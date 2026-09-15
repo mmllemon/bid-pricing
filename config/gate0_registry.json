@@ -1,0 +1,125 @@
+{
+  "registry_id": "gate0_registry_v1",
+  "description": "Gate 0a / Gate 0b 受控制品注册表。version / hash / frozen_at 三字段由 `bidpricing freeze` 写入，手工改动即视为契约失效。",
+  "hash_algorithm": "sha256 前 12 位（前缀 sha256:），对制品文件原始字节计算",
+  "gate_0a": {
+    "rule_set_selector_spec": {
+      "kind": "versioned",
+      "artifact_path": "ruleset_selector_spec.json",
+      "version": "sha256:7bb222629cb1",
+      "hash": "sha256:7bb222629cb1",
+      "frozen_at": "2026-09-15T17:53:26+00:00",
+      "note": "T00-08 规格制品"
+    },
+    "field_schema_version": {
+      "kind": "versioned",
+      "artifact_path": "field_schema.json",
+      "version": "sha256:858b0c997f85",
+      "hash": "sha256:858b0c997f85",
+      "frozen_at": "2026-09-15T17:53:26+00:00",
+      "note": "T00-02 字段字典"
+    },
+    "constraint_schema_version": {
+      "kind": "versioned",
+      "artifact_path": "constraint_schema.json",
+      "version": "sha256:49966cbda4b7",
+      "hash": "sha256:49966cbda4b7",
+      "frozen_at": "2026-09-15T17:53:26+00:00",
+      "note": "T00-03 约束字典 C1–C12"
+    },
+    "precision_profile_version": {
+      "kind": "versioned",
+      "artifact_path": "precision_profile.json",
+      "version": "sha256:6ce483e8d221",
+      "hash": "sha256:6ce483e8d221",
+      "frozen_at": "2026-09-15T17:53:26+00:00",
+      "note": "T00-04 精度与容差策略"
+    },
+    "architecture_decision_version": {
+      "kind": "versioned",
+      "artifact_path": "architecture_decision.json",
+      "version": "sha256:3601adeed46c",
+      "hash": "sha256:3601adeed46c",
+      "frozen_at": "2026-09-15T17:53:26+00:00",
+      "note": "T00-05 三层分割架构地位"
+    },
+    "competitiveness_classification": {
+      "kind": "versioned",
+      "artifact_path": "competitiveness_classification.json",
+      "version": null,
+      "hash": null,
+      "frozen_at": null,
+      "note": "T00-06 可竞争性分类——分类表为空，依赖真实招标清单，属启动前阻塞项"
+    },
+    "input_protocol_schema": {
+      "kind": "versioned",
+      "artifact_path": "input_protocol_schema.json",
+      "version": "sha256:519e56561e01",
+      "hash": "sha256:519e56561e01",
+      "frozen_at": "2026-09-15T17:53:26+00:00",
+      "note": "T01-00A 输入协议 Schema（v3.2.1 由 WP1 移入 WP0 以解 Gate 0a 死锁）"
+    },
+    "adjustment_scope": {
+      "kind": "enum",
+      "allowed": [
+        "FULL",
+        "SEGMENT"
+      ],
+      "source": "T00-08 select_rule_set() 输出",
+      "note": "v3.2.1 由 Gate 0b 前移至 Gate 0a（它直接决定 WP3 的 R_i 分段逻辑）。未定态必须表现为 key 缺失，不得写 null 或 '未定' 等字符串（§7.1.1 断言 1）"
+    }
+  },
+  "gate_0b": {
+    "contract_ruleset_version": {
+      "kind": "versioned",
+      "artifact_path": "contract_ruleset_card.json",
+      "version": null,
+      "hash": null,
+      "frozen_at": null,
+      "note": "T00-01《计价规则卡》经合同条款核对后的最终冻结版"
+    },
+    "cost_basis_spec": {
+      "kind": "versioned",
+      "artifact_path": "cost_basis_spec.json",
+      "version": null,
+      "hash": null,
+      "frozen_at": null,
+      "note": "T00-09 成本口径证明包（八项分解）"
+    },
+    "cost_assumption_spec": {
+      "kind": "versioned",
+      "artifact_path": "cost_assumption_spec.json",
+      "version": null,
+      "hash": null,
+      "frozen_at": null,
+      "note": "T00-11 成本 c_i 假设与来源声明（v3.2.1 新增）"
+    },
+    "q1_assumption_spec": {
+      "kind": "versioned",
+      "artifact_path": "q1_assumption_spec.json",
+      "version": null,
+      "hash": null,
+      "frozen_at": null,
+      "note": "T00-10A/10B q^1 假设声明（格式篇 + 来源篇）"
+    },
+    "profit_bridge_spec": {
+      "kind": "versioned",
+      "artifact_path": "profit_bridge_spec.json",
+      "version": null,
+      "hash": null,
+      "frozen_at": null,
+      "note": "T00-12 利润口径桥接表（v3.2.1 新增，闭合隐藏依赖第 8 条的悬空）"
+    },
+    "approvals": {
+      "kind": "approvals",
+      "roles": [
+        "合同",
+        "造价",
+        "法务",
+        "项目经理"
+      ],
+      "signed": {},
+      "note": "每角色须签署非空制品 hash。v3.2 的 all_required_approvals 布尔位可被一人勾选通过，业务口径并未真正冻结"
+    }
+  }
+}

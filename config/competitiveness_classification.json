@@ -1,0 +1,31 @@
+{
+  "spec_id": "competitiveness_classification_v1",
+  "task": "T00-06",
+  "title": "报价项可竞争性分类与变量集合冻结",
+  "source_of_truth": "实施路线 v3.2.1 T00-06 + model_v0.3_R2.md C1 的作用域说明",
+  "roles": [
+    {"role": "OPTIMIZABLE", "label": "可优化", "in_x_opt": true, "note": "进入决策变量集合，求解器可自由定价"},
+    {"role": "FIXED", "label": "固定金额项", "in_x_opt": false, "note": "招标文件或合同指定固定金额"},
+    {"role": "NON_COMPETITIVE", "label": "不可竞争费", "in_x_opt": false, "note": "安全生产措施费 / 规费 / 税金等按规定计价，基数联动见 T00-06B"},
+    {"role": "PASS_THROUGH", "label": "甲供材/暂列金额等透传项", "in_x_opt": false, "note": "按实结算，不参与竞价"},
+    {"role": "CONTRACT_DEFINED", "label": "合同指定单价", "in_x_opt": false, "note": "合同已锁定单价，投标人不得调整"}
+  ],
+  "decision_variable_set": {
+    "definition": "X_opt = { i : pricing_role(i) = OPTIMIZABLE }",
+    "total_price_decomposition": "P* = P*_competitive + P_fixed",
+    "P_fixed": "sum_{i not in X_opt} p_i q_i^0",
+    "note": "本分类是变量生成的前置条件；C1 的总价锁定作用域即 X_opt"
+  },
+  "classification_heuristics": [
+    {"signal": "招标文件「其他项目清单」中的暂列金额", "role": "PASS_THROUGH", "note": "按实结算，投标人不竞价"},
+    {"signal": "招标文件「其他项目清单」中的材料暂估价", "role": "PASS_THROUGH", "note": "需注意与 T00-06B 的调差规则联动"},
+    {"signal": "甲供材料清单中的项目", "role": "PASS_THROUGH", "note": "在总价恒等式中单独列出，不得并入 P*_competitive"},
+    {"signal": "安全文明施工费 / 安全生产措施费", "role": "NON_COMPETITIVE", "note": "以「分部分项人工费 + 机械费」为基数 x 固定费率，基数随报价变动 → 需仿射关系 f(p)"},
+    {"signal": "规费 / 税金（增值税）", "role": "NON_COMPETITIVE", "note": "2024 版明确增值税单列"},
+    {"signal": "合同专用条款中已锁定单价的项目", "role": "CONTRACT_DEFINED", "note": null},
+    {"signal": "其余分部分项与可竞争措施项目", "role": "OPTIMIZABLE", "note": null}
+  ],
+  "classification_table": [],
+  "freeze_blocker": "本表为空——逐项分类必须基于真实招标清单（含不可竞争费分项、暂估价形式、标段划分）才能落定。空表状态即 Gate 0a 判据 competitiveness_classification 未冻结，属启动前阻塞项。",
+  "acceptance": "每项标注 pricing_role；显式输出 X_opt 与总价分解 P* = P*_competitive + P_fixed；与 T00-06B 的 compute_P_competitive(p) 同源同值"
+}

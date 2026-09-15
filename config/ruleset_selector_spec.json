@@ -1,0 +1,43 @@
+{
+  "spec_id": "rule_set_selector_spec_v1",
+  "task": "T00-08",
+  "title": "规则集选择器规格",
+  "role": "路线起点任务（Depends 为空）。规则集未定，则 P1 定义、调价阈值、adjustment_scope 全部悬空。",
+  "implementation": "bidpricing.contracts.selector.select_rule_set",
+  "inputs": [
+    {"key": "tender_document_date", "type": "date|null", "required": false},
+    {"key": "contract_date", "type": "date|null", "required": false},
+    {"key": "standard_version_declared", "type": "string|null", "required": false},
+    {"key": "region", "type": "string|null", "required": false, "decisive": false, "note": "已记录，当前规则表未定义其分支作用"},
+    {"key": "project_type", "type": "string|null", "required": false, "decisive": false, "note": "同上"},
+    {"key": "funding_type", "type": "string|null", "required": false, "decisive": false, "note": "同上"},
+    {"key": "tender_document_override", "type": "string|null", "required": false},
+    {"key": "contract_override", "type": "string|null", "required": false},
+    {"key": "adjustment_scope_declared", "type": "enum|null", "required": false, "note": "非路线原始输入；T00-01 的落值通道"}
+  ],
+  "outputs": ["rule_set_id", "effective_date", "legal_basis", "precedence_chain", "adjustment_scope"],
+  "precedence_chain": ["Contract", "Tender", "Regional", "Standard"],
+  "decision_rules": {
+    "default": "GB/T50500-2024（自 2025-09-01 起施行）",
+    "fallback_to_2013": "仅当同时满足：① 属过渡项目（2025-09-01 前发布招标文件或已签合同）② 招标文件/合同约定沿用旧规范",
+    "fallback_reading_note": "路线 T00-08 原文写「过渡项目 或 合同另有约定」，§8.3 校正一写「且」。本实现采用 §8.3 的严格口径（两个条件同时成立），并在仅命中日期条件时输出 BLOCKED 而非默认取 2013——符合「禁止默认取任一侧」。",
+    "undeterminable": "BLOCKED（禁止默认取任一侧）",
+    "adjustment_scope_for_2013": "SEGMENT（§9.6.2 明文规定分段累加，非歧义）",
+    "adjustment_scope_for_2024": "须由 T00-01 落值；未落值时输出中不含该 key（§7.1.1 断言 1）"
+  },
+  "mechanical_fingerprint": {
+    "quantity_ratio": "r = q1 / q0",
+    "effective_revenue_multiple": "r_eff = SettlementAmount(q1) / (q0 * p0)",
+    "probe": "以 rho_probe（非 0 探针值）在 r = 1.15 +/- delta 处取 r_eff 的跳变量",
+    "expected": {
+      "GB50500-2013": "跳变量 ~= 0（分段累加 → 收益结构连续）",
+      "GB/T50500-2024": "跳变量 ~= -1.15 * rho_probe（调整单价本身 → 跳降）"
+    },
+    "purpose": "识别「两套 RuleSet 是否只是改了条文号、公式其实相同」（T00-07 强制测试）",
+    "degeneracy_warning": "rho_plus 的规范默认值为 0（无量化依据）。若探针也取 0，两套规则集在 r_eff 上完全重合、指纹退化。故自检必须使用非零探针值。这是一处已知的判据退化条件，已在 ruleset_self_test 中显式参数化。"
+  },
+  "known_limits": [
+    "region / project_type / funding_type 三个输入当前不参与判定，仅留痕——待 T00-01 补充规则表后启用",
+    "2024 版减量侧（r < 0.85）FULL 与 SEGMENT 等价（「减少后剩余部分」本就是全部 q1），作用域分叉只出现在增量侧"
+  ]
+}

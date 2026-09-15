@@ -1,0 +1,98 @@
+{
+  "schema_id": "constraint_schema_v1",
+  "task": "T00-03",
+  "title": "约束字典 C1–C12",
+  "source_of_truth": "model_v0.3_R2.md §5.4 约束全集 C1–C12",
+  "status_domain": ["PASS", "WARN", "FAIL", "BLOCKED"],
+  "tuple_fields": ["constraint_id", "status", "actual", "limit", "slack", "severity"],
+  "constraints": [
+    {
+      "id": "C1", "name": "总价锁定（作用域限为可竞争部分）", "severity": "P0", "toggleable": false,
+      "expression": "sum_{i in X_opt} p_i q_i^0 = P*_competitive",
+      "inputs": ["p_bid", "q0", "pricing_role", "P*_competitive"],
+      "metric": "|sum_{i in X_opt} p_i q_i^0 - P*_competitive|",
+      "tolerance": "eps_total",
+      "implementation": "按 §8.2 容差带实现（模式 A / B 二选一，两层须同口径），P*_competitive 由 T00-06B 的 compute_P_competitive(p) 提供，禁止重实现",
+      "note": "税金/安全生产措施费/暂列金额/暂估价/合同指定固定金额项不可自由优化——若一并投入求和，会产生「数学最优、投标非法」的解"
+    },
+    {
+      "id": "C2", "name": "单项上界", "severity": "P0", "toggleable": false,
+      "expression": "p_i <= U_i = min(cap_i, base_i(1 + delta_eff_i))",
+      "inputs": ["cap", "p0", "delta_eff"], "metric": "p_i - U_i", "tolerance": "eps_price",
+      "implementation": "直接线性约束", "note": null
+    },
+    {
+      "id": "C3", "name": "单项下界（合规下浮）", "severity": "P0", "toggleable": false,
+      "expression": "p_i >= L_i = base_i(1 - delta_eff_i)",
+      "inputs": ["p0", "delta_eff"], "metric": "L_i - p_i", "tolerance": "eps_price",
+      "implementation": "直接线性约束（数学上被 C4 蕴含，但保留以承载合规语义供审计）", "note": null
+    },
+    {
+      "id": "C4", "name": "地板（成本止损）", "severity": "P0", "toggleable": false,
+      "expression": "p_i >= floor_i = max(L_i, c_i(1 - mu_i))",
+      "inputs": ["floor", "p0", "delta_eff", "c_i", "mu"], "metric": "floor_i - p_i", "tolerance": "eps_price",
+      "implementation": "按取大计算；config 保留独立「合规下浮限」字段供审计",
+      "note": "C4 与 C6 必须并存：只留 C6 允许个别项压至 p_i≈0（数值可行、工程荒谬、触发清标废标）；只留 C4 则累计亏损可突破 theta*P*"
+    },
+    {
+      "id": "C5", "name": "非负性", "severity": "P1", "toggleable": true,
+      "expression": "p_i >= 0", "inputs": ["p_bid"], "metric": "-p_i", "tolerance": "eps_price",
+      "implementation": "由 C4 蕴含，仅作求解器保险", "note": null
+    },
+    {
+      "id": "C6", "name": "亏损风险总量约束", "severity": "P0", "toggleable": true,
+      "expression": "sum_{i in I} s_i q_i^1 <= theta * P*,  s_i >= c_i - p_i,  s_i >= 0",
+      "inputs": ["c_i", "p_bid", "q1_point", "theta", "P*"],
+      "metric": "sum s_i q_i^1 - theta*P*", "tolerance": "eps_total",
+      "implementation": "线性化 s_i >= max(0, c_i - p_i)，问题保持 LP", "note": null
+    },
+    {
+      "id": "C7", "name": "亏损项数上限（升为 MILP）", "severity": "P0", "toggleable": true,
+      "expression": "sum_i I(p_i < c_i) <= N_max",
+      "inputs": ["c_i", "p_bid", "N_max"], "metric": "sum z_i - N_max", "tolerance": "0（整数）",
+      "implementation": "引入二元变量 z_i in {0,1}，p_i >= c_i - M z_i；问题升为 MILP，须走 T04-07 独立验收协议",
+      "note": "引入二元变量是本项目进入 MILP 的唯一来源"
+    },
+    {
+      "id": "C8", "name": "单项亏损深度上限", "severity": "P0", "toggleable": true,
+      "expression": "(c_i - p_i) / c_i <= d_max  for all i",
+      "inputs": ["c_i", "p_bid", "d_max"], "metric": "(c_i - p_i)/c_i - d_max", "tolerance": "eps_price",
+      "implementation": "建议 d_max 与 mu 绑定并在 config 显式声明，避免维护两套数字", "note": null
+    },
+    {
+      "id": "C9", "name": "整体盈利门槛", "severity": "P0", "toggleable": true,
+      "expression": "C9a 绝对：Z >= Z_min ；C9b 相对：Z / sum_i c_i q_i^1 >= pi_target",
+      "inputs": ["Z", "c_i", "q1_point", "Z_min", "pi_target"],
+      "metric": "Z 或 Z/sum(c_i q_i^1)", "tolerance": "eps_total",
+      "implementation": "推荐 C9b（与项目规模无关，阈值可直接继承企业决策惯例）",
+      "note": "C9 与 C1 联立后可行域可能为空——此时必须返回无可行解并转入放弃投标判据，不得通过放松 C6 或 C4 强行找回解"
+    },
+    {
+      "id": "C10", "name": "现金流前载约束", "severity": "P0", "toggleable": true,
+      "expression": "sum_{i in T_front} (rho_i p_i - c_i) q_i^0 >= 0",
+      "inputs": ["rho_i", "p_bid", "c_i", "q0", "T_front"],
+      "metric": "sum (rho_i p_i - c_i) q_i^0", "tolerance": "eps_total",
+      "implementation": "硬约束，不得被优化器自动权衡掉；若导致不可行则交人决策",
+      "note": "rho_i >= 0.8 有规范下限支撑（GB/T 50500-2024 第 10.2 节：施工过程结算款支付比例不低于 80%）"
+    },
+    {
+      "id": "C11", "name": "报价离散度控制", "severity": "P1", "toggleable": true,
+      "expression": "sigma(d) <= sigma_max,  d_i = (p_i - base_i)/base_i",
+      "inputs": ["p_bid", "p0", "sigma_max", "kappa_max"],
+      "metric": "MAD 或 sigma(d)", "tolerance": "eps_price",
+      "implementation": "原始 sigma 为二阶锥约束，标准 LP 不支持；推荐 MAD 线性化 (1/n) sum |p_i - p_bar| <= kappa_max，引入 u_i >= p_i - p_bar、u_i >= p_bar - p_i 两条线性约束即可，问题仍为 LP",
+      "note": null
+    },
+    {
+      "id": "C12", "name": "总价成本比", "severity": "P1", "toggleable": true,
+      "expression": "R_pc = sum_i p_i q_i^0 / sum_i c_i q_i^0 >= R_min",
+      "inputs": ["p_bid", "q0", "c_i", "R_min"], "metric": "R_pc", "tolerance": "eps_price",
+      "implementation": "R_min > 1 是 C9b 的等价形态", "note": "价值在于它是投标前的可解释指标"
+    }
+  ],
+  "global_notes": [
+    "C1–C12 是「判定层每约束返回六元组」的枚举来源（T03-04）",
+    "无可行解时的诊断输出见 T03-06（conflict set + suggested_relaxation）",
+    "合规口径（决定 C4 / theta 取值）依赖 T00-09 成本口径证明包，未冻结前相关约束只能标 BLOCKED"
+  ]
+}

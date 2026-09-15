@@ -1,0 +1,56 @@
+{
+  "profile_id": "precision_profile_v1",
+  "task": "T00-04",
+  "title": "精度与容差策略表",
+  "source_of_truth": "实施路线 v3.2.1 §5.3（S1–S7）、§8.2（等式约束容差化）、T00-04",
+  "eps_solver": {
+    "value": 1e-08,
+    "unit": "无量纲（约束残差，绝对）",
+    "scope": "g_j(x) <= eps_solver；|h_j(x)| <= eps_solver（判据 S1）",
+    "note": "沿用规格书「原始可行性残差 <= 1e-8」的口径"
+  },
+  "eps_price": {
+    "value": 1e-09,
+    "unit": "相对值（乘以 P*）",
+    "scope": "C1/C2/C3/C4/C8/C11/C12 的单价类残差",
+    "note": null
+  },
+  "eps_quantity": {
+    "value": 1e-06,
+    "unit": "相对值",
+    "scope": "工程量相关残差",
+    "note": null
+  },
+  "eps_abs": {
+    "value": 0.01,
+    "unit": "元",
+    "scope": "总价类残差的绝对下限",
+    "note": "等于分项舍入分辨率（0.01 元）"
+  },
+  "eps_total": {
+    "formula": "max(eps_abs, eps_price * P*)",
+    "scope": "S2 总价锁定、C6、C9、C10 的总价类残差",
+    "note": "两层必须使用同一 eps 口径——不得「求解时容差化、复核时严格等式」（§8.2）"
+  },
+  "rounding": {
+    "resolution": 0.01,
+    "rule": "分项四舍五入至 0.01 元，汇总后再舍入一次；禁止逐项舍入后累加",
+    "owner_task": "T06-06",
+    "note": "S2 通过 ≠ Excel 舍入后总价一致，故必须由独立环节 TotalPriceReconciliation 复验"
+  },
+  "internal_vs_display": {
+    "internal_precision": {"price": 10, "quantity": 10, "note": "求解器内部不做展示位截断"},
+    "display_precision": {"price": 2, "quantity": 4, "note": "仅影响报告输出，不影响计算"}
+  },
+  "equality_tolerance_mode": {
+    "allowed": ["A", "B"],
+    "A": "内部严格等式 + 仅对最终输出做舍入调和",
+    "B": "全程容差带 |.| <= eps_P（此时 Phase 3 复核必须使用同一 eps_P）",
+    "current": null,
+    "note": "二选一，不得混用。current 为 null 表示尚未冻结——需在 Gate 0a 前确定（T00-04 完成判据）"
+  },
+  "open_items": [
+    "「等式约束性能显著更差」不应写成无条件事实，须在本项目 benchmark 后决定（§8.2 末段）",
+    "对 P* > 1e7 元的项目，eps_price*P* 项已大于 0.01 元舍入分辨率，T06-06 的舍入后校验须单独使用 eps_abs=0.01，不得沿用 eps_total"
+  ]
+}

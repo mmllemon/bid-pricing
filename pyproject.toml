@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bidpricing"
+version = "0.1.0"
+description = "投标报价利润最大化测算模型 —— 实施路线 v3.2.1 的执行代码库"
+requires-python = ">=3.11"
+dependencies = []
+readme = "README.md"
+
+[project.scripts]
+bidpricing = "bidpricing.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

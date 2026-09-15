@@ -1,0 +1,44 @@
+{
+  "adr_id": "ADR-0001",
+  "task": "T00-05",
+  "title": "三层分割架构地位确认",
+  "status": "accepted",
+  "source_of_truth": "model_v0.3_R2.md §7、实施路线 v3.2.1 T00-05",
+  "decision": {
+    "phase1_role": "candidate",
+    "phase1_role_domain": ["candidate", "upper_bound", "warm_start"],
+    "phase1_use_as_mip_start": false,
+    "rationale": "Phase 1 给出 O(n log n) 解析解，仅在 T04-00 已证明的适用子集内成立。其定位是候选解/上界，不承担最终解职责；默认不作为 MILP 的 mip start，避免把未证精确的解注入求解器而污染最优性论证。"
+  },
+  "layers": [
+    {
+      "id": "phase_1",
+      "name": "解析解（排序 + 二分 + 贪心定容）",
+      "complexity": "O(n log n)",
+      "applicability": "T04-00 输出《Phase 1 精确性条件》所定义的适用子集",
+      "outputs": ["lambda", "层归属", "候选解 p_candidate"],
+      "not_responsible_for": "最终解"
+    },
+    {
+      "id": "phase_2",
+      "name": "精确解（LP / MILP 分叉）",
+      "complexity": "多项式",
+      "activation": "全部参数 + C6/C9/C10 激活时由 LP 升为 MILP",
+      "outputs": ["p_star", "active_constraints", "对偶信息（LP）"]
+    },
+    {
+      "id": "phase_3",
+      "name": "验证（独立复核）",
+      "complexity": "—",
+      "acceptance": "LP 模式：primal/dual feasibility + stationarity + complementary slackness；MILP 模式：primal feasibility + objective recomputation + MIP gap + integer feasibility + status",
+      "note": "禁止把 KKT 当作 MILP 的最优性证明（判据 S5）"
+    }
+  ],
+  "independence_requirement": {
+    "rule": "禁止 Phase 3 复用 Phase 2 的 R_i / constraint / objective 实现",
+    "allowed_sharing": "底层数据结构（不可变值对象）",
+    "forbidden_sharing": "核心计算逻辑",
+    "owner_task": "T04-08",
+    "enforcement": "T04-08 须输出三层隔离证明（源码文件不重叠 / 数据结构不共享可变状态 / 独立实现不得由生产代码作者单人完成）；未通过时 T04-04 对拍结论强制标 BLOCKED"
+  }
+}

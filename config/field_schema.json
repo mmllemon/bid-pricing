@@ -1,0 +1,55 @@
+{
+  "schema_id": "field_schema_v1",
+  "task": "T00-02",
+  "title": "字段字典 v1",
+  "source_of_truth": "model_v0.3_R2.md 第四章符号表 + 实施路线 v3.2.1 T00-02/T01-03A",
+  "conventions": {
+    "unit_of_money": "元",
+    "percentage": "统一小数（0.15 表示 15%），禁止出现 15 这种整数百分比",
+    "item_id_unique_key": "(project_id, unit_work, item_id)",
+    "missing_policy_domain": ["BLOCK", "WARN", "DEFAULT", "IMPUTE", "IGNORE"],
+    "no_default_field_families": [
+      "合同口径类（rule_set_id / adjustment_scope / rho_plus / rho_minus）",
+      "成本类（c_i / mu / floor）",
+      "税费类（r_tax / 不可竞争费费率）",
+      "限价类（cap / delta_eff）"
+    ],
+    "note": "上列字段族禁止 DEFAULT —— 见实施路线 T01-03A 与 §7.1.1 断言 6①"
+  },
+  "fields": [
+    {"name": "project_id", "label": "项目编号", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "主键组成部分"},
+    {"name": "unit_work", "label": "单位工程", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "多标段/多单位工程时的区分维度"},
+    {"name": "item_id", "label": "清单项目编码", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "编码补零见 T01-03；13/15 位编码体系由 code_system 区分"},
+    {"name": "item_name", "label": "项目名称", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "WARN", "note": null},
+    {"name": "item_feature", "label": "项目特征描述", "type": "string", "unit": null, "range": null, "default": null, "nullable": true, "precision": null, "missing_policy": "WARN", "note": "C11 离散度分组时可作为分组键"},
+    {"name": "unit", "label": "计量单位", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "单位换算的基准；D3 判据要求比较换算后等价值"},
+    {"name": "code_system", "label": "清单编码体系", "type": "enum", "unit": null, "range": ["GB50500-2013", "GBT50500-2024"], "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "与 rule_set_id 的一致性由 T01-01/T01-03 校验"},
+
+    {"name": "q0", "label": "清单工程量（招标基准）", "type": "number", "unit": "按 unit 字段", "range": [0, null], "default": null, "nullable": false, "precision": 6, "missing_policy": "BLOCK", "note": "D1：q0=0 时必须显式处理（排除出价格优化或 BLOCK），禁止静默通过"},
+    {"name": "q1_point", "label": "结算/实际工程量点估计", "type": "number", "unit": "按 unit 字段", "range": [0, null], "default": null, "nullable": false, "precision": 6, "missing_policy": "BLOCK", "note": "Phase 1/2 仅接受点估计或有限场景集（T00-10A）"},
+    {"name": "q1_lo", "label": "结算工程量下界", "type": "number", "unit": "按 unit 字段", "range": [0, null], "default": null, "nullable": true, "precision": 6, "missing_policy": "BLOCK", "note": "D1：q1_lo <= q1_point <= q1_hi；仅用于 Phase 3 敏感性分析"},
+    {"name": "q1_hi", "label": "结算工程量上界", "type": "number", "unit": "按 unit 字段", "range": [0, null], "default": null, "nullable": true, "precision": 6, "missing_policy": "BLOCK", "note": null},
+    {"name": "conf", "label": "工程量置信等级", "type": "enum", "unit": null, "range": ["H", "M", "L", "N"], "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "D1 判据要求取值域受限"},
+
+    {"name": "p0", "label": "合同/控制价综合单价", "type": "number", "unit": "元", "range": [0, null], "default": null, "nullable": false, "precision": 2, "missing_policy": "BLOCK", "note": "同时是 base_i 的来源（T00-01 计价规则卡落值）"},
+    {"name": "p_bid", "label": "投标综合单价（决策变量）", "type": "number", "unit": "元", "range": [0, null], "default": null, "nullable": true, "precision": 2, "missing_policy": "BLOCK", "note": "仅当 pricing_role=OPTIMIZABLE 时存在；由求解器产出，非输入字段"},
+    {"name": "cap", "label": "招标文件规定的单价上限", "type": "number", "unit": "元", "range": [0, null], "default": null, "nullable": true, "precision": 2, "missing_policy": "BLOCK", "note": "D1：cap >= floor；禁用 DEFAULT"},
+    {"name": "floor", "label": "成本地板价", "type": "number", "unit": "元", "range": [0, null], "default": null, "nullable": false, "precision": 2, "missing_policy": "BLOCK", "note": "C4 定值；禁用 DEFAULT"},
+    {"name": "delta_eff", "label": "有效下浮/上浮幅度", "type": "number", "unit": "小数", "range": [0, 1], "default": null, "nullable": false, "precision": 6, "missing_policy": "BLOCK", "note": "C2/C3 使用；禁用 DEFAULT"},
+    {"name": "mu", "label": "允许亏损深度", "type": "number", "unit": "小数", "range": [0, 1], "default": null, "nullable": false, "precision": 6, "missing_policy": "BLOCK", "note": "C4 的 c_i(1-mu)；C8 的 d_max 建议与之绑定"},
+    {"name": "c_i", "label": "个别成本单价", "type": "number", "unit": "元", "range": [0, null], "default": null, "nullable": false, "precision": 2, "missing_policy": "BLOCK", "note": "T00-11 假设声明书落值；与 T00-09 成本口径证明包共用字段定义。禁用 DEFAULT"},
+    {"name": "pricing_role", "label": "报价项可竞争性分类", "type": "enum", "unit": null, "range": ["OPTIMIZABLE", "FIXED", "NON_COMPETITIVE", "PASS_THROUGH", "CONTRACT_DEFINED"], "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "T00-06 产出；决定决策变量集合 X_opt 与总价分解"},
+    {"name": "adjustment_scope", "label": "工程量偏差调整作用域", "type": "enum", "unit": null, "range": ["FULL", "SEGMENT"], "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "T00-01 落值；**未定态不得写成任何字符串**，须由 T00-08 直接不输出该 key（§7.1.1 断言 1）。禁用 DEFAULT"},
+    {"name": "rule_set_id", "label": "适用规则集", "type": "enum", "unit": null, "range": ["GB50500-2013", "GB/T50500-2024"], "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "T00-08 机械产出。禁用 DEFAULT"},
+    {"name": "rho_plus", "label": "增量侧单价调整幅度", "type": "number", "unit": "小数", "range": [0, 1], "default": 0.0, "nullable": false, "precision": 6, "missing_policy": "DEFAULT", "note": "规范无依据，默认必须为 0；非零须附合同条款或谈判证据（§8.3 机制差异 4）"},
+    {"name": "rho_minus", "label": "减量侧单价调整幅度", "type": "number", "unit": "小数", "range": [0, 1], "default": 0.0, "nullable": false, "precision": 6, "missing_policy": "DEFAULT", "note": "同上"},
+
+    {"name": "source_file", "label": "来源文件名", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "D4 溯源链起点"},
+    {"name": "source_sheet", "label": "来源工作表", "type": "string", "unit": null, "range": null, "default": null, "nullable": true, "precision": null, "missing_policy": "WARN", "note": null},
+    {"name": "source_row", "label": "来源行号", "type": "integer", "unit": null, "range": [1, null], "default": null, "nullable": true, "precision": null, "missing_policy": "WARN", "note": null},
+    {"name": "source_column", "label": "来源列号", "type": "string", "unit": null, "range": null, "default": null, "nullable": true, "precision": null, "missing_policy": "WARN", "note": null},
+    {"name": "original_value", "label": "原始值（未规范化）", "type": "string", "unit": null, "range": null, "default": null, "nullable": true, "precision": null, "missing_policy": "WARN", "note": "D4 要求同时保留 original_value 与 normalized_value"},
+    {"name": "normalized_value", "label": "规范化值", "type": "string", "unit": null, "range": null, "default": null, "nullable": true, "precision": null, "missing_policy": "WARN", "note": null},
+    {"name": "value_source", "label": "取值来源", "type": "enum", "unit": null, "range": ["explicit", "defaulted", "derived", "inferred"], "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "T02-02 口径：inferred 必须显式标注，不得伪装成 explicit"}
+  ]
+}

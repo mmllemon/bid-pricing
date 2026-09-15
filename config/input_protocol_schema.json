@@ -1,0 +1,51 @@
+{
+  "schema_id": "input_protocol_schema_v1",
+  "task": "T01-00A",
+  "owner_work_package": "WP0",
+  "title": "招标文件计价口径与输入协议 Schema",
+  "source_of_truth": "实施路线 v3.2.1 T01-00A",
+  "why_in_wp0": "若本任务留在 WP1，则 Gate 0a（需 input_protocol_schema 非空）与「Gate 0a 放行 WP1」构成死锁——0a 不放行 WP1，本任务不能开工，input_protocol_schema 永为 null。故 v3.2.1 将其拆出并前移至 WP0。",
+  "input_formats": [
+    {"format_id": "excel_xlsx", "extensions": [".xlsx"], "parser_owner": "T01-00B", "required": true},
+    {"format_id": "excel_xls", "extensions": [".xls"], "parser_owner": "T01-00B", "required": true, "note": "旧格式，需注意 1024 字符/嵌套层数等硬限制"},
+    {"format_id": "xml", "extensions": [".xml"], "parser_owner": "T01-00B", "required": false, "note": "部分地区电子招投标平台导出格式"},
+    {"format_id": "pdf_extract", "extensions": [".pdf"], "parser_owner": "T01-00B", "required": false, "note": "仅在无源文件时使用；提取结果必须标记 value_source=inferred 供人工复核"},
+    {"format_id": "other", "extensions": [], "parser_owner": "T01-00B", "required": false, "note": "未登记格式一律 BLOCK"}
+  ],
+  "canonical_target": "bidpricing.data.CanonicalRecord（由 T01-01 定义；字段集见 config/field_schema.json）",
+  "minimum_legal_field_set": {
+    "must_have": ["project_id", "unit_work", "item_id", "item_name", "unit", "q0", "p0", "code_system"],
+    "must_have_when_applicable": [
+      {"field": "pricing_role", "condition": "存在不可竞争项 / 暂估价 / 甲供材时必填"},
+      {"field": "cap", "condition": "招标文件设定单价上限时必填"},
+      {"field": "adjustment_scope", "condition": "规则集为 GB/T 50500-2024 时必填（未定则 Gate 0a BLOCKED）"}
+    ],
+    "shape_questions": [
+      "是否含不可竞争费分项（安全生产措施费 / 规费 / 税金）",
+      "暂估价的呈现形式（独立行 / 括号标注 / 说明列）",
+      "是否多标段（多标段时 unit_work 的取值口径）",
+      "清单编码体系（13 位 / 15 位）"
+    ]
+  },
+  "failure_policy": {
+    "on_unrecognized_structure": "BLOCK",
+    "on_unmapped_column": "BLOCK",
+    "forbidden": ["猜测映射", "静默丢弃", "按列序硬编码"],
+    "rationale": "T01-02B 明令：任何无法识别的结构必须 BLOCK，禁止猜测映射。猜测映射会把错误静默传播到整条成本链。"
+  },
+  "code_system_mapping": {
+    "from": ["GB50500-2013 13 位编码"],
+    "to": ["GB/T50500-2024 15 位编码"],
+    "rule": "按《房屋建筑与装饰工程工程量计算规范》等专业规范的附录对照表匹配；无法匹配的项输出 BLOCKED 并进入异常清单",
+    "note": "编码补零规则见 T01-03；本表只负责体系间映射，不负责规范化"
+  },
+  "responsibility_boundary": {
+    "T01-00B_does": ["格式识别", "字段提取", "输出解析日志 / 字段映射报告 / 失败样本清单"],
+    "T01-00B_does_not": ["业务语义映射（清单编码体系转换）", "规范化与清洗"],
+    "handoff": "语义映射由 T01-01 / T01-02 承接；禁止重复实现解析逻辑"
+  },
+  "acceptance": {
+    "criterion": "Schema 冻结并经 REV 复核；本制品即 Gate 0a 判据 input_protocol_schema",
+    "note": "v3.2 曾要求解析器「并进入 T01-03」，该要求使 T01-00 完成依赖 T01-03 开工、T01-03 开工又依赖 T01-00 完成，导致 WP1 全部串行阻塞——v3.2.1 已删除"
+  }
+}

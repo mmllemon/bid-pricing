@@ -1,0 +1,5 @@
+{
+  "selection_id": "project_selection_v1",
+  "note": "项目级选择项落值文件。未选择的选择项不写 value 字段——与《实施路线 v3.2.1》§7.1.1 断言 1「未定态 = key 完全缺失」同构，使「还没选」在机器上可判。本文件由 `bidpricing options set` 写入，禁止手工填默认值（断言 6① 会拒绝）。",
+  "options": {}
+}

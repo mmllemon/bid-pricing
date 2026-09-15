@@ -24,6 +24,12 @@ v3.2 / v3.2.1 因此把 Gate 0 拆为 **0a（技术接口）/ 0b（业务口径�
 5       Gate 0b 必须早于 WP4 Phase 1                          :func:`assertion_5_sequence`
 6       CI 门禁：配置层零默认值 + 求解层硬门禁                :func:`assertion_6_config_zero_defaults`
 ======  ==================================================  ==========================
+
+此外新增一条**选择项判据**（:func:`check_selectable_option`）：
+``adjustment_scope`` 已是项目级选择项，其合法取值集合**依规则集而变**
+（2013 只有 SEGMENT / 2024 二者皆可），因此不能再用全局枚举集校验——
+否则「在 2013 项目上落值 FULL」会被判为合法。该判据同时把落值**来源与依据**
+带进判定理由，构成决策审计快照。
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ from ..artifact import (
     verify_enum,
     verify_versioned,
 )
+from ..selection_options import SELECTABLE_OPTIONS, OptionResolution, resolve_option
 from ..states import CheckItem, GateReport, Status
 
 #: Gate 0a 放行的工作包（路线 §7.1.1 断言 3）
@@ -140,6 +147,82 @@ def guard_representation(selection: dict) -> CheckItem:
 # ----------------------------------------------------------------- Gate 0a
 
 
+def _resolution_from_selection(
+    rec: ArtifactRecord, selection: dict
+) -> OptionResolution:
+    """把 T00-08 的选择结果还原成一次选择项解析（含来源与依据）。"""
+    option = SELECTABLE_OPTIONS[rec.key]
+    rule_set_id = selection.get("rule_set_id")
+    value = selection.get(rec.key)
+    source = selection.get(f"{rec.key}_source")
+
+    allowed = option.allowed_for(rule_set_id) if rule_set_id else tuple(rec.allowed)
+    errors: tuple[str, ...] = ()
+    if value is None:
+        return OptionResolution(
+            key=rec.key, value=None, source=source or "UNSELECTED",
+            rule_set_id=rule_set_id, allowed=allowed,
+        )
+    if value not in allowed:
+        errors = (
+            f"取值 {value!r} 在规则集 {rule_set_id or '<未定>'} 下不可选；"
+            f"合法取值仅 {list(allowed)}",
+        )
+    return OptionResolution(
+        key=rec.key, value=None if errors else value, source=source or "UNKNOWN",
+        rule_set_id=rule_set_id, allowed=allowed, errors=errors,
+    )
+
+
+def check_selectable_option(rec: ArtifactRecord, selection: dict) -> CheckItem:
+    """选择项判据：取值必须**在该规则集的合法集合内**，且能说明来源。
+
+    与 :func:`bidpricing.artifact.verify_enum` 的区别：
+
+    * ``verify_enum`` 只对照注册表声明的**全局**取值集合——对
+      ``adjustment_scope`` 而言是 ``{FULL, SEGMENT}`` 的并集，
+      于是「在 2013 项目上落值 FULL」会被误判为合法；
+    * 本函数按**规则集**取合法集合：2013 下只有 ``SEGMENT``，
+      落值 ``FULL`` 属配置冲突，直接 BLOCKED（而不是静默改成 SEGMENT）——
+      静默覆盖会让"系统建议值"与"人工落值"的差异从审计链上消失。
+    """
+    option = SELECTABLE_OPTIONS.get(rec.key)
+    if option is None:  # 未登记的选择项退回通用枚举校验
+        return verify_enum(rec, selection.get(rec.key), "T00-08 select_rule_set()")
+
+    resolution = _resolution_from_selection(rec, selection)
+    where = f"来源 {resolution.source}" + (
+        f"，规则集 {resolution.rule_set_id}" if resolution.rule_set_id else ""
+    )
+
+    if resolution.value is None and not resolution.errors:
+        return CheckItem(
+            scope="§7.1.1-1/2", item=rec.key, status=Status.BLOCKED,
+            reason=(
+                f"选择项未定（key 缺失）：{option.title}。该选择项**无默认值**，"
+                f"未落值前 Phase 0 直接判 BLOCKED。"
+                f"该规则集下合法取值：{list(resolution.allowed)}；"
+                f"落值通道：bidpricing options set --key {rec.key} --value ..."
+            ),
+            actual="<missing>", expected=list(resolution.allowed),
+        )
+    if resolution.errors:
+        return CheckItem(
+            scope="§7.1.1-1/2", item=rec.key, status=Status.BLOCKED,
+            reason=resolution.errors[0],
+            actual=selection.get(rec.key), expected=list(resolution.allowed),
+        )
+    return CheckItem(
+        scope="§7.1.1-1/2", item=rec.key, status=Status.PASS,
+        reason=(
+            f"选择项已落值且在该规则集下合法（{where}"
+            + (f"，依据：{resolution.rationale}" if resolution.rationale else "")
+            + "）"
+        ),
+        actual=resolution.value, expected=list(resolution.allowed),
+    )
+
+
 def check_gate_0a(
     registry: dict,
     config_dir: Path,
@@ -166,9 +249,7 @@ def check_gate_0a(
 
     enum_recs = [r for r in records if r.is_enum]
     for rec in enum_recs:
-        report.add(
-            verify_enum(rec, selection.get(rec.key), "T00-08 select_rule_set()")
-        )
+        report.add(check_selectable_option(rec, selection))
 
     # 断言 3：双闸门独立判定 + 放行清单
     gate_status = report.status

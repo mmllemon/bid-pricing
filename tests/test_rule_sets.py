@@ -116,6 +116,26 @@ class FingerprintTest(unittest.TestCase):
         self.assertAlmostEqual(RS13.fingerprint(rho_probe=0.0), 0.0, places=6)
         self.assertAlmostEqual(RS24.fingerprint(rho_probe=0.0), 0.0, places=6)
 
+    def test_2024_fingerprint_is_scope_dependent(self):
+        """指纹随作用域变化：FULL 跳降、SEGMENT 连续。"""
+        self.assertAlmostEqual(
+            RS24.fingerprint(rho_probe=0.01, scope="FULL"), -1.15 * 0.01, places=6
+        )
+        self.assertLess(abs(RS24.fingerprint(rho_probe=0.01, scope="SEGMENT")), 1e-6)
+
+    def test_self_test_exposes_segment_degeneracy(self):
+        """选择 SEGMENT 会让数值指纹失去鉴别力——必须登记为遗留项而非静默通过。"""
+        result = ruleset_self_test()
+        self.assertIn("rs_2024_fingerprint_SEGMENT", result["checks"])
+        self.assertTrue(result["checks"]["rs_2024_fingerprint_SEGMENT"]["degenerate"])
+        self.assertTrue(
+            any("退化" in a for a in result["advisories"]), result["advisories"]
+        )
+
+    def test_supported_scopes_are_declared_per_rule_set(self):
+        self.assertEqual(RS13.supported_scopes, ("SEGMENT",))
+        self.assertEqual(set(RS24.supported_scopes), {"FULL", "SEGMENT"})
+
 
 if __name__ == "__main__":
     unittest.main()

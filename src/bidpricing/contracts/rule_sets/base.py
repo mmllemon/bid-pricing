@@ -46,6 +46,11 @@ class RuleSet(ABC):
     legal_basis: str = ""
     #: 该规则集的 ``adjustment_scope`` 是否在规范层面存在歧义
     scope_ambiguous: bool = False
+    #: 该规则集下 ``adjustment_scope`` 的**合法取值集合**。
+    #: 长度为 1 表示规范已明文确定（非可选项）；长度 > 1 表示属项目级选择项。
+    #: 取值集合由 :mod:`bidpricing.selection_options` 统一登记，此处仅作实现侧声明，
+    #: 两处必须一致——由 ``tests/test_selection_options.py`` 的防漂移断言守住。
+    supported_scopes: tuple[str, ...] = ()
 
     # ------------------------------------------------------------------ 分档
 

@@ -22,6 +22,10 @@
 **未冻结（``scope`` 非枚举值）时一律抛异常**，不得自行取任一侧——
 这是路线 §7.1.1 断言 2「未定态熔断」在求解层面的落地。
 
+注意：本版的作用域是**项目级选择项**而非一次性裁决常量，取值由
+:mod:`bidpricing.selection_options` 统一登记与落值（``config/project_selection.json``），
+本模块只负责"取到非法/缺失值时拒绝计算"。
+
 本地实现**不共享** 2013 版的任何调价公式。
 """
 
@@ -52,6 +56,8 @@ class GBT50500_2024_RuleSet(RuleSet):
     )
     #: 规范未明说是否分段 —— 必须由 T00-01 冻结
     scope_ambiguous = True
+    #: 该规则集下 adjustment_scope 属**项目级选择项**（两种解读均合法）
+    supported_scopes = VALID_SCOPES
 
     @staticmethod
     def _require_scope(scope: str | None) -> str:
@@ -110,14 +116,26 @@ class GBT50500_2024_RuleSet(RuleSet):
             q0, q1, p0, rho_plus=rho_plus, rho_minus=rho_minus, scope=resolved
         ) / (q0 * p0)
 
-    def fingerprint(self, rho_probe: float = 0.01, delta: float = 1e-9) -> float:
-        """以 ``FULL`` 作用域取指纹——这是 2024 版字面口径，也是唯一产生跳变的分支。"""
+    def fingerprint(
+        self,
+        rho_probe: float = 0.01,
+        delta: float = 1e-9,
+        scope: str = "FULL",
+    ) -> float:
+        """按指定作用域取 ``r_eff`` 在 ``r = 1.15 ± δ`` 处的跳变量。
+
+        默认 ``FULL``——2024 版字面口径，也是**唯一产生跳降的分支**。
+        ``scope="SEGMENT"`` 时跳变量回到 ``≈ 0``（与 2013 同形），
+        这是已知的**指纹退化条件**：一旦项目选择 SEGMENT，
+        数值指纹便无法再区分两套实现，区分依据退回条款覆盖（§8.2/§8.9 双路径）
+        与两版代码路径的独立实现。自检必须同时输出两个作用域的结果。
+        """
         lo = self.effective_revenue_multiple(
             1.0, INCREASE_THRESHOLD - delta, 1.0,
-            rho_plus=rho_probe, rho_minus=rho_probe, scope="FULL",
+            rho_plus=rho_probe, rho_minus=rho_probe, scope=scope,
         )
         hi = self.effective_revenue_multiple(
             1.0, INCREASE_THRESHOLD + delta, 1.0,
-            rho_plus=rho_probe, rho_minus=rho_probe, scope="FULL",
+            rho_plus=rho_probe, rho_minus=rho_probe, scope=scope,
         )
         return hi - lo

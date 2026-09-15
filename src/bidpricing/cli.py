@@ -7,6 +7,14 @@
     PYTHONPATH=src python -m bidpricing.cli ruleset-selftest
     PYTHONPATH=src python -m bidpricing.cli freeze --all
     PYTHONPATH=src python -m bidpricing.cli freeze --gate gate_0a --key field_schema_version
+
+    # 选择项（adjustment_scope 等）
+    PYTHONPATH=src python -m bidpricing.cli options list
+    PYTHONPATH=src python -m bidpricing.cli options set \\
+        --key adjustment_scope --value FULL --rule-set GB/T50500-2024 \\
+        --rationale "招标文件 §12.3 未约定分段，按 2024 字面口径"
+    PYTHONPATH=src python -m bidpricing.cli options clear --key adjustment_scope
+    PYTHONPATH=src python -m bidpricing.cli scope-impact --q0 100 --q1 130 --p0 10
 """
 
 from __future__ import annotations
@@ -22,15 +30,29 @@ from .artifact import (
     parse_records,
     save_registry,
 )
+from .contracts.scope_impact import compare_scopes
 from .contracts.selector import ruleset_self_test, select_rule_set
 from .gates.gate0 import evaluate_gate_0
-from .paths import GATE0_REGISTRY, config_dir
+from .paths import GATE0_REGISTRY, PROJECT_SELECTION, config_dir
+from .selection_options import (
+    SELECTABLE_OPTIONS,
+    clear_option,
+    read_option_entry,
+    resolve_option,
+    write_option,
+)
 
 _STATUS_MARK = {"PASS": "PASS", "WARN": "WARN", "FAIL": "FAIL", "BLOCKED": "BLOCKED"}
+
+RULE_SET_CHOICES = ("GB/T50500-2024", "GB50500-2013")
 
 
 def _registry_path():
     return config_dir() / GATE0_REGISTRY
+
+
+def _selection_path():
+    return config_dir() / PROJECT_SELECTION
 
 
 def _load():
@@ -52,6 +74,7 @@ def _selection_from_args(args) -> dict:
         tender_document_override=args.tender_document_override,
         contract_override=args.contract_override,
         adjustment_scope_declared=args.adjustment_scope,
+        selection_file=getattr(args, "selection_file", None),
     )
     return selection.to_dict()
 
@@ -134,7 +157,8 @@ def cmd_ruleset_selftest(args) -> int:
     print(f"  探针 rho_probe = {result['rho_probe']}   delta = {result['delta']}\n")
     for name, chk in result["checks"].items():
         flag = "PASS" if chk["passed"] else "FAIL"
-        print(f"  [{flag}] {name}")
+        scope = f"   [作用域 {chk['scope']}]" if "scope" in chk else ""
+        print(f"  [{flag}] {name}{scope}")
         print(f"         actual = {chk['actual']!r}")
         if "expected" in chk:
             print(f"         expected = {chk['expected']!r} (tol {chk.get('tolerance')})")
@@ -142,8 +166,12 @@ def cmd_ruleset_selftest(args) -> int:
             print(f"         |actual| <= {chk['expected_abs_max']}")
         if "expected_min" in chk:
             print(f"         |actual| >= {chk['expected_min']}")
+        if chk.get("degenerate"):
+            print("         [该作用域下判据退化——见遗留项]")
         print(f"         {chk['meaning']}")
     print(f"\n总判定：{'PASS' if result['passed'] else 'FAIL'}")
+    for adv in result.get("advisories", []):
+        print(f"\n  [遗留项] {adv}")
     return 0 if result["passed"] else 1
 
 
@@ -190,6 +218,174 @@ def cmd_freeze(args) -> int:
     return 0 if not skipped else 1
 
 
+# ------------------------------------------------------------------ options
+
+
+def cmd_options(args) -> int:
+    path = _selection_path()
+    action = args.action
+
+    if action == "list":
+        return _options_list(path, args)
+    if action == "set":
+        return _options_set(path, args)
+    if action == "clear":
+        return _options_clear(path, args)
+    print(f"[FATAL] 未知动作：{action}", file=sys.stderr)
+    return 2
+
+
+def _options_list(path, args) -> int:
+    rule_set_id = args.rule_set
+    rows = []
+    for key, option in SELECTABLE_OPTIONS.items():
+        allowed = option.allowed_for(rule_set_id)
+        entry = read_option_entry(path, key)
+        resolution = (
+            resolve_option(key, rule_set_id, path=path) if rule_set_id else None
+        )
+        rows.append(
+            {
+                "option": option.to_dict(),
+                "allowed_here": list(allowed),
+                "discretionary_here": option.is_discretionary(rule_set_id),
+                "file_entry": entry,
+                "resolution": resolution.to_dict() if resolution else None,
+            }
+        )
+
+    if args.json:
+        print(json.dumps({"selection_file": str(path), "options": rows},
+                         ensure_ascii=False, indent=2))
+        return 0
+
+    print("=" * 78)
+    print("选择项清单（《实施路线 v3.2.1》§7.1.1 断言 1/2/6 的落地）")
+    print(f"落值文件：{path}")
+    print("=" * 78)
+    for row in rows:
+        option = row["option"]
+        print(f"\n■ {option['key']}  —— {option['title']}")
+        print(f"  所属闸门：{option['gate']}    规格出处：{option['spec_ref']}")
+        print(f"  取值集合（按规则集）：")
+        for rs, values in option["allowed_by_rule_set"].items():
+            print(f"      {rs:<16} {' | '.join(values)}")
+        print(f"  默认值：{option['default']}（选择项永无默认值）")
+        if rule_set_id:
+            print(f"  当前规则集 {rule_set_id} 下合法取值：{' | '.join(row['allowed_here'])}"
+                  f"    是否真有选择余地：{'是' if row['discretionary_here'] else '否（规范明文确定）'}")
+            res = row["resolution"]
+            print(f"  解析结果：{res['status']}    取值={res['value']!r}    来源={res['source']}")
+            for err in res["errors"]:
+                print(f"      [冲突] {err}")
+        else:
+            print("  （未指定 --rule-set：不解析当前取值）")
+        if row["file_entry"]:
+            entry = row["file_entry"]
+            print(f"  已落值：{entry.get('value')!r} @ {entry.get('selected_at')}"
+                  f" by {entry.get('actor')}")
+            if entry.get("rationale"):
+                print(f"     依据：{entry['rationale']}")
+        else:
+            print("  已落值：（无——未选择）")
+        for value, text in option["impact"].items():
+            print(f"  影响 [{value}]：{text}")
+        print(f"  下游消费方：{'、'.join(option['consumers'])}")
+        print(f"  为何是选择项：{option['rationale']}")
+    print("\n" + "=" * 78)
+    print("说明：未落值的选择项在 T00-08 输出中**不写 key**，Gate 0a 判 BLOCKED。")
+    print("落值命令：bidpricing options set --key <key> --value <value> --rule-set <rid>")
+    return 0
+
+
+def _options_set(path, args) -> int:
+    key = args.key
+    option = SELECTABLE_OPTIONS.get(key)
+    if option is None:
+        print(f"[FATAL] 未登记的选择项：{key}（已登记：{list(SELECTABLE_OPTIONS)}）",
+              file=sys.stderr)
+        return 2
+    rule_set_id = args.rule_set
+    if rule_set_id is None:
+        print("[FATAL] options set 必须显式给出 --rule-set（合法取值随规则集而变）",
+              file=sys.stderr)
+        return 2
+
+    # 先校验再落值：合法性判据只有一处（selection_options.resolve_option）
+    probe = resolve_option(key, rule_set_id, cli_value=args.value)
+    if probe.errors:
+        print(f"[REJECTED] {probe.errors[0]}", file=sys.stderr)
+        print(f"           该规则集下合法取值：{list(probe.allowed)}", file=sys.stderr)
+        return 2
+    if not option.is_discretionary(rule_set_id):
+        print(
+            f"[REJECTED] {key} 在规则集 {rule_set_id} 下由规范明文确定为 "
+            f"{probe.value}，不构成可选项；无需（也不允许）落值。",
+            file=sys.stderr,
+        )
+        return 2
+
+    doc = write_option(
+        path, key, args.value,
+        rule_set_id=rule_set_id,
+        rationale=args.rationale or "",
+        actor=args.actor,
+    )
+    entry = (doc.get("options") or {}).get(key, {})
+    print(f"[SELECTED] {key} = {args.value}   （规则集 {rule_set_id}）")
+    print(f"           落值文件：{path}")
+    print(f"           落值时间：{entry.get('selected_at')}   落值人：{entry.get('actor')}")
+    if entry.get("rationale"):
+        print(f"           依据：{entry['rationale']}")
+    else:
+        print("           [提示] 未提供 --rationale：该选择项将缺少决策依据快照")
+    print("\n下一步：PYTHONPATH=src python -m bidpricing.cli gate-check "
+          "--contract-date <合同签订日期>    # 复查 Gate 0a 剩余阻塞项")
+    return 0
+
+
+def _options_clear(path, args) -> int:
+    clear_option(path, args.key)
+    print(f"[CLEARED]  {args.key} → 未选择（不写 value 字段）")
+    print(f"           落值文件：{path}")
+    print("           注意：未选择的选择项会让 Gate 0a 判 BLOCKED（断言 2 熔断）")
+    return 0
+
+
+# ------------------------------------------------------------ scope-impact
+
+
+def cmd_scope_impact(args) -> int:
+    result = compare_scopes(
+        args.q0, args.q1, args.p0,
+        rho_plus=args.rho_plus, rho_minus=args.rho_minus,
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
+    print("=" * 78)
+    print("选择项影响度量 —— GB/T 50500-2024 §8.9 作用域分叉（规则层）")
+    print("=" * 78)
+    inp = result["inputs"]
+    print(f"输入：q0={inp['q0']}  q1={inp['q1']}  p0={inp['p0']}  "
+          f"ρ⁺={inp['rho_plus']}  ρ⁻={inp['rho_minus']}")
+    print(f"工程量比值 r = {result['quantity_ratio']:.6g}    分档 = {result['branch']}\n")
+    rs = result["gb_t_50500_2024"]
+    print(f"  FULL    结算金额 = {rs['FULL']:.6f}")
+    print(f"  SEGMENT 结算金额 = {rs['SEGMENT']:.6f}")
+    print(f"  差额（SEGMENT − FULL） = {rs['difference_segment_minus_full']:.6f}"
+          + (f"   （{rs['divergence_pct']:.4f}%）" if rs["divergence_pct"] is not None else ""))
+    print(f"  2013 参照值 = {result['gb_50500_2013_reference']:.6f}"
+          f"    SEGMENT 与 2013 同值：{'是' if result['segment_equals_2013'] else '否'}")
+    print(f"  本项上两作用域是否等价：{'是' if result['scope_equivalent_here'] else '否'}\n")
+    for note in result["notes"]:
+        print(f"  · {note}")
+    print(f"\n  边界说明：{result['rules_to_optimizer_gap']}")
+    print("=" * 78)
+    return 0
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -210,7 +406,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--tender-document-override", default=None)
         p.add_argument("--contract-override", default=None)
         p.add_argument("--adjustment-scope", default=None, choices=["FULL", "SEGMENT"],
-                       help="T00-01 对 §8.9 是否分段的解读结论")
+                       help="选择项 adjustment_scope 的临时落值（优先级高于落值文件）")
+        p.add_argument("--selection-file", default=None,
+                       help=f"选择项落值文件，默认 config/{PROJECT_SELECTION}")
 
     p_gate = sub.add_parser("gate-check", help="执行 Gate 0 全部机械判据")
     add_selection_args(p_gate)
@@ -232,6 +430,34 @@ def build_parser() -> argparse.ArgumentParser:
     p_fz.add_argument("--gate", default=None, choices=["gate_0a", "gate_0b"])
     p_fz.add_argument("--key", default=None)
     p_fz.set_defaults(func=cmd_freeze)
+
+    # ------------------------------------------------------------ options
+    p_opt = sub.add_parser(
+        "options",
+        help="查看 / 落值 / 撤销项目级选择项（adjustment_scope 等）",
+    )
+    p_opt.add_argument("action", choices=["list", "set", "clear"])
+    p_opt.add_argument("--key", default=None, help="选择项 key（set/clear 必填）")
+    p_opt.add_argument("--value", default=None, help="取值（set 必填）")
+    p_opt.add_argument("--rule-set", default=None, choices=list(RULE_SET_CHOICES),
+                       help="规则集——合法取值集合随规则集而变，故必须显式给出")
+    p_opt.add_argument("--rationale", default=None, help="选择依据（计入审计快照）")
+    p_opt.add_argument("--actor", default="operator", help="落值人标识")
+    p_opt.add_argument("--json", action="store_true", help="输出 JSON（list）")
+    p_opt.set_defaults(func=cmd_options)
+
+    # ------------------------------------------------------- scope-impact
+    p_si = sub.add_parser(
+        "scope-impact",
+        help="度量 adjustment_scope 两个取值在**规则层**的结算分叉",
+    )
+    p_si.add_argument("--q0", type=float, required=True, help="投标基准工程量")
+    p_si.add_argument("--q1", type=float, required=True, help="实施工程量")
+    p_si.add_argument("--p0", type=float, required=True, help="投标单价")
+    p_si.add_argument("--rho-plus", type=float, default=0.0, help="ρ⁺（默认 0，规范无量化依据）")
+    p_si.add_argument("--rho-minus", type=float, default=0.0, help="ρ⁻（默认 0）")
+    p_si.add_argument("--json", action="store_true")
+    p_si.set_defaults(func=cmd_scope_impact)
 
     return parser
 

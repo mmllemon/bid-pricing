@@ -1,7 +1,7 @@
 {
-  "spec_id": "rule_set_selector_spec_v1",
+  "spec_id": "rule_set_selector_spec_v2",
   "task": "T00-08",
-  "title": "规则集选择器规格",
+  "title": "规则集选择器规格（含项目级选择项）",
   "role": "路线起点任务（Depends 为空）。规则集未定，则 P1 定义、调价阈值、adjustment_scope 全部悬空。",
   "implementation": "bidpricing.contracts.selector.select_rule_set",
   "inputs": [
@@ -13,18 +13,53 @@
     {"key": "funding_type", "type": "string|null", "required": false, "decisive": false, "note": "同上"},
     {"key": "tender_document_override", "type": "string|null", "required": false},
     {"key": "contract_override", "type": "string|null", "required": false},
-    {"key": "adjustment_scope_declared", "type": "enum|null", "required": false, "note": "非路线原始输入；T00-01 的落值通道"}
+    {"key": "adjustment_scope_declared", "type": "enum|null", "required": false, "note": "非路线原始输入；选择项 adjustment_scope 的临时落值通道，优先级高于落值文件，但不留审计快照"}
   ],
-  "outputs": ["rule_set_id", "effective_date", "legal_basis", "precedence_chain", "adjustment_scope"],
+  "outputs": [
+    "rule_set_id", "effective_date", "legal_basis", "precedence_chain",
+    "adjustment_scope", "adjustment_scope_source"
+  ],
   "precedence_chain": ["Contract", "Tender", "Regional", "Standard"],
   "decision_rules": {
     "default": "GB/T50500-2024（自 2025-09-01 起施行）",
     "fallback_to_2013": "仅当同时满足：① 属过渡项目（2025-09-01 前发布招标文件或已签合同）② 招标文件/合同约定沿用旧规范",
     "fallback_reading_note": "路线 T00-08 原文写「过渡项目 或 合同另有约定」，§8.3 校正一写「且」。本实现采用 §8.3 的严格口径（两个条件同时成立），并在仅命中日期条件时输出 BLOCKED 而非默认取 2013——符合「禁止默认取任一侧」。",
     "undeterminable": "BLOCKED（禁止默认取任一侧）",
-    "adjustment_scope_for_2013": "SEGMENT（§9.6.2 明文规定分段累加，非歧义）",
-    "adjustment_scope_for_2024": "须由 T00-01 落值；未落值时输出中不含该 key（§7.1.1 断言 1）"
+    "adjustment_scope_for_2013": "SEGMENT（§9.6.2 明文规定分段累加）。该规则集下不构成可选项：落值 FULL 判为与规则集冲突 → BLOCKED，不再静默覆盖",
+    "adjustment_scope_for_2024": "项目级选择项，FULL / SEGMENT 二选一；未落值时输出中不含该 key（§7.1.1 断言 1）"
   },
+  "selectable_options": [
+    {
+      "key": "adjustment_scope",
+      "title": "§8.9 工程量偏差调整作用域",
+      "kind": "enum",
+      "gate": "gate_0a",
+      "spec_ref": "T00-08 / T00-01",
+      "default": null,
+      "allowed_by_rule_set": {
+        "GB/T50500-2024": ["FULL", "SEGMENT"],
+        "GB50500-2013": ["SEGMENT"]
+      },
+      "resolution_order": [
+        "CLI（临时，最高优先）",
+        "config/project_selection.json（项目落值，含依据快照）",
+        "RULE_SET_DETERMINED（仅当规范明文确定、无选择余地）",
+        "BLOCKED（未定态熔断）"
+      ],
+      "impact": {
+        "FULL": "字面口径：全部工程量按调整后单价结算；r_eff 在 r=1.15 处跳降 ≈ -1.15·ρ⁺",
+        "SEGMENT": "分段口径：仅超出 1.15·Q0 的部分按调整后单价；r_eff 连续（与 2013 同形）"
+      },
+      "consumers": [
+        "WP3 判定层 R_i(·) 分段逻辑",
+        "WP4 求解层目标函数与约束",
+        "WP4 Phase 1/2 对拍",
+        "WP6 报价表与总价分解输出"
+      ],
+      "no_default_rationale": "默认值会让「未选择」与「已选择」在机器上不可区分，等价于在 4.5 倍误差区间内做优化（§7.1.1 断言 2 要拦的正是这条路径）",
+      "audit_note": "落值携带 source / actor / selected_at / rationale，构成报价决策依据快照；缺失 rationale 时落值命令会显式提示"
+    }
+  ],
   "mechanical_fingerprint": {
     "quantity_ratio": "r = q1 / q0",
     "effective_revenue_multiple": "r_eff = SettlementAmount(q1) / (q0 * p0)",
@@ -33,11 +68,17 @@
       "GB50500-2013": "跳变量 ~= 0（分段累加 → 收益结构连续）",
       "GB/T50500-2024": "跳变量 ~= -1.15 * rho_probe（调整单价本身 → 跳降）"
     },
-    "purpose": "识别「两套 RuleSet 是否只是改了条文号、公式其实相同」（T00-07 强制测试）",
-    "degeneracy_warning": "rho_plus 的规范默认值为 0（无量化依据）。若探针也取 0，两套规则集在 r_eff 上完全重合、指纹退化。故自检必须使用非零探针值。这是一处已知的判据退化条件，已在 ruleset_self_test 中显式参数化。"
+    "scope_dependency": "指纹随作用域变化：2024 在 FULL 下跳降 ≈ -1.15·ρ⁺（与 2013 分离度显著）；在 SEGMENT 下跳变量 ≈ 0，**与 2013 同形** → 该作用域下指纹退化，失去对两套实现的鉴别力。故自检必须同时输出两个作用域的结果，并把退化登记为遗留项。",
+    "degeneracy_conditions": [
+      "rho_probe = 0：两版指纹完全重合（ρ 规范默认值为 0，无量化依据）",
+      "2024 选择 SEGMENT：该口径结算曲线与 2013 同形；此时区分依据退回条款覆盖（2024 拆为 §8.2 清单缺陷 / §8.9 工程变更，2013 为 §9.6.2 单条款）与两版代码路径的独立实现"
+    ],
+    "purpose": "识别「两套 RuleSet 是否只是改了条文号、公式其实相同」（T00-07 强制测试）"
   },
   "known_limits": [
     "region / project_type / funding_type 三个输入当前不参与判定，仅留痕——待 T00-01 补充规则表后启用",
-    "2024 版减量侧（r < 0.85）FULL 与 SEGMENT 等价（「减少后剩余部分」本就是全部 q1），作用域分叉只出现在增量侧"
+    "2024 版减量侧（r < 0.85）FULL 与 SEGMENT 等价（「减少后剩余部分」本就是全部 q1），作用域分叉只出现在增量侧",
+    "规则层分叉（同一报价在两种口径下的结算差）不等于报价层的最优利润差：规格书附录 B 例 2R 的约 4.5 倍差需由 WP4 在两条口径下分别求解后比较",
+    "选择项落值文件未纳入 Gate 0a 受控制品注册表（不入 hash 绑定）：变更不留契约失效信号，是否升级为受控制品待定"
   ]
 }

@@ -35,6 +35,8 @@ class GB50500_2013_RuleSet(RuleSet):
     )
     #: 2013 版 §9.6.2 已明确规定分段累加，不存在作用域歧义
     scope_ambiguous = False
+    #: 该规则集下 adjustment_scope **只有一种合法取值** → 非选择项（规范明文确定）
+    supported_scopes = ("SEGMENT",)
 
     def settlement_amount(
         self,

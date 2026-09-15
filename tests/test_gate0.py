@@ -114,10 +114,16 @@ class Gate0aTest(unittest.TestCase):
             self.assertEqual(GATE_0A_RELEASE_EXCLUSIONS[0][0], "T00-10B")
 
     def test_real_config_is_blocked_on_two_startup_items(self):
-        """真实仓库现状：技术制品可冻结，但两项属启动前阻塞。"""
+        """真实仓库现状：技术制品可冻结，另有两项属启动前阻塞。
+
+        显式关闭项目落值文件——该用例断言"未选择 adjustment_scope"这一状态，
+        不得随本机 config/project_selection.json 内容变化。
+        """
         cdir = config_dir()
         registry = load_registry(cdir / GATE0_REGISTRY)
-        selection = select_rule_set(contract_date="2026-03-01").to_dict()
+        selection = select_rule_set(
+            contract_date="2026-03-01", use_project_selection=False
+        ).to_dict()
         report = check_gate_0a(registry, cdir, selection)
         self.assertIs(report.status, Status.BLOCKED)
         blocked = {i.item for i in report.blockers}
@@ -243,7 +249,9 @@ class EndToEndTest(unittest.TestCase):
     def test_evaluate_gate_0_real_repo_state(self):
         cdir = config_dir()
         registry = load_registry(cdir / GATE0_REGISTRY)
-        selection = select_rule_set(contract_date="2026-03-01").to_dict()
+        selection = select_rule_set(
+            contract_date="2026-03-01", use_project_selection=False
+        ).to_dict()
         report = evaluate_gate_0(registry, cdir, selection)
         self.assertEqual(report["summary"]["gate_0a"], "BLOCKED")
         self.assertEqual(report["summary"]["phase_0"], "BLOCKED")

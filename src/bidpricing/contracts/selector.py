@@ -21,17 +21,33 @@
 ``adjustment_scope`` 未定时，本模块**直接不输出该 key**，
 而不是写入 ``None`` / ``"未定"`` / ``"UNDETERMINED"`` 等字符串——
 后者会被「非空即通过」的判据当成已冻结，从而绕过 §7.1.1 的熔断点。
+
+``adjustment_scope`` 的取值不再是"一次性裁决的常量"，而是一个
+**项目级选择项**，由 :mod:`bidpricing.selection_options` 统一登记、校验与留痕：
+
+* GB/T 50500-2024 —— ``FULL`` / ``SEGMENT`` 二选一（无默认值）；
+* GB 50500-2013 —— 仅 ``SEGMENT``（§9.6.2 明文分段，**不可选 FULL**，
+  在 2013 项目上出现 ``FULL`` 会被判为与规则集冲突而 BLOCKED，
+  而不是被静默覆盖——静默覆盖会让"系统的建议值"与"人工落值"的差异消失于审计链）。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 
+from ..paths import PROJECT_SELECTION, config_dir
+from ..selection_options import (
+    SELECTABLE_OPTIONS,
+    SOURCE_CLI,
+    SOURCE_RULE_SET,
+    resolve_option,
+)
 from ..states import Status
 from .rule_sets.base import RuleSet
 from .rule_sets.gb50500_2013 import GB50500_2013_RuleSet
-from .rule_sets.gbt50500_2024 import GBT50500_2024_RuleSet, VALID_SCOPES
+from .rule_sets.gbt50500_2024 import GBT50500_2024_RuleSet
 
 #: GB/T 50500-2024 施行日 / GB 50500-2013 废止日
 CUTOVER_DATE = date(2025, 9, 1)
@@ -87,6 +103,7 @@ class RuleSetSelection:
     legal_basis: str | None
     precedence_chain: tuple[str, ...]
     adjustment_scope: str | None
+    adjustment_scope_source: str | None = None
     decisions: list[str] = field(default_factory=list)
     blockers: list[str] = field(default_factory=list)
 
@@ -95,8 +112,13 @@ class RuleSetSelection:
         return self.rule_set.rule_set_id if self.rule_set else None
 
     @property
+    def scope_allowed(self) -> tuple[str, ...]:
+        """当前规则集下该选择项的合法取值集合。"""
+        return SELECTABLE_OPTIONS["adjustment_scope"].allowed_for(self.rule_set_id)
+
+    @property
     def scope_is_frozen(self) -> bool:
-        return self.adjustment_scope in VALID_SCOPES
+        return self.adjustment_scope in self.scope_allowed
 
     def to_dict(self) -> dict:
         payload: dict = {
@@ -112,7 +134,14 @@ class RuleSetSelection:
         # §7.1.1 断言 1：未定态 = key 完全缺失。
         if self.adjustment_scope is not None:
             payload["adjustment_scope"] = self.adjustment_scope
+            if self.adjustment_scope_source:
+                # 来源另立 key，不污染取值本身——取值必须恰好是枚举字面量
+                payload["adjustment_scope_source"] = self.adjustment_scope_source
         return payload
+
+
+def _default_selection_path() -> Path:
+    return config_dir() / PROJECT_SELECTION
 
 
 def select_rule_set(
@@ -126,15 +155,22 @@ def select_rule_set(
     tender_document_override: str | None = None,
     contract_override: str | None = None,
     adjustment_scope_declared: str | None = None,
+    selection_file: str | Path | None = None,
+    use_project_selection: bool = True,
 ) -> RuleSetSelection:
-    """机械判定项目适用的规则集。
+    """机械判定项目适用的规则集，并解析项目级选择项。
 
     参数
     ----
     adjustment_scope_declared
-        **不属于路线原始 9 项输入**，是 T00-01 的落值通道：合同/招标文件对
-        §8.9「是否分段」的解读结论。未提供且规则集为 2024 时，
+        **不属于路线原始 9 项输入**，是选择项的临时落值通道（最高优先级）。
+        未提供时回落到项目选择项文件；两者都没有且规则集为 2024 时，
         输出中将**不含** ``adjustment_scope`` key（未定态）。
+    selection_file
+        项目选择项落值文件，默认 ``config/project_selection.json``。
+        文件不存在或其中该选择项未落值，等价于"未选择"。
+    use_project_selection
+        置 ``False`` 可忽略落值文件（仅用于单测构造"未选择"场景）。
     """
     decisions: list[str] = []
     blockers: list[str] = []
@@ -215,37 +251,61 @@ def select_rule_set(
         if value:
             decisions.append(f"输入 {label}={value!r} 已记录；当前规则表未定义其分支作用（待 T00-01 补充）")
 
-    # ------------------------------------------------------------ 4. 作用域冻结
+    # -------------------------------------------------------- 4. 选择项解析
     adjustment_scope: str | None = None
+    adjustment_scope_source: str | None = None
     if rule_set is not None:
-        if rule_set.scope_ambiguous:
-            if adjustment_scope_declared is not None:
-                if adjustment_scope_declared in VALID_SCOPES:
-                    adjustment_scope = adjustment_scope_declared
-                    decisions.append(
-                        f"adjustment_scope 取自 T00-01 落值：{adjustment_scope}"
-                    )
-                else:
-                    blockers.append(
-                        f"adjustment_scope_declared={adjustment_scope_declared!r} 非合法枚举"
-                        f"（只允许 {list(VALID_SCOPES)}）"
-                    )
-            else:
-                blockers.append(
-                    "adjustment_scope 未定：GB/T 50500-2024 §8.9 未明说是否分段，"
-                    "FULL 与 SEGMENT 下最优报价结构相反、利润差约 4.5 倍。"
-                    "按 §7.1.1 断言 2，Phase 0 直接判 BLOCKED"
-                )
-        else:
-            adjustment_scope = "SEGMENT"
-            decisions.append(
-                "adjustment_scope=SEGMENT 由 GB 50500-2013 §9.6.2 明文规定（分段累加），"
-                "非歧义、无需人工裁定"
+        if use_project_selection:
+            selection_path = (
+                Path(selection_file) if selection_file is not None
+                else _default_selection_path()
             )
-            if adjustment_scope_declared and adjustment_scope_declared != "SEGMENT":
+        else:
+            selection_path = None
+
+        resolution = resolve_option(
+            "adjustment_scope",
+            rule_set.rule_set_id,
+            cli_value=adjustment_scope_declared,
+            path=selection_path,
+        )
+
+        if resolution.errors:
+            blockers.extend(resolution.errors)
+        elif resolution.value is None:
+            blockers.append(
+                "选择项 adjustment_scope 未定：GB/T 50500-2024 §8.9 未明说是否分段，"
+                "FULL 与 SEGMENT 两种解读下最优报价结构相反、利润差约 4.5 倍。"
+                "该选择项**无默认值**，未落值前按 §7.1.1 断言 2 直接判 BLOCKED"
+                "（落值通道：bidpricing options set --key adjustment_scope "
+                f"--value {{{'|'.join(resolution.allowed)}}} --rule-set "
+                f"{rule_set.rule_set_id}）"
+            )
+        else:
+            adjustment_scope = resolution.value
+            adjustment_scope_source = resolution.source
+            decisions.append(
+                f"选择项 adjustment_scope={adjustment_scope}"
+                f"（来源：{resolution.source}；该规则集合法取值："
+                f"{list(resolution.allowed)}）"
+            )
+            if resolution.source == SOURCE_RULE_SET:
                 decisions.append(
-                    f"注意：声明的 adjustment_scope={adjustment_scope_declared!r} "
-                    "被规范明文覆盖为 SEGMENT（规范优先于约定解读）"
+                    f"{rule_set.standard_code} 已由规范明文确定该口径，"
+                    "非人工可选项——因此不构成未证假设"
+                )
+            elif resolution.source == SOURCE_CLI:
+                decisions.append(
+                    "本次取值来自命令行（临时）。正式口径应写入 "
+                    "config/project_selection.json 以留下决策依据快照"
+                    "（bidpricing options set）"
+                )
+            if resolution.rationale:
+                decisions.append(f"选择依据：{resolution.rationale}")
+            if resolution.selected_at:
+                decisions.append(
+                    f"落值时间 {resolution.selected_at}"
+                    + (f"，落值人 {resolution.actor}" if resolution.actor else "")
                 )
 
     status = Status.BLOCKED if blockers else Status.PASS
@@ -257,6 +317,7 @@ def select_rule_set(
         legal_basis=rule_set.legal_basis if rule_set else None,
         precedence_chain=PRECEDENCE_CHAIN,
         adjustment_scope=adjustment_scope,
+        adjustment_scope_source=adjustment_scope_source,
         decisions=decisions,
         blockers=blockers,
     )
@@ -269,38 +330,85 @@ def ruleset_self_test(rho_probe: float = 0.01, delta: float = 1e-9) -> dict:
 
     路线原文：「同一输入下两套 RuleSet 输出不得仅因条文号不同而相同」。
 
-    返回 dict，含两套规则集的实测跳变量与期望量级、以及是否通过。
+    **指纹是作用域相关的**，因此必须同时报告 2024 的两个作用域：
+
+    * ``FULL``     —— 跳降 ``≈ -1.15·ρ⁺``，与 2013 分离度显著 → 判据可用于区分实现；
+    * ``SEGMENT``  —— 跳变量 ``≈ 0``，**与 2013 同形** → 数值指纹在此作用域下**退化**，
+      不能再用于区分两套实现。这不是实现缺陷，而是所选口径的直接后果：
+      SEGMENT 的结算曲线本就与 2013 同形。
+
+    退化时区分依据退回条款覆盖（§8.2/§8.9 双路径 vs §9.6.2 单条款）与
+    两版代码路径的独立实现，自检把这一点作为**遗留项**显式暴露，
+    而不是让"自检通过"掩盖"此刻指纹已无鉴别力"。
+
+    返回 dict，含两套规则集在各作用域下的实测跳变量、是否通过、以及遗留项。
     """
     jump_2013 = _RS_2013.fingerprint(rho_probe=rho_probe, delta=delta)
-    jump_2024 = _RS_2024.fingerprint(rho_probe=rho_probe, delta=delta)
+    jump_2024_full = _RS_2024.fingerprint(
+        rho_probe=rho_probe, delta=delta, scope="FULL"
+    )
+    jump_2024_segment = _RS_2024.fingerprint(
+        rho_probe=rho_probe, delta=delta, scope="SEGMENT"
+    )
 
     expected_2024 = -1.15 * rho_probe
     tol = 1e-6
 
     checks = {
         "rs_2013_fingerprint": {
+            "scope": "SEGMENT（§9.6.2 明文，非可选项）",
             "actual": jump_2013,
             "expected_abs_max": tol,
             "passed": abs(jump_2013) <= tol,
             "meaning": "分段累加 → 阈值处连续，跳变量 ≈ 0",
         },
-        "rs_2024_fingerprint": {
-            "actual": jump_2024,
+        "rs_2024_fingerprint_FULL": {
+            "scope": "FULL",
+            "actual": jump_2024_full,
             "expected": expected_2024,
             "tolerance": tol,
-            "passed": abs(jump_2024 - expected_2024) <= tol,
+            "passed": abs(jump_2024_full - expected_2024) <= tol,
             "meaning": "调整单价本身 → 阈值处跳降 ≈ -1.15·ρ⁺",
         },
-        "separation": {
-            "actual": abs(jump_2024 - jump_2013),
+        "separation_FULL": {
+            "scope": "FULL",
+            "actual": abs(jump_2024_full - jump_2013),
             "expected_min": 0.5 * abs(expected_2024),
-            "passed": abs(jump_2024 - jump_2013) >= 0.5 * abs(expected_2024),
+            "passed": abs(jump_2024_full - jump_2013) >= 0.5 * abs(expected_2024),
             "meaning": "两套实现必须可区分，否则说明公式被复制",
         },
+        "rs_2024_fingerprint_SEGMENT": {
+            "scope": "SEGMENT",
+            "actual": jump_2024_segment,
+            "expected_abs_max": tol,
+            "passed": abs(jump_2024_segment) <= tol,
+            "degenerate": True,
+            "meaning": (
+                "该作用域下 2024 与 2013 同形（跳变量均 ≈ 0）："
+                "指纹在此退化，失去对两套实现的鉴别力"
+            ),
+        },
     }
+
+    advisories: list[str] = []
+    if abs(jump_2024_segment) <= tol:
+        advisories.append(
+            "判据退化：选择 SEGMENT 时，GB/T 50500-2024 的 r_eff 曲线与 GB 50500-2013 同形"
+            "（阈值处均连续）：**数值指纹不再能证明两套实现相互独立**。"
+            "此时区分依据为条款覆盖（2024 拆为 §8.2 清单缺陷 / §8.9 工程变更两条路径，"
+            "2013 为 §9.6.2 单条款）与两版代码路径的独立实现，"
+            "不得以『指纹通过』替代该人工审查。"
+        )
+    if abs(rho_probe) < 1e-12:
+        advisories.append(
+            "判据退化：rho_probe=0 时两版指纹完全重合（已登记的退化条件）——"
+            "自检必须使用非零探针值。"
+        )
+
     return {
         "rho_probe": rho_probe,
         "delta": delta,
         "checks": checks,
+        "advisories": advisories,
         "passed": all(c["passed"] for c in checks.values()),
     }

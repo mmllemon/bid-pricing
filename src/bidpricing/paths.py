@@ -28,3 +28,6 @@ def docs_dir() -> Path:
 
 
 GATE0_REGISTRY = "gate0_registry.json"
+
+#: 项目级选择项落值文件（adjustment_scope 等）。未选择 = 不写 value 字段。
+PROJECT_SELECTION = "project_selection.json"

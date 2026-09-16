@@ -201,8 +201,16 @@ class SelectionFileTest(unittest.TestCase):
 
 
 class GateSelectableOptionTest(unittest.TestCase):
-    def test_unselected_blocks(self):
-        item = check_selectable_option(_empty_registry_rec(), {"rule_set_id": "GB/T50500-2024"})
+    def test_unselected_passes_at_gate_0a_and_blocks_at_phase_0(self):
+        """未落值：Gate 0a 时点只判机制（PASS），Phase 0 时点判取值（BLOCKED）。"""
+        selection = {"rule_set_id": "GB/T50500-2024"}
+        rec = _empty_registry_rec()
+
+        item = check_selectable_option(rec, selection, phase="gate_0a")
+        self.assertIs(item.status, Status.PASS)
+        self.assertIn("机制就绪", item.reason)
+
+        item = check_selectable_option(rec, selection, phase="phase_0")
         self.assertIs(item.status, Status.BLOCKED)
         self.assertIn("无默认值", item.reason)
 

@@ -17,6 +17,7 @@ from bidpricing.gates.gate0 import (
     assertion_6_config_zero_defaults,
     check_gate_0a,
     check_gate_0b,
+    check_phase0_inputs,
     evaluate_gate_0,
     guard_representation,
 )
@@ -87,7 +88,13 @@ class Gate0aTest(unittest.TestCase):
             report = check_gate_0a(registry, cdir, {"adjustment_scope": "FULL"})
             self.assertIs(report.status, Status.PASS, [i.to_dict() for i in report.items])
 
-    def test_undetermined_scope_blocks_and_withholds_release(self):
+    def test_undetermined_scope_does_not_block_0a_but_blocks_phase_0(self):
+        """选择项取值未定：Gate 0a 仍 PASS（机制就绪），Phase 0 输入门 BLOCKED。
+
+        这是对早前版本的修正：把「机制是否就绪」与「取值是否已定」拆到
+        两个时点判定。取值未定不该阻塞 WP1/WP2/WP3 —— 那两层被要求
+        同时实现 FULL / SEGMENT 两条分支，选择只决定哪条生效。
+        """
         with tempfile.TemporaryDirectory() as tmp:
             cdir = Path(tmp)
             _stub_config(cdir)
@@ -95,10 +102,28 @@ class Gate0aTest(unittest.TestCase):
             for key in TECH_ARTIFACTS:
                 freeze_record(registry, "gate_0a", key, cdir)
             report = check_gate_0a(registry, cdir, {})  # key 缺失
-            self.assertIs(report.status, Status.BLOCKED)
-            self.assertIn("adjustment_scope", {i.item for i in report.blockers})
+            self.assertIs(
+                report.status, Status.PASS, [i.to_dict() for i in report.items]
+            )
             release = next(i for i in report.items if i.item == "release_scope")
-            self.assertIn("未放行任何下游工作包", release.reason)
+            self.assertIn("WP1 数据层", release.reason)
+
+            # 同一份选择：Phase 0 输入门必须熔断
+            phase0 = check_phase0_inputs(registry, {})
+            self.assertIs(phase0.status, Status.BLOCKED)
+            self.assertIn("adjustment_scope", {i.item for i in phase0.blockers})
+
+    def test_conflicting_scope_blocks_both_phases(self):
+        """配置冲突（2013 项目落值 FULL）在两个时点下都必须 BLOCKED。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            _stub_config(cdir)
+            registry = _stub_registry()
+            for key in TECH_ARTIFACTS:
+                freeze_record(registry, "gate_0a", key, cdir)
+            selection = {"rule_set_id": "GB50500-2013", "adjustment_scope": "FULL"}
+            self.assertIs(check_gate_0a(registry, cdir, selection).status, Status.BLOCKED)
+            self.assertIs(check_phase0_inputs(registry, selection).status, Status.BLOCKED)
 
     def test_release_list_excludes_t00_10b(self):
         """断言 3：放行清单不含 T00-10B（依赖 WP1 的 T01-00B 产出）。"""
@@ -113,8 +138,9 @@ class Gate0aTest(unittest.TestCase):
             self.assertIn("T00-10B", release.reason)
             self.assertEqual(GATE_0A_RELEASE_EXCLUSIONS[0][0], "T00-10B")
 
-    def test_real_config_is_blocked_on_two_startup_items(self):
-        """真实仓库现状：技术制品可冻结，另有两项属启动前阻塞。
+    def test_real_config_0a_blocks_only_on_classification(self):
+        """真实仓库现状：技术制品可冻结，``competitiveness_classification`` 空表
+        是 Gate 0a 的唯一阻塞项。
 
         显式关闭项目落值文件——该用例断言"未选择 adjustment_scope"这一状态，
         不得随本机 config/project_selection.json 内容变化。
@@ -127,8 +153,15 @@ class Gate0aTest(unittest.TestCase):
         report = check_gate_0a(registry, cdir, selection)
         self.assertIs(report.status, Status.BLOCKED)
         blocked = {i.item for i in report.blockers}
-        self.assertIn("adjustment_scope", blocked)
         self.assertIn("competitiveness_classification", blocked)
+        # 机制就绪 → 未落值不再进入 Gate 0a 阻塞清单，但仍出现在判据清单里
+        self.assertNotIn("adjustment_scope", blocked)
+        self.assertIn("adjustment_scope", {i.item for i in report.items})
+
+        # 同一份选择结果下，Phase 0 输入门因 adjustment_scope 未定而熔断
+        phase0 = check_phase0_inputs(registry, selection)
+        self.assertIs(phase0.status, Status.BLOCKED)
+        self.assertIn("adjustment_scope", {i.item for i in phase0.blockers})
 
 
 class Gate0bTest(unittest.TestCase):
@@ -254,6 +287,7 @@ class EndToEndTest(unittest.TestCase):
         ).to_dict()
         report = evaluate_gate_0(registry, cdir, selection)
         self.assertEqual(report["summary"]["gate_0a"], "BLOCKED")
+        self.assertEqual(report["summary"]["phase_0_input_gate"], "BLOCKED")
         self.assertEqual(report["summary"]["phase_0"], "BLOCKED")
         self.assertEqual(report["summary"]["wp4_solver_layer"], "BLOCKED")
         # 遗留项必须被显式暴露，避免"已冻结"被误读为"已完备"

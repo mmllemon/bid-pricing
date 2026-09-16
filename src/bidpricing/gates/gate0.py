@@ -18,7 +18,7 @@ v3.2 / v3.2.1 因此把 Gate 0 拆为 **0a（技术接口）/ 0b（业务口径�
 断言     内容                                                实现
 ======  ==================================================  ==========================
 1       ``adjustment_scope`` 未定态 = key 完全缺失           :func:`guard_representation`
-2       未定态熔断：Phase 0 直接 BLOCKED                      :func:`check_gate_0a`
+2       未定态熔断：Phase 0 直接 BLOCKED                      :func:`check_phase0_inputs`
 3       双闸门独立判定，放行清单不含 T00-10B                  :func:`check_gate_0a`
 4       字段有效性机械化（hash 绑定 + 占位符黑名单）          :mod:`bidpricing.artifact`
 5       Gate 0b 必须早于 WP4 Phase 1                          :func:`assertion_5_sequence`
@@ -30,6 +30,22 @@ v3.2 / v3.2.1 因此把 Gate 0 拆为 **0a（技术接口）/ 0b（业务口径�
 （2013 只有 SEGMENT / 2024 二者皆可），因此不能再用全局枚举集校验——
 否则「在 2013 项目上落值 FULL」会被判为合法。该判据同时把落值**来源与依据**
 带进判定理由，构成决策审计快照。
+
+判定时点：一次判据，两个时点
+----------------------------
+``check_selectable_option`` 接受 ``phase`` 参数，把「机制是否就绪」与
+「取值是否已定」拆成两件事——这是对早前版本的修正：
+
+* ``phase="gate_0a"``（默认）：只判**机制**。取值未定 **不阻塞** Gate 0a。
+  理由：契约要求 WP3/WP4 **同时实现 FULL 与 SEGMENT 两条分支**，
+  选择只决定「哪条分支生效」，不影响分支代码能否开工。
+  把「还没选」当成 Gate 0a 阻塞项，等于用一个晚期决策卡住解析器与成本层开发。
+* ``phase="phase_0"``：判**取值**。未定即 BLOCKED——这才是 §7.1.1 断言 2
+  原文「未定态熔断：**Phase 0** 直接 BLOCKED」的落点（见
+  :func:`check_phase0_inputs`）。
+
+两种时点下，**配置冲突**（如 2013 项目落值 FULL）都直接 BLOCKED，
+不因时点差异而放行。
 """
 
 from __future__ import annotations
@@ -174,7 +190,9 @@ def _resolution_from_selection(
     )
 
 
-def check_selectable_option(rec: ArtifactRecord, selection: dict) -> CheckItem:
+def check_selectable_option(
+    rec: ArtifactRecord, selection: dict, *, phase: str = "gate_0a"
+) -> CheckItem:
     """选择项判据：取值必须**在该规则集的合法集合内**，且能说明来源。
 
     与 :func:`bidpricing.artifact.verify_enum` 的区别：
@@ -185,6 +203,13 @@ def check_selectable_option(rec: ArtifactRecord, selection: dict) -> CheckItem:
     * 本函数按**规则集**取合法集合：2013 下只有 ``SEGMENT``，
       落值 ``FULL`` 属配置冲突，直接 BLOCKED（而不是静默改成 SEGMENT）——
       静默覆盖会让"系统建议值"与"人工落值"的差异从审计链上消失。
+
+    参数 ``phase`` 决定**判定时点**（见模块 docstring）：
+
+    * ``"gate_0a"``：取值未定 → **PASS**（机制就绪即可，不阻塞 WP1/WP2/WP3）；
+    * ``"phase_0"``：取值未定 → **BLOCKED**（断言 2 熔断点）。
+
+    配置冲突（``errors``）在两个时点下都 BLOCKED。
     """
     option = SELECTABLE_OPTIONS.get(rec.key)
     if option is None:  # 未登记的选择项退回通用枚举校验
@@ -196,11 +221,25 @@ def check_selectable_option(rec: ArtifactRecord, selection: dict) -> CheckItem:
     )
 
     if resolution.value is None and not resolution.errors:
+        if phase == "gate_0a":
+            return CheckItem(
+                scope="§7.1.1-1/2", item=rec.key, status=Status.PASS,
+                reason=(
+                    f"选择项机制就绪，取值未定：{option.title}。"
+                    f"**取值未定不阻塞 Gate 0a**——下游被要求同时实现两条分支，"
+                    f"选择只决定生效分支，不影响分支代码能否开工。"
+                    f"未定态的熔断点在 **Phase 0 输入门**（§7.1.1 断言 2 原文即"
+                    f"「Phase 0 直接 BLOCKED」）。该规则集下合法取值："
+                    f"{list(resolution.allowed)}；"
+                    f"落值通道：bidpricing options set --key {rec.key} --value ..."
+                ),
+                actual="<missing>", expected=list(resolution.allowed),
+            )
         return CheckItem(
-            scope="§7.1.1-1/2", item=rec.key, status=Status.BLOCKED,
+            scope="§7.1.1-2", item=rec.key, status=Status.BLOCKED,
             reason=(
                 f"选择项未定（key 缺失）：{option.title}。该选择项**无默认值**，"
-                f"未落值前 Phase 0 直接判 BLOCKED。"
+                f"Phase 0 求解启动前必须落值，否则直接判 BLOCKED。"
                 f"该规则集下合法取值：{list(resolution.allowed)}；"
                 f"落值通道：bidpricing options set --key {rec.key} --value ..."
             ),
@@ -231,7 +270,12 @@ def check_gate_0a(
     """Gate 0a：Technical Interface & Rule-Set Frozen。
 
     机械判据：8 项全部通过（versioned 走 :func:`verify_versioned`，
-    ``adjustment_scope`` 走 :func:`verify_enum`，取值来自 T00-08 的选择结果）。
+    ``adjustment_scope`` 走 :func:`check_selectable_option` 的 ``gate_0a`` 时点——
+    只判**机制就绪**，取值未定不阻塞）。
+
+    注意：选择项的**取值**不在本闸门判定，而在 Phase 0 输入门
+    （:func:`check_phase0_inputs`）。本闸门放行 WP1/WP2/WP3 —— 解析器、
+    配置层与判定层都要求同时实现 FULL/SEGMENT 两条分支，不依赖取值。
     """
     report = GateReport(
         gate="Gate 0a",
@@ -249,7 +293,7 @@ def check_gate_0a(
 
     enum_recs = [r for r in records if r.is_enum]
     for rec in enum_recs:
-        report.add(check_selectable_option(rec, selection))
+        report.add(check_selectable_option(rec, selection, phase="gate_0a"))
 
     # 断言 3：双闸门独立判定 + 放行清单
     gate_status = report.status
@@ -271,6 +315,45 @@ def check_gate_0a(
             expected="8 项判据全通过",
         )
     )
+    return report
+
+
+# --------------------------------------------------------- Phase 0 输入门
+
+
+def check_phase0_inputs(registry: dict, selection: dict) -> GateReport:
+    """Phase 0 输入门 —— §7.1.1 断言 2「未定态熔断：Phase 0 直接 BLOCKED」的落点。
+
+    为什么单独设这一道门，而不是把「未落值」挂在 Gate 0a
+    ----------------------------------------------------
+    ``adjustment_scope`` 是**项目级选择项**：契约要求 WP3 / WP4 同时实现
+    FULL 与 SEGMENT 两条分支，选择只决定「哪条分支生效」。因此
+
+    * **开发期不需要它** —— 两条分支都要写，没选也能开工；
+    * **求解期必须有它** —— 没选就跑求解器，等于在该误差区间内做优化，
+      而两种口径下最优报价结构相反、利润差约 4.5 倍。
+
+    把它挂在 Gate 0a 会同时造成两个后果：解析器被一个晚期决策无故阻塞，
+    以及「机制就绪」与「取值已定」两类不同性质的失败被混在同一个闸门里
+    无法区分归因。本函数把后者独立出来，**判定时点与消耗时点对齐**。
+    """
+    report = GateReport(
+        gate="Phase 0 输入门",
+        purpose="求解层启动前，全部项目级选择项取值必须已定（未定即熔断）",
+    )
+
+    enum_recs = [r for r in parse_records(registry, "gate_0a") if r.is_enum]
+    for rec in enum_recs:
+        report.add(check_selectable_option(rec, selection, phase="phase_0"))
+
+    if not enum_recs:
+        report.add(
+            CheckItem(
+                scope="§7.1.1-2", item="selectable_option_registry", status=Status.PASS,
+                reason="注册表未声明选择项，本门空真通过（vacuous pass）",
+                actual=0, expected=">= 0",
+            )
+        )
     return report
 
 
@@ -487,25 +570,33 @@ def evaluate_gate_0(
     gate_0b_passed_at: str | None = None,
     phase1_first_build_at: str | None = None,
 ) -> dict:
-    """执行 Gate 0 全部判据，返回可直接序列化的总报告。"""
+    """执行 Gate 0 全部判据，返回可直接序列化的总报告。
+
+    ``phase_0`` 由**两个条件共同**决定：Gate 0a 通过（技术接口冻结）
+    **且** Phase 0 输入门通过（选择项取值已定）。二者缺一即 BLOCKED。
+    """
     gate_0a = check_gate_0a(registry, config_dir, selection)
     gate_0b = check_gate_0b(registry, config_dir)
+    phase0 = check_phase0_inputs(registry, selection)
     ci = assertion_6_config_zero_defaults(config_dir)
     ci.add(assert_wp4_build_allowed(gate_0b))
     seq = assertion_5_sequence(gate_0b_passed_at, phase1_first_build_at)
 
+    phase_0_released = (
+        gate_0a.status is Status.PASS and phase0.status is Status.PASS
+    )
     return {
         "gate_0a": gate_0a.to_dict(),
         "gate_0b": gate_0b.to_dict(),
+        "phase_0_input_gate": phase0.to_dict(),
         "assertion_5_sequence": seq.to_dict(),
         "assertion_6_ci_gate": ci.to_dict(),
         "advisories": advisories(registry, config_dir),
         "summary": {
             "gate_0a": gate_0a.status.value,
             "gate_0b": gate_0b.status.value,
-            "phase_0": (
-                "RELEASED" if gate_0a.status is Status.PASS else "BLOCKED"
-            ),
+            "phase_0_input_gate": phase0.status.value,
+            "phase_0": "RELEASED" if phase_0_released else "BLOCKED",
             "wp4_solver_layer": (
                 "ALLOWED" if gate_0b.status is Status.PASS else "BLOCKED"
             ),

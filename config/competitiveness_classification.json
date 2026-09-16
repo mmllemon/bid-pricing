@@ -6,10 +6,33 @@
   "roles": [
     {"role": "OPTIMIZABLE", "label": "可优化", "in_x_opt": true, "note": "进入决策变量集合，求解器可自由定价"},
     {"role": "FIXED", "label": "固定金额项", "in_x_opt": false, "note": "招标文件或合同指定固定金额"},
-    {"role": "NON_COMPETITIVE", "label": "不可竞争费", "in_x_opt": false, "note": "安全生产措施费 / 规费 / 税金等按规定计价，基数联动见 T00-06B"},
+    {"role": "NON_COMPETITIVE", "label": "不可竞争费", "in_x_opt": false, "note": "安全生产（安全文明施工）措施费 / 规费 / 税金等按规定计取。**投标期为外生常量**：招标文件给定固定值（或按给定费率计得的固定金额），模型只接收不计算、不可调整。见 external_constants"},
     {"role": "PASS_THROUGH", "label": "甲供材/暂列金额等透传项", "in_x_opt": false, "note": "按实结算，不参与竞价"},
     {"role": "CONTRACT_DEFINED", "label": "合同指定单价", "in_x_opt": false, "note": "合同已锁定单价，投标人不得调整"}
   ],
+  "external_constants": {
+    "summary": "以下费用在**投标场景**下是外生给定常量：不同项目取值不同，但投标人无权更改，因此不构成优化变量，也不是本模型的求解对象。它们以固定值进入总价恒等式。",
+    "items": [
+      {
+        "name": "安全文明施工费（安全生产措施费）",
+        "how_obtained": "招标文件给定的固定值或给定费率；**投标期即为固定数**",
+        "model_treatment": "外生常量。进总价、不进 X_opt。",
+        "correction": "早前版本要求「以分部分项人工费 + 机械费为基数 × 固定费率」建立仿射关系 f(p)——那是**结算期**口径（工程量/人工费变动后重算）。用结算口径建模投标报价属场景混用，已删除该基数要求。实测样本的措施项目表-10 确有「安全文明施工费 148724.45 元 / 费率 25.1%」，进一步确认它必须被显式建模为常量项，而不是被忽略。"
+      },
+      {
+        "name": "规费",
+        "how_obtained": "由计价（报价）软件按当地规则计算，基数依赖人工费分解",
+        "model_treatment": "**外生输入**：模型不计算，只接收金额。",
+        "correction": "实测样本表-12 的计算基础为一串文字规则（专业工程规费（人）+机械（爆破）土石方规费（人+机）*0.072/费率+人工土石方规费（人）*0.082/费率），**未给出任何可直接引用的基数值**，且清单不提供人工费分解。故规费不可由本模型复算。升级条件：若未来输入包含逐项人工费分解，可将其升级为关于 p 的仿射关系并纳入恒等式校验。"
+      },
+      {
+        "name": "税金（增值税 + 附加税）",
+        "how_obtained": "增值税按「分部分项工程费+措施项目费+其他项目费+规费−甲供材料费」× 税率；附加税按增值税 × 税率",
+        "model_treatment": "外生输入的**联动终端**：计价基数的构成已知，故可作为总价恒等式的闭合校验点；但因基数含规费（规费本身外生），税金亦不得由模型独立复算。",
+        "correction": "实测样本提供了完整链条：增值税 251037.99（费率 9%）→ 附加税 30124.56（费率 12%）→ 税金 281162.55 = 两者之和。反推计税基数 = 251037.99 / 0.09 = 2789311.00 元，即可作为解析器的独立交叉校验锚点（详见 acceptance.identity_check）。"
+      }
+    ]
+  },
   "decision_variable_set": {
     "definition": "X_opt = { i : pricing_role(i) = OPTIMIZABLE }",
     "total_price_decomposition": "P* = P*_competitive + P_fixed",
@@ -20,12 +43,25 @@
     {"signal": "招标文件「其他项目清单」中的暂列金额", "role": "PASS_THROUGH", "note": "按实结算，投标人不竞价"},
     {"signal": "招标文件「其他项目清单」中的材料暂估价", "role": "PASS_THROUGH", "note": "需注意与 T00-06B 的调差规则联动"},
     {"signal": "甲供材料清单中的项目", "role": "PASS_THROUGH", "note": "在总价恒等式中单独列出，不得并入 P*_competitive"},
-    {"signal": "安全文明施工费 / 安全生产措施费", "role": "NON_COMPETITIVE", "note": "以「分部分项人工费 + 机械费」为基数 x 固定费率，基数随报价变动 → 需仿射关系 f(p)"},
-    {"signal": "规费 / 税金（增值税）", "role": "NON_COMPETITIVE", "note": "2024 版明确增值税单列"},
+    {"signal": "安全文明施工费 / 安全生产措施费", "role": "NON_COMPETITIVE", "note": "**投标期外生常量**：按招标文件给定的固定值（或给定费率）直接进总价，不建立关于报价 p 的仿射关系。结算期的「人工费 × 费率」重算口径不适用于投标建模。"},
+    {"signal": "规费 / 税金（增值税、附加税）", "role": "NON_COMPETITIVE", "note": "由计价软件计算，模型**只接收金额不计算**（外生输入）；2024 版明确增值税单列。"},
     {"signal": "合同专用条款中已锁定单价的项目", "role": "CONTRACT_DEFINED", "note": null},
     {"signal": "其余分部分项与可竞争措施项目", "role": "OPTIMIZABLE", "note": null}
   ],
   "classification_table": [],
-  "freeze_blocker": "本表为空——逐项分类必须基于真实招标清单（含不可竞争费分项、暂估价形式、标段划分）才能落定。空表状态即 Gate 0a 判据 competitiveness_classification 未冻结，属启动前阻塞项。",
-  "acceptance": "每项标注 pricing_role；显式输出 X_opt 与总价分解 P* = P*_competitive + P_fixed；与 T00-06B 的 compute_P_competitive(p) 同源同值"
+  "freeze_blocker": "本表为空——逐项分类必须基于**一份被指定为基准的招标清单**才能落定。口径歧义已消除（不可竞争费 = 投标期外生常量；规费/税金 = 外生输入，模型不复算），剩余缺口仅为清单本身：需明确哪一套清单作为基准（示例模板 或 真实项目清单）。空表状态即 Gate 0a 判据 competitiveness_classification 未冻结，属启动前阻塞项。",
+  "acceptance": "每项标注 pricing_role；显式输出 X_opt 与总价分解 P* = P*_competitive + P_fixed；与 T00-06B 的 compute_P_competitive(p) 同源同值",
+  "identity_check": {
+    "source": "重庆某变配电工程示例模板「规费、税金项目计价表」（表-12）+「其他项目清单计价汇总表」（表-11）实测",
+    "identity": "增值税 = (分部分项工程费 + 措施项目费 + 其他项目费 + 规费 − 甲供材料费) × 增值税率",
+    "measured": {
+      "vat_amount": 251037.99,
+      "vat_rate": 0.09,
+      "implied_tax_base": 2789311.0,
+      "fee_regulations": 8044.53,
+      "other_items": 0,
+      "implied_sum_of_unit_and_measure_works": 2781266.47
+    },
+    "note": "implied_tax_base = 251037.99 / 0.09 = 2789311.00；再减规费 8044.53、其他项目费 0，得分部分项工程费 + 措施项目费 − 甲供材料费 = 2781266.47 元。该值可作**解析器独立交叉校验锚点**：分部分项清单合价合计 + 措施项目清单合计，与它不符即说明列映射或口径有误。注意其他项目清单为空表（金额列合计为文本 '0'），故其他项目费取 0。"
+  }
 }

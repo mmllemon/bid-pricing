@@ -103,6 +103,8 @@ def cmd_gate_check(args) -> int:
     for key, title in (
         ("gate_0a", "Gate 0a — Technical Interface & Rule-Set Frozen"),
         ("gate_0b", "Gate 0b — Business Caliber & Compliance Frozen"),
+        ("phase_0_input_gate",
+         "Phase 0 输入门 — Selectable-Option Values Resolved"),
     ):
         section = report[key]
         print(f"\n[{section['status']:>7}] {title}")
@@ -130,16 +132,31 @@ def cmd_gate_check(args) -> int:
     print("\n" + "=" * 78)
     print(f"Gate 0a = {report['summary']['gate_0a']}   "
           f"Gate 0b = {report['summary']['gate_0b']}")
+    print(f"Phase 0 输入门          = {report['summary']['phase_0_input_gate']}")
     print(f"Phase 0 准入            = {report['summary']['phase_0']}")
     print(f"WP4 求解层构建          = {report['summary']['wp4_solver_layer']}")
     print("=" * 78)
 
-    if report["summary"]["gate_0a"] == "PASS":
-        print("\n结论：Gate 0a 通过，放行 WP1 / WP2 / WP3。")
-        return 0
-    print("\n结论：Gate 0a 未通过 —— 按 §7.1.1 断言 2，Phase 0 判 BLOCKED，"
-          "WP1 / WP2 / WP3 不得开工。")
-    return 1
+    gate_0a_ok = report["summary"]["gate_0a"] == "PASS"
+    phase0_ok = report["summary"]["phase_0_input_gate"] == "PASS"
+
+    if gate_0a_ok:
+        print("\n结论：Gate 0a 通过，放行 WP1 / WP2 / WP3（解析器 / 配置层 / 判定层）。")
+    else:
+        print("\n结论：Gate 0a 未通过 —— WP1 / WP2 / WP3 暂不得开工。")
+        print("      未通过项见上方 BLOCKED 行；技术接口类阻塞必须补齐后才放行。")
+
+    if phase0_ok:
+        print("Phase 0 输入门通过：项目级选择项取值已定，可启动 Phase 0 求解。")
+    else:
+        print("Phase 0 输入门未通过：存在未落值的项目级选择项。")
+        print("      注意：这**不阻塞** Gate 0a 与 WP1/WP2/WP3 —— "
+              "两条分支都要求被实现，")
+        print("      选择只决定哪条生效。仅在启动求解（Phase 0）前需要落值：")
+        print("      bidpricing options set --key adjustment_scope "
+              "--value <FULL|SEGMENT> --rule-set <rid> --rationale \"...\"")
+
+    return 0 if gate_0a_ok else 1
 
 
 # ----------------------------------------------------------- ruleset-select
@@ -293,7 +310,11 @@ def _options_list(path, args) -> int:
         print(f"  下游消费方：{'、'.join(option['consumers'])}")
         print(f"  为何是选择项：{option['rationale']}")
     print("\n" + "=" * 78)
-    print("说明：未落值的选择项在 T00-08 输出中**不写 key**，Gate 0a 判 BLOCKED。")
+    print("说明：未落值的选择项在 T00-08 输出中**不写 key**。未落值**不阻塞** "
+          "Gate 0a 与\n"
+          "      WP1/WP2/WP3（两条分支都要求被实现，选择只决定生效分支），"
+          "但会阻塞\n"
+          "      Phase 0 输入门——§7.1.1 断言 2 的熔断点在那里。")
     print("落值命令：bidpricing options set --key <key> --value <value> --rule-set <rid>")
     return 0
 
@@ -348,7 +369,9 @@ def _options_clear(path, args) -> int:
     clear_option(path, args.key)
     print(f"[CLEARED]  {args.key} → 未选择（不写 value 字段）")
     print(f"           落值文件：{path}")
-    print("           注意：未选择的选择项会让 Gate 0a 判 BLOCKED（断言 2 熔断）")
+    print("           注意：未选择的选择项**不阻塞** Gate 0a 与 WP1/WP2/WP3，"
+          "但会让\n"
+          "                 Phase 0 输入门判 BLOCKED（§7.1.1 断言 2 熔断）")
     return 0
 
 

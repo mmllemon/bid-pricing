@@ -1,0 +1,263 @@
+{
+ "golden_version": "golden-v1",
+ "seed": 20260916,
+ "generated_at": "2026-09-16T22:05:00+08:00",
+ "generator": "src/bidpricing/io/golden.py::generate_golden",
+ "binding": "Gate 1 的「100% 通过」绑定 golden_version；期望改动必须重跑生成器，不得手改制品",
+ "cases": [
+  {
+   "case_id": "A_pos",
+   "category": "A",
+   "kind": "positive",
+   "desc": "正常随机 24 行，两侧对齐",
+   "files": {
+    "cap": "A_pos_cap.xlsx",
+    "cost": "A_pos_cost.xlsx"
+   },
+   "expect": {
+    "rows": 48,
+    "failures": 0,
+    "matched": 24,
+    "blocked": false,
+    "anomalies": 0
+   },
+   "spot_check": {
+    "307140358179": {
+     "q0": 341.421534,
+     "cap": 47102.86,
+     "c_i": 43218.66,
+     "q1_point": 341.421534
+    },
+    "347710819817": {
+     "q0": 252.473673,
+     "cap": 43316.47,
+     "c_i": 36710.03,
+     "q1_point": 252.473673
+    },
+    "380152150677": {
+     "q0": 301.745379,
+     "cap": 36759.2,
+     "c_i": 31360.95,
+     "q1_point": 301.745379
+    }
+   }
+  },
+  {
+   "case_id": "A_neg",
+   "category": "A",
+   "kind": "negative",
+   "desc": "成本侧多 3 行 → ONLY_IN_COST 异常",
+   "files": {
+    "cap": "A_neg_cap.xlsx",
+    "cost": "A_neg_cost.xlsx"
+   },
+   "expect": {
+    "rows": 51,
+    "failures": 0,
+    "matched": 24,
+    "blocked": false,
+    "anomalies": 3
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "B_pos",
+   "category": "B",
+   "kind": "positive",
+   "desc": "边界值：极小/极大量、千分位、全角、no_cap",
+   "files": {
+    "cap": "B_pos_cap.xlsx",
+    "cost": "B_pos_cost.xlsx"
+   },
+   "expect": {
+    "rows": 10,
+    "failures": 0,
+    "matched": 5,
+    "blocked": false,
+    "anomalies": 0,
+    "no_cap": 1
+   },
+   "spot_check": {
+    "301000000001": {
+     "q0": 1e-06,
+     "cap": 0.01,
+     "c_i": 0.01
+    },
+    "301000000003": {
+     "q0": 1234.5,
+     "cap": 9999999.99
+    },
+    "301000000004": {
+     "q0": 12.5,
+     "cap": 88.88
+    },
+    "301000000005": {
+     "q0": 5.0,
+     "cap": null,
+     "no_cap": true
+    }
+   }
+  },
+  {
+   "case_id": "B_neg",
+   "category": "B",
+   "kind": "negative",
+   "desc": "零价（C5 信号）×2 → 异常清单",
+   "files": {
+    "cap": "B_neg_cap.xlsx",
+    "cost": "B_neg_cost.xlsx"
+   },
+   "expect": {
+    "rows": 6,
+    "failures": 0,
+    "matched": 3,
+    "blocked": false,
+    "anomalies": 2
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "C_pos",
+   "category": "C",
+   "kind": "positive",
+   "desc": "两侧明细 0 数据行 = 合法结论（非 BLOCK）",
+   "files": {
+    "cap": "C_pos_cap.xlsx",
+    "cost": "C_pos_cost.xlsx"
+   },
+   "expect": {
+    "rows": 0,
+    "failures": 0,
+    "matched": 0,
+    "blocked": false,
+    "anomalies": 0
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "C_neg",
+   "category": "C",
+   "kind": "negative",
+   "desc": "全部行缺工程量 → 失败样本清单",
+   "files": {
+    "cap": "C_neg_cap.xlsx"
+   },
+   "expect": {
+    "rows": 0,
+    "failures": 3,
+    "matched": 0,
+    "blocked": false,
+    "anomalies": 0
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "D_pos",
+   "category": "D",
+   "kind": "positive",
+   "desc": "c_i > cap_i 全部项（求解层不可行，数据层可解析）",
+   "files": {
+    "cap": "D_pos_cap.xlsx",
+    "cost": "D_pos_cost.xlsx"
+   },
+   "expect": {
+    "rows": 20,
+    "failures": 0,
+    "matched": 10,
+    "blocked": false,
+    "anomalies": 0
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "D_neg",
+   "category": "D",
+   "kind": "negative",
+   "desc": "两侧各 1 个重复 key → BLOCK 禁止自动合并",
+   "files": {
+    "cap": "D_neg_cap.xlsx",
+    "cost": "D_neg_cost.xlsx"
+   },
+   "expect": {
+    "rows": 6,
+    "failures": 0,
+    "matched": 1,
+    "blocked": true,
+    "anomalies": 6
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "E_pos",
+   "category": "E",
+   "kind": "positive",
+   "desc": "极端尺度：2000 行、量至 1e6、价至 1e8",
+   "files": {
+    "cap": "E_pos_cap.xlsx",
+    "cost": "E_pos_cost.xlsx"
+   },
+   "expect": {
+    "rows": 4000,
+    "failures": 0,
+    "matched": 2000,
+    "blocked": false,
+    "anomalies": 0
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "E_neg",
+   "category": "E",
+   "kind": "negative",
+   "desc": "超长字符串（5 千字符特征/3 千字符名称）不崩溃",
+   "files": {
+    "cap": "E_neg_cap.xlsx",
+    "cost": "E_neg_cost.xlsx"
+   },
+   "expect": {
+    "rows": 4,
+    "failures": 0,
+    "matched": 2,
+    "blocked": false,
+    "anomalies": 0
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "F_pos",
+   "category": "F",
+   "kind": "positive",
+   "desc": "对抗但合法：分节标题夹数据 + 补充/异形编码",
+   "files": {
+    "cap": "F_pos_cap.xlsx",
+    "cost": "F_pos_cost.xlsx"
+   },
+   "expect": {
+    "rows": 8,
+    "failures": 0,
+    "matched": 4,
+    "blocked": false,
+    "anomalies": 0
+   },
+   "spot_check": {}
+  },
+  {
+   "case_id": "F_neg",
+   "category": "F",
+   "kind": "negative",
+   "desc": "对抗：表头带单位 → 定位不到表头 → BLOCK",
+   "files": {
+    "cap": "F_neg_cap.xlsx"
+   },
+   "expect": {
+    "rows": 0,
+    "failures": 1,
+    "matched": 0,
+    "blocked": false,
+    "anomalies": 0
+   },
+   "spot_check": {}
+  }
+ ],
+ "manifest_hash": "9f39fdf11f144e309691350fb292677eeb944737f45bdc96957ddaf03de37680"
+}

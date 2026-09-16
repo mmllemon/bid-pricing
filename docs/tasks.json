@@ -391,8 +391,8 @@
    "summary": "覆盖 Sheet 名变化、列序变化、合并单元格、空行、多表头、合计行、隐藏行、表头带单位、数字带逗号、中文括号、文本数字、百分比、公式结果、多单位工程；任何无法识别的结构必须 BLOCK，禁止猜测映射",
    "gate": "Gate 1",
    "evidence": [],
-   "status": "not_started",
-   "note": ""
+   "status": "done",
+   "note": "2026-09-16 落 tests/test_t0102b_variants.py 十四类变体（Sheet 名/列序/合并单元格/空行/双行表头真实形态/合计行/隐藏行/表头带单位/千分位/中文括号全角/文本数字/百分比/公式有无缓存/多单位工程）+ 5 个 BLOCK 负例（表头带单位/未登录别名/同行重复别名/无表头/空表对照）。行为决策留痕：隐藏行按普通行处理（数据层不因展示属性丢数据）。底座 src/bidpricing/io/xlsxkit.py 零依赖 xlsx 构造器。"
   },
   {
    "id": "T01-02C",
@@ -414,8 +414,8 @@
      "path": "tests/data/xiyong_l_district/pair.json"
     }
    ],
-   "status": "partial",
-   "note": "首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定"
+   "status": "done",
+   "note": "2026-09-16 六类分层用例（A–F）各正例+负例建成，工具 tools/make_golden.py，制品 tests/data/golden/golden-v1/（12 用例 xlsx + manifest.json）。固定种子 20260916；manifest_hash 锁定期望（手改即失配）；tests/test_golden_dataset.py 逐用例复算断言（含可复现性 probe）——Gate 1「100% 通过」绑定 golden_version=golden-v1。"
   },
   {
    "id": "T01-03",

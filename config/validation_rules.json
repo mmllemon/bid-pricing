@@ -56,9 +56,9 @@
     },
     {
       "id": "D07", "level": "BLOCK",
-      "predicate": "c_i ≤ cap_i（逐项，两者齐备时）",
-      "rebase": "L := floor := c_i（C4 成本地板）、U := cap_i（C2 单边上界，base=cap 裁定后无独立 base 下界）。no_cap 项无上界，不参与。规格 §7.4『floor_i > U_i → 可行域为空 → D07 拦截』。",
-      "inputs": ["items[].c_i", "items[].cap", "items[].no_cap"]
+      "predicate": "c_i ≤ cap_i（逐项，两者齐备时）；选择项 loss_acceptance=ACCEPT 时亏损项转 WARN（清单+最低亏损额），否则 FAIL",
+      "rebase": "L := floor := c_i（C4 成本地板）、U := cap_i（C2 单边上界，base=cap 裁定后无独立 base 下界）。规格 §7.4『floor_i > U_i → 可行域为空 → D07 拦截』。2026-09-16 用户裁定『考虑整体利润，单项清单本就有亏有赚』→ 新增选择项 loss_acceptance=ACCEPT：C4 地板钳制到 cap（p=cap 止损），亏损总量由 C6（Σ s_i·q1 ≤ θ·P*）兜底，D07 对亏损项转 WARN 输出清单；未声明时保持严格 FAIL（无默认值）。见 ADR-0009。",
+      "inputs": ["items[].c_i", "items[].cap", "items[].no_cap", "items[].q1_point", "selection.options.loss_acceptance"]
     },
     {
       "id": "D08", "level": "BLOCK",

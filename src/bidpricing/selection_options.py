@@ -137,9 +137,45 @@ ADJUSTMENT_SCOPE = SelectableOption(
     },
 )
 
+LOSS_ACCEPTANCE = SelectableOption(
+    key="loss_acceptance",
+    title="单项亏损承接口径（C4 地板豁免声明）",
+    gate="phase_0",
+    spec_ref="T01-06 D07 / ADR-0009",
+    consumers=(
+        "D07 校验（亏损项 FAIL→WARN）",
+        "WP4 求解层 C4 地板钳制（floor_i := min(floor_i, cap_i)）",
+        "WP6 报价表亏损项披露",
+    ),
+    allowed_by_rule_set={
+        "GB/T50500-2024": ("ACCEPT", "DECLINE"),
+        "GB50500-2013": ("ACCEPT", "DECLINE"),
+    },
+    rationale=(
+        "用户 2026-09-16 裁定：『考虑整体利润，本来单项清单就是有亏有赚的』。"
+        "接受亏损 = C4 地板钳制到 cap（floor_i := min(floor_i, cap_i)），"
+        "单项允许 p_i < c_i，亏损总量仍由 C6（Σ s_i·q1 ≤ θ·P*）兜底——"
+        "与 C4 备注『C4 与 C6 必须并存』的设计一致。DECLINE = 保持严格"
+        "地板，出现 c_i > cap_i 即 D07 FAIL（可行域为空）。不设默认值："
+        "未声明时 D07 按严格口径判死。"
+    ),
+    impact={
+        "ACCEPT": (
+            "亏损项不阻塞：D07 转 WARN 并输出亏损项清单与最低亏损额"
+            "（(c_i − cap_i)·q1_point）；求解时 C4 地板钳到 cap，"
+            "亏损总量受 C6 约束"
+        ),
+        "DECLINE": (
+            "严格地板：任一 c_i > cap_i → D07 FAIL（可行域为空），"
+            "须先修成本数据或改声明"
+        ),
+    },
+)
+
 #: 全局选择项注册表
 SELECTABLE_OPTIONS: dict[str, SelectableOption] = {
     ADJUSTMENT_SCOPE.key: ADJUSTMENT_SCOPE,
+    LOSS_ACCEPTANCE.key: LOSS_ACCEPTANCE,
 }
 
 

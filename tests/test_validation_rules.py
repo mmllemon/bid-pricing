@@ -169,6 +169,21 @@ class TestBlockingRules(unittest.TestCase):
         r = rep.by_rule("D07")
         self.assertEqual(r.status, STATUS_FAIL)
         self.assertIn("可行域为空", r.detail)
+        self.assertIn("loss_acceptance", r.detail)
+
+    def test_d07_loss_acceptance_warns_with_loss_estimate(self):
+        """用户裁定（ADR-0009）：loss_acceptance=ACCEPT → 亏损项 WARN 不阻塞。"""
+        items = [_mk("A", cap=50.0, c_i=80.0, q1=10.0),   # 最低亏损 (80-50)*10=300
+                 _mk("B", cap=100.0, c_i=80.0)]           # 正常项
+        rep = self.validate(_report(items),
+                            selection={"options": {
+                                "contract_type": {"value": "UNIT_PRICE"},
+                                "loss_acceptance": {"value": "ACCEPT"}}},
+                            p_star=1000.0, p_star_max=2000.0)
+        r = rep.by_rule("D07")
+        self.assertEqual(r.status, STATUS_WARN)
+        self.assertFalse(rep.blocked)
+        self.assertIn("最低亏损 300", "".join(r.evidence))
 
     def test_d08_missing_declaration_blocked_inconsistency_fails(self):
         rep = self.validate(_report([_mk()]), basis=None)

@@ -208,13 +208,25 @@ def run_validation(report, *, classification: dict, selection: dict,
             "D06", f"attribution 标注完成（UNKNOWN {len(unknown)}/{len(need_attr)}"
                    f" = {ratio:.2%} ≤ {max_unk:.0%}）"))
 
-    # ---- D07 c_i ≤ cap_i ------------------------------------------------------
-    infeasible = [(it.item_id, it.c_i, it.cap) for it in items
+    # ---- D07 亏损承接（C4 地板 vs C2 上限） -----------------------------------
+    # loss_acceptance=ACCEPT（用户裁定：单项有亏有赚、整体利润优先）→
+    # 亏损项不阻塞（WARN + 清单），C4 地板钳制到 cap、亏损总量由 C6 兜底。
+    infeasible = [(it.item_id, it.c_i, it.cap, it.q1_point) for it in items
                   if it.cap is not None and it.c_i is not None and it.c_i > it.cap]
-    if infeasible:
+    opts07 = (selection or {}).get("options", {})
+    la = opts07.get("loss_acceptance", {})
+    la_val = la.get("value") if isinstance(la, dict) else la
+    if infeasible and la_val == "ACCEPT":
+        ev = [f"{k}: c={a} > cap={b}，最低亏损 {round((a - b) * (q or 0), 2)} 元"
+              for k, a, b, q in infeasible]
+        res.results.append(_warn_result(
+            "D07", f"{len(infeasible)} 项 c_i > cap_i（接受亏损承接，ADR-0009）："
+                   "C4 地板钳制到 cap（p=cap 止损），亏损总量由 C6 兜底", ev))
+    elif infeasible:
         res.results.append(_fail(
-            "D07", f"{len(infeasible)} 项 c_i > cap_i（floor > U，可行域为空）",
-            [f"{k}: c={a} > cap={b}" for k, a, b in infeasible]))
+            "D07", f"{len(infeasible)} 项 c_i > cap_i（floor > U，可行域为空）；"
+                   "如接受单项亏损，请先落值选择项 loss_acceptance=ACCEPT",
+            [f"{k}: c={a} > cap={b}" for k, a, b, _ in infeasible]))
     else:
         res.results.append(_ok("D07", "逐项 c_i ≤ cap_i 成立（no_cap 项无上界不参与）"))
 

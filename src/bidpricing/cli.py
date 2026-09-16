@@ -672,6 +672,23 @@ def build_parser() -> argparse.ArgumentParser:
                       help="三项产出的落盘目录（默认 docs/parsed/<文件名>）")
     p_pb.set_defaults(func=cmd_parse_boq)
 
+    # ------------------------------------------------------------ clean-boq
+    p_cb = sub.add_parser(
+        "clean-boq",
+        help="T01-03：解析 + 规范化清洗 → 类型化 canonical 行（含空值语义与异常清单）",
+    )
+    p_cb.add_argument("xlsx", help="清单文件路径（限价/报价/成本清单同构）")
+    p_cb.add_argument("--project-id", required=True,
+                      help="项目编号（主键第一段）")
+    p_cb.add_argument("--side", required=True, choices=["cap", "cost"],
+                      help="清单侧：cap=限价清单（q0/cap），cost=成本清单（q1_point/c_i）")
+    p_cb.add_argument("--attribution", default=None,
+                      choices=["DRAWING_DIFF", "CHANGE_ORDER", "BOTH", "UNKNOWN"],
+                      help="q0≠q1 的变化归因标签（OI-01；默认 UNKNOWN）")
+    p_cb.add_argument("--out-dir", default=None,
+                      help="产出落盘目录（默认 docs/cleaned/<文件名>/<side>）")
+    p_cb.set_defaults(func=cmd_clean_boq)
+
     return parser
 
 
@@ -761,6 +778,59 @@ def cmd_parse_boq(args) -> int:
     print(" 三项产出：")
     for k, v in paths.items():
         print(f"   {k:>9}: {v}")
+    return 0
+
+
+def cmd_clean_boq(args) -> int:
+    """T01-03：解析 → 规范化清洗 → 类型化 canonical 行 + 清洗报告。
+
+    清洗口径全部来自冻结制品（canonical_schema / field_schema / cap 空值裁定），
+    清洗器只做机械归一，不猜、不补、不静默丢弃。
+    """
+    import json as _json
+    from pathlib import Path as _P
+
+    from .io.clean import clean_listing_rows
+
+    out_dir = _P(args.out_dir) if args.out_dir else (
+        repo_root() / "docs" / "cleaned" / _P(args.xlsx).stem / args.side
+    )
+    try:
+        report = parse_listing(args.xlsx, args.project_id)
+    except XlsxError as exc:
+        print(f"■ 解析失败：{exc}")
+        return 1
+
+    rows, crep = clean_listing_rows(report.rows, args.side, args.attribution)
+
+    print("=" * 78)
+    print(f"清洗（T01-03）：{_P(args.xlsx).name}  [{args.side} 侧]")
+    print("=" * 78)
+    print(f" 行数 {crep.n_rows_in} → {crep.n_rows_out}（canonical）")
+    print(f" 不限价项（cap 空 = 不限价但不得为 0）：{len(crep.no_cap_items)}"
+          + (f" {crep.no_cap_items[:6]}" if crep.no_cap_items else ""))
+    print(f" 零报价信号（C5）：{len(crep.zero_price_items)}")
+    print(f" 暂估价透传信号：{len(crep.pass_through_items)}")
+    print(f" 数值解析失败：{len(crep.numeric_errors)}（原样保留，禁止猜）")
+    for e in crep.numeric_errors[:8]:
+        print(f"   ■ {e['source_sheet']} r{e['source_row']} {e['column']}: {e['error']}")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows_path = out_dir / "canonical_rows.json"
+    rep_path = out_dir / "cleaning_report.json"
+    rows_path.write_text(
+        _json.dumps([r.to_dict() for r in rows], ensure_ascii=False, indent=1),
+        encoding="utf-8")
+    payload = crep.to_dict()
+    payload["source_file"] = str(args.xlsx)
+    payload["source_sha256"] = report.source_sha256
+    payload["project_id"] = args.project_id
+    payload["attribution"] = args.attribution or "UNKNOWN"
+    rep_path.write_text(
+        _json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    print("-" * 78)
+    print(f" canonical: {rows_path}")
+    print(f" 清洗报告: {rep_path}")
     return 0
 
 

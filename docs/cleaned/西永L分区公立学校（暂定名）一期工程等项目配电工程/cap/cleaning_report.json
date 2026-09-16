@@ -1,0 +1,16 @@
+{
+ "side": "cap",
+ "n_rows_in": 82,
+ "n_rows_out": 82,
+ "numeric_errors": [],
+ "no_cap_items": [
+  "031301017001"
+ ],
+ "zero_price_items": [],
+ "pass_through_items": [],
+ "q_mismatch_items": 0,
+ "source_file": "E:/liam proj/work/2026-09-15-19-46-14/真实案件示例/中标限价/西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx",
+ "source_sha256": "f5dc3abb5588",
+ "project_id": "XIYONG-L",
+ "attribution": "UNKNOWN"
+}

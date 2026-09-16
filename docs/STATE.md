@@ -5,17 +5,17 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-16 17:40:46** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-16 17:57:40** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`e32286d` ｜ 累计 20 次提交
-- 最新提交信息：feat(contracts): cap 空值语义裁定 —— 空 = 不限价但不得为 0
-- 最近里程碑标签：`null-cap-semantics-v1`
-- 工作区：有 3 处未提交改动
+- 提交：`eef5d06` ｜ 累计 21 次提交
+- 最新提交信息：docs(contracts): OI-06 裁定落账 —— 修正价投标期不可知，唯一锚点 ≤ 限价
+- 最近里程碑标签：`p-rev-resolved-v1`
+- 工作区：有 7 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -43,13 +43,14 @@
 
 | 制品 key | 类型 | hash | 冻结时间 |
 |---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-16T09:40:41+00:00 |
-| `field_schema_version` | versioned | sha256:330cf6165ad9 | 2026-09-16T09:40:41+00:00 |
-| `constraint_schema_version` | versioned | sha256:b07f2cf70697 | 2026-09-16T09:40:41+00:00 |
-| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-16T09:40:41+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-16T09:40:41+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-16T09:40:41+00:00 |
-| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-16T09:40:41+00:00 |
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-16T09:56:59+00:00 |
+| `field_schema_version` | versioned | sha256:330cf6165ad9 | 2026-09-16T09:56:59+00:00 |
+| `constraint_schema_version` | versioned | sha256:b07f2cf70697 | 2026-09-16T09:56:59+00:00 |
+| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-16T09:56:59+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-16T09:56:59+00:00 |
+| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-16T09:56:59+00:00 |
+| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-16T09:56:59+00:00 |
+| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-16T09:56:59+00:00 |
 | `adjustment_scope` | enum | **未冻结** | — |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
@@ -58,7 +59,7 @@
 
 ## 四、质量门
 
-- 单元测试：**211** 项，结果 **通过**（OK）
+- 单元测试：**227** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -78,7 +79,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP | 任务数 | 状态分布 |
 |---|---|---|
 | WP0 | 15 | done 7、not_started 5、partial 3 |
-| WP1 | 11 | done 1、not_started 9、partial 1 |
+| WP1 | 11 | done 3、not_started 7、partial 1 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | not_started 7 |
 | WP4 | 13 | not_started 13 |
@@ -90,7 +91,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ### 已启动 / 已完成任务
 
-> 共 12 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 14 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -105,7 +106,9 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T00-07 | 规则集优先级冻结 | done | ✓ 成立 | rule_set_selector_spec 已冻结 sha256:0dd335b5a8ae |
 | T01-00A | 招标文件计价口径与输入协议 Schema 冻结 | done | ✓ 成立 | input_protocol_schema 已冻结 sha256:1696175b90ff |
 | T01-00B | 招标文件解析器实现 | done | — | 解析器 src/bidpricing/io/（零依赖读取器 + 表号/别名双键 + 双行表头合并 + 分节标题四信号判据）；CLI parse-boq 三项产出在真实配对样本上验证：82 行/0 失败/加权下浮 8.0084% 与 pair.json 交叉印证；tests/test_io_boq.py 19 项 |
+| T01-01 | Canonical Schema 定义 | done | — | config/canonical_schema.json（Gate 0a 冻结 ff90d54cbb5e）：统一字段集 16 字段、三类输入映射、空值语义（cap 空=不限价）、normalization 规则（编码不做位数补零——D1）；tests/test_io_clean.py CanonicalSchemaArtifactTest 锁注册与冻结 |
 | T01-02C | Golden Dataset 建设与版本锁定 | partial | ✓ 成立 | 首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定；tests/data/xiyong_l_district/pair.json 存在（35937 字节） |
+| T01-03 | 规范化与清洗 | done | — | src/bidpricing/io/clean.py + CLI clean-boq：数值归一（千分位/全角/空白）、编码标准化（不补零）、单位归一、精度归一（q 6 位/金额 2 位）、cap 空值语义 → no_cap、C5 零价信号、透传信号、数值失败进报告不猜；真实文件实测 82→82 两侧行、0 解析失败、031301017001 正确标记不限价；tests/test_io_clean.py 16 项 |
 
 ---
 

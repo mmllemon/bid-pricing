@@ -1,0 +1,53 @@
+{
+  "schema_id": "canonical_schema",
+  "task": "T01-01",
+  "title": "Canonical Schema —— 三类输入映射到的统一字段集（无同义异名）",
+  "version": 1,
+  "created_at": "2026-09-16",
+  "row_key": "(project_id, unit_work, item_id)",
+  "row_key_note": "单位工程维度由子表名 + 「工程名称：…」单元格承担（无独立列）；序号在分节内重算，不可作主键。",
+  "source_mapping": {
+    "input_A_cap_listing": {
+      "maps_to": ["q0", "cap", "item_name", "item_feature", "unit", "pass_through_signal"],
+      "note": "招标限价清单（表-09 分部分项）。工程量→q0；综合单价→cap（**空值 = 不限价**，见 null_semantics）。"
+    },
+    "input_B": {
+      "maps_to": ["q1_point"],
+      "note": "**由输入 C 兼任**（OI-01 已裁定）：成本清单工程量 = 投标人对实际结算量的预判。"
+    },
+    "input_C_cost_listing": {
+      "maps_to": ["q1_point", "c_i", "item_name", "item_feature", "unit"],
+      "note": "成本清单：编码/名称/特征/单位与 A 一致，工程量与单价不同（工程量→q1_point，单价→c_i）。"
+    }
+  },
+  "fields": [
+    {"name": "project_id",  "type": "string", "nullable": false, "source": "用户声明"},
+    {"name": "unit_work",   "type": "string", "nullable": false, "source": "解析器（子表名 + 工程名称单元格）"},
+    {"name": "item_id",     "type": "string", "nullable": false, "source": "解析器；标准化见 normalization"},
+    {"name": "code_kind",   "type": "enum",   "nullable": false, "range": ["STANDARD", "SUPPLEMENTARY", "UNKNOWN"], "source": "解析器；位数不参与合法性判定（D1）"},
+    {"name": "item_name",   "type": "string", "nullable": false, "source": "解析器"},
+    {"name": "item_feature","type": "string", "nullable": true,  "source": "解析器（项目特征长文本，原样保留）"},
+    {"name": "unit",        "type": "string", "nullable": false, "source": "解析器；归一见 normalization"},
+    {"name": "q0",          "type": "number", "nullable": true,  "precision": 6, "source": "输入 A 工程量", "note": "招标清单工程量"},
+    {"name": "q1_point",    "type": "number", "nullable": true,  "precision": 6, "source": "输入 C 工程量", "note": "成本清单工程量 = 结算量预判（OI-01）；attribution 标签（DRAWING_DIFF/CHANGE_ORDER/BOTH/UNKNOWN）随行携带"},
+    {"name": "cap",         "type": "number", "nullable": true,  "precision": 2, "source": "输入 A 综合单价", "note": "空 → no_cap=true（不限价语义，用户 2026-09-16 裁定）"},
+    {"name": "c_i",         "type": "number", "nullable": true,  "precision": 2, "source": "输入 C 单价", "note": "自身个别成本（≠市场平均成本）"},
+    {"name": "no_cap",      "type": "boolean","nullable": false, "source": "清洗器", "note": "cap 为空 → true；该项上界由总价约束聚合兜底，C5（≠0）仍适用"},
+    {"name": "zero_price",  "type": "boolean","nullable": false, "source": "清洗器", "note": "任一侧单价为 0 → true（C5 触发信号，人工确认）"},
+    {"name": "pass_through","type": "boolean","nullable": false, "source": "清洗器", "note": "暂估价列非空 → true（例外信号，role=PASS_THROUGH）"},
+    {"name": "attribution", "type": "enum",   "nullable": true,  "range": ["DRAWING_DIFF", "CHANGE_ORDER", "BOTH", "UNKNOWN"], "source": "用户声明（逐项或整体）", "note": "q0 ≠ q1 的变化归因（OI-01）；默认 UNKNOWN，不阻塞"},
+    {"name": "provenance",  "type": "object", "nullable": false, "source": "清洗器", "note": "{source_file, source_sha256, source_sheet, source_row, source_table_no, side}——对账与审计用"}
+  ],
+  "null_semantics": {
+    "cap": "空 = 不限价（ALLOW_EMPTY_NO_CAP，用户 2026-09-16 裁定）——不是数据缺口，禁止按 cap=0 处理",
+    "amount": "空 = 源文件即如此（ADR-0005：限价侧普遍「列在、行在、值空」）",
+    "q0/q1_point/c_i": "空 = 缺测 → 进异常清单，禁止静默丢弃（T01-04 判据前置）"
+  },
+  "normalization": {
+    "item_id": "去首尾空白；全角数字/字母→半角；小写字母→大写。**不做位数补零**——位数不参与合法性判定（D1），补零等于改主键",
+    "unit": "去首尾空白；全角→半角",
+    "numeric": "去千分位逗号与空白；全角→半角；空→null（语义见 null_semantics）",
+    "precision": "quantity 类 6 位小数、金额类 2 位小数（与 field_schema 一致）"
+  },
+  "consumed_by": "T01-03 清洗器产出；T01-04 三表交叉匹配的 JOIN 键与字段来源"
+}

@@ -41,6 +41,9 @@ from .selection_options import (
     resolve_option,
     write_option,
 )
+from .status import collect as collect_status
+from .status import render as render_status
+from .status import write_state
 
 _STATUS_MARK = {"PASS": "PASS", "WARN": "WARN", "FAIL": "FAIL", "BLOCKED": "BLOCKED"}
 
@@ -418,6 +421,45 @@ def cmd_scope_impact(args) -> int:
     return 0
 
 
+# ------------------------------------------------------------------ status
+
+
+def cmd_status(args) -> int:
+    """状态快照 —— 跨会话交接的单一入口。
+
+    刻意不做任何「读一份写好的进度文档」的动作：本命令的每一条都现场从
+    权威源采集（git / 注册表 / 现场跑测试 / 任务板证据核对）。若本命令失败，
+    说明权威源有问题，而不是「文档没更新」。
+    """
+    snap = collect_status(contract_date=args.contract_date)
+
+    if args.json:
+        print(json.dumps(snap, ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    text = render_status(snap)
+
+    if args.write:
+        path = write_state(args.contract_date)
+        print(f"已写入状态快照：{path}")
+        print()
+    if args.write and not args.print_md:
+        # 写盘模式下默认只打印提纲，避免刷屏
+        tests = snap["tests"]
+        git = snap["git"]
+        print(f"  提交      {git['head']}  ({git.get('subject', '')})")
+        print(f"  闸门      Gate 0a={snap['gates'].get('gate_0a')}  "
+              f"Gate 0b={snap['gates'].get('gate_0b')}  "
+              f"Phase 0 输入门={snap['gates'].get('phase_0_input_gate')}")
+        print(f"  测试      {tests['ran']} 项，{'通过' if tests['ok'] else '未通过'}")
+        print(f"  遗留项    {len(snap['advisories'])} 条")
+        print(f"  下一步    {', '.join(n['id'] for n in snap['next_steps']) or '（无）'}")
+        return 0
+
+    print(text)
+    return 0
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -490,6 +532,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_si.add_argument("--rho-minus", type=float, default=0.0, help="ρ⁻（默认 0）")
     p_si.add_argument("--json", action="store_true")
     p_si.set_defaults(func=cmd_scope_impact)
+
+    # ------------------------------------------------------------ status
+    p_stat = sub.add_parser(
+        "status",
+        help="生成项目状态快照（全部现场派生，可写入 docs/STATE.md）",
+    )
+    p_stat.add_argument("--contract-date", default="2026-03-01",
+                        help="合同基准日 YYYY-MM-DD（决定规则集选择）")
+    p_stat.add_argument("--write", action="store_true",
+                        help="写入 docs/STATE.md（跨会话交接用）")
+    p_stat.add_argument("--print-md", action="store_true",
+                        help="配合 --write 时仍打印完整 Markdown")
+    p_stat.add_argument("--json", action="store_true", help="输出 JSON 原始快照")
+    p_stat.set_defaults(func=cmd_status)
 
     return parser
 

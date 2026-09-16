@@ -1,0 +1,138 @@
+<!-- ⚠ 本文件由 `python -m bidpricing.cli status --write` 自动生成。
+     请勿手工编辑——手写的状态一定会在某次改动后过期。
+     要改内容，请改来源：git 提交 / config 注册表 / docs/tasks.json。 -->
+
+
+# 项目状态快照
+
+> 生成于 **2026-09-16 10:36:31** ｜ 合同基准日 `2026-03-01`
+> 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
+
+---
+
+## 一、版本锚点
+
+- 提交：`a17e07c` ｜ 累计 5 次提交
+- 最新提交信息：fix(t00-06): 分类表拆为机制层/数据层 —— 真实清单不再是开工前置
+- 最近里程碑标签：`classification-split-v1`
+- 工作区：有 12 处未提交改动
+
+> 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
+
+---
+
+## 二、闸门状态
+
+| 闸门 | 状态 |
+|---|---|
+| Gate 0a — 技术接口与规则集冻结 | **PASS** |
+| Gate 0b — 商务口径与合规冻结 | **BLOCKED** |
+| Phase 0 输入门 — 项目级数据/取值 | **BLOCKED** |
+| Phase 0 准入（综合） | **BLOCKED** |
+| WP4 求解层构建 | **BLOCKED** |
+
+**Gate 0a 无阻塞项**，已放行 WP1 数据层 / WP2 配置层 / WP3 判定层。
+
+---
+
+## 三、契约制品冻结表
+
+| 制品 key | 类型 | hash | 冻结时间 |
+|---|---|---|---|
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-16T02:18:09+00:00 |
+| `field_schema_version` | versioned | sha256:858b0c997f85 | 2026-09-16T02:18:09+00:00 |
+| `constraint_schema_version` | versioned | sha256:49966cbda4b7 | 2026-09-16T02:18:09+00:00 |
+| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-16T02:18:09+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-16T02:18:09+00:00 |
+| `competitiveness_classification` | versioned | sha256:5610c8d879dd | 2026-09-16T02:18:09+00:00 |
+| `input_protocol_schema` | versioned | sha256:92c3edea3d46 | 2026-09-16T02:18:09+00:00 |
+| `adjustment_scope` | enum | **未冻结** | — |
+
+> hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
+
+---
+
+## 四、质量门
+
+- 单元测试：**123** 项，结果 **通过**（OK）
+
+```bash
+cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
+```
+
+---
+
+## 五、任务进度
+
+| WP | 任务数 | 状态分布 |
+|---|---|---|
+| WP0 | 15 | done 7、not_started 6、partial 2 |
+| WP1 | 11 | not_started 10、ready 1 |
+| WP2 | 5 | not_started 5 |
+| WP3 | 7 | not_started 7 |
+| WP4 | 13 | not_started 13 |
+| WP5 | 5 | not_started 5 |
+| WP6 | 8 | not_started 8 |
+| WP7 | 4 | not_started 4 |
+
+共 **68** 项任务。
+
+### 已启动 / 已完成任务
+
+> 共 10 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+
+| 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
+|---|---|---|---|---|
+| T00-08 | 规则集选择器 | done | ✓ 成立 | src/bidpricing/contracts/selector.py 存在 |
+| T00-01 | 合同计价与调价口径冻结 | partial | — | 规则集已承载调价口径；adjustment_scope 为选择项，取值待项目落值 |
+| T00-02 | 字段字典冻结 | done | ✓ 成立 | field_schema_version 已冻结 sha256:858b0c997f85 |
+| T00-03 | 约束字典冻结 | done | ✓ 成立 | constraint_schema_version 已冻结 sha256:49966cbda4b7 |
+| T00-04 | 精度与容差策略冻结 | done | ✓ 成立 | precision_profile_version 已冻结 sha256:6ce483e8d221 |
+| T00-05 | 三层分割架构地位确认 | done | ✓ 成立 | architecture_decision_version 已冻结 sha256:3601adeed46c |
+| T00-06 | 报价项可竞争性分类与变量集合冻结 | partial | ✓ 成立 | 规则书已冻结；项目级落值表为空，属 Phase 0 输入门判据；competitiveness_classification 已冻结 sha256:5610c8d879dd |
+| T00-07 | 规则集优先级冻结 | done | ✓ 成立 | rule_set_selector_spec 已冻结 sha256:0dd335b5a8ae |
+| T01-00A | 招标文件计价口径与输入协议 Schema 冻结 | done | ✓ 成立 | input_protocol_schema 已冻结 sha256:92c3edea3d46 |
+| T01-00B | 招标文件解析器实现 | ready | — | Gate 0a 已放行；列结构实测口径已就位，可直开 |
+
+---
+
+## 六、下一步（自动派生）
+
+> 判据：依赖任务均已 `done`/`partial`，且自身未完成。**由代码算出，非人工推荐。**
+
+| 任务 | WP | 标题 | 产出物 | 状态 |
+|---|---|---|---|---|
+| T00-01 | WP0 | 合同计价与调价口径冻结 | 《计价规则卡》 | partial |
+| T00-06 | WP0 | 报价项可竞争性分类与变量集合冻结 | 分类表 + 变量集合定义 | partial |
+| T00-06B | WP0 | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | 总价分解计算规范（T00-06 的补充附件，冲突时以本规范为准） | not_started |
+| T00-09 | WP0 | 成本口径证明包 | 成本构成规范 | not_started |
+| T00-10A | WP0 | $q^1$ 假设声明：格式与冻结时点 | 《$q^1$ 假设声明书（格式篇）》 | not_started |
+| T01-00B | WP1 | 招标文件解析器实现 | 解析器 + 解析日志 + 字段映射报告 + 失败样本清单 | ready |
+
+---
+
+## 七、遗留项与已知限制
+
+- ruleset_selector_spec.json → known_limits: region / project_type / funding_type 三个输入当前不参与判定，仅留痕——待 T00-01 补充规则表后启用
+- ruleset_selector_spec.json → known_limits: 2024 版减量侧（r < 0.85）FULL 与 SEGMENT 等价（「减少后剩余部分」本就是全部 q1），作用域分叉只出现在增量侧
+- ruleset_selector_spec.json → known_limits: 规则层分叉（同一报价在两种口径下的结算差）不等于报价层的最优利润差：规格书附录 B 例 2R 的约 4.5 倍差需由 WP4 在两条口径下分别求解后比较
+- ruleset_selector_spec.json → known_limits: 选择项落值文件未纳入 Gate 0a 受控制品注册表（不入 hash 绑定）：变更不留契约失效信号，是否升级为受控制品待定
+
+> 遗留项从各配置的 `known_limits` / `freeze_blocker` 自声明字段汇聚，
+> 因此不会被「汇总为一句已完成」而掩盖。
+
+---
+
+## 八、复现全部结论
+
+```bash
+cd bid-pricing
+# 1. 状态快照（本文件的来源）
+PYTHONPATH=src python -m bidpricing.cli status --write
+# 2. 闸门机械判定
+PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01
+# 3. 全量测试
+PYTHONPATH=src python -m unittest discover -s tests
+# 4. 规则集指纹自检（含退化条件登记）
+PYTHONPATH=src python -m bidpricing.cli ruleset-selftest
+```

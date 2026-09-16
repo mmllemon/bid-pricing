@@ -53,10 +53,20 @@ src/bidpricing/
     rule_sets/gb50500_2013.py           GB 50500-2013 独立实现（分段累加）
     rule_sets/gbt50500_2024.py          GB/T 50500-2024 独立实现（调整单价本身）
   gates/gate0.py                        §7.1 + §7.1.1 六条死锁断言的可执行实现
+  status.py                             状态快照派生（git / 闸门 / 制品 / 测试 / 任务板）
   cli.py                                命令行入口
-tests/                                  98 项单元测试
-docs/ADR-0001-three-layer-separation.md 架构决策记录
-DEVELOPMENT.md                          任务状态板（任务号 ↔ 文件映射）
+tests/                                  单元测试（数量以 `bidpricing status` 输出为准）
+tools/extract_tasks.py                  路线文档 → docs/tasks.json 单向派生器（含 --check）
+docs/
+  STATE.md                              **状态快照（自动生成，勿手改）** —— 跨会话交接入口
+  tasks.json                            机器可读任务板（68 项；结构派生 + 状态人工）
+  GOVERNANCE.md                         记录体系与跨会话延续机制
+  adr/ADR-0001-three-layer-separation.md      三层分割架构
+  adr/ADR-0002-判定时点与机制数据分层.md      判定时点对齐（两次踩坑的结论）
+  adr/ADR-0003-状态快照自动派生.md            为什么文档不能手写状态
+  adr/ADR-0004-未定态必须是机器可判状态.md    未定态表示法与制品冻结
+CHANGELOG.md                            里程碑变更历史
+DEVELOPMENT.md                          早期任务状态板（内容已并入 STATE.md，保留作沿革）
 ```
 
 ## 两条设计原则
@@ -85,17 +95,50 @@ SHA-256 前 12 位。制品一改，hash 失配，Gate 立即失效——无需�
 
 ## 当前状态
 
+**不要在本文件里找状态数字。** 状态一律以自动生成的
+[`docs/STATE.md`](docs/STATE.md) 为准——手写在文档里的数字必然会过期，
+本项目已为此付出三次代价（见 [ADR-0003](docs/adr/ADR-0003-状态快照自动派生.md)）。
+
 ```bash
-$ PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01
-[   PASS] Gate 0a    — 8/8 判据通过      → 放行 WP1 / WP2 / WP3
-[BLOCKED] Gate 0b    — 5 项制品 + 分级审批全部待定  → 阻塞 WP4
-[BLOCKED] Phase 0 输入门 — adjustment_scope、project_classification_table  → 阻塞求解
+# 生成 / 刷新状态快照
+PYTHONPATH=src python -m bidpricing.cli status --write
+
+# 只看关键行（不写盘）
+PYTHONPATH=src python -m bidpricing.cli status
+
+# 机器可读
+PYTHONPATH=src python -m bidpricing.cli status --json
 ```
 
-Gate 0a 已通过：技术接口与规则集（含 T00-06 分类**规则书**）全部冻结，技术侧
-无剩余阻塞，可开工 WP1 数据层 / WP2 配置层 / WP3 判定层。注意 Gate 0a **已通过**
-不等于「项目数据齐备」——后者由 Phase 0 输入门单独把关，缺的是
-`adjustment_scope` 取值与逐项分类表两项**项目级数据**，它们只在启动求解前需要。
+快照内容：版本锚点（git commit / tag / 工作区状态）、三个闸门的状态与阻塞项、
+契约制品冻结表（hash）、现场测试结果、68 项任务的进度与**证据核对**、
+自动派生的下一步任务、遗留项汇总。
 
-详见 `DEVELOPMENT.md` 的任务状态板。
+### 三个闸门的分工（结构说明，非状态）
+
+| 闸门 | 判什么 | 未通过时阻挡 |
+|---|---|---|
+| **Gate 0a** | 机制：规则集、字段字典、分类规则书是否冻结 | WP1/WP2/WP3 开发 |
+| **Phase 0 输入门** | 取值/数据：`adjustment_scope` 取值、项目逐项分类表 | **仅**求解启动 |
+| **Gate 0b** | 商务口径与合规：成本口径、假设声明书、桥接表 | WP4 求解层 |
+
+## 跨会话延续机制
+
+这是一个需要长期开发维护的项目，**仅靠对话上下文记忆是不够的**。
+本项目采用六层记录体系，并把状态快照做成**生成物**而非著作物：
+
+| 层 | 文件 | 作用 |
+|---|---|---|
+| 事实 | `config/`、`src/` | 系统当前是什么（唯一事实源） |
+| 意图 | `docs/tasks.json` | 68 项任务的状态与证据 |
+| 决策 | `docs/adr/` | **为什么**这么做、否决了什么 |
+| 变更 | `CHANGELOG.md`、git tag | 什么时候变了什么 |
+| 快照 | `docs/STATE.md` | **自动生成**，现在到哪了 |
+| 交接 | `.workbuddy/memory/*.md` | 会话级流水 |
+
+**接手者必做**：读 `docs/STATE.md` → 复算一次 → 读 `docs/adr/`。
+**离场者必做**：提交 → `status --write` → 追加日志。
+
+完整协议、变更同步义务矩阵与校验闭环见
+[`docs/GOVERNANCE.md`](docs/GOVERNANCE.md)。
 

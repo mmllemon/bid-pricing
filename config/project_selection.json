@@ -1,5 +1,14 @@
 {
   "selection_id": "project_selection_v1",
   "note": "项目级选择项落值文件。未选择的选择项不写 value 字段——与《实施路线 v3.2.1》§7.1.1 断言 1「未定态 = key 完全缺失」同构，使「还没选」在机器上可判。本文件由 `bidpricing options set` 写入，禁止手工填默认值（断言 6① 会拒绝）。",
-  "options": {}
+  "options": {
+    "adjustment_scope": {
+      "value": "SEGMENT",
+      "rule_set_id": "GB/T50500-2024",
+      "source": "OPERATOR",
+      "actor": "operator",
+      "selected_at": "2026-09-16T06:01:47+00:00",
+      "rationale": "2026-09-16 裁定：§8.9 工程量偏差按分段口径结算（仅超出 1.15·Q0 的部分按调整后单价）。理由：与 2013 §9.6.2 分段累加同形，r_eff 在阈值处连续，不引入报价结构在 1.15 处的跳变风险；且 SEGMENT 在 2013/2024 两规则集下均为合法取值，跨规则集稳健。"
+    }
+  }
 }

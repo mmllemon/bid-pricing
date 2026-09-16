@@ -1,1290 +1,1290 @@
 {
-  "schema": "bidpricing.tasks/v1",
-  "source": "impl_plan_v321.md",
-  "source_note": "结构字段由 tools/extract_tasks.py 从路线文档派生，请勿手改；status/note 为人工维护字段。",
-  "counts": {
-    "total": 68,
-    "by_wp": {
-      "WP0": 15,
-      "WP1": 11,
-      "WP2": 5,
-      "WP3": 7,
-      "WP4": 13,
-      "WP5": 5,
-      "WP6": 8,
-      "WP7": 4
+ "schema": "bidpricing.tasks/v1",
+ "source": "impl_plan_v321.md",
+ "source_note": "结构字段由 tools/extract_tasks.py 从路线文档派生，请勿手改；status/note 为人工维护字段。",
+ "counts": {
+  "total": 68,
+  "by_wp": {
+   "WP0": 15,
+   "WP1": 11,
+   "WP2": 5,
+   "WP3": 7,
+   "WP4": 13,
+   "WP5": 5,
+   "WP6": 8,
+   "WP7": 4
+  }
+ },
+ "warnings": [],
+ "tasks": [
+  {
+   "id": "T00-08",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "规则集选择器",
+   "revision_note": "v3 新增/P0，**起点任务**",
+   "deliverable": "`select_rule_set()` 模块",
+   "type": "CON",
+   "review": "REV",
+   "deps": [],
+   "summary": "输入：`tender_document_date / contract_date / standard_version_declared / region / project_type / funding_type / tender_document_override / contract_override`；输出：`…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "module",
+     "path": "src/bidpricing/contracts/selector.py"
     }
+   ],
+   "status": "not_started",
+   "note": ""
   },
-  "warnings": [],
-  "tasks": [
-    {
-      "id": "T00-08",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "规则集选择器",
-      "revision_note": "v3 新增/P0，**起点任务**",
-      "deliverable": "`select_rule_set()` 模块",
-      "type": "CON",
-      "review": "REV",
-      "deps": [],
-      "summary": "输入：`tender_document_date / contract_date / standard_version_declared / region / project_type / funding_type / tender_document_override / contract_override`；输出：`…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "module",
-          "path": "src/bidpricing/contracts/selector.py"
-        }
-      ],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T00-01",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "合同计价与调价口径冻结",
-      "revision_note": "",
-      "deliverable": "《计价规则卡》",
-      "type": "CON",
-      "review": "REV",
-      "deps": [],
-      "summary": "$Q_0/Q_1/P_0/P_1$ 定义完成；规则表按 `rule_set_id` 可机器执行；$P_1$ 计算规则来源已回答 5 项澄清（见 §8.3）；「合同约定优先」显式化；必须落定 `adjustment_scope ∈ {FULL, SEGMENT}`——2024 §8.9.2 未明说是否分段，两种解读下最优…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [],
-      "status": "partial",
-      "note": "规则集已承载调价口径；adjustment_scope 为选择项，取值待项目落值"
-    },
-    {
-      "id": "T00-02",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "字段字典冻结",
-      "revision_note": "",
-      "deliverable": "《字段字典 v1》",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [],
-      "summary": "每字段含 type/unit/range/default/nullable/精度/MISSING_POLICY；`item_id` 唯一规则；百分比统一小数；$q^0=0$ 与 $c_i=0$ 的处理明确表态",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "artifact",
-          "key": "field_schema_version"
-        }
-      ],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T00-03",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "约束字典冻结",
-      "revision_note": "",
-      "deliverable": "《约束字典 C1–C12》",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [],
-      "summary": "每条含表达式、输入字段、输出指标、threshold、tolerance、severity、可开关性",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "artifact",
-          "key": "constraint_schema_version"
-        }
-      ],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T00-04",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "精度与容差策略冻结",
-      "revision_note": "",
-      "deliverable": "《精度策略表》",
-      "type": "REV",
-      "review": "CON",
-      "deps": [],
-      "summary": "$\\epsilon_{\\text{solver}}/\\epsilon_{\\text{price}}/\\epsilon_{\\text{quantity}}/\\epsilon_{\\text{total}}$ 与 $\\epsilon_{\\text{total}}=\\max(\\epsilon_{\\text{abs}},\\eps…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "artifact",
-          "key": "precision_profile_version"
-        }
-      ],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T00-05",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "三层分割架构地位确认",
-      "revision_note": "",
-      "deliverable": "架构决策记录",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [],
-      "summary": "Phase 1 默认定位 `candidate`（不等同 warm-start）；保留 `phase1_role` 开关；另设 `phase1_use_as_mip_start`，默认 false",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "artifact",
-          "key": "architecture_decision_version"
-        }
-      ],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T00-06",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "报价项可竞争性分类与变量集合冻结",
-      "revision_note": "P0",
-      "deliverable": "分类表 + 变量集合定义",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T00-02"
-      ],
-      "summary": "每项标注 `pricing_role ∈ {OPTIMIZABLE, FIXED, NON_COMPETITIVE, PASS_THROUGH, CONTRACT_DEFINED}`；显式定义决策变量集合 $X_{\\text{opt}}=\\{i:\\text{pricing\\_role}=\\text{OPTIMIZABL…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "artifact",
-          "key": "competitiveness_classification"
-        }
-      ],
-      "status": "partial",
-      "note": "规则书已冻结；项目级落值表为空，属 Phase 0 输入门判据"
-    },
-    {
-      "id": "T00-06B",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "$P_{\\text{competitive}}$ 与不可竞争费基数联动规则",
-      "revision_note": "v3.2 新增/P0；v3.2.1 补全公式与边界",
-      "deliverable": "总价分解计算规范（T00-06 的补充附件，冲突时以本规范为准）",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T00-06"
-      ],
-      "summary": "① 扣减式 $P_{\\text{competitive}}(p)=P^*(p)-\\sum_{i\\notin X_{\\text{opt}}}p_iq_i^0-\\sum(\\text{暂列金额})-\\sum(\\text{甲供材})$；② 总价恒等式（v3.2.1 补全） $P^*(p)=P_{\\text{competitiv…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "module",
-          "path": "src/bidpricing/identity.py"
-        }
-      ],
-      "status": "partial",
-      "note": "恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落"
-    },
-    {
-      "id": "T00-07",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "规则集优先级冻结",
-      "revision_note": "P0",
-      "deliverable": "《规则优先级卡》",
-      "type": "CON",
-      "review": "REV",
-      "deps": [],
-      "summary": "明确 $\\text{Precedence}(\\text{Contract},\\text{Tender},\\text{Regional},\\text{Standard})$；各版 RuleSet 独立实现、仅共享接口、禁止共享核心调价公式；附强制测试：同一输入下两套 RuleSet 输出不得仅因条文号不同而相同（机械判据…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "artifact",
-          "key": "rule_set_selector_spec"
-        }
-      ],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T00-09",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "成本口径证明包",
-      "revision_note": "v3 新增/P0",
-      "deliverable": "成本构成规范",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T00-02"
-      ],
-      "summary": "明确 $C_{\\text{individual}}$ 的八项分解：`labor / material / equipment / subcontract / management / allocated_overhead / tax_and_fee_treatment / risk_reserve`；显式声明 $C_{…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [],
-      "status": "not_started",
-      "note": "需造价专业取数（八项成本分解）"
-    },
-    {
-      "id": "T00-10A",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "$q^1$ 假设声明：格式与冻结时点",
-      "revision_note": "v3.2.1 拆分/P0·阻塞",
-      "deliverable": "《$q^1$ 假设声明书（格式篇）》",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T00-02"
-      ],
-      "summary": "① 格式：须与 T00-02 字段字典一致；Phase 1 / Phase 2 只接受点估计或有限场景集 $\\{q_i^{1,s},\\pi_s\\}$（并给出场景聚合公式 $q_i^1=\\sum_s\\pi_s q_i^{1,s}$），区间 $[q^{1,\\text{lo}},q^{1,\\text{hi}}]$ 与分布形式…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [],
-      "status": "not_started",
-      "note": "需人工：q^1 格式与冻结时点声明"
-    },
-    {
-      "id": "T00-10B",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "$q^1$ 来源判定",
-      "revision_note": "v3.2.1 拆分/P0·阻塞",
-      "deliverable": "《$q^1$ 假设声明书（来源篇）》",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T00-01",
-        "T01-00B"
-      ],
-      "summary": "明确来源（历史项目数据 / 造价专家估计 / 显式假设比例，须择一或加权并标注），判据须引用合同条款对工程量偏差的约定（`contract_ruleset` 与 T01-00B 的合同解析结果），并标注样本量、时间跨度、覆盖项目类型。本任务属 WP0 但不在 Gate 0a 判据内、不在 Gate 0a 放行清单中（v…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [],
-      "status": "not_started",
-      "note": "依赖 T01-00B 合同解析产出"
-    },
-    {
-      "id": "T00-11",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "成本 $c_i$ 假设与来源声明",
-      "revision_note": "v3.2.1 新增/P0·阻塞",
-      "deliverable": "《$c_i$ 假设声明书》",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T00-02",
-        "T00-09"
-      ],
-      "summary": "与 T00-10A 同格式三要素：① 来源（成本库 / 历史结算 / 供应商询价 / 专家估计）；② 格式（点值 / 区间，须与 T00-02 字段字典一致）；③ 冻结时点（Gate 0b 前冻结）；产出 `cost_assumption_spec_version / hash / frozen_at`，与 T00-0…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [],
-      "status": "not_started",
-      "note": "需人工：c_i 来源与冻结时点声明"
-    },
-    {
-      "id": "T00-12",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "利润口径桥接表",
-      "revision_note": "v3.2.1 新增/P0",
-      "deliverable": "《利润口径桥接表》",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T00-06B",
-        "T00-09"
-      ],
-      "summary": "逐项映射 $p\\to$ 结算收入 $R_i$ / 成本 $c_iq_i^1$ / 税金 / 规费 / 不可竞争费 / 利润 $Z$，明确哪一层级进入优化目标、哪些为派生量；与 T00-06B 的总价分解同源同值（桥接表任一行与 T00-06B 总价恒等式不符即判 BLOCK）；供 Phase 3 独立复核逐项对账使用。…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [],
-      "status": "not_started",
-      "note": "依赖 T00-06B、T00-09"
-    },
-    {
-      "id": "T01-00A",
-      "wp": "WP0",
-      "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
-      "title": "招标文件计价口径与输入协议 Schema 冻结",
-      "revision_note": "v3.2.1 新增/P0·阻塞，**属 WP0**",
-      "deliverable": "输入协议规范（Schema）",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T00-02"
-      ],
-      "summary": "① 输入格式清单（Excel / XML / PDF 提取 / 其他）及每种格式到 Canonical Data Model 的映射规则；② 最小合法字段集（是否含不可竞争费分项、暂估价呈现形式、是否多标段、清单编码体系、`adjustment_scope` 字段）；③ 解析失败处理策略（BLOCK，禁止猜测映射）；④…",
-      "gate": "Gate 0a / 0b",
-      "evidence": [
-        {
-          "kind": "artifact",
-          "key": "input_protocol_schema"
-        }
-      ],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-00B",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "招标文件解析器实现",
-      "revision_note": "v3.2.1 拆自 T01-00，**属 WP1**",
-      "deliverable": "解析器 + 解析日志 + 字段映射报告 + 失败样本清单",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T00-02",
-        "T01-00A"
-      ],
-      "summary": "按 T01-00A 冻结的 Schema 实现格式识别与字段提取；职责边界（v3.2.1 明确）：解析器仅负责格式识别与字段提取，业务语义映射（清单编码体系转换）由 T01-01 / T01-02 承接，禁止重复实现解析逻辑。完成判据（v3.2.1 解死锁）：≥3 套真实历史非标 Excel 清单可无报错解析，输出解析…",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "ready",
-      "note": "Gate 0a 已放行；列结构实测口径已就位，且已有 1 份真实配对样本可作输入"
-    },
-    {
-      "id": "T01-01",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "Canonical Schema 定义",
-      "revision_note": "",
-      "deliverable": "标准数据模型",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T00-02"
-      ],
-      "summary": "三类输入映射到统一字段集，无同义异名",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-02",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "Excel Adapter",
-      "revision_note": "",
-      "deliverable": "三类输入解析器",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T01-01"
-      ],
-      "summary": "三类输入各 1 个真实文件可解析，无人工预处理",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-02B",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "输入变体测试集",
-      "revision_note": "",
-      "deliverable": "变体测试集",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T01-02"
-      ],
-      "summary": "覆盖 Sheet 名变化、列序变化、合并单元格、空行、多表头、合计行、隐藏行、表头带单位、数字带逗号、中文括号、文本数字、百分比、公式结果、多单位工程；任何无法识别的结构必须 BLOCK，禁止猜测映射",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-02C",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "Golden Dataset 建设与版本锁定",
-      "revision_note": "v3 新增/P1",
-      "deliverable": "`golden_dataset_v1` + 固定 seed",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T01-02"
-      ],
-      "summary": "六类分层用例齐备：A 正常随机 / B 边界随机 / C 退化随机 / D 不可行随机 / E 极端尺度 / F 对抗构造；每类含正例与负例；固定随机种子；Gate 1 的「100% 通过」必须绑定本数据集版本号，不允许开发人员用一个简单 Excel 声称通过",
-      "gate": "Gate 1",
-      "evidence": [
-        {
-          "kind": "file",
-          "path": "tests/data/xiyong_l_district/pair.json"
-        }
-      ],
-      "status": "partial",
-      "note": "首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定"
-    },
-    {
-      "id": "T01-03",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "规范化与清洗",
-      "revision_note": "",
-      "deliverable": "清洗模块",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T01-01"
-      ],
-      "summary": "编码补零、单位统一、数值精度归一全自动",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-03A",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "缺失值与异常值策略",
-      "revision_note": "",
-      "deliverable": "缺失值规则表",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T00-02"
-      ],
-      "summary": "每字段在字段字典中显式声明 `MISSING_POLICY ∈ {BLOCK, WARN, DEFAULT, IMPUTE, IGNORE}`；`required+missing→BLOCK`；`invalid numeric→BLOCK`；`inferred→标记 source=derived`；合同口径 / flo…",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-04",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "三表交叉匹配",
-      "revision_note": "",
-      "deliverable": "匹配器 + 异常清单",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T01-03"
-      ],
-      "summary": "以 master item set 为基准 LEFT JOIN 三张表；逐字段统计缺失覆盖率（`missing_quantity / missing_cost / missing_limit`）；未匹配项 100% 进异常清单，禁止静默丢弃",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-04A",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "多级 key 与重复 key 治理",
-      "revision_note": "",
-      "deliverable": "Key 规范",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T01-04"
-      ],
-      "summary": "Canonical key = `(project, unit, item_id)`，必要时 `+(description, unit)`；重复 key 必须 BLOCK，禁止自动合并",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-05",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "源文件版本锁定与完整性",
-      "revision_note": "v3 新增/P1",
-      "deliverable": "源文件登记表",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T01-02"
-      ],
-      "summary": "每次导入记录 `file_name / file_hash / file_version / sheet_hash / import_timestamp / source_owner`；源文件被替换后必须能识别并拒绝复用旧复算结果",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T01-06",
-      "wp": "WP1",
-      "wp_title": "数据层 → Gate 1",
-      "title": "D01–D12 校验实现",
-      "revision_note": "",
-      "deliverable": "校验器",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T01-04A"
-      ],
-      "summary": "9 条阻断级 + 3 条告警级规则可触发并给出明确原因",
-      "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T02-01",
-      "wp": "WP2",
-      "wp_title": "配置层 → Gate 2",
-      "title": "Config Schema",
-      "revision_note": "",
-      "deliverable": "配置定义表",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T00-02"
-      ],
-      "summary": "每 Sheet 每 key 含 type/required/default/min/max/enum/description",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T02-02",
-      "wp": "WP2",
-      "wp_title": "配置层 → Gate 2",
-      "title": "defaults-fallback 合并器",
-      "revision_note": "",
-      "deliverable": "合并模块",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T02-01"
-      ],
-      "summary": "$\\text{Config}^{\\text{eff}}=\\text{Config}^{\\text{user}}\\oplus\\text{Defaults}$；每字段标记 value_source ∈ {explicit, defaulted, derived, inferred}；合同口径 / 成本 / 税 / 不可竞争…",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T02-03",
-      "wp": "WP2",
-      "wp_title": "配置层 → Gate 2",
-      "title": "Config Validator",
-      "revision_note": "",
-      "deliverable": "校验器",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T02-02"
-      ],
-      "summary": "缺失/空值/类型错/越界/未知 key/重复 key/版本不符 七类全部可机械检出",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T02-04",
-      "wp": "WP2",
-      "wp_title": "配置层 → Gate 2",
-      "title": "配置耦合度体检",
-      "revision_note": "",
-      "deliverable": "体检脚本",
-      "type": "REV",
-      "review": "PM",
-      "deps": [
-        "T02-01"
-      ],
-      "summary": "统计 Sheet 数、字段总数、重复字段数、跨 Sheet 引用数、默认值数量",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T02-05",
-      "wp": "WP2",
-      "wp_title": "配置层 → Gate 2",
-      "title": "版本绑定校验",
-      "revision_note": "",
-      "deliverable": "校验器",
-      "type": "REV",
-      "review": "PM",
-      "deps": [
-        "T02-01"
-      ],
-      "summary": "参数版本与模型版本不兼容时拒绝运行",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T03-01",
-      "wp": "WP3",
-      "wp_title": "判定层 → Gate 2",
-      "title": "结算规则引擎",
-      "revision_note": "",
-      "deliverable": "`SettlementRule.evaluate(Q0, Q1, P0, ContractContext)`",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T00-01",
-        "T00-08"
-      ],
-      "summary": "返回 `settlement_amount / effective_price / rule_id / rule_branch`；覆盖 $Q_1<0.85Q_0$ / 区间内 / $Q_1>1.15Q_0$ 三段且边界归属正确；规则阈值与 $P_1$ 来源按 `rule_set_id` 分发；支持合同规则覆盖标准阈值",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T03-02",
-      "wp": "WP3",
-      "wp_title": "判定层 → Gate 2",
-      "title": "派生量计算",
-      "revision_note": "",
-      "deliverable": "派生模块",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T00-03"
-      ],
-      "summary": "$L_i/U_i/\\text{floor}_i/r_i^{\\text{eff}}/w_i/\\delta_i^{\\text{eff}}$ 按规格实现",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T03-03",
-      "wp": "WP3",
-      "wp_title": "判定层 → Gate 2",
-      "title": "Phase 0 预检与可行性证书",
-      "revision_note": "",
-      "deliverable": "预检引擎",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T03-02",
-        "T00-06"
-      ],
-      "summary": "输出 ① 结构化可行性证书：$P_{\\min}=\\sum L_iq_i^0$、$P_{\\max}=\\sum U_iq_i^0$、$P^*_{\\text{variable}}=P^*-P_{\\text{fixed}}$，并校验 $P^*_{\\text{variable}}\\in[P_{\\min},P_{\\max}]$，越…",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T03-06",
-      "wp": "WP3",
-      "wp_title": "判定层 → Gate 2",
-      "title": "不可行诊断",
-      "revision_note": "",
-      "deliverable": "诊断模块",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T03-03"
-      ],
-      "summary": "输出 `constraint_id / blocking / conflicting_set / suggested_relaxation`；求解器无 IIS 时实现最小冲突集近似或逐项关闭诊断",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T03-04",
-      "wp": "WP3",
-      "wp_title": "判定层 → Gate 2",
-      "title": "约束判定器",
-      "revision_note": "",
-      "deliverable": "判定器",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T03-02"
-      ],
-      "summary": "每约束返回六元组 `constraint_id/status/actual/limit/slack/severity`；status 取值域为 PASS / WARN / FAIL / BLOCKED 四态，禁止只返回 PASS/FAIL",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T03-07",
-      "wp": "WP3",
-      "wp_title": "判定层 → Gate 2",
-      "title": "状态机与低价处置状态",
-      "revision_note": "v3 新增/P0",
-      "deliverable": "状态机规范",
-      "type": "REV",
-      "review": "CON",
-      "deps": [
-        "T03-04"
-      ],
-      "summary": "全局四态：`FAIL`=检测到风险/不满足约束；`BLOCKED`=数据或规则不足禁止继续计算（如规则版本未知、$P_1$ 缺失、不可竞争费未识别、成本证明缺失、数据匹配失败）；低价输出三态：`LOW_PRICE_REVIEW_REQUIRED / COST_EVIDENCE_REQUIRED / POTENTIAL_…",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T03-05",
-      "wp": "WP3",
-      "wp_title": "判定层 → Gate 2",
-      "title": "判定层测试矩阵",
-      "revision_note": "",
-      "deliverable": "测试集",
-      "type": "REV",
-      "review": "CON",
-      "deps": [
-        "T03-04"
-      ],
-      "summary": "覆盖正常/缺失/越界/恰好等于边界/超边界 1 单位；含规则优先级测试：标准阈值与合同阈值并存时须证明合同阈值生效；含规则集切换测试：2013-规则集与 2024-规则集同一输入下输出必须可区分",
-      "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-00",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "Phase 1 适用条件证明与反例集",
-      "revision_note": "v3 新增/P0",
-      "deliverable": "《Phase 1 精确性条件》+ 反例集",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T00-05"
-      ],
-      "summary": "输出形式化命题：Phase 1 精确 iff（统一排序指标 $r^{\\text{eff}}$ 存在且单调、单一 $\\lambda$ 阈值成立、$R_i(p_i)$ 保持目标函数结构、$L_i/U_i/\\text{floor}_i$ 与总价约束共同存在时最优性成立）；并给出违反条件的反例集。未完成前，§4.1 不得称为「…",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-01",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "Phase 1 解析解",
-      "revision_note": "",
-      "deliverable": "排序+二分+贪心定容",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T03-02",
-        "T04-00"
-      ],
-      "summary": "$O(n\\log n)$ 仅适用于 T04-00 已证明的适用子集；输出 $\\lambda$ 与层归属；定位为 candidate / 上界，不承担最终解职责",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-02A",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "LP 模型形式化",
-      "revision_note": "",
-      "deliverable": "LP formulation",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T00-03",
-        "T00-04",
-        "T00-06"
-      ],
-      "summary": "变量、目标、约束映射完整；总价约束按可竞争部分实现：$\\sum_{i\\in X_{\\text{opt}}}p_iq_i^0=P^*_{\\text{competitive}}$；C1 按容差带实现（见 §8.2）",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-02B",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "约束编译器",
-      "revision_note": "",
-      "deliverable": "Constraint compiler",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T04-02A"
-      ],
-      "summary": "约束字典 → 求解器约束的机械转换，无手写约束",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-02C",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "HiGHS backend adapter",
-      "revision_note": "",
-      "deliverable": "Adapter",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T04-02B"
-      ],
-      "summary": "业务逻辑不写死求解器；换后端只改配置",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-02D",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "解校验器",
-      "revision_note": "",
-      "deliverable": "Solution validator",
-      "type": "REV",
-      "review": "SOL",
-      "deps": [
-        "T04-02C"
-      ],
-      "summary": "独立复核可行性、目标值、上下界、层归属",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-02E",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "不可行诊断对接",
-      "revision_note": "",
-      "deliverable": "诊断接口",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T04-02C",
-        "T03-06"
-      ],
-      "summary": "与 T03-06 打通，输出冲突集",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-07",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "MILP 独立验收协议",
-      "revision_note": "",
-      "deliverable": "MILP 验收规程",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T04-02C"
-      ],
-      "summary": "定义 `status / integer_feasible / objective_gap / best_bound / time_limit / incumbent`；未证明最优时不得标记 OPTIMAL；定义 MILP 超时降级策略",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-08",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "独立 Reference Implementation",
-      "revision_note": "v3 新增/P0；v3.2.1 增独立性验收",
-      "deliverable": "第二实现路径 + 独立性验收记录",
-      "type": "Z_{\\text{solver}}-Z_{\\text{ref}}\\right",
-      "review": "\\le\\epsilon_Z$；禁止 Phase 3 复用 Phase 2 的 $R_i$/constraint/objective 实现（底层数据结构可共享，核心计算逻辑不得共用），以消除共因错误。v3.2.1 新增独立性验收（P2-⑩）：须输出三层隔离证明（① 源码文件不重叠 ② 数据结构不得共享可变状态 ③ 独立实现不得由生产代码作者单人完成），并给出可核查的文件/模块清单；验收未通过时，T04-04 的对拍结论一律标 BLOCKED（见 T04-04）",
-      "deps": [],
-      "summary": "用独立于生产代码的路径重算 $R_i(\\cdot)$、约束残差、目标函数，输出 $Z_{\\text{ref}}$；要求 $\\left",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-04",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "Phase 1/2 对拍器",
-      "revision_note": "",
-      "deliverable": "对拍脚本 + 报告",
-      "type": "REV",
-      "review": "SOL",
-      "deps": [
-        "T04-01",
-        "T04-02D"
-      ],
-      "summary": "见 §4.1 三级判定 + A/B 两组验收；仅在 T04-00 适用子集内要求一致性；实例集来自 `golden_dataset_v1`（分层 A–F）。v3.2.1 独立性前置（P2-⑩）：对拍报告首部必须声明 T04-08 独立性验收状态；状态非 PASS 时，报告结论栏强制标记 BLOCKED，禁止出现\"对拍通…",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-05",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "Phase 3 验证",
-      "revision_note": "",
-      "deliverable": "验证模块",
-      "type": "REV",
-      "review": "SOL",
-      "deps": [
-        "T04-02D",
-        "T04-08"
-      ],
-      "summary": "LP 模式：primal/dual feasibility + stationarity + complementary slackness + objective recomputation；MILP 模式：primal feasibility + objective recomputation + MIP gap …",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-06",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "数值稳定性处理",
-      "revision_note": "",
-      "deliverable": "预处理 + 后处理",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T04-01"
-      ],
-      "summary": "$\\varepsilon$ 截断、$\\varepsilon_r$ 容差、系数尺度归一、平台效应识别、$q^0=0$ 项的排除规则、P95 求解时延基线",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T04-06B",
-      "wp": "WP4",
-      "wp_title": "求解层 → Gate 3",
-      "title": "退化与多最优解处理",
-      "revision_note": "v3 拆分/P1",
-      "deliverable": "退化处理规范",
-      "type": "p_i-p_i^{\\text{canonical}}\\right",
-      "review": "$）使变量比对可判定；输出边界对偶区间",
-      "deps": [],
-      "summary": "识别并显式标记：边界对偶非唯一、$r^{\\text{eff}}$ 相等项、多最优解；定义 canonical tie-break（次级目标 $\\min\\sum w_i\\left",
-      "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T05-00",
-      "wp": "WP5",
-      "wp_title": "鲁棒性 → Gate 4",
-      "title": "Baseline 定义与冻结",
-      "revision_note": "v3 新增/P1",
-      "deliverable": "Baseline 规范",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T04-05"
-      ],
-      "summary": "明确 $Z_{\\text{baseline}}$ 的口径并版本化锁定，候选口径包括：① 统一报价（按招标控制价 × 统一下浮率）② 上一版人工报价 ③ 公司现行惯例报价；只能由 config 择一，一旦冻结不得中途更换；baseline 必须可复算",
-      "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T05-01",
-      "wp": "WP5",
-      "wp_title": "鲁棒性 → Gate 4",
-      "title": "$q^1$ 扰动实验",
-      "revision_note": "",
-      "deliverable": "扰动报告",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T05-00"
-      ],
-      "summary": "四类扰动齐备：① 逐项独立扰动 ② 分组相关扰动（同一分部/同一工程量守恒组）③ 全局比例扰动 ④ 历史误差重采样；明确标注哪个是 stress test、哪个是 empirical simulation；$N=1000$，`seed=20260915`，置信 95%；输出 P5/P50/P95/VaR/CVaR",
-      "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T05-02",
-      "wp": "WP5",
-      "wp_title": "鲁棒性 → Gate 4",
-      "title": "三指标价值评估",
-      "revision_note": "",
-      "deliverable": "核心指标",
-      "type": "REV",
-      "review": "CON",
-      "deps": [
-        "T05-01"
-      ],
-      "summary": "输出 Optimization Gain（$Z_{\\text{opt}}-Z_{\\text{baseline}}$）、Prediction Risk（$Q_{95}-Q_5$）、Robustness Ratio",
-      "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T05-03",
-      "wp": "WP5",
-      "wp_title": "鲁棒性 → Gate 4",
-      "title": "$c_i$ 区间情景",
-      "revision_note": "",
-      "deliverable": "情景结果",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T04-05"
-      ],
-      "summary": "大宗物资项 $c_i$ 上浮情景复算",
-      "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T05-04",
-      "wp": "WP5",
-      "wp_title": "鲁棒性 → Gate 4",
-      "title": "$k^+/k^-$ 情景",
-      "revision_note": "",
-      "deliverable": "情景结果",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T04-05"
-      ],
-      "summary": "$k^+=0/0.5/1.0$ 三档分别求解并比较排序变化",
-      "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T06-01",
-      "wp": "WP6",
-      "wp_title": "交付层 → Gate 5A",
-      "title": "报价表输出",
-      "revision_note": "",
-      "deliverable": "Excel 报价表",
-      "type": "PM",
-      "review": "REV",
-      "deps": [
-        "T04-05"
-      ],
-      "summary": "含规格书 §8.1 全部列，$r_i^{\\text{eff}}$ 与层归属可见；不可竞争项与固定项单独分区展示",
-      "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T06-02",
-      "wp": "WP6",
-      "wp_title": "交付层 → Gate 5A",
-      "title": "风险体检单",
-      "revision_note": "",
-      "deliverable": "体检单",
-      "type": "REV",
-      "review": "CON",
-      "deps": [
-        "T04-05"
-      ],
-      "summary": "9 项输出 `PASS/WARN/FAIL/BLOCKED + actual + threshold + delta`，禁止「经综合判断风险较低」式表述",
-      "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T06-03",
-      "wp": "WP6",
-      "wp_title": "交付层 → Gate 5A",
-      "title": "决策支持结论页",
-      "revision_note": "",
-      "deliverable": "结论页",
-      "type": "CON",
-      "review": "PM",
-      "deps": [
-        "T06-02"
-      ],
-      "summary": "输出机器决策支持而非「投/不投」；含结构合理性、定价基准风险提示；低价项附可解释材料包（`item / bid_price / estimated_individual_cost / margin / reason / supporting_data`）并映射 T03-07 三态；最终决策保留人工审批字段",
-      "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T06-04",
-      "wp": "WP6",
-      "wp_title": "交付层 → Gate 5A",
-      "title": "一键复算",
-      "revision_note": "",
-      "deliverable": "复算脚本",
-      "type": "REV",
-      "review": "DAT",
-      "deps": [
-        "T06-01"
-      ],
-      "summary": "拆三项：R1-A 可重复性（同输入同环境 → result hash 一致）｜R1-B 正确性（golden cases 比对）｜R1-C 环境记录（Python/PuLP/HiGHS/OS/arch/solver options/random seed）",
-      "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T06-05",
-      "wp": "WP6",
-      "wp_title": "交付层 → Gate 5A",
-      "title": "全链追溯",
-      "revision_note": "",
-      "deliverable": "Calculation Trace",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T06-01"
-      ],
-      "summary": "形成 $\\text{Source}\\to\\text{Normalized}\\to\\text{Derived}\\to\\text{Constraint}\\to\\text{Solver}\\to\\text{Postprocess}\\to\\text{Report}$ 完整 lineage；每项含 `source_refs / d…",
-      "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T06-06",
-      "wp": "WP6",
-      "wp_title": "交付层 → Gate 5A",
-      "title": "总价重算与舍入调和",
-      "revision_note": "",
-      "deliverable": "Reconciliation 模块",
-      "type": "SOL",
-      "review": "REV",
-      "deps": [
-        "T06-01"
-      ],
-      "summary": "独立环节负责：四舍五入 → 总价重算 → 差额修正 → 全部约束复验 → 输出最终可提交报价；防止 S2 通过但 Excel 舍入后总价不一致",
-      "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T06-07",
-      "wp": "WP6",
-      "wp_title": "交付层 → Gate 5A",
-      "title": "报告元信息与 hash 分层",
-      "revision_note": "",
-      "deliverable": "元信息规范",
-      "type": "PM",
-      "review": "REV",
-      "deps": [
-        "T06-05"
-      ],
-      "summary": "区分 `calculation_hash`（不含 timestamp / run_id / operator）/ `artifact_hash` / `run_id` / `created_at`；报告绑定 `model_version / config_version / input_hash / rule_set_…",
-      "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T06-08",
-      "wp": "WP6",
-      "wp_title": "交付层 → Gate 5A",
-      "title": "不可变审计运行记录",
-      "revision_note": "v3 新增/P0",
-      "deliverable": "审计日志",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T06-05",
-        "T06-07"
-      ],
-      "summary": "每次运行产生不可变记录链：$\\text{RunID}\\to\\text{Input}\\to\\text{Config}\\to\\text{RuleSet}\\to\\text{Model}\\to\\text{Solver}\\to\\text{Output}\\to\\text{Decision}$；字段含 `run_id / opera…",
-      "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T07-01",
-      "wp": "WP7",
-      "wp_title": "闭环 → Gate 6",
-      "title": "历史项目回放",
-      "revision_note": "",
-      "deliverable": "回放报告",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T06-06"
-      ],
-      "summary": "≥3 个历史项目可完整复算",
-      "gate": "Gate 6",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T07-02",
-      "wp": "WP7",
-      "wp_title": "闭环 → Gate 6",
-      "title": "$Q_0 \\to Q_1$ 实际对照",
-      "revision_note": "",
-      "deliverable": "对照表",
-      "type": "CON",
-      "review": "DAT",
-      "deps": [
-        "T07-01"
-      ],
-      "summary": "预测 $q^1$ 与实际结算量逐项比对",
-      "gate": "Gate 6",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T07-03",
-      "wp": "WP7",
-      "wp_title": "闭环 → Gate 6",
-      "title": "精度监控",
-      "revision_note": "",
-      "deliverable": "监控模块",
-      "type": "DAT",
-      "review": "REV",
-      "deps": [
-        "T07-02"
-      ],
-      "summary": "使用 MAE / WAPE / sMAPE 组合（MAPE 在 $q^1\\to0$ 时爆炸）；$q^1<q_{\\min}$ 的项目单独口径；升降级须基于 `sample_size + confidence interval + segment + project_type`，非单次指标",
-      "gate": "Gate 6",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
-    },
-    {
-      "id": "T07-04",
-      "wp": "WP7",
-      "wp_title": "闭环 → Gate 6",
-      "title": "参数校准",
-      "revision_note": "",
-      "deliverable": "校准记录",
-      "type": "CON",
-      "review": "REV",
-      "deps": [
-        "T07-03"
-      ],
-      "summary": "依据回放结果调整 config 并形成新版本",
-      "gate": "Gate 6",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+  {
+   "id": "T00-01",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "合同计价与调价口径冻结",
+   "revision_note": "",
+   "deliverable": "《计价规则卡》",
+   "type": "CON",
+   "review": "REV",
+   "deps": [],
+   "summary": "$Q_0/Q_1/P_0/P_1$ 定义完成；规则表按 `rule_set_id` 可机器执行；$P_1$ 计算规则来源已回答 5 项澄清（见 §8.3）；「合同约定优先」显式化；必须落定 `adjustment_scope ∈ {FULL, SEGMENT}`——2024 §8.9.2 未明说是否分段，两种解读下最优…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [],
+   "status": "partial",
+   "note": "规则集已承载调价口径；adjustment_scope 为选择项，取值待项目落值"
+  },
+  {
+   "id": "T00-02",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "字段字典冻结",
+   "revision_note": "",
+   "deliverable": "《字段字典 v1》",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [],
+   "summary": "每字段含 type/unit/range/default/nullable/精度/MISSING_POLICY；`item_id` 唯一规则；百分比统一小数；$q^0=0$ 与 $c_i=0$ 的处理明确表态",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "artifact",
+     "key": "field_schema_version"
     }
-  ]
+   ],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T00-03",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "约束字典冻结",
+   "revision_note": "",
+   "deliverable": "《约束字典 C1–C12》",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [],
+   "summary": "每条含表达式、输入字段、输出指标、threshold、tolerance、severity、可开关性",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "artifact",
+     "key": "constraint_schema_version"
+    }
+   ],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T00-04",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "精度与容差策略冻结",
+   "revision_note": "",
+   "deliverable": "《精度策略表》",
+   "type": "REV",
+   "review": "CON",
+   "deps": [],
+   "summary": "$\\epsilon_{\\text{solver}}/\\epsilon_{\\text{price}}/\\epsilon_{\\text{quantity}}/\\epsilon_{\\text{total}}$ 与 $\\epsilon_{\\text{total}}=\\max(\\epsilon_{\\text{abs}},\\eps…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "artifact",
+     "key": "precision_profile_version"
+    }
+   ],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T00-05",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "三层分割架构地位确认",
+   "revision_note": "",
+   "deliverable": "架构决策记录",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [],
+   "summary": "Phase 1 默认定位 `candidate`（不等同 warm-start）；保留 `phase1_role` 开关；另设 `phase1_use_as_mip_start`，默认 false",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "artifact",
+     "key": "architecture_decision_version"
+    }
+   ],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T00-06",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "报价项可竞争性分类与变量集合冻结",
+   "revision_note": "P0",
+   "deliverable": "分类表 + 变量集合定义",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T00-02"
+   ],
+   "summary": "每项标注 `pricing_role ∈ {OPTIMIZABLE, FIXED, NON_COMPETITIVE, PASS_THROUGH, CONTRACT_DEFINED}`；显式定义决策变量集合 $X_{\\text{opt}}=\\{i:\\text{pricing\\_role}=\\text{OPTIMIZABL…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "artifact",
+     "key": "competitiveness_classification"
+    }
+   ],
+   "status": "partial",
+   "note": "规则书已冻结；项目级落值表为空，属 Phase 0 输入门判据"
+  },
+  {
+   "id": "T00-06B",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "$P_{\\text{competitive}}$ 与不可竞争费基数联动规则",
+   "revision_note": "v3.2 新增/P0；v3.2.1 补全公式与边界",
+   "deliverable": "总价分解计算规范（T00-06 的补充附件，冲突时以本规范为准）",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T00-06"
+   ],
+   "summary": "① 扣减式 $P_{\\text{competitive}}(p)=P^*(p)-\\sum_{i\\notin X_{\\text{opt}}}p_iq_i^0-\\sum(\\text{暂列金额})-\\sum(\\text{甲供材})$；② 总价恒等式（v3.2.1 补全） $P^*(p)=P_{\\text{competitiv…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "module",
+     "path": "src/bidpricing/identity.py"
+    }
+   ],
+   "status": "partial",
+   "note": "恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落"
+  },
+  {
+   "id": "T00-07",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "规则集优先级冻结",
+   "revision_note": "P0",
+   "deliverable": "《规则优先级卡》",
+   "type": "CON",
+   "review": "REV",
+   "deps": [],
+   "summary": "明确 $\\text{Precedence}(\\text{Contract},\\text{Tender},\\text{Regional},\\text{Standard})$；各版 RuleSet 独立实现、仅共享接口、禁止共享核心调价公式；附强制测试：同一输入下两套 RuleSet 输出不得仅因条文号不同而相同（机械判据…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "artifact",
+     "key": "rule_set_selector_spec"
+    }
+   ],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T00-09",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "成本口径证明包",
+   "revision_note": "v3 新增/P0",
+   "deliverable": "成本构成规范",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T00-02"
+   ],
+   "summary": "明确 $C_{\\text{individual}}$ 的八项分解：`labor / material / equipment / subcontract / management / allocated_overhead / tax_and_fee_treatment / risk_reserve`；显式声明 $C_{…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [],
+   "status": "not_started",
+   "note": "需造价专业取数（八项成本分解）"
+  },
+  {
+   "id": "T00-10A",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "$q^1$ 假设声明：格式与冻结时点",
+   "revision_note": "v3.2.1 拆分/P0·阻塞",
+   "deliverable": "《$q^1$ 假设声明书（格式篇）》",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T00-02"
+   ],
+   "summary": "① 格式：须与 T00-02 字段字典一致；Phase 1 / Phase 2 只接受点估计或有限场景集 $\\{q_i^{1,s},\\pi_s\\}$（并给出场景聚合公式 $q_i^1=\\sum_s\\pi_s q_i^{1,s}$），区间 $[q^{1,\\text{lo}},q^{1,\\text{hi}}]$ 与分布形式…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [],
+   "status": "not_started",
+   "note": "需人工：q^1 格式与冻结时点声明"
+  },
+  {
+   "id": "T00-10B",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "$q^1$ 来源判定",
+   "revision_note": "v3.2.1 拆分/P0·阻塞",
+   "deliverable": "《$q^1$ 假设声明书（来源篇）》",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T00-01",
+    "T01-00B"
+   ],
+   "summary": "明确来源（历史项目数据 / 造价专家估计 / 显式假设比例，须择一或加权并标注），判据须引用合同条款对工程量偏差的约定（`contract_ruleset` 与 T01-00B 的合同解析结果），并标注样本量、时间跨度、覆盖项目类型。本任务属 WP0 但不在 Gate 0a 判据内、不在 Gate 0a 放行清单中（v…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [],
+   "status": "not_started",
+   "note": "依赖 T01-00B 合同解析产出"
+  },
+  {
+   "id": "T00-11",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "成本 $c_i$ 假设与来源声明",
+   "revision_note": "v3.2.1 新增/P0·阻塞",
+   "deliverable": "《$c_i$ 假设声明书》",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T00-02",
+    "T00-09"
+   ],
+   "summary": "与 T00-10A 同格式三要素：① 来源（成本库 / 历史结算 / 供应商询价 / 专家估计）；② 格式（点值 / 区间，须与 T00-02 字段字典一致）；③ 冻结时点（Gate 0b 前冻结）；产出 `cost_assumption_spec_version / hash / frozen_at`，与 T00-0…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [],
+   "status": "not_started",
+   "note": "需人工：c_i 来源与冻结时点声明"
+  },
+  {
+   "id": "T00-12",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "利润口径桥接表",
+   "revision_note": "v3.2.1 新增/P0",
+   "deliverable": "《利润口径桥接表》",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T00-06B",
+    "T00-09"
+   ],
+   "summary": "逐项映射 $p\\to$ 结算收入 $R_i$ / 成本 $c_iq_i^1$ / 税金 / 规费 / 不可竞争费 / 利润 $Z$，明确哪一层级进入优化目标、哪些为派生量；与 T00-06B 的总价分解同源同值（桥接表任一行与 T00-06B 总价恒等式不符即判 BLOCK）；供 Phase 3 独立复核逐项对账使用。…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [],
+   "status": "not_started",
+   "note": "依赖 T00-06B、T00-09"
+  },
+  {
+   "id": "T01-00A",
+   "wp": "WP0",
+   "wp_title": "模型契约冻结 → Gate 0a / Gate 0b",
+   "title": "招标文件计价口径与输入协议 Schema 冻结",
+   "revision_note": "v3.2.1 新增/P0·阻塞，**属 WP0**",
+   "deliverable": "输入协议规范（Schema）",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T00-02"
+   ],
+   "summary": "① 输入格式清单（Excel / XML / PDF 提取 / 其他）及每种格式到 Canonical Data Model 的映射规则；② 最小合法字段集（是否含不可竞争费分项、暂估价呈现形式、是否多标段、清单编码体系、`adjustment_scope` 字段）；③ 解析失败处理策略（BLOCK，禁止猜测映射）；④…",
+   "gate": "Gate 0a / 0b",
+   "evidence": [
+    {
+     "kind": "artifact",
+     "key": "input_protocol_schema"
+    }
+   ],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-00B",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "招标文件解析器实现",
+   "revision_note": "v3.2.1 拆自 T01-00，**属 WP1**",
+   "deliverable": "解析器 + 解析日志 + 字段映射报告 + 失败样本清单",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T00-02",
+    "T01-00A"
+   ],
+   "summary": "按 T01-00A 冻结的 Schema 实现格式识别与字段提取；职责边界（v3.2.1 明确）：解析器仅负责格式识别与字段提取，业务语义映射（清单编码体系转换）由 T01-01 / T01-02 承接，禁止重复实现解析逻辑。完成判据（v3.2.1 解死锁）：≥3 套真实历史非标 Excel 清单可无报错解析，输出解析…",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "done",
+   "note": "解析器 src/bidpricing/io/（零依赖读取器 + 表号/别名双键 + 双行表头合并 + 分节标题四信号判据）；CLI parse-boq 三项产出在真实配对样本上验证：82 行/0 失败/加权下浮 8.0084% 与 pair.json 交叉印证；tests/test_io_boq.py 19 项"
+  },
+  {
+   "id": "T01-01",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "Canonical Schema 定义",
+   "revision_note": "",
+   "deliverable": "标准数据模型",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T00-02"
+   ],
+   "summary": "三类输入映射到统一字段集，无同义异名",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-02",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "Excel Adapter",
+   "revision_note": "",
+   "deliverable": "三类输入解析器",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T01-01"
+   ],
+   "summary": "三类输入各 1 个真实文件可解析，无人工预处理",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-02B",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "输入变体测试集",
+   "revision_note": "",
+   "deliverable": "变体测试集",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T01-02"
+   ],
+   "summary": "覆盖 Sheet 名变化、列序变化、合并单元格、空行、多表头、合计行、隐藏行、表头带单位、数字带逗号、中文括号、文本数字、百分比、公式结果、多单位工程；任何无法识别的结构必须 BLOCK，禁止猜测映射",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-02C",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "Golden Dataset 建设与版本锁定",
+   "revision_note": "v3 新增/P1",
+   "deliverable": "`golden_dataset_v1` + 固定 seed",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T01-02"
+   ],
+   "summary": "六类分层用例齐备：A 正常随机 / B 边界随机 / C 退化随机 / D 不可行随机 / E 极端尺度 / F 对抗构造；每类含正例与负例；固定随机种子；Gate 1 的「100% 通过」必须绑定本数据集版本号，不允许开发人员用一个简单 Excel 声称通过",
+   "gate": "Gate 1",
+   "evidence": [
+    {
+     "kind": "file",
+     "path": "tests/data/xiyong_l_district/pair.json"
+    }
+   ],
+   "status": "partial",
+   "note": "首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定"
+  },
+  {
+   "id": "T01-03",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "规范化与清洗",
+   "revision_note": "",
+   "deliverable": "清洗模块",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T01-01"
+   ],
+   "summary": "编码补零、单位统一、数值精度归一全自动",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-03A",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "缺失值与异常值策略",
+   "revision_note": "",
+   "deliverable": "缺失值规则表",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T00-02"
+   ],
+   "summary": "每字段在字段字典中显式声明 `MISSING_POLICY ∈ {BLOCK, WARN, DEFAULT, IMPUTE, IGNORE}`；`required+missing→BLOCK`；`invalid numeric→BLOCK`；`inferred→标记 source=derived`；合同口径 / flo…",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-04",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "三表交叉匹配",
+   "revision_note": "",
+   "deliverable": "匹配器 + 异常清单",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T01-03"
+   ],
+   "summary": "以 master item set 为基准 LEFT JOIN 三张表；逐字段统计缺失覆盖率（`missing_quantity / missing_cost / missing_limit`）；未匹配项 100% 进异常清单，禁止静默丢弃",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-04A",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "多级 key 与重复 key 治理",
+   "revision_note": "",
+   "deliverable": "Key 规范",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T01-04"
+   ],
+   "summary": "Canonical key = `(project, unit, item_id)`，必要时 `+(description, unit)`；重复 key 必须 BLOCK，禁止自动合并",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-05",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "源文件版本锁定与完整性",
+   "revision_note": "v3 新增/P1",
+   "deliverable": "源文件登记表",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T01-02"
+   ],
+   "summary": "每次导入记录 `file_name / file_hash / file_version / sheet_hash / import_timestamp / source_owner`；源文件被替换后必须能识别并拒绝复用旧复算结果",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T01-06",
+   "wp": "WP1",
+   "wp_title": "数据层 → Gate 1",
+   "title": "D01–D12 校验实现",
+   "revision_note": "",
+   "deliverable": "校验器",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T01-04A"
+   ],
+   "summary": "9 条阻断级 + 3 条告警级规则可触发并给出明确原因",
+   "gate": "Gate 1",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T02-01",
+   "wp": "WP2",
+   "wp_title": "配置层 → Gate 2",
+   "title": "Config Schema",
+   "revision_note": "",
+   "deliverable": "配置定义表",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T00-02"
+   ],
+   "summary": "每 Sheet 每 key 含 type/required/default/min/max/enum/description",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T02-02",
+   "wp": "WP2",
+   "wp_title": "配置层 → Gate 2",
+   "title": "defaults-fallback 合并器",
+   "revision_note": "",
+   "deliverable": "合并模块",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T02-01"
+   ],
+   "summary": "$\\text{Config}^{\\text{eff}}=\\text{Config}^{\\text{user}}\\oplus\\text{Defaults}$；每字段标记 value_source ∈ {explicit, defaulted, derived, inferred}；合同口径 / 成本 / 税 / 不可竞争…",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T02-03",
+   "wp": "WP2",
+   "wp_title": "配置层 → Gate 2",
+   "title": "Config Validator",
+   "revision_note": "",
+   "deliverable": "校验器",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T02-02"
+   ],
+   "summary": "缺失/空值/类型错/越界/未知 key/重复 key/版本不符 七类全部可机械检出",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T02-04",
+   "wp": "WP2",
+   "wp_title": "配置层 → Gate 2",
+   "title": "配置耦合度体检",
+   "revision_note": "",
+   "deliverable": "体检脚本",
+   "type": "REV",
+   "review": "PM",
+   "deps": [
+    "T02-01"
+   ],
+   "summary": "统计 Sheet 数、字段总数、重复字段数、跨 Sheet 引用数、默认值数量",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T02-05",
+   "wp": "WP2",
+   "wp_title": "配置层 → Gate 2",
+   "title": "版本绑定校验",
+   "revision_note": "",
+   "deliverable": "校验器",
+   "type": "REV",
+   "review": "PM",
+   "deps": [
+    "T02-01"
+   ],
+   "summary": "参数版本与模型版本不兼容时拒绝运行",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T03-01",
+   "wp": "WP3",
+   "wp_title": "判定层 → Gate 2",
+   "title": "结算规则引擎",
+   "revision_note": "",
+   "deliverable": "`SettlementRule.evaluate(Q0, Q1, P0, ContractContext)`",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T00-01",
+    "T00-08"
+   ],
+   "summary": "返回 `settlement_amount / effective_price / rule_id / rule_branch`；覆盖 $Q_1<0.85Q_0$ / 区间内 / $Q_1>1.15Q_0$ 三段且边界归属正确；规则阈值与 $P_1$ 来源按 `rule_set_id` 分发；支持合同规则覆盖标准阈值",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T03-02",
+   "wp": "WP3",
+   "wp_title": "判定层 → Gate 2",
+   "title": "派生量计算",
+   "revision_note": "",
+   "deliverable": "派生模块",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T00-03"
+   ],
+   "summary": "$L_i/U_i/\\text{floor}_i/r_i^{\\text{eff}}/w_i/\\delta_i^{\\text{eff}}$ 按规格实现",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T03-03",
+   "wp": "WP3",
+   "wp_title": "判定层 → Gate 2",
+   "title": "Phase 0 预检与可行性证书",
+   "revision_note": "",
+   "deliverable": "预检引擎",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T03-02",
+    "T00-06"
+   ],
+   "summary": "输出 ① 结构化可行性证书：$P_{\\min}=\\sum L_iq_i^0$、$P_{\\max}=\\sum U_iq_i^0$、$P^*_{\\text{variable}}=P^*-P_{\\text{fixed}}$，并校验 $P^*_{\\text{variable}}\\in[P_{\\min},P_{\\max}]$，越…",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T03-06",
+   "wp": "WP3",
+   "wp_title": "判定层 → Gate 2",
+   "title": "不可行诊断",
+   "revision_note": "",
+   "deliverable": "诊断模块",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T03-03"
+   ],
+   "summary": "输出 `constraint_id / blocking / conflicting_set / suggested_relaxation`；求解器无 IIS 时实现最小冲突集近似或逐项关闭诊断",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T03-04",
+   "wp": "WP3",
+   "wp_title": "判定层 → Gate 2",
+   "title": "约束判定器",
+   "revision_note": "",
+   "deliverable": "判定器",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T03-02"
+   ],
+   "summary": "每约束返回六元组 `constraint_id/status/actual/limit/slack/severity`；status 取值域为 PASS / WARN / FAIL / BLOCKED 四态，禁止只返回 PASS/FAIL",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T03-07",
+   "wp": "WP3",
+   "wp_title": "判定层 → Gate 2",
+   "title": "状态机与低价处置状态",
+   "revision_note": "v3 新增/P0",
+   "deliverable": "状态机规范",
+   "type": "REV",
+   "review": "CON",
+   "deps": [
+    "T03-04"
+   ],
+   "summary": "全局四态：`FAIL`=检测到风险/不满足约束；`BLOCKED`=数据或规则不足禁止继续计算（如规则版本未知、$P_1$ 缺失、不可竞争费未识别、成本证明缺失、数据匹配失败）；低价输出三态：`LOW_PRICE_REVIEW_REQUIRED / COST_EVIDENCE_REQUIRED / POTENTIAL_…",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T03-05",
+   "wp": "WP3",
+   "wp_title": "判定层 → Gate 2",
+   "title": "判定层测试矩阵",
+   "revision_note": "",
+   "deliverable": "测试集",
+   "type": "REV",
+   "review": "CON",
+   "deps": [
+    "T03-04"
+   ],
+   "summary": "覆盖正常/缺失/越界/恰好等于边界/超边界 1 单位；含规则优先级测试：标准阈值与合同阈值并存时须证明合同阈值生效；含规则集切换测试：2013-规则集与 2024-规则集同一输入下输出必须可区分",
+   "gate": "Gate 2",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-00",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "Phase 1 适用条件证明与反例集",
+   "revision_note": "v3 新增/P0",
+   "deliverable": "《Phase 1 精确性条件》+ 反例集",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T00-05"
+   ],
+   "summary": "输出形式化命题：Phase 1 精确 iff（统一排序指标 $r^{\\text{eff}}$ 存在且单调、单一 $\\lambda$ 阈值成立、$R_i(p_i)$ 保持目标函数结构、$L_i/U_i/\\text{floor}_i$ 与总价约束共同存在时最优性成立）；并给出违反条件的反例集。未完成前，§4.1 不得称为「…",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-01",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "Phase 1 解析解",
+   "revision_note": "",
+   "deliverable": "排序+二分+贪心定容",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T03-02",
+    "T04-00"
+   ],
+   "summary": "$O(n\\log n)$ 仅适用于 T04-00 已证明的适用子集；输出 $\\lambda$ 与层归属；定位为 candidate / 上界，不承担最终解职责",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-02A",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "LP 模型形式化",
+   "revision_note": "",
+   "deliverable": "LP formulation",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T00-03",
+    "T00-04",
+    "T00-06"
+   ],
+   "summary": "变量、目标、约束映射完整；总价约束按可竞争部分实现：$\\sum_{i\\in X_{\\text{opt}}}p_iq_i^0=P^*_{\\text{competitive}}$；C1 按容差带实现（见 §8.2）",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-02B",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "约束编译器",
+   "revision_note": "",
+   "deliverable": "Constraint compiler",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T04-02A"
+   ],
+   "summary": "约束字典 → 求解器约束的机械转换，无手写约束",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-02C",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "HiGHS backend adapter",
+   "revision_note": "",
+   "deliverable": "Adapter",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T04-02B"
+   ],
+   "summary": "业务逻辑不写死求解器；换后端只改配置",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-02D",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "解校验器",
+   "revision_note": "",
+   "deliverable": "Solution validator",
+   "type": "REV",
+   "review": "SOL",
+   "deps": [
+    "T04-02C"
+   ],
+   "summary": "独立复核可行性、目标值、上下界、层归属",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-02E",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "不可行诊断对接",
+   "revision_note": "",
+   "deliverable": "诊断接口",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T04-02C",
+    "T03-06"
+   ],
+   "summary": "与 T03-06 打通，输出冲突集",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-07",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "MILP 独立验收协议",
+   "revision_note": "",
+   "deliverable": "MILP 验收规程",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T04-02C"
+   ],
+   "summary": "定义 `status / integer_feasible / objective_gap / best_bound / time_limit / incumbent`；未证明最优时不得标记 OPTIMAL；定义 MILP 超时降级策略",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-08",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "独立 Reference Implementation",
+   "revision_note": "v3 新增/P0；v3.2.1 增独立性验收",
+   "deliverable": "第二实现路径 + 独立性验收记录",
+   "type": "Z_{\\text{solver}}-Z_{\\text{ref}}\\right",
+   "review": "\\le\\epsilon_Z$；禁止 Phase 3 复用 Phase 2 的 $R_i$/constraint/objective 实现（底层数据结构可共享，核心计算逻辑不得共用），以消除共因错误。v3.2.1 新增独立性验收（P2-⑩）：须输出三层隔离证明（① 源码文件不重叠 ② 数据结构不得共享可变状态 ③ 独立实现不得由生产代码作者单人完成），并给出可核查的文件/模块清单；验收未通过时，T04-04 的对拍结论一律标 BLOCKED（见 T04-04）",
+   "deps": [],
+   "summary": "用独立于生产代码的路径重算 $R_i(\\cdot)$、约束残差、目标函数，输出 $Z_{\\text{ref}}$；要求 $\\left",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-04",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "Phase 1/2 对拍器",
+   "revision_note": "",
+   "deliverable": "对拍脚本 + 报告",
+   "type": "REV",
+   "review": "SOL",
+   "deps": [
+    "T04-01",
+    "T04-02D"
+   ],
+   "summary": "见 §4.1 三级判定 + A/B 两组验收；仅在 T04-00 适用子集内要求一致性；实例集来自 `golden_dataset_v1`（分层 A–F）。v3.2.1 独立性前置（P2-⑩）：对拍报告首部必须声明 T04-08 独立性验收状态；状态非 PASS 时，报告结论栏强制标记 BLOCKED，禁止出现\"对拍通…",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-05",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "Phase 3 验证",
+   "revision_note": "",
+   "deliverable": "验证模块",
+   "type": "REV",
+   "review": "SOL",
+   "deps": [
+    "T04-02D",
+    "T04-08"
+   ],
+   "summary": "LP 模式：primal/dual feasibility + stationarity + complementary slackness + objective recomputation；MILP 模式：primal feasibility + objective recomputation + MIP gap …",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-06",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "数值稳定性处理",
+   "revision_note": "",
+   "deliverable": "预处理 + 后处理",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T04-01"
+   ],
+   "summary": "$\\varepsilon$ 截断、$\\varepsilon_r$ 容差、系数尺度归一、平台效应识别、$q^0=0$ 项的排除规则、P95 求解时延基线",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T04-06B",
+   "wp": "WP4",
+   "wp_title": "求解层 → Gate 3",
+   "title": "退化与多最优解处理",
+   "revision_note": "v3 拆分/P1",
+   "deliverable": "退化处理规范",
+   "type": "p_i-p_i^{\\text{canonical}}\\right",
+   "review": "$）使变量比对可判定；输出边界对偶区间",
+   "deps": [],
+   "summary": "识别并显式标记：边界对偶非唯一、$r^{\\text{eff}}$ 相等项、多最优解；定义 canonical tie-break（次级目标 $\\min\\sum w_i\\left",
+   "gate": "Gate 3",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T05-00",
+   "wp": "WP5",
+   "wp_title": "鲁棒性 → Gate 4",
+   "title": "Baseline 定义与冻结",
+   "revision_note": "v3 新增/P1",
+   "deliverable": "Baseline 规范",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T04-05"
+   ],
+   "summary": "明确 $Z_{\\text{baseline}}$ 的口径并版本化锁定，候选口径包括：① 统一报价（按招标控制价 × 统一下浮率）② 上一版人工报价 ③ 公司现行惯例报价；只能由 config 择一，一旦冻结不得中途更换；baseline 必须可复算",
+   "gate": "Gate 4",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T05-01",
+   "wp": "WP5",
+   "wp_title": "鲁棒性 → Gate 4",
+   "title": "$q^1$ 扰动实验",
+   "revision_note": "",
+   "deliverable": "扰动报告",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T05-00"
+   ],
+   "summary": "四类扰动齐备：① 逐项独立扰动 ② 分组相关扰动（同一分部/同一工程量守恒组）③ 全局比例扰动 ④ 历史误差重采样；明确标注哪个是 stress test、哪个是 empirical simulation；$N=1000$，`seed=20260915`，置信 95%；输出 P5/P50/P95/VaR/CVaR",
+   "gate": "Gate 4",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T05-02",
+   "wp": "WP5",
+   "wp_title": "鲁棒性 → Gate 4",
+   "title": "三指标价值评估",
+   "revision_note": "",
+   "deliverable": "核心指标",
+   "type": "REV",
+   "review": "CON",
+   "deps": [
+    "T05-01"
+   ],
+   "summary": "输出 Optimization Gain（$Z_{\\text{opt}}-Z_{\\text{baseline}}$）、Prediction Risk（$Q_{95}-Q_5$）、Robustness Ratio",
+   "gate": "Gate 4",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T05-03",
+   "wp": "WP5",
+   "wp_title": "鲁棒性 → Gate 4",
+   "title": "$c_i$ 区间情景",
+   "revision_note": "",
+   "deliverable": "情景结果",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T04-05"
+   ],
+   "summary": "大宗物资项 $c_i$ 上浮情景复算",
+   "gate": "Gate 4",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T05-04",
+   "wp": "WP5",
+   "wp_title": "鲁棒性 → Gate 4",
+   "title": "$k^+/k^-$ 情景",
+   "revision_note": "",
+   "deliverable": "情景结果",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T04-05"
+   ],
+   "summary": "$k^+=0/0.5/1.0$ 三档分别求解并比较排序变化",
+   "gate": "Gate 4",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T06-01",
+   "wp": "WP6",
+   "wp_title": "交付层 → Gate 5A",
+   "title": "报价表输出",
+   "revision_note": "",
+   "deliverable": "Excel 报价表",
+   "type": "PM",
+   "review": "REV",
+   "deps": [
+    "T04-05"
+   ],
+   "summary": "含规格书 §8.1 全部列，$r_i^{\\text{eff}}$ 与层归属可见；不可竞争项与固定项单独分区展示",
+   "gate": "Gate 5A",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T06-02",
+   "wp": "WP6",
+   "wp_title": "交付层 → Gate 5A",
+   "title": "风险体检单",
+   "revision_note": "",
+   "deliverable": "体检单",
+   "type": "REV",
+   "review": "CON",
+   "deps": [
+    "T04-05"
+   ],
+   "summary": "9 项输出 `PASS/WARN/FAIL/BLOCKED + actual + threshold + delta`，禁止「经综合判断风险较低」式表述",
+   "gate": "Gate 5A",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T06-03",
+   "wp": "WP6",
+   "wp_title": "交付层 → Gate 5A",
+   "title": "决策支持结论页",
+   "revision_note": "",
+   "deliverable": "结论页",
+   "type": "CON",
+   "review": "PM",
+   "deps": [
+    "T06-02"
+   ],
+   "summary": "输出机器决策支持而非「投/不投」；含结构合理性、定价基准风险提示；低价项附可解释材料包（`item / bid_price / estimated_individual_cost / margin / reason / supporting_data`）并映射 T03-07 三态；最终决策保留人工审批字段",
+   "gate": "Gate 5A",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T06-04",
+   "wp": "WP6",
+   "wp_title": "交付层 → Gate 5A",
+   "title": "一键复算",
+   "revision_note": "",
+   "deliverable": "复算脚本",
+   "type": "REV",
+   "review": "DAT",
+   "deps": [
+    "T06-01"
+   ],
+   "summary": "拆三项：R1-A 可重复性（同输入同环境 → result hash 一致）｜R1-B 正确性（golden cases 比对）｜R1-C 环境记录（Python/PuLP/HiGHS/OS/arch/solver options/random seed）",
+   "gate": "Gate 5A",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T06-05",
+   "wp": "WP6",
+   "wp_title": "交付层 → Gate 5A",
+   "title": "全链追溯",
+   "revision_note": "",
+   "deliverable": "Calculation Trace",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T06-01"
+   ],
+   "summary": "形成 $\\text{Source}\\to\\text{Normalized}\\to\\text{Derived}\\to\\text{Constraint}\\to\\text{Solver}\\to\\text{Postprocess}\\to\\text{Report}$ 完整 lineage；每项含 `source_refs / d…",
+   "gate": "Gate 5A",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T06-06",
+   "wp": "WP6",
+   "wp_title": "交付层 → Gate 5A",
+   "title": "总价重算与舍入调和",
+   "revision_note": "",
+   "deliverable": "Reconciliation 模块",
+   "type": "SOL",
+   "review": "REV",
+   "deps": [
+    "T06-01"
+   ],
+   "summary": "独立环节负责：四舍五入 → 总价重算 → 差额修正 → 全部约束复验 → 输出最终可提交报价；防止 S2 通过但 Excel 舍入后总价不一致",
+   "gate": "Gate 5A",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T06-07",
+   "wp": "WP6",
+   "wp_title": "交付层 → Gate 5A",
+   "title": "报告元信息与 hash 分层",
+   "revision_note": "",
+   "deliverable": "元信息规范",
+   "type": "PM",
+   "review": "REV",
+   "deps": [
+    "T06-05"
+   ],
+   "summary": "区分 `calculation_hash`（不含 timestamp / run_id / operator）/ `artifact_hash` / `run_id` / `created_at`；报告绑定 `model_version / config_version / input_hash / rule_set_…",
+   "gate": "Gate 5A",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T06-08",
+   "wp": "WP6",
+   "wp_title": "交付层 → Gate 5A",
+   "title": "不可变审计运行记录",
+   "revision_note": "v3 新增/P0",
+   "deliverable": "审计日志",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T06-05",
+    "T06-07"
+   ],
+   "summary": "每次运行产生不可变记录链：$\\text{RunID}\\to\\text{Input}\\to\\text{Config}\\to\\text{RuleSet}\\to\\text{Model}\\to\\text{Solver}\\to\\text{Output}\\to\\text{Decision}$；字段含 `run_id / opera…",
+   "gate": "Gate 5A",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T07-01",
+   "wp": "WP7",
+   "wp_title": "闭环 → Gate 6",
+   "title": "历史项目回放",
+   "revision_note": "",
+   "deliverable": "回放报告",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T06-06"
+   ],
+   "summary": "≥3 个历史项目可完整复算",
+   "gate": "Gate 6",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T07-02",
+   "wp": "WP7",
+   "wp_title": "闭环 → Gate 6",
+   "title": "$Q_0 \\to Q_1$ 实际对照",
+   "revision_note": "",
+   "deliverable": "对照表",
+   "type": "CON",
+   "review": "DAT",
+   "deps": [
+    "T07-01"
+   ],
+   "summary": "预测 $q^1$ 与实际结算量逐项比对",
+   "gate": "Gate 6",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T07-03",
+   "wp": "WP7",
+   "wp_title": "闭环 → Gate 6",
+   "title": "精度监控",
+   "revision_note": "",
+   "deliverable": "监控模块",
+   "type": "DAT",
+   "review": "REV",
+   "deps": [
+    "T07-02"
+   ],
+   "summary": "使用 MAE / WAPE / sMAPE 组合（MAPE 在 $q^1\\to0$ 时爆炸）；$q^1<q_{\\min}$ 的项目单独口径；升降级须基于 `sample_size + confidence interval + segment + project_type`，非单次指标",
+   "gate": "Gate 6",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  },
+  {
+   "id": "T07-04",
+   "wp": "WP7",
+   "wp_title": "闭环 → Gate 6",
+   "title": "参数校准",
+   "revision_note": "",
+   "deliverable": "校准记录",
+   "type": "CON",
+   "review": "REV",
+   "deps": [
+    "T07-03"
+   ],
+   "summary": "依据回放结果调整 config 并形成新版本",
+   "gate": "Gate 6",
+   "evidence": [],
+   "status": "not_started",
+   "note": ""
+  }
+ ]
 }

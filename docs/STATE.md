@@ -5,17 +5,17 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-16 16:02:30** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-16 16:03:55** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`f590301` ｜ 累计 15 次提交
-- 最新提交信息：feat(t01-00b): 清单解析器落地 —— WP1 第一块（tag boq-parser-v1）
+- 提交：`7321760` ｜ 累计 16 次提交
+- 最新提交信息：chore(state): 重生成状态快照（boq-parser-v1 之后）
 - 最近里程碑标签：`boq-parser-v1`
-- 工作区：干净
+- 工作区：有 1 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -78,7 +78,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP | 任务数 | 状态分布 |
 |---|---|---|
 | WP0 | 15 | done 7、not_started 5、partial 3 |
-| WP1 | 11 | not_started 9、partial 1、ready 1 |
+| WP1 | 11 | done 1、not_started 9、partial 1 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | not_started 7 |
 | WP4 | 13 | not_started 13 |
@@ -104,7 +104,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T00-06B | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | partial | ✓ 成立 | 恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落；src/bidpricing/identity.py 存在 |
 | T00-07 | 规则集优先级冻结 | done | ✓ 成立 | rule_set_selector_spec 已冻结 sha256:0dd335b5a8ae |
 | T01-00A | 招标文件计价口径与输入协议 Schema 冻结 | done | ✓ 成立 | input_protocol_schema 已冻结 sha256:41dc4f1bbd6e |
-| T01-00B | 招标文件解析器实现 | ready | — | Gate 0a 已放行；列结构实测口径已就位，且已有 1 份真实配对样本可作输入 |
+| T01-00B | 招标文件解析器实现 | done | — | 解析器 src/bidpricing/io/（零依赖读取器 + 表号/别名双键 + 双行表头合并 + 分节标题四信号判据）；CLI parse-boq 三项产出在真实配对样本上验证：82 行/0 失败/加权下浮 8.0084% 与 pair.json 交叉印证；tests/test_io_boq.py 19 项 |
 | T01-02C | Golden Dataset 建设与版本锁定 | partial | ✓ 成立 | 首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定；tests/data/xiyong_l_district/pair.json 存在（35937 字节） |
 
 ---
@@ -120,7 +120,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T00-06B | WP0 | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | 总价分解计算规范（T00-06 的补充附件，冲突时以本规范为准） | partial |
 | T00-09 | WP0 | 成本口径证明包 | 成本构成规范 | not_started |
 | T00-10A | WP0 | $q^1$ 假设声明：格式与冻结时点 | 《$q^1$ 假设声明书（格式篇）》 | not_started |
-| T01-00B | WP1 | 招标文件解析器实现 | 解析器 + 解析日志 + 字段映射报告 + 失败样本清单 | ready |
+| T00-10B | WP0 | $q^1$ 来源判定 | 《$q^1$ 假设声明书（来源篇）》 | not_started |
 
 ---
 

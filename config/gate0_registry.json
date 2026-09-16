@@ -8,15 +8,15 @@
       "artifact_path": "ruleset_selector_spec.json",
       "version": "sha256:0dd335b5a8ae",
       "hash": "sha256:0dd335b5a8ae",
-      "frozen_at": "2026-09-16T06:24:03+00:00",
+      "frozen_at": "2026-09-16T06:34:49+00:00",
       "note": "T00-08 规格制品"
     },
     "field_schema_version": {
       "kind": "versioned",
       "artifact_path": "field_schema.json",
-      "version": "sha256:c5884708a04c",
-      "hash": "sha256:c5884708a04c",
-      "frozen_at": "2026-09-16T06:24:03+00:00",
+      "version": "sha256:7837eac655a6",
+      "hash": "sha256:7837eac655a6",
+      "frozen_at": "2026-09-16T06:34:49+00:00",
       "note": "T00-02 字段字典"
     },
     "constraint_schema_version": {
@@ -24,7 +24,7 @@
       "artifact_path": "constraint_schema.json",
       "version": "sha256:49966cbda4b7",
       "hash": "sha256:49966cbda4b7",
-      "frozen_at": "2026-09-16T06:24:03+00:00",
+      "frozen_at": "2026-09-16T06:34:49+00:00",
       "note": "T00-03 约束字典 C1–C12"
     },
     "precision_profile_version": {
@@ -32,7 +32,7 @@
       "artifact_path": "precision_profile.json",
       "version": "sha256:6ce483e8d221",
       "hash": "sha256:6ce483e8d221",
-      "frozen_at": "2026-09-16T06:24:03+00:00",
+      "frozen_at": "2026-09-16T06:34:49+00:00",
       "note": "T00-04 精度与容差策略"
     },
     "architecture_decision_version": {
@@ -40,23 +40,23 @@
       "artifact_path": "architecture_decision.json",
       "version": "sha256:3601adeed46c",
       "hash": "sha256:3601adeed46c",
-      "frozen_at": "2026-09-16T06:24:03+00:00",
+      "frozen_at": "2026-09-16T06:34:49+00:00",
       "note": "T00-05 三层分割架构地位"
     },
     "competitiveness_classification": {
       "kind": "versioned",
       "artifact_path": "competitiveness_classification.json",
-      "version": "sha256:5610c8d879dd",
-      "hash": "sha256:5610c8d879dd",
-      "frozen_at": "2026-09-16T06:24:03+00:00",
+      "version": "sha256:2913378715d5",
+      "hash": "sha256:2913378715d5",
+      "frozen_at": "2026-09-16T06:34:49+00:00",
       "note": "T00-06 可竞争性**分类规则书**（角色集合 + 启发式 + 覆盖范围 + 外生常量）。本制品是跨项目复用的机制，不含任何具体项目的分类结果——逐项落值在 phase_0.project_classification_table"
     },
     "input_protocol_schema": {
       "kind": "versioned",
       "artifact_path": "input_protocol_schema.json",
-      "version": "sha256:f58dbb8be86c",
-      "hash": "sha256:f58dbb8be86c",
-      "frozen_at": "2026-09-16T06:24:03+00:00",
+      "version": "sha256:d6a26c25f5aa",
+      "hash": "sha256:d6a26c25f5aa",
+      "frozen_at": "2026-09-16T06:34:49+00:00",
       "note": "T01-00A 输入协议 Schema（v3.2.1 由 WP1 移入 WP0 以解 Gate 0a 死锁）"
     },
     "adjustment_scope": {
@@ -73,7 +73,16 @@
     "project_classification_table": {
       "kind": "project_input",
       "artifact_path": "project_classification_table.json",
-      "min_rows": 1,
+      "required_scalar_fields": [
+        "project_id",
+        "code_system",
+        "search_basis"
+      ],
+      "required_list_fields": [
+        "covered_lists",
+        "external_constants",
+        "exceptions"
+      ],
       "allowed_roles": [
         "OPTIMIZABLE",
         "FIXED",
@@ -81,14 +90,36 @@
         "PASS_THROUGH",
         "CONTRACT_DEFINED"
       ],
-      "required_row_fields": [
+      "allowed_source_lists": [
+        "BOQ",
+        "TECH_MEASURE",
+        "ORG_MEASURE",
+        "OTHER"
+      ],
+      "allowed_code_systems": [
+        "GB50500-2013",
+        "GB/T50500-2024"
+      ],
+      "required_covered_list_fields": [
+        "source_list",
+        "default_role",
+        "basis"
+      ],
+      "required_exception_row_fields": [
         "item_id",
         "unit_work",
         "item_name",
         "source_list",
-        "pricing_role"
+        "pricing_role",
+        "evidence"
       ],
-      "note": "T00-06 的**项目级落值表**（数据侧）。Gate 0a 判据是规则书（gate_0a.competitiveness_classification）；本表是 Phase 0 输入门判据。拆分依据：规则书跨项目复用、逐项分类随项目而异，两者判定时点不同（同 adjustment_scope 的处理）。空表 → Phase 0 BLOCKED，不阻塞 WP1/WP2/WP3。"
+      "required_external_constant_fields": [
+        "fee",
+        "given_as",
+        "treatment",
+        "basis"
+      ],
+      "note": "T00-06 的**项目级落值表**（数据侧），2026-09-16 由「逐行分类」改为「**声明 + 例外**」。判据是《声明式就绪》而非《行数》：required_*_fields 的 key **必须存在**（缺失 → BLOCKED，即『没声明』），但 exceptions / external_constants 取空列表是**合法且有意义的结论**（= 本标段无例外项 / 无汇总性外生常量），不得判 BLOCKED。此设计与 adjustment_scope 的「未定态 = key 完全缺失」同构：**不能把『没有例外』误判成『没做』**。改动的依据：分部分项清单内的角色本由清单自带列（`其中:暂估价` 列 / 甲供材）机械命中，其余缺省即 OPTIMIZABLE，不需要人工逐行填表；分类的必要性收缩到分部分项清单之外（表-10 费率式 / 表-11 透传 / 规费税金外生常量）。空表或字段缺失 → Phase 0 BLOCKED，不阻塞 WP1/WP2/WP3。"
     }
   },
   "gate_0b": {

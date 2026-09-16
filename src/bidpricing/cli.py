@@ -171,12 +171,15 @@ def cmd_gate_check(args) -> int:
         print("      注意：这**不阻塞** Gate 0a 与 WP1/WP2/WP3。")
         print("      它们都是「求解启动前必须有、开发期不需要」的输入：")
         print("      · 选择项取值未定 → 两条分支都要求被实现，选择只决定哪条生效")
-        print("      · 逐项分类表为空 → 它随项目而异，规则书（分类机制）已冻结即可开工")
+        print("      · 分类声明未就位 → 它随项目而异，规则书（分类机制）已冻结即可开工")
         print("      落值命令：")
         print("      bidpricing options set --key adjustment_scope "
               "--value <FULL|SEGMENT> --rule-set <rid> --rationale \"...\"")
-        print("      逐项分类表：由真实招标清单经 T01-00B 解析器产出后填入 "
-              "config/project_classification_table.json")
+        print("      分类声明：填 config/project_classification_table.json —— "
+              "逐张清单声明**缺省角色** + 登记**例外**。")
+        print("      注意：不需要逐行填分类（清单内缺省即可竞争项，例外由清单自带列机械命中）；")
+        print("            exceptions / external_constants 取 [] 是合法结论，"
+              "但 key 必须存在——缺失会被判「没声明」。")
 
     return 0 if gate_0a_ok else 1
 

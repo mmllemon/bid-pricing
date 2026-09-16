@@ -43,14 +43,48 @@ CLASSIFICATION_ROLES = (
     "OPTIMIZABLE", "FIXED", "NON_COMPETITIVE", "PASS_THROUGH", "CONTRACT_DEFINED",
 )
 
-STUB_ROW = {
+STUB_COVERED = {
+    "source_list": "BOQ",
+    "unit_work_scope": ["000001 配电工程"],
+    "default_role": "OPTIMIZABLE",
+    "basis": "stub——分部分项清单内缺省即可竞争",
+}
+
+STUB_EXCEPTION = {
     "item_id": "030404017001",
     "unit_work": "000001 配电工程",
     "item_name": "配电箱",
     "source_list": "BOQ",
-    "pricing_role": "OPTIMIZABLE",
-    "evidence": "stub——仅用于机制测试",
+    "pricing_role": "PASS_THROUGH",
+    "evidence": "stub——「其中:暂估价」列非空",
 }
+
+STUB_EXTERNAL = {
+    "fee": "安全文明施工费",
+    "given_as": "LUMP_SUM",
+    "treatment": "NON_COMPETITIVE",
+    "basis": "stub——招标文件给定固定值",
+}
+
+
+def _stub_table(**overrides) -> dict:
+    """一份**声明齐备**的项目级分类表（例外与外部常量均为空，即合法结论）。"""
+    payload = {
+        "project_id": "STUB-001",
+        "code_system": "GB/T50500-2024",
+        "search_basis": "分部分项清单「其中:暂估价」列非空",
+        "covered_lists": [dict(STUB_COVERED)],
+        "external_constants": [],
+        "exceptions": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _phase0_spec() -> dict:
+    """从**真实注册表**取 phase_0 规格，避免测试与配置各写一份而漂移。"""
+    real = json.loads((config_dir() / GATE0_REGISTRY).read_text(encoding="utf-8"))
+    return {"phase_0": real["phase_0"]}
 
 
 def _stub_config(root: Path) -> None:
@@ -60,8 +94,7 @@ def _stub_config(root: Path) -> None:
             json.dumps({"schema_id": path}, ensure_ascii=False), encoding="utf-8"
         )
     (root / PROJECT_CLASSIFICATION_TABLE).write_text(
-        json.dumps({"spec_id": "stub", "rows": [STUB_ROW]}, ensure_ascii=False),
-        encoding="utf-8",
+        json.dumps(_stub_table(), ensure_ascii=False), encoding="utf-8",
     )
 
 
@@ -72,21 +105,9 @@ def _stub_registry() -> dict:
         for key, path in TECH_ARTIFACTS.items()
     }
     gate_0a["adjustment_scope"] = {"kind": "enum", "allowed": ["FULL", "SEGMENT"]}
-    return {
-        "gate_0a": gate_0a,
-        "gate_0b": {},
-        "phase_0": {
-            "project_classification_table": {
-                "kind": "project_input",
-                "artifact_path": PROJECT_CLASSIFICATION_TABLE,
-                "min_rows": 1,
-                "allowed_roles": list(CLASSIFICATION_ROLES),
-                "required_row_fields": [
-                    "item_id", "unit_work", "item_name", "source_list", "pricing_role",
-                ],
-            }
-        },
-    }
+    registry = {"gate_0a": gate_0a, "gate_0b": {}}
+    registry.update(_phase0_spec())
+    return registry
 
 
 class RepresentationGuardTest(unittest.TestCase):
@@ -211,63 +232,136 @@ class Gate0aTest(unittest.TestCase):
 
 
 class ProjectInputArtifactTest(unittest.TestCase):
-    """断言 2 的第二类判据：项目级逐项落值表。"""
+    """断言 2 的第二类判据：项目级分类声明（**声明式就绪**，不是「表里有没有行」）。
+
+    2026-09-16 改：原判据是 ``len(rows) >= 1``，会把「本标段无例外项」这个
+    **结论**误判成「没做」。新判据区分两件事——
+    「key 存在且为 []」（已核查、结论为空）与「key 缺失」（根本没声明）。
+    """
 
     def _registry(self, **spec_overrides) -> dict:
-        spec = {
-            "kind": "project_input",
-            "artifact_path": PROJECT_CLASSIFICATION_TABLE,
-            "min_rows": 1,
-            "allowed_roles": list(CLASSIFICATION_ROLES),
-            "required_row_fields": [
-                "item_id", "unit_work", "item_name", "source_list", "pricing_role",
-            ],
-        }
+        registry = _phase0_spec()
+        spec = registry["phase_0"]["project_classification_table"]
         spec.update(spec_overrides)
-        return {"phase_0": {"project_classification_table": spec}}
+        return registry
 
     def _write(self, cdir: Path, payload) -> None:
         (cdir / PROJECT_CLASSIFICATION_TABLE).write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8"
         )
 
-    def test_empty_table_blocks_with_correct_attribution(self):
+    def _check(self, payload, **spec_overrides):
         with tempfile.TemporaryDirectory() as tmp:
             cdir = Path(tmp)
-            self._write(cdir, {"rows": []})
-            item = check_project_input_artifacts(self._registry(), cdir)[0]
-            self.assertIs(item.status, Status.BLOCKED)
-            self.assertIn("项目级数据", item.reason)
-            # 归因必须写明「不阻塞 Gate 0a」，否则会被误读为开工阻塞
-            self.assertIn("不阻塞 Gate 0a", item.reason)
+            self._write(cdir, payload)
+            return check_project_input_artifacts(self._registry(**spec_overrides), cdir)[0]
 
-    def test_valid_rows_pass(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cdir = Path(tmp)
-            self._write(cdir, {"rows": [STUB_ROW, {**STUB_ROW, "item_id": "03B001",
-                                                  "source_list": "ORG_MEASURE",
-                                                  "pricing_role": "NON_COMPETITIVE"}]})
-            item = check_project_input_artifacts(self._registry(), cdir)[0]
-            self.assertIs(item.status, Status.PASS, item.to_dict())
-            self.assertEqual(item.actual, 2)
+    # ---------------------------------------------------- 声明齐备 → PASS
+    def test_declaration_with_empty_exceptions_passes(self):
+        """**本轮新增语义**：例外为空是合法结论，不得判 BLOCKED。"""
+        item = self._check(_stub_table())
+        self.assertIs(item.status, Status.PASS, item.to_dict())
+        self.assertEqual(item.actual["exceptions"], 0)
+        self.assertIn("结论", item.reason)
 
-    def test_illegal_role_blocks(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cdir = Path(tmp)
-            self._write(cdir, {"rows": [{**STUB_ROW, "pricing_role": "CHEAP"}]})
-            item = check_project_input_artifacts(self._registry(), cdir)[0]
-            self.assertIs(item.status, Status.BLOCKED)
-            self.assertEqual(item.actual[0]["problems"][0].startswith("pricing_role="), True)
+    def test_empty_exceptions_never_reported_as_empty_table(self):
+        """反向断言：不得再出现「表为空」这类把它当没做的措辞。"""
+        item = self._check(_stub_table())
+        self.assertNotIn("表为空", item.reason)
+        self.assertNotIn("rows=", item.reason)
 
-    def test_missing_required_field_blocks(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cdir = Path(tmp)
-            row = {k: v for k, v in STUB_ROW.items() if k != "unit_work"}
-            self._write(cdir, {"rows": [row]})
-            item = check_project_input_artifacts(self._registry(), cdir)[0]
-            self.assertIs(item.status, Status.BLOCKED)
-            self.assertIn("unit_work 缺失", item.actual[0]["problems"])
+    def test_exceptions_and_external_constants_may_be_populated(self):
+        item = self._check(
+            _stub_table(exceptions=[dict(STUB_EXCEPTION)],
+                        external_constants=[dict(STUB_EXTERNAL)])
+        )
+        self.assertIs(item.status, Status.PASS, item.to_dict())
+        self.assertEqual(item.actual["exceptions"], 1)
+        self.assertEqual(item.actual["external_constants"], 1)
 
+    # ------------------------------------------- key 缺失 ≠ 空列表 → BLOCKED
+    def test_missing_exceptions_key_blocks_while_empty_list_passes(self):
+        """核心判据：key 缺失与空列表在机器上必须可区分。"""
+        ok = self._check(_stub_table(exceptions=[]))
+        self.assertIs(ok.status, Status.PASS)
+
+        table = _stub_table()
+        del table["exceptions"]
+        item = self._check(table)
+        self.assertIs(item.status, Status.BLOCKED)
+        self.assertIn("key 缺失与空列表语义不同", item.reason)
+
+    def test_missing_external_constants_key_blocks(self):
+        table = _stub_table()
+        del table["external_constants"]
+        item = self._check(table)
+        self.assertIs(item.status, Status.BLOCKED)
+        self.assertIn("external_constants", item.reason)
+
+    def test_list_field_of_wrong_type_blocks(self):
+        item = self._check(_stub_table(covered_lists={"source_list": "BOQ"}))
+        self.assertIs(item.status, Status.BLOCKED)
+        self.assertIn("须为列表", item.reason)
+
+    # ------------------------------------------------------ 标量声明 → BLOCKED
+    def test_missing_scalar_declaration_blocks(self):
+        for field in ("project_id", "code_system", "search_basis"):
+            with self.subTest(field=field):
+                item = self._check(_stub_table(**{field: None}))
+                self.assertIs(item.status, Status.BLOCKED)
+                self.assertIn(field, item.actual)
+
+    def test_illegal_code_system_blocks(self):
+        item = self._check(_stub_table(code_system="GBT50500-2024"))
+        self.assertIs(item.status, Status.BLOCKED)
+        self.assertIn("code_system", item.reason)
+
+    # ------------------------------------------------------- 覆盖声明 → BLOCKED
+    def test_empty_covered_lists_blocks(self):
+        item = self._check(_stub_table(covered_lists=[]))
+        self.assertIs(item.status, Status.BLOCKED)
+        self.assertIn("covered_lists 为空", item.reason)
+
+    def test_covered_entry_requires_basis_and_legal_default_role(self):
+        for bad in ({**STUB_COVERED, "basis": ""},
+                    {**STUB_COVERED, "default_role": "CHEAP"},
+                    {**STUB_COVERED, "source_list": "SOMEWHERE"}):
+            with self.subTest(bad=bad):
+                item = self._check(_stub_table(covered_lists=[bad]))
+                self.assertIs(item.status, Status.BLOCKED)
+                self.assertIn("覆盖声明不合格", item.reason)
+
+    # --------------------------------------------------------- 例外行 → BLOCKED
+    def test_illegal_exception_role_blocks(self):
+        item = self._check(
+            _stub_table(exceptions=[{**STUB_EXCEPTION, "pricing_role": "CHEAP"}])
+        )
+        self.assertIs(item.status, Status.BLOCKED)
+        self.assertTrue(item.actual[0]["problems"][0].startswith("pricing_role="))
+
+    def test_exception_missing_field_blocks(self):
+        row = {k: v for k, v in STUB_EXCEPTION.items() if k != "unit_work"}
+        item = self._check(_stub_table(exceptions=[row]))
+        self.assertIs(item.status, Status.BLOCKED)
+        self.assertIn("unit_work 缺失", item.actual[0]["problems"])
+
+    def test_exception_row_key_is_not_droppable(self):
+        """例外行必须带 evidence —— 「无依据的例外」不构成声明。"""
+        row = {k: v for k, v in STUB_EXCEPTION.items() if k != "evidence"}
+        item = self._check(_stub_table(exceptions=[row]))
+        self.assertIs(item.status, Status.BLOCKED)
+        self.assertIn("evidence 缺失", item.actual[0]["problems"])
+
+    # --------------------------------------------- 汇总性外生常量 → BLOCKED
+    def test_external_constant_needs_treatment_and_basis(self):
+        for bad in ({**STUB_EXTERNAL, "treatment": "CHEAP"},
+                    {k: v for k, v in STUB_EXTERNAL.items() if k != "basis"}):
+            with self.subTest(bad=bad):
+                item = self._check(_stub_table(external_constants=[bad]))
+                self.assertIs(item.status, Status.BLOCKED)
+                self.assertIn("汇总性外生常量", item.reason)
+
+    # ------------------------------------------------------------ 其他
     def test_missing_file_blocks(self):
         with tempfile.TemporaryDirectory() as tmp:
             item = check_project_input_artifacts(self._registry(), Path(tmp))[0]

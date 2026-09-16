@@ -76,6 +76,76 @@
 
 ---
 
+## [classification-declaration-v1] — 2026-09-16
+
+### 分类改为「声明 + 例外」；判据由《行数》改为《声明式就绪》
+
+**背景**：用户 2026-09-16 提出两点，均成立——
+
+1. 「如果没有特殊说明，分部分项清单里面的应都是可竞争项，所以为什么要做这个分类？」
+   → 分部分项清单内**缺省即可竞争**，例外（`其中:暂估价` 列 / 甲供材）在清单里
+   **是列**、机械可读，不需要人工逐行填表。原设计属**过度设计**。
+2. 用户同时说明**实际可提供的资料**只有两份：招标限价清单（逐项只有单价、
+   不超限价；另给一个项目总价限价金额）+ 成本清单（编码/名称/特征/单位一致，
+   工程量不同、单价为成本价）。此前所有输入契约都是照**示例模板**推的，不是
+   照用户实际能提供的资料推的——这是本轮 3 项 OI 的根因。
+
+#### 变更
+- `config/competitiveness_classification.json`（规则书）：新增
+  `assignment_scope.defaults_and_exceptions`——逐张清单的**缺省角色**与
+  **例外信号**（`role_defaults_by_list`）；`assignment_scope.answer` 改为区分
+  「优化对象的主体」与「总价的完全划分」两件事；`assignment_protocol` 改为
+  声明式（`artifact_shape` / `readiness_criterion` / `exception_row_fields` /
+  `coverage_check_location`）。
+- `config/project_classification_table.json`（项目级）：结构由 `rows[]`
+  改为 `project_id` / `code_system` / `covered_lists` / `external_constants` /
+  `exceptions` / `search_basis` + `field_semantics` 逐字段说明。
+- `config/gate0_registry.json`：`phase_0` 规格改为
+  `required_scalar_fields` / `required_list_fields` / `required_covered_list_fields` /
+  `required_exception_row_fields` / `required_external_constant_fields`。
+- `src/bidpricing/gates/gate0.py::_check_project_input`：**重写**为三层声明式判据。
+  必需 key 缺失 → BLOCKED；**列表字段取 `[]` → PASS**（已核查、结论为空）；
+  逐条校验缺省角色、例外行字段与角色、外部常量取值与依据。
+- `docs/adr/ADR-0006-声明式就绪而非行数.md`。
+- 文档同步：`README.md`、`DEVELOPMENT.md`、`src/bidpricing/paths.py`、
+  `gate0.py` 模块说明、`cli.py` 的 gate-check 提示文案。
+
+#### 修正
+- `config/field_schema.json` → `item_id.note` 仍写「13/15 位编码体系由
+  code_system 区分」——该口径早在 D1 裁定中删除，输入协议已明写「位数不参与
+  合法性判定」。**同一份字段字典与输入协议对同一条规则说法相反**，已修正。
+  （教训：删除一条口径时必须全仓搜索旧表述。）
+- `config/field_schema.json` → `code_system.range` 原写 `GBT50500-2024`（无斜杠），
+  而同一文件的 `rule_set_id.range` 写 `GB/T50500-2024`，且该字段的注释要求
+  「与 rule_set_id 一致性校验」。**两个应当相等的枚举用了两种写法**，已统一。
+
+#### 新增（待决问题登记）
+- `config/input_protocol_schema.json` → `open_issues`：
+  - `OI-01` 成本清单工程量与招标清单不一致 → **RESOLVED**：该量即预估结算量
+    `q1`，输入 B 由输入 C 兼任；须补 `attribution` 归属标签。
+  - `OI-02` 限价清单单价是 cap 还是 base → **RESOLVED**：仅最高限价，
+    `base_i := cap_i`；连带 **δ⁺ 失效**（`U_i ≡ cap_i`）。
+  - `OI-03` P* 由谁定 → **RESOLVED**：用户定总价，模型给最优单价结构，不扩范围。
+  - `OI-04` **新增**：`C3` 合规下界 `L_i` 缺招标依据（招标文件不设单价下限），
+    `δ⁻` 取值来源未定 → PENDING_USER_DECISION。
+
+#### 制品重新冻结
+| 制品 | 旧 hash | 新 hash |
+|---|---|---|
+| `field_schema_version` | `sha256:858b0c997f85` | `sha256:7837eac655a6` |
+| `competitiveness_classification` | `sha256:5610c8d879dd` | `sha256:2913378715d5` |
+| `input_protocol_schema` | `sha256:92c3edea3d46` | `sha256:d6a26c25f5aa` |
+
+#### 测试
+- 155 → **165** 项（`ProjectInputArtifactTest` 由 6 项重写为 15 项，含
+  `test_missing_exceptions_key_blocks_while_empty_list_passes` 这一**反向断言**：
+  同一 payload，`[]` → PASS，删 key → BLOCKED）。
+- Gate 0a 仍 **PASS 8/8**；Phase 0 输入门仍 BLOCKED（现为「声明未就位」而不再是「表为空」）。
+
+> 里程碑索引见文末。
+
+---
+
 ## [classification-split-v1] — 2026-09-16
 
 > 修正 commit `a17e07c`：`fix(t00-06): 分类表拆为机制层/数据层 —— 真实清单不再是开工前置`
@@ -173,3 +243,4 @@
 | `options-phase-split-v1` | 2026-09-16 | 选择项判定时点后移（机制 / 取值分离） |
 | `classification-split-v1` | 2026-09-16 | 分类表拆为规则书 / 项目落值表 |
 | `project-governance-v1` | 2026-09-16 | 状态快照自动派生 + 任务板 + ADR 目录 |
+| `classification-declaration-v1` | 2026-09-16 | 分类改为「声明 + 例外」；判据由行数改为声明式就绪 |

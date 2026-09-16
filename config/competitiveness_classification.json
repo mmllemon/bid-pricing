@@ -14,7 +14,7 @@
   ],
   "assignment_scope": {
     "question": "分类表要覆盖哪些清单？",
-    "answer": "覆盖**该标段全部清单文件中所有可计价行**，不是「选一套清单做基准」。分部分项是主体，但不是唯一来源。",
+    "answer": "需要区分**两件事**：① **优化对象的主体**是分部分项清单（表-09 同构，一并算）——它内部缺省即可竞争项，**不需要逐行分类**；② **总价的完全划分**则需要每张清单的**缺省角色**都被声明，否则 X_opt 与 P_fixed 相加不等于总价。所以不是「用哪一套清单做基准」的问题，而是「四张清单的角色各是什么」的问题——分部分项解决『哪些单价可以动』，措施/其他/规费税金解决『哪些金额必须原样进总价』。",
     "feeds": [
       {"list": "分部分项工程量清单", "source_list_code": "BOQ", "role_typical": "OPTIMIZABLE", "note": "可优化项的主体（本项目实测 5 个单位工程 / 115 条明细）。列结构：序号/项目编码/项目名称/项目特征/计量单位/工程量/最高限价/合价/其中:暂估价。**单价列名是「最高限价」不是「综合单价」**，解析器须做列名别名。"},
       {"list": "措施项目清单 · 施工技术措施（表-09）", "source_list_code": "TECH_MEASURE", "role_typical": "OPTIMIZABLE", "note": "与分部分项同构：有工程量、有综合单价 → 同样可竞价，必须进入分类表。若只取分部分项，这部分会被误并入 P_fixed 而丢掉优化空间。"},
@@ -25,16 +25,30 @@
       {"fee": "规费", "reason": "不由清单逐项给出，是汇总性外生输入。模型只接收金额、不复算（计算基础是纯文字规则且依赖人工费分解）。"},
       {"fee": "税金（增值税 + 附加税）", "reason": "由规费联动，同上。作为总价恒等式的闭合校验点使用。"}
     ],
-    "closure_requirement": "分类表必须是「对总价的完全划分」：任一条清单行有且只有一个 pricing_role。缺任何一张清单，X_opt 与 P_fixed 的划分就不完整，恒等式无法闭合。"
+    "defaults_and_exceptions": {
+      "principle": "**清单内缺省即角色，例外才需登记。** 分类不是「逐行判断」，而是「声明每张清单的缺省角色 + 登记与之不同的行」。（2026-09-16 修订：原设计要求逐行给 pricing_role，属过度设计。）",
+      "why": "分部分项清单里除被标记的行之外，其余**缺省就是可竞争项**——这是清单计价的基本性质。而清单内的例外在清单里**是列**（`其中:暂估价` 列、甲供材标志），是机械可读信号，不需要人来判断。",
+      "role_defaults_by_list": [
+        {"source_list": "BOQ", "default_role": "OPTIMIZABLE", "exception_signals": ["「其中:暂估价」列非空 → PASS_THROUGH", "甲供材清单命中 → PASS_THROUGH", "合同专用条款已锁定单价 → CONTRACT_DEFINED"], "basis": "除被标记行外，分部分项清单项均可自由报价"},
+        {"source_list": "TECH_MEASURE", "default_role": "OPTIMIZABLE", "exception_signals": ["安全生产措施项目 → NON_COMPETITIVE"], "basis": "表-09 与分部分项同构（有工程量、有综合单价），可竞价"},
+        {"source_list": "ORG_MEASURE", "default_role": "NON_COMPETITIVE", "exception_signals": ["可竞争的临时设施类措施项 → OPTIMIZABLE"], "basis": "表-10 为费率式（计算基础 + 费率 + 金额），无工程量、无综合单价；投标期为外生常量"},
+        {"source_list": "OTHER", "default_role": "PASS_THROUGH", "exception_signals": ["计日工/总承包服务费若允许竞价 → OPTIMIZABLE"], "basis": "暂列金额、暂估价按实结算，投标人不竞价；多数项目为空表"}
+      ],
+      "note": "上列 default_role 是**规则书的建议默认**；项目实际取值在 project_classification_table.json 的 covered_lists 中逐表声明（可因招标文件约定而不同），声明须附 basis。"
+    },
+    "closure_requirement": "分类必须是「对总价的**完全划分**」：任一条清单行有且只有一个 pricing_role。缺任何一张清单，X_opt 与 P_fixed 的划分就不完整，恒等式无法闭合。注意「完全划分」由『每张清单的缺省角色 + 例外清单』共同实现，**不以逐行登记为前提**。"
   },
   "assignment_protocol": {
     "output_artifact": "project_classification_table.json",
-    "consumed_by": "Phase 0 输入门（gates.gate0.check_phase0_inputs）",
-    "row_key": "(project_id, unit_work, item_id)",
+    "consumed_by": "Phase 0 输入门（gates.gate0.check_phase0_inputs → _check_project_input）",
+    "artifact_shape": "**声明 + 例外**（2026-09-16 修订）。标量声明：project_id / code_system / search_basis；列表声明：covered_lists（每张清单的缺省角色与依据）/ external_constants（汇总性外生常量）/ exceptions（例外行）。",
+    "readiness_criterion": "判据是《声明式就绪》，不是《行数》：必需 key **必须存在**，但 exceptions 与 external_constants 取 `[]` 是**合法结论**（= 无例外项 / 无汇总性外生常量）。key 缺失 = 「没声明」→ BLOCKED；key 存在且为 `[]` = 「已核查、结论为空」→ PASS。二者机器可区分。此条与 adjustment_scope 的「未定态 = key 完全缺失」同源。",
+    "row_key": "(project_id, unit_work, item_id) —— 仅用于**例外行**与下游逐行校验",
     "row_key_note": "unit_work 不可省——实测同一项目内 03B001 在不同单位工程里含义不同（灭火弹 / 其它措施费）。单位工程维度由**子表名 + 「工程名称：…」单元格**承担，多单位工程清单里**没有独立的单位工程列**。",
-    "row_fields": ["item_id", "unit_work", "item_name", "source_list", "pricing_role", "evidence"],
-    "evidence_required": "每行须给出判定依据（招标文件条款 / 不可竞争费依据 / 合同锁定条款 / 暂估价标注位置）。分类结果是审计对象，不得无依据落值。",
-    "produced_by": "T01-00B 解析器 + 人工确认（解析器只做信号命中初判，pricing_role 最终以人工确认为准）"
+    "exception_row_fields": ["item_id", "unit_work", "item_name", "source_list", "pricing_role", "evidence"],
+    "evidence_required": "每条**例外**须给出判定依据（暂估价标注位置 / 甲供材清单条款 / 合同锁定条款），且 search_basis 须说明例外是靠什么机械命中的。分类结果是审计对象，不得无依据落值；「无例外」也必须可复核。",
+    "produced_by": "T01-00B 解析器按 search_basis 机械命中例外 → 人工确认 pricing_role 与依据（人工只需确认例外，不需要逐行过）",
+    "coverage_check_location": "逐行覆盖率**不在本判据**中校验（无解析数据时不可判），落在 T01-00B 解析产物上：`Σ明细 == 表列小计`（ADR-0005 输入保真判据）+ 本规则书 assignment_scope 覆盖度。"
   },
   "external_constants": {
     "summary": "以下费用在**投标场景**下是外生给定常量：不同项目取值不同，但投标人无权更改，因此不构成优化变量，也不是本模型的求解对象。它们以固定值进入总价恒等式。",
@@ -74,7 +88,7 @@
     {"signal": "合同专用条款中已锁定单价的项目", "role": "CONTRACT_DEFINED", "note": null},
     {"signal": "其余分部分项（BOQ）与可竞争技术措施项（表-09）", "role": "OPTIMIZABLE", "note": "注意：技术措施项（表-09）具备工程量与单价，属可优化；组织措施项（表-10）多为费率式，通常落入不可竞争或固定。"}
   ],
-  "acceptance": "每项标注 pricing_role；显式输出 X_opt 与总价分解 P* = P*_competitive + P_fixed；与 T00-06B 的 compute_P_competitive(p) 同源同值。**本规则书自身的验收 = 规则集齐备且启发式可执行**；逐项落值的验收在 Phase 0 输入门（project_classification_table）。",
+  "acceptance": "显式输出 X_opt 与总价分解 P* = P*_competitive + P_fixed；与 T00-06B 的 compute_P_competitive(p) 同源同值。**本规则书自身的验收 = 规则集齐备且启发式可执行**；项目级落值的验收在 Phase 0 输入门（project_classification_table），判据为《声明式就绪》：covered_lists 逐表声明缺省角色、exceptions 登记例外（可为空但 key 须存在）、external_constants 登记汇总性外生常量。",
   "identity_check": {
     "source": "重庆某变配电工程示例模板「规费、税金项目计价表」（表-12）+「其他项目清单计价汇总表」（表-11）实测",
     "identity": "增值税 = (分部分项工程费 + 措施项目费 + 其他项目费 + 规费 − 甲供材料费) × 增值税率",

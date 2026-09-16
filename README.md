@@ -41,7 +41,7 @@ config/                                 机器可读契约制品（人可编辑�
   ruleset_selector_spec.json            T00-08 规则集选择器规格
   input_protocol_schema.json            T01-00A 输入协议 Schema
   competitiveness_classification.json   T00-06 可竞争性分类**规则书**（机制层，跨项目复用）
-  project_classification_table.json     T00-06 逐项分类**落值表**（数据层，一项目一份）
+  project_classification_table.json     T00-06 分类**声明**（数据层，一项目一份：缺省角色 + 例外）
   project_selection.json                项目级选择项落值（adjustment_scope 等；未选 = 不写 value）
 src/bidpricing/
   states.py                             §5 全局四态状态机 PASS/WARN/FAIL/BLOCKED
@@ -87,7 +87,7 @@ SHA-256 前 12 位。制品一改，hash 失配，Gate 立即失效——无需�
 
 | | 属 Gate 0a（开发开工前） | 属 Phase 0 输入门（求解启动前） |
 |---|---|---|
-| 性质 | **机制** —— 跨项目复用：规则集、字段字典、分类规则书、两套分支的实现要求 | **数据/取值** —— 一项目一份：`adjustment_scope` 的取值、逐项可竞争性分类表 |
+| 性质 | **机制** —— 跨项目复用：规则集、字段字典、分类规则书、两套分支的实现要求 | **数据/取值** —— 一项目一份：`adjustment_scope` 的取值、项目级分类声明 |
 | 未就绪 | BLOCKED（技术接口没冻结，代码不该写） | BLOCKED（但**不阻塞** WP1/WP2/WP3，只挡求解） |
 | 典型错误 | 把「还没选作用域」当成开工阻塞 —— 而契约恰恰要求两条分支都实现 | 把某个项目的清单数据当成机制完备的前提 |
 
@@ -119,7 +119,7 @@ PYTHONPATH=src python -m bidpricing.cli status --json
 | 闸门 | 判什么 | 未通过时阻挡 |
 |---|---|---|
 | **Gate 0a** | 机制：规则集、字段字典、分类规则书是否冻结 | WP1/WP2/WP3 开发 |
-| **Phase 0 输入门** | 取值/数据：`adjustment_scope` 取值、项目逐项分类表 | **仅**求解启动 |
+| **Phase 0 输入门** | 取值/数据：`adjustment_scope` 取值、项目级分类声明 | **仅**求解启动 |
 | **Gate 0b** | 商务口径与合规：成本口径、假设声明书、桥接表 | WP4 求解层 |
 
 ## 跨会话延续机制

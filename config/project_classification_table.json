@@ -3,20 +3,28 @@
   "task": "T00-06（Phase 0 输入侧）",
   "rule_book": "competitiveness_classification.json",
   "artifact_kind": "PROJECT_INPUT",
+  "schema_note": "本表 **2026-09-16 由「逐行分类」改为「声明 + 例外」**。判据是《声明式就绪》而非《行数》——分部分项清单内缺省即可竞争项、例外由清单自带列机械命中，不需要人工逐行填表。`exceptions` 与 `external_constants` 取 `[]` 是**合法且有意义的结论**（= 本标段无例外项 / 无汇总性外生常量）；而 key **完全缺失**表示「根本没声明」，判 BLOCKED。二者机器可区分（同 adjustment_scope 的「未定态 = key 完全缺失」）。",
   "project_id": null,
-  "unit_work_scope": [],
-  "row_key": "(project_id, unit_work, item_id)",
-  "row_schema": {
-    "item_id": "清单项目编码原文（不补零、不规范化、位数不参与合法性判定）",
-    "unit_work": "单位工程名——取自子表名或「工程名称：…」单元格，清单中无此列",
-    "item_name": "项目名称原文",
-    "source_list": "BOQ | TECH_MEASURE | ORG_MEASURE | OTHER",
-    "pricing_role": "OPTIMIZABLE | FIXED | NON_COMPETITIVE | PASS_THROUGH | CONTRACT_DEFINED",
-    "evidence": "判定依据（招标文件条款号 / 不可竞争费依据 / 合同锁定条款 / 暂估价标注位置）"
+  "code_system": null,
+  "covered_lists": [],
+  "external_constants": [],
+  "exceptions": [],
+  "search_basis": null,
+  "declared_by": null,
+  "declared_at": null,
+  "field_semantics": {
+    "project_id": "项目身份命名空间（回答「哪一个项目」）。**不携带任何计价规则**；同一项目可含多单位工程，故行键为 (project_id, unit_work, item_id)。",
+    "code_system": "计价机制声明（回答「按哪一版国标计价」）：GB50500-2013 或 GB/T50500-2024。**不得由编码位数或前缀推断**（见 input_protocol_schema.code_identity_policy）。",
+    "covered_lists": "本标段覆盖了哪些清单、各自的**缺省角色**与依据。每项含 {source_list, unit_work_scope, default_role, basis}；source_list ∈ BOQ | TECH_MEASURE | ORG_MEASURE | OTHER。**覆盖率不是可选项**：X_opt 与 P_fixed 的完全划分依赖它才能闭合。",
+    "external_constants": "以**汇总数**（而非逐行清单）进入总价的费用项，每项含 {fee, given_as, treatment, basis}。典型：安全文明施工费、规费、税金。given_as ∈ LUMP_SUM | RATE_FORMULA；treatment 通常为 NON_COMPETITIVE（外生常量——进总价、不进 X_opt；投标人无权更改，故建模上属常量而非变量）。",
+    "exceptions": "**例外清单**——与所属清单缺省角色不同的行。每行须含 {item_id, unit_work, item_name, source_list, pricing_role, evidence}。空数组 = 本标段无例外项（**合法结论**）。",
+    "search_basis": "例外是**靠什么机械命中**的，例如「分部分项清单 I 列『其中:暂估价』非空」「招标文件 §X 甲供材清单」。该字段让「无例外」成为**可复核的声明**而不是一句空话——没有检索依据的『无例外』不构成结论。",
+    "declared_by": "声明人标识",
+    "declared_at": "声明时间（ISO 8601）"
   },
-  "rows": [],
   "status": "EMPTY",
-  "blocker": "本表是**项目级数据**，空表即 Phase 0 输入门判 BLOCKED（§7.1.1 断言 2 落点）。落值路径：真实招标清单 → T01-00B 解析器逐行初判 → 人工确认 pricing_role 与依据。示例模板不足以落值：它们是不同项目的片段，措施/其他两份标「外线工程-土建工程」、规费税金标「外线工程-安装工程」、分部分项是另外 5 个单位工程名，跨文件不构成可校验样本。",
+  "blocker": "本表是**项目级数据**。当前 project_id / code_system / search_basis 为空、covered_lists 为空 → Phase 0 输入门 BLOCKED（§7.1.1 断言 2 落点）。落值路径：真实招标清单 → T01-00B 解析器 → 按 search_basis 机械命中例外 → 人工确认例外行的 pricing_role 与依据。**不需要逐行填分类，只填例外。**",
   "not_gate_0a_reason": "本表**不阻塞 Gate 0a**。Gate 0a 判的是技术接口与规则集是否冻结——对 T00-06 而言即规则书（competitiveness_classification.json）齐备且可执行。规则书是跨项目复用的机制，逐项落值是每个项目各自的输入数据；用某个项目的清单数据去阻塞解析器/配置层/判定层的开发，等于把「机制就绪」与「某个项目的数据就绪」混成一个判据。这与 adjustment_scope 的时点拆分是同一条设计规则。",
-  "note": "填写时遵循规则书的 assignment_scope：分类表必须是对**该标段全部清单**的完全划分（BOQ + 表-09 + 表-10 + 表-11），不是只取分部分项。规费/税金不逐项出现，属汇总性外生常量，不占本表行。"
+  "why_declaration_not_rows": "原设计要求「分类表覆盖四张清单、逐行给 pricing_role」。2026-09-16 用户指出：**分部分项清单内缺省就是可竞争项**——该判断成立。清单内的例外（`其中:暂估价` 列、甲供材）在清单里**是列**，是机械可读信号，不是需要人去判断的东西。因此分类的必要性收缩到分部分项清单**之外**：表-10（费率式，安全文明施工费的唯一落点）、表-11（透传）、规费税金（汇总性外生常量）。逐行填表属**过度设计**，已改为声明 + 例外。",
+  "downstream_coverage_check": "本判据只能校验**声明**是否就位——无解析数据时无法逐行核对覆盖率。逐行覆盖率的校验落在 T01-00B 解析产物（CanonicalRecord）上：`Σ明细 == 表列小计`（ADR-0005 输入保真判据）与 T00-06 assignment_scope 覆盖度，不复用本判据。"
 }

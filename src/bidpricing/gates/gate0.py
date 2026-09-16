@@ -32,14 +32,17 @@ Phase 0 输入门判两类东西
 
 1. **项目级选择项取值**（``adjustment_scope``）—— :func:`check_selectable_option`
    的 ``phase_0`` 时点；
-2. **项目级逐项落值表**（``project_classification_table``，T00-06 数据侧）
+2. **项目级分类声明**（``project_classification_table``，T00-06 数据侧）
    —— :func:`check_project_input_artifacts`。
 
 第 2 类是本版新增，修正的是一处与第 1 类**同型**的判定时点错误：早前把
 「逐项可竞争性分类表」直接放在 Gate 0a 制品里，于是任一具体项目的清单数据
 未就绪就阻塞解析器/配置层/判定层的开发。正确切法是——``T00-06`` 的
-**规则书**（角色集合 + 启发式 + 覆盖范围，跨项目复用）属 Gate 0a；
-**逐项分类结果**（随项目而异）属 Phase 0 输入。
+**规则书**（角色集合 + 缺省角色 + 例外信号 + 覆盖范围，跨项目复用）属 Gate 0a；
+**项目级分类声明**（随项目而异）属 Phase 0 输入。2026-09-16 又把后者的判据
+从「表里有没有行」改为「声明是否就绪」——清单内缺省即可竞争项、例外由清单
+自带列机械命中，故不需逐行填表；而「例外为空」是**结论**，不能被误判为
+「没做」（与 :func:`guard_representation` 的「未定态 = key 完全缺失」同型）。
 ======  ==================================================  ==========================
 
 此外新增一条**选择项判据**（:func:`check_selectable_option`）：
@@ -363,6 +366,26 @@ def check_project_input_artifacts(registry: dict, config_dir: Path) -> list[Chec
 
 
 def _check_project_input(key: str, spec: dict, config_dir: Path) -> CheckItem:
+    """项目级输入制品判据 —— **声明式就绪**，而非「表里有没有行」。
+
+    2026-09-16 改。原判据是 ``len(rows) >= min_rows``，它把两件事混成一件：
+
+    * 「**没做**分类」——没有任何声明，无从判定；
+    * 「做了，且**结论是空的**」——本标段没有例外项，这是一个**结论**。
+
+    前者的正确反应是 BLOCKED，后者是 PASS。用行数判定会把后者误判为前者，
+    与 ``adjustment_scope`` 踩过的坑同型（把「没有」当成「没有做」）。
+
+    现判据分三层：
+
+    1. **标量字段**（``project_id`` / ``code_system`` / ``search_basis``）：key 缺失
+       或空值 → BLOCKED（「没声明」）。
+    2. **列表字段**（``covered_lists`` / ``external_constants`` / ``exceptions``）：
+       key **必须存在**，但**取空列表是合法结论**——「已核查，无例外」。
+       key 缺失与空列表在机器上必须可区分，这正是「未定态 = key 完全缺失」的用法。
+    3. **逐条校验**：覆盖声明的缺省角色、例外行的字段与角色取值、
+       汇总性外生常量的取值与依据。
+    """
     scope = "§7.1.1-2"
 
     def bad(reason: str, actual=None, expected=None) -> CheckItem:
@@ -385,32 +408,92 @@ def _check_project_input(key: str, spec: dict, config_dir: Path) -> CheckItem:
     if not isinstance(payload, dict):
         return bad("顶层须为 JSON 对象", actual=type(payload).__name__, expected="object")
 
-    rows = payload.get("rows")
-    if not isinstance(rows, list):
-        return bad("缺少 rows 列表", actual=type(rows).__name__, expected="list")
+    scalar_fields = tuple(spec.get("required_scalar_fields") or ())
+    list_fields = tuple(spec.get("required_list_fields") or ())
+    allowed_roles = tuple(spec.get("allowed_roles") or ())
+    allowed_lists = tuple(spec.get("allowed_source_lists") or ())
 
-    min_rows = int(spec.get("min_rows", 1))
-    if len(rows) < min_rows:
+    # 1) 标量声明：缺失即为「没做」
+    missing_scalars = [f for f in scalar_fields if not payload.get(f)]
+    if missing_scalars:
         return bad(
-            (
-                f"逐项分类表为空（rows={len(rows)}，要求 >= {min_rows}）。"
-                "本表是**项目级数据**：须由真实招标清单经 T01-00B 解析器逐行初判、"
-                "再人工确认 pricing_role 与依据。空表 → Phase 0 输入门 BLOCKED，"
-                "但**不阻塞 Gate 0a / WP1 / WP2 / WP3** —— Gate 0a 判的是规则书"
-                "（competitiveness_classification）是否冻结，规则书是跨项目复用的"
-                "机制，逐项落值是每个项目各自的输入"
-            ),
-            actual=0, expected=f">= {min_rows} 行",
+            f"未作声明（key 缺失或为空）：{missing_scalars}。"
+            "本判据判的是**声明是否就绪**——分部分项清单内缺省即可竞争项、"
+            "例外由清单自带列（「其中:暂估价」列 / 甲供材）机械命中，"
+            "所以不要求逐行填表；但项目身份（project_id）、"
+            "计价机制（code_system，**不得由编码位数推断**）与"
+            "例外检索方式（search_basis）必须显式给出",
+            actual=missing_scalars, expected=f"非空：{list(scalar_fields)}",
         )
 
-    required = tuple(spec.get("required_row_fields") or ())
-    allowed_roles = tuple(spec.get("allowed_roles") or ())
+    # 2) 列表声明：key 必须存在；空列表是合法结论
+    absent = [f for f in list_fields if f not in payload]
+    if absent:
+        return bad(
+            f"缺少列表声明：{absent}。**key 缺失与空列表语义不同**——"
+            "空列表表示「已核查、结论为空」，key 缺失表示「根本没声明」，"
+            "后者没有判据（没有声明就没有检查，等于静默取消）",
+            actual=absent, expected=f"key 须存在（取值可为 []）：{list(list_fields)}",
+        )
+    mistyped = [f for f in list_fields if not isinstance(payload.get(f), list)]
+    if mistyped:
+        return bad(
+            f"以下字段须为列表：{mistyped}",
+            actual={f: type(payload.get(f)).__name__ for f in mistyped},
+            expected="list",
+        )
+
+    # 3) 计价机制声明合法
+    allowed_cs = tuple(spec.get("allowed_code_systems") or ())
+    code_system = payload.get("code_system")
+    if allowed_cs and code_system not in allowed_cs:
+        return bad(
+            f"code_system={code_system!r} 不在 {list(allowed_cs)}",
+            actual=code_system, expected=list(allowed_cs),
+        )
+
+    # 4) 覆盖声明：每张清单的**缺省角色**
+    req_covered = tuple(spec.get("required_covered_list_fields") or ())
+    covered = payload.get("covered_lists") or []
+    if not covered:
+        return bad(
+            "covered_lists 为空：必须声明本标段覆盖了哪些清单、各自的**缺省角色**"
+            "与判定依据。覆盖率不是可选项——X_opt 与 P_fixed 的完全划分依赖它",
+            actual=0, expected=">= 1 项覆盖声明",
+        )
+    bad_covered: list[dict] = []
+    for idx, entry in enumerate(covered):
+        if not isinstance(entry, dict):
+            bad_covered.append({"index": idx, "problems": ["非对象项"]})
+            continue
+        problems = [f"{f} 缺失" for f in req_covered if not entry.get(f)]
+        sl = entry.get("source_list")
+        if allowed_lists and sl not in allowed_lists:
+            problems.append(f"source_list={sl!r} 不在 {list(allowed_lists)}")
+        role = entry.get("default_role")
+        if allowed_roles and role not in allowed_roles:
+            problems.append(f"default_role={role!r} 不在 {list(allowed_roles)}")
+        if problems:
+            bad_covered.append({"index": idx, "source_list": sl, "problems": problems})
+    if bad_covered:
+        return bad(
+            f"{len(bad_covered)} 项覆盖声明不合格（共 {len(covered)} 项）",
+            actual=bad_covered[:10],
+            expected=(
+                f"每项含 {list(req_covered)}；"
+                f"source_list ∈ {list(allowed_lists)}；default_role ∈ {list(allowed_roles)}"
+            ),
+        )
+
+    # 5) 例外行（可为 0 条，但每一行都要有依据）
+    req_row = tuple(spec.get("required_exception_row_fields") or ())
+    exceptions = payload.get("exceptions") or []
     bad_rows: list[dict] = []
-    for idx, row in enumerate(rows):
+    for idx, row in enumerate(exceptions):
         if not isinstance(row, dict):
             bad_rows.append({"index": idx, "problems": ["非对象行"]})
             continue
-        problems = [f"{f} 缺失" for f in required if not row.get(f)]
+        problems = [f"{f} 缺失" for f in req_row if not row.get(f)]
         role = row.get("pricing_role")
         if allowed_roles and role and role not in allowed_roles:
             problems.append(f"pricing_role={role!r} 不在 {list(allowed_roles)}")
@@ -420,16 +503,44 @@ def _check_project_input(key: str, spec: dict, config_dir: Path) -> CheckItem:
             )
     if bad_rows:
         return bad(
-            f"{len(bad_rows)} 行不合格（共 {len(rows)} 行）：字段缺失或角色取值非法",
-            actual=bad_rows[:10], expected=f"每行含 {list(required)}，角色 ∈ {list(allowed_roles)}",
+            f"{len(bad_rows)} 条例外行不合格（共 {len(exceptions)} 条）",
+            actual=bad_rows[:10],
+            expected=f"每行含 {list(req_row)}；pricing_role ∈ {list(allowed_roles)}",
+        )
+
+    # 6) 汇总性外生常量声明（可为 0 条）
+    req_ext = tuple(spec.get("required_external_constant_fields") or ())
+    externals = payload.get("external_constants") or []
+    bad_ext: list[dict] = []
+    for idx, entry in enumerate(externals):
+        if not isinstance(entry, dict):
+            bad_ext.append({"index": idx, "problems": ["非对象项"]})
+            continue
+        problems = [f"{f} 缺失" for f in req_ext if not entry.get(f)]
+        treatment = entry.get("treatment")
+        if allowed_roles and treatment and treatment not in allowed_roles:
+            problems.append(f"treatment={treatment!r} 不在 {list(allowed_roles)}")
+        if problems:
+            bad_ext.append({"index": idx, "fee": entry.get("fee"), "problems": problems})
+    if bad_ext:
+        return bad(
+            f"{len(bad_ext)} 条汇总性外生常量声明不合格（共 {len(externals)} 条）",
+            actual=bad_ext[:10],
+            expected=f"每项含 {list(req_ext)}；treatment ∈ {list(allowed_roles)}",
         )
 
     return CheckItem(
         scope=scope, item=key, status=Status.PASS,
         reason=(
-            f"逐项分类表已就位：{len(rows)} 行，字段齐备且 pricing_role 取值合法"
+            "分类声明已就位：覆盖 "
+            f"{len(covered)} 张清单（缺省角色已声明）／例外 {len(exceptions)} 条／"
+            f"汇总性外生常量 {len(externals)} 项。"
+            "例外与外部常量为 0 是**结论**而非缺省——key 存在且为 [] 与 key 缺失"
+            "在机器上可区分"
         ),
-        actual=len(rows), expected=f">= {min_rows} 行",
+        actual={"covered_lists": len(covered), "exceptions": len(exceptions),
+                "external_constants": len(externals)},
+        expected="三项声明齐备（后两项计数可为 0）",
     )
 
 
@@ -440,13 +551,14 @@ def check_phase0_inputs(
 
     为什么单独设这一道门，而不是把「未落值」挂在 Gate 0a
     ----------------------------------------------------
-    项目级输入（选择项取值、逐项分类表）有一个共同性质：
+    项目级输入（选择项取值、分类声明）有一个共同性质：
 
     * **开发期不需要它** —— 契约要求 WP3 / WP4 同时实现 FULL 与 SEGMENT
-      两条分支，逐项分类表则是数据不是机制；两者都改变不了"代码该不该写"；
+      两条分支，分类声明则是数据不是机制；两者都改变不了"代码该不该写"；
     * **求解期必须有它** —— 没选 ``adjustment_scope`` 就跑求解器，等于在该
       误差区间内做优化（两种口径下最优报价结构相反、利润差约 4.5 倍）；
-      没有逐项分类表则 ``X_opt`` 无从生成。
+      没有分类声明则 ``X_opt`` 与 ``P_fixed`` 的划分无从生成，
+      总价恒等式不闭合。
 
     把它挂在 Gate 0a 会同时造成两个后果：解析器被晚期决策无故阻塞，
     以及「机制就绪」与「数据就绪」两类不同性质的失败被混在同一个闸门里

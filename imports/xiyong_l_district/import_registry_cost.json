@@ -1,0 +1,19 @@
+{
+ "records": [
+  {
+   "import_seq": 1,
+   "project_id": "xiyong_l_district",
+   "side": "cost",
+   "file_name": "西永L分区公立学校（暂定名）一期工程等项目配电工程成本清单.xlsx",
+   "file_path": "..\\真实案件示例\\成本\\西永L分区公立学校（暂定名）一期工程等项目配电工程成本清单.xlsx",
+   "file_hash": "7a8110d65b240b399926649d36b96c4fbea3cdaf8a2651facb47ef15adeb75c4",
+   "file_version": "7a8110d65b24",
+   "sheet_hash": {
+    "表-09 分部分项工程项目清单计价表【电气设备安装工程】": "c038e675cc7883f4e93816487dab16f7779c1bacd6c2129a969721d63e60459c"
+   },
+   "sheet_hash_combined": "283511420f028ba45baccf0e121d52202e9f3022e07ff0ab61106b522dadae33",
+   "import_timestamp": "2026-09-16T22:55:37+0800",
+   "source_owner": "投标人成本"
+  }
+ ]
+}

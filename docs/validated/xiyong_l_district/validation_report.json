@@ -1,6 +1,6 @@
 {
  "blocked": true,
- "summary": "■ BLOCKED  规则 14 条：FAIL=1 BLOCKED=2 WARN=0 SKIP=1",
+ "summary": "■ BLOCKED  规则 14 条：FAIL=2 BLOCKED=2 WARN=0 SKIP=1",
  "results": [
   {
    "rule_id": "D01",
@@ -34,14 +34,14 @@
    "rule_id": "D05",
    "level": "BLOCK",
    "status": "PASS",
-   "detail": "匹配覆盖率 1.0000 ≥ 0.98（matched 82 / master 82）",
+   "detail": "匹配覆盖率 0.9878 ≥ 0.98（matched 81 / master 82）",
    "evidence": []
   },
   {
    "rule_id": "D06",
    "level": "BLOCK",
    "status": "FAIL",
-   "detail": "82 项 q1_point 未标注 attribution（OI-01 裁定：须补归属标签，未标注 ≠ UNKNOWN）",
+   "detail": "81 项 q1_point 未标注 attribution（OI-01 裁定：须补归属标签，未标注 ≠ UNKNOWN）",
    "evidence": [
     "030401002001",
     "030401002002",
@@ -93,7 +93,6 @@
     "030414002004",
     "030414008001",
     "030414015001",
-    "031301017001",
     "03B001",
     "03B002",
     "03B003",
@@ -130,9 +129,18 @@
   {
    "rule_id": "D07",
    "level": "BLOCK",
-   "status": "PASS",
-   "detail": "逐项 c_i ≤ cap_i 成立（no_cap 项无上界不参与）",
-   "evidence": []
+   "status": "FAIL",
+   "detail": "8 项 c_i > cap_i（floor > U，可行域为空）",
+   "evidence": [
+    "030401002003: c=1500.0 > cap=1407.82",
+    "030403006001: c=3329.0 > cap=3205.65",
+    "030403006002: c=4848.0 > cap=4669.72",
+    "030403007001: c=2206.0 > cap=2105.61",
+    "030403007002: c=2818.0 > cap=2688.29",
+    "030404017001: c=6785.0 > cap=6614.19",
+    "030408001006: c=8.0 > cap=5.37",
+    "030413001001: c=18.0 > cap=16.68"
+   ]
   },
   {
    "rule_id": "D08",
@@ -187,7 +195,7 @@
  "inputs": {
   "project_id": "xiyong_l_district",
   "cap_xlsx": "../真实案件示例/中标限价/西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx",
-  "cost_xlsx": "../真实案件示例/报价/西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx",
+  "cost_xlsx": "../真实案件示例/成本/西永L分区公立学校（暂定名）一期工程等项目配电工程成本清单.xlsx",
   "p_star": 1416251.85,
   "p_star_max": 1500000.0,
   "p_star_min": null,

@@ -200,6 +200,14 @@ class TestBlockingRules(unittest.TestCase):
         self.assertEqual(rep.by_rule("D10").status, STATUS_FAIL)
         self.assertIn("未覆盖清单", rep.by_rule("D10").detail)
 
+    def test_d10_single_side_provenance_none_is_tolerated(self):
+        """单侧项（ONLY_IN_CAP）的 provenance['cost']=None 不得炸行级映射。"""
+        it = _mk("ONLY_CAP", cost_row=False)
+        it.provenance = {"cap": {"source_sheet": "表-09 分部分项"}, "cost": None}
+        rep = self.validate(_report([it]),
+                            sheet_roles={"表-09 分部分项": "BOQ"})
+        self.assertEqual(rep.by_rule("D10").status, STATUS_PASS)
+
     def test_d10_sheet_roles_absent_skips_row_subcheck(self):
         rep = self.validate(_report([_mk()]), sheet_roles=None)
         self.assertEqual(rep.by_rule("D10").status, STATUS_PASS)

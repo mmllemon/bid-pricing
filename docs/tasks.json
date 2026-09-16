@@ -373,8 +373,8 @@
    "summary": "三类输入各 1 个真实文件可解析，无人工预处理",
    "gate": "Gate 1",
    "evidence": [],
-   "status": "not_started",
-   "note": ""
+   "status": "done",
+   "note": "2026-09-16 真实成本清单到位（真实案件示例/成本/…成本清单.xlsx，sha256 7a8110d65b24）完成严格验收：解析 81 条规范行 0 失败（STANDARD 67+补充14，分节标题 C/B.3 正确跳过）；import-register cost 侧登记；限价×成本真实匹配 81/82（唯一异常 ONLY_IN_CAP=031301017001 脚手架搭拆，成本清单无此行、限价侧本就是 no_cap）；D05 覆盖率 0.9878≥0.98。三份输入制品解析均零失败，验收闭环。副产品：修 validate-boq 单侧项 provenance cost=None 崩溃（+1 回归测试）。"
   },
   {
    "id": "T01-02B",

@@ -263,8 +263,10 @@ def run_validation(report, *, classification: dict, selection: dict,
         uncovered: list[str] = []
         if sheet_roles:
             for it in items:
-                sl = sheet_roles.get(it.provenance.get("cost", {}).get("source_sheet")
-                                     or it.provenance.get("cap", {}).get("source_sheet"))
+                pv = it.provenance or {}
+                sheet = ((pv.get("cost") or {}).get("source_sheet")
+                         or (pv.get("cap") or {}).get("source_sheet"))
+                sl = sheet_roles.get(sheet)
                 if sl is not None and sl not in covered:
                     uncovered.append(f"{it.item_id}({sl})")
         if bad_exc:

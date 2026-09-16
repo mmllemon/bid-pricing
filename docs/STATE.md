@@ -5,16 +5,16 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-16 22:38:27** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-16 22:58:11** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`93f7699` ｜ 累计 25 次提交
-- 最新提交信息：feat(t01-02b,t01-02c): 输入变体测试集 + Golden Dataset 版本锁定 —— WP1 数据层验收资产
-- 最近里程碑标签：`golden-dataset-v1`
+- 提交：`0f806fb` ｜ 累计 26 次提交
+- 最新提交信息：feat(t01-06): D01–D12 校验器 —— 求解前数据体检（9 阻断 + 3 告警）
+- 最近里程碑标签：`d-rules-validation-v1`
 - 工作区：有 7 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
@@ -59,7 +59,7 @@
 
 ## 四、质量门
 
-- 单元测试：**303** 项，结果 **通过**（OK）
+- 单元测试：**304** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -79,7 +79,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP | 任务数 | 状态分布 |
 |---|---|---|
 | WP0 | 15 | done 7、not_started 5、partial 3 |
-| WP1 | 11 | done 9、not_started 2 |
+| WP1 | 11 | done 10、not_started 1 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | not_started 7 |
 | WP4 | 13 | not_started 13 |
@@ -91,7 +91,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ### 已启动 / 已完成任务
 
-> 共 19 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 20 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -107,6 +107,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T01-00A | 招标文件计价口径与输入协议 Schema 冻结 | done | ✓ 成立 | input_protocol_schema 已冻结 sha256:1696175b90ff |
 | T01-00B | 招标文件解析器实现 | done | — | 解析器 src/bidpricing/io/（零依赖读取器 + 表号/别名双键 + 双行表头合并 + 分节标题四信号判据）；CLI parse-boq 三项产出在真实配对样本上验证：82 行/0 失败/加权下浮 8.0084% 与 pair.json 交叉印证；tests/test_io_boq.py 19 项 |
 | T01-01 | Canonical Schema 定义 | done | — | config/canonical_schema.json（Gate 0a 冻结 ff90d54cbb5e）：统一字段集 16 字段、三类输入映射、空值语义（cap 空=不限价）、normalization 规则（编码不做位数补零——D1）；tests/test_io_clean.py CanonicalSchemaArtifactTest 锁注册与冻结 |
+| T01-02 | Excel Adapter | done | — | 2026-09-16 真实成本清单到位（真实案件示例/成本/…成本清单.xlsx，sha256 7a8110d65b24）完成严格验收：解析 81 条规范行 0 失败（STANDARD 67+补充14，分节标题 C/B.3 正确跳过）；import-register cost 侧登记；限价×成本真实匹配 81/82（唯一异常 ONLY_IN_CAP=031301017001 脚手架搭拆，成本清单无此行、限价侧本就是 no_cap）；D05 覆盖率 0.9878≥0.98。三份输入制品解析均零失败，验收闭环。副产品：修 validate-boq 单侧项 provenance cost=None 崩溃（+1 回归测试）。 |
 | T01-02B | 输入变体测试集 | done | — | 2026-09-16 落 tests/test_t0102b_variants.py 十四类变体（Sheet 名/列序/合并单元格/空行/双行表头真实形态/合计行/隐藏行/表头带单位/千分位/中文括号全角/文本数字/百分比/公式有无缓存/多单位工程）+ 5 个 BLOCK 负例（表头带单位/未登录别名/同行重复别名/无表头/空表对照）。行为决策留痕：隐藏行按普通行处理（数据层不因展示属性丢数据）。底座 src/bidpricing/io/xlsxkit.py 零依赖 xlsx 构造器。 |
 | T01-02C | Golden Dataset 建设与版本锁定 | done | ✓ 成立 | 2026-09-16 六类分层用例（A–F）各正例+负例建成，工具 tools/make_golden.py，制品 tests/data/golden/golden-v1/（12 用例 xlsx + manifest.json）。固定种子 20260916；manifest_hash 锁定期望（手改即失配）；tests/test_golden_dataset.py 逐用例复算断言（含可复现性 probe）——Gate 1「100% 通过」绑定 golden_version=golden-v1。；tests/data/xiyong_l_district/pair.json 存在（35937 字节） |
 | T01-03 | 规范化与清洗 | done | — | src/bidpricing/io/clean.py + CLI clean-boq：数值归一（千分位/全角/空白）、编码标准化（不补零）、单位归一、精度归一（q 6 位/金额 2 位）、cap 空值语义 → no_cap、C5 零价信号、透传信号、数值失败进报告不猜；真实文件实测 82→82 两侧行、0 解析失败、031301017001 正确标记不限价；tests/test_io_clean.py 16 项 |

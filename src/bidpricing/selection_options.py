@@ -313,6 +313,19 @@ def resolve_option(
         if entry and entry.get("value"):
             entry_rule_set = entry.get("rule_set_id")
             if entry_rule_set and entry_rule_set != rule_set_id:
+                # 规则集切换后落值一律失效（禁止沿用）——依据快照是在旧规则集下
+                # 做出的，沿用会把"当时的前提"静默带到"现在的前提"。
+                # 但若当前规则集本就无选择余地（如 2013 只有 SEGMENT），
+                # "重新选择"是空操作，此时明确提示清除即可，避免把人引到
+                # 一个不存在的动作上。
+                if option.is_discretionary(rule_set_id):
+                    remedy = "必须以当前规则集重新选择（禁止沿用）"
+                else:
+                    remedy = (
+                        f"且当前规则集 {rule_set_id} 下该口径由规范明文确定为 "
+                        f"{list(allowed)}，不构成可选项——清除本条落值即可"
+                        f"（options clear），清除后按规则集自动取值"
+                    )
                 return OptionResolution(
                     key=key,
                     value=None,
@@ -321,7 +334,7 @@ def resolve_option(
                     allowed=allowed,
                     errors=(
                         f"选择项落值记录属于规则集 {entry_rule_set}，当前规则集为 "
-                        f"{rule_set_id}；二者不匹配，必须以当前规则集重新选择（禁止沿用）",
+                        f"{rule_set_id}；二者不匹配，{remedy}",
                     ),
                 )
             value, source = entry["value"], SOURCE_FILE

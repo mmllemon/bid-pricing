@@ -142,6 +142,30 @@ class ResolvePrecedenceTest(unittest.TestCase):
             self.assertTrue(res.is_conflict)
             self.assertIn("不匹配", res.errors[0])
 
+    def test_conflict_remedy_points_at_a_real_action(self):
+        """冲突提示必须指向当前规则集下**真实可做**的动作。
+
+        2013 无选择余地（只有 SEGMENT）→ 提示应是「清除本条落值」，而不是
+        「重新选择」——后者在该规则集下是空操作，会把人引到一个不存在的动作上。
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "project_selection.json"
+            write_option(path, "adjustment_scope", "SEGMENT",
+                         rule_set_id="GB/T50500-2024")
+            res = resolve_option("adjustment_scope", "GB50500-2013", path=path)
+            self.assertIn("清除本条落值", res.errors[0])
+            self.assertNotIn("重新选择", res.errors[0])
+
+    def test_conflict_remedy_asks_for_reselection_when_discretionary(self):
+        """2024 有选择余地 → 提示应是「重新选择」，而非「清除」。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "project_selection.json"
+            write_option(path, "adjustment_scope", "SEGMENT",
+                         rule_set_id="GB50500-2013")
+            res = resolve_option("adjustment_scope", "GB/T50500-2024", path=path)
+            self.assertIn("重新选择", res.errors[0])
+            self.assertNotIn("清除本条落值", res.errors[0])
+
 
 class SelectionFileTest(unittest.TestCase):
     def test_write_then_clear_round_trip(self):

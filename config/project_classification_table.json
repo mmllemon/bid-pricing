@@ -4,14 +4,58 @@
   "rule_book": "competitiveness_classification.json",
   "artifact_kind": "PROJECT_INPUT",
   "schema_note": "本表 **2026-09-16 由「逐行分类」改为「声明 + 例外」**。判据是《声明式就绪》而非《行数》——分部分项清单内缺省即可竞争项、例外由清单自带列机械命中，不需要人工逐行填表。`exceptions` 与 `external_constants` 取 `[]` 是**合法且有意义的结论**（= 本标段无例外项 / 无汇总性外生常量）；而 key **完全缺失**表示「根本没声明」，判 BLOCKED。二者机器可区分（同 adjustment_scope 的「未定态 = key 完全缺失」）。",
-  "project_id": null,
-  "code_system": null,
-  "covered_lists": [],
-  "external_constants": [],
+  "project_id": "xiyong_l_district",
+  "code_system": "GB/T50500-2024",
+  "covered_lists": [
+    {
+      "source_list": "BOQ",
+      "unit_work_scope": "电气设备安装工程",
+      "default_role": "OPTIMIZABLE",
+      "basis": "表-09 分部分项工程项目清单计价表。分部分项清单内缺省即可竞争项；例外由清单自带『其中:暂估价』列机械命中——2026-09-16 解析器实测 82 行该列全部为空（见 search_basis）"
+    },
+    {
+      "source_list": "TECH_MEASURE",
+      "unit_work_scope": "电气设备安装工程",
+      "default_role": "OPTIMIZABLE",
+      "basis": "表-09 施工技术措施项目清单计价表，与分部分项同构（有工程量、有综合单价），缺省可竞争"
+    },
+    {
+      "source_list": "ORG_MEASURE",
+      "unit_work_scope": "电气设备安装工程",
+      "default_role": "NON_COMPETITIVE",
+      "basis": "表-10 施工组织措施项目清单计价表，费率式（无工程量、无综合单价），投标人无竞争空间；本表是安全文明施工费的唯一落点"
+    },
+    {
+      "source_list": "OTHER",
+      "unit_work_scope": "电气设备安装工程",
+      "default_role": "PASS_THROUGH",
+      "basis": "表-11 其他项目清单计价汇总表，暂列金额/暂估价按实结算，只透传不优化"
+    }
+  ],
+  "external_constants": [
+    {
+      "fee": "安全文明施工费",
+      "given_as": "LUMP_SUM",
+      "treatment": "NON_COMPETITIVE",
+      "basis": "投标期=招标文件给定固定值（D2 裁定：非「人工费+机械费」基数——那是结算期口径）；D3 实证：西永L 中标报价与限价两侧同为 7,834.06 元，投标人未改动"
+    },
+    {
+      "fee": "规费",
+      "given_as": "LUMP_SUM",
+      "treatment": "NON_COMPETITIVE",
+      "basis": "D4 裁定：规费基础为纯文字规则、依赖人工费分解，投标期不可复算——外生输入，模型只接收金额"
+    },
+    {
+      "fee": "税金",
+      "given_as": "LUMP_SUM",
+      "treatment": "NON_COMPETITIVE",
+      "basis": "D4 裁定：税金基数含规费，投标期不可复算——外生输入，进总价恒等式加项、不进 X_opt"
+    }
+  ],
   "exceptions": [],
-  "search_basis": null,
-  "declared_by": null,
-  "declared_at": null,
+  "search_basis": "例外机械检索依据：①表-09 分部分项/施工技术措施『其中:暂估价』列非空（2026-09-16 T01-00B 解析器对真实限价文件实测：82 行全部为空，failed 0）；②甲供材：本清单未见甲供材标注列，若出现将按特征描述/备注列扫描。空数组=已检索、结论为空，非「未声明」。",
+  "declared_by": "operator（用户 2026-09-16 裁定：西永L 分区按 2024 计价）",
+  "declared_at": "2026-09-16T18:06:00+08:00",
   "field_semantics": {
     "project_id": "项目身份命名空间（回答「哪一个项目」）。**不携带任何计价规则**；同一项目可含多单位工程，故行键为 (project_id, unit_work, item_id)。",
     "code_system": "计价机制声明（回答「按哪一版国标计价」）：GB50500-2013 或 GB/T50500-2024。**不得由编码位数或前缀推断**（见 input_protocol_schema.code_identity_policy）。",
@@ -22,8 +66,8 @@
     "declared_by": "声明人标识",
     "declared_at": "声明时间（ISO 8601）"
   },
-  "status": "EMPTY",
-  "blocker": "本表是**项目级数据**。当前 project_id / code_system / search_basis 为空、covered_lists 为空 → Phase 0 输入门 BLOCKED（§7.1.1 断言 2 落点）。落值路径：真实招标清单 → T01-00B 解析器 → 按 search_basis 机械命中例外 → 人工确认例外行的 pricing_role 与依据。**不需要逐行填分类，只填例外。**",
+  "status": "DECLARED",
+  "resolution": "2026-09-16 落值：project_id=xiyong_l_district、code_system=GB/T50500-2024（用户裁定）、covered_lists 四张清单、external_constants 三项、exceptions=[]（82 行暂估价列实测全空）。原 blocker（声明未就位）解除。",
   "not_gate_0a_reason": "本表**不阻塞 Gate 0a**。Gate 0a 判的是技术接口与规则集是否冻结——对 T00-06 而言即规则书（competitiveness_classification.json）齐备且可执行。规则书是跨项目复用的机制，逐项落值是每个项目各自的输入数据；用某个项目的清单数据去阻塞解析器/配置层/判定层的开发，等于把「机制就绪」与「某个项目的数据就绪」混成一个判据。这与 adjustment_scope 的时点拆分是同一条设计规则。",
   "why_declaration_not_rows": "原设计要求「分类表覆盖四张清单、逐行给 pricing_role」。2026-09-16 用户指出：**分部分项清单内缺省就是可竞争项**——该判断成立。清单内的例外（`其中:暂估价` 列、甲供材）在清单里**是列**，是机械可读信号，不是需要人去判断的东西。因此分类的必要性收缩到分部分项清单**之外**：表-10（费率式，安全文明施工费的唯一落点）、表-11（透传）、规费税金（汇总性外生常量）。逐行填表属**过度设计**，已改为声明 + 例外。",
   "downstream_coverage_check": "本判据只能校验**声明**是否就位——无解析数据时无法逐行核对覆盖率。逐行覆盖率的校验落在 T01-00B 解析产物（CanonicalRecord）上：`Σ明细 == 表列小计`（ADR-0005 输入保真判据）与 T00-06 assignment_scope 覆盖度，不复用本判据。"

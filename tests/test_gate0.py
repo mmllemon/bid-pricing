@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 from bidpricing.artifact import freeze_record, load_registry
@@ -28,6 +30,37 @@ from bidpricing.paths import (
     config_dir,
 )
 from bidpricing.states import Status
+
+
+@contextmanager
+def _config_with_empty_classification_table():
+    """真实配置 + **空壳分类表**的临时 config 目录。
+
+    「分类表未声明 → Phase 0 熔断」这一行为判据不得耦合仓库实时状态——
+    2026-09-16 分类表已落值（xiyong_l_district / GB/T50500-2024）后，
+    直读真实 config 的用例全部过期。本 helper 复制真实配置后把分类表
+    覆写为「key 在、标量为空」的未声明形态，使断言永远测的是**行为**
+    而不是某天恰好成立的**数据**。
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        cdir = Path(tmp)
+        for f in config_dir().glob("*.json"):
+            shutil.copy2(f, cdir / f.name)
+        (cdir / PROJECT_CLASSIFICATION_TABLE).write_text(
+            json.dumps(
+                {
+                    "project_id": None,
+                    "code_system": None,
+                    "search_basis": None,
+                    "covered_lists": [],
+                    "external_constants": [],
+                    "exceptions": [],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        yield cdir
 
 TECH_ARTIFACTS = {
     "rule_set_selector_spec": "ruleset_selector_spec.json",
@@ -208,8 +241,10 @@ class Gate0aTest(unittest.TestCase):
           跨项目复用 → 已冻结即通过；
         * Phase 0 输入门判据 = **逐项落值表**，随项目而异 → 空表即熔断。
 
-        显式关闭项目落值文件——该用例断言"未选择 adjustment_scope"这一状态，
-        不得随本机 config/project_selection.json 内容变化。
+        两处均与仓库实时状态解耦：选择项显式关闭项目落值文件
+        （``use_project_selection=False``）；分类表注入**空壳**（key 在、
+        标量为空）——断言的是「未声明即熔断」这一**行为**，而不是某个
+        时点恰好成立的**数据**。
         """
         cdir = config_dir()
         registry = load_registry(cdir / GATE0_REGISTRY)
@@ -223,8 +258,9 @@ class Gate0aTest(unittest.TestCase):
         )
         self.assertNotIn("competitiveness_classification", {i.item for i in report.blockers})
 
-        # 项目级输入仍未就位 → Phase 0 输入门熔断（两类阻塞：选择项取值 + 逐项表）
-        phase0 = check_phase0_inputs(registry, selection, cdir)
+        # 项目级输入未就位（空壳分类表 + 未落值选择项）→ Phase 0 输入门熔断
+        with _config_with_empty_classification_table() as cdir_empty:
+            phase0 = check_phase0_inputs(registry, selection, cdir_empty)
         self.assertIs(phase0.status, Status.BLOCKED)
         blocked = {i.item for i in phase0.blockers}
         self.assertIn("adjustment_scope", blocked)
@@ -497,7 +533,11 @@ class EndToEndTest(unittest.TestCase):
         selection = select_rule_set(
             contract_date="2026-03-01", use_project_selection=False
         ).to_dict()
-        report = evaluate_gate_0(registry, cdir, selection)
+        # 分类表注入空壳：断言的是「未声明即熔断」的行为，不耦合实时落值
+        # （2026-09-16 真实表已落值后，直读真实 config 的断言全部过期）。
+        with _config_with_empty_classification_table() as cdir_empty:
+            registry_empty = load_registry(cdir_empty / GATE0_REGISTRY)
+            report = evaluate_gate_0(registry_empty, cdir_empty, selection)
         # 机制层已冻结 → Gate 0a 放行 WP1/WP2/WP3
         self.assertEqual(report["summary"]["gate_0a"], "PASS")
         # 数据层未就位 → Phase 0 仍熔断（含 adjustment_scope 与逐项分类表）
@@ -515,6 +555,23 @@ class EndToEndTest(unittest.TestCase):
         # 早前 T00-06 的 freeze_blocker 是"分类表依赖真实清单"，随机制/数据
         # 两层拆分一并消除：规则书自身已完备，数据缺口改由 Phase 0 输入门表达。
         self.assertIsInstance(report["advisories"], list)
+
+    def test_evaluate_gate_0_real_classification_table_passes(self):
+        """真实分类表（已落值）应使 project_classification_table 判 PASS。
+
+        与上一用例互补：空壳 → BLOCKED，落值 → PASS。落值内容随项目演进，
+        但「落值后判 PASS」这一行为判据必须恒真。
+        """
+        cdir = config_dir()
+        registry = load_registry(cdir / GATE0_REGISTRY)
+        selection = select_rule_set(
+            contract_date="2026-03-01", use_project_selection=False
+        ).to_dict()
+        report = evaluate_gate_0(registry, cdir, selection)
+        items = {
+            i["item"]: i["status"] for i in report["phase_0_input_gate"]["items"]
+        }
+        self.assertEqual(items.get("project_classification_table"), "PASS")
 
 
 class AdvisoryTest(unittest.TestCase):

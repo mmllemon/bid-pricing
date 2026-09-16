@@ -689,6 +689,22 @@ def build_parser() -> argparse.ArgumentParser:
                       help="产出落盘目录（默认 docs/cleaned/<文件名>/<side>）")
     p_cb.set_defaults(func=cmd_clean_boq)
 
+    # ------------------------------------------------------------ match-boq
+    p_mb = sub.add_parser(
+        "match-boq",
+        help="T01-04：限价侧 + 成本侧 → master 并集融合 + 覆盖率 + 异常清单",
+    )
+    p_mb.add_argument("--cap-xlsx", required=True, help="限价清单 xlsx")
+    p_mb.add_argument("--cost-xlsx", required=True, help="成本清单 xlsx")
+    p_mb.add_argument("--project-id", required=True,
+                      help="项目编号（主键第一段）")
+    p_mb.add_argument("--attribution", default=None,
+                      choices=["DRAWING_DIFF", "CHANGE_ORDER", "BOTH", "UNKNOWN"],
+                      help="q0≠q1 的变化归因标签（OI-01；默认 UNKNOWN）")
+    p_mb.add_argument("--out-dir", default=None,
+                      help="产出落盘目录（默认 docs/matched/<project_id>）")
+    p_mb.set_defaults(func=cmd_match_boq)
+
     return parser
 
 
@@ -832,6 +848,68 @@ def cmd_clean_boq(args) -> int:
     print(f" canonical: {rows_path}")
     print(f" 清洗报告: {rep_path}")
     return 0
+
+
+def cmd_match_boq(args) -> int:
+    """T01-04：解析两侧 → 清洗 → master 并集匹配 → 覆盖率 + 异常清单。
+
+    未匹配项 100% 进异常清单；同侧重复 key → BLOCKED（禁止自动合并）。
+    存在 DUPLICATE_KEY / ONLY_IN_* 异常时退出码 1——**数据问题必须人工裁定**，
+    匹配器不替用户做合并决策。
+    """
+    import json as _json
+    from pathlib import Path as _P
+
+    from .io.match import match_canonical_rows
+
+    try:
+        cap_parsed = parse_listing(args.cap_xlsx, args.project_id)
+        cost_parsed = parse_listing(args.cost_xlsx, args.project_id)
+    except XlsxError as exc:
+        print(f"■ 解析失败：{exc}")
+        return 1
+
+    from .io.clean import clean_listing_rows
+
+    cap_rows, cap_rep = clean_listing_rows(cap_parsed.rows, "cap")
+    cost_rows, cost_rep = clean_listing_rows(cost_parsed.rows, "cost", args.attribution)
+    rep = match_canonical_rows(cap_rows, cost_rows)
+
+    print("=" * 78)
+    print(f"三表交叉匹配（T01-04）：{_P(args.cap_xlsx).name} × {_P(args.cost_xlsx).name}")
+    print("=" * 78)
+    print(f" cap 侧 {rep.n_cap_rows} 行（清洗异常 {len(cap_rep.numeric_errors)}）｜"
+          f"cost 侧 {rep.n_cost_rows} 行（清洗异常 {len(cost_rep.numeric_errors)}）")
+    print(" " + rep.summary_line())
+    if rep.duplicate_keys:
+        print(f" ■ 重复 key（禁止自动合并，须人工裁定）：{rep.duplicate_keys[:10]}")
+
+    by_kind: dict[str, int] = {}
+    for a in rep.anomalies:
+        by_kind[a.kind] = by_kind.get(a.kind, 0) + 1
+    if by_kind:
+        print(" 异常分布: " + "、".join(f"{k} {v}" for k, v in sorted(by_kind.items())))
+        for a in rep.anomalies[:12]:
+            print(f"   ■ [{a.kind}] {a.item_id}: {a.detail[:90]}")
+        if len(rep.anomalies) > 12:
+            print(f"   …其余 {len(rep.anomalies) - 12} 条见异常清单文件")
+
+    out_dir = _P(args.out_dir) if args.out_dir else (
+        repo_root() / "docs" / "matched" / args.project_id
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload = rep.to_dict()
+    payload["inputs"] = {
+        "cap_xlsx": str(args.cap_xlsx), "cap_sha256": cap_parsed.source_sha256,
+        "cost_xlsx": str(args.cost_xlsx), "cost_sha256": cost_parsed.source_sha256,
+        "project_id": args.project_id, "attribution": args.attribution or "UNKNOWN",
+    }
+    out_path = out_dir / "match_report.json"
+    out_path.write_text(
+        _json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    print("-" * 78)
+    print(f" 匹配报告: {out_path}")
+    return 1 if rep.blocked else 0
 
 
 def main(argv: list[str] | None = None) -> int:

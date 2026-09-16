@@ -468,8 +468,8 @@
    "summary": "以 master item set 为基准 LEFT JOIN 三张表；逐字段统计缺失覆盖率（`missing_quantity / missing_cost / missing_limit`）；未匹配项 100% 进异常清单，禁止静默丢弃",
    "gate": "Gate 1",
    "evidence": [],
-   "status": "not_started",
-   "note": ""
+   "status": "done",
+   "note": "2026-09-16 实现 src/bidpricing/io/match.py + CLI match-boq + 10 测试。master=cap∪cost 键并集；未匹配项 100% 进异常清单；同侧重复 key BLOCK 禁止自动合并；no_cap=合法语义单列计数。真实文件 e2e：82 键全匹配、0 异常、missing_limit=1（脚手架搭拆，合法 no_cap）。"
   },
   {
    "id": "T01-04A",

@@ -1,0 +1,2737 @@
+{
+ "n_cap_rows": 82,
+ "n_cost_rows": 82,
+ "n_master": 82,
+ "n_matched": 82,
+ "n_only_cap": 0,
+ "n_only_cost": 0,
+ "n_no_cap": 1,
+ "coverage": {
+  "missing_limit": 1,
+  "missing_cost": 0,
+  "missing_quantity": 0,
+  "missing_quantity_cap": 0,
+  "missing_quantity_cost": 0
+ },
+ "duplicate_keys": [],
+ "blocked": false,
+ "anomalies": [],
+ "items": [
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030401002001",
+   "code_kind": "STANDARD",
+   "item_name": "干式变压器1600KVA",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 176068.11,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 161561.36,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 14,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 14,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030401002002",
+   "code_kind": "STANDARD",
+   "item_name": "干式变压器1000KVA",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 141176.67,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 129572.03,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 15,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 15,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030401002003",
+   "code_kind": "STANDARD",
+   "item_name": "拆除箱式变电站800kVA",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 1407.82,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 1236.4,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 49,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 49,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030402017001",
+   "code_kind": "STANDARD",
+   "item_name": "高压柜 ZG1",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 32881.61,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 30267.72,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 7,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 7,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030402017002",
+   "code_kind": "STANDARD",
+   "item_name": "高压柜 ZG2",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 17501.07,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 16173.56,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 8,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 8,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030402017003",
+   "code_kind": "STANDARD",
+   "item_name": "高压柜 ZG3",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 19589.57,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 18087.38,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 9,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 9,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030402017004",
+   "code_kind": "STANDARD",
+   "item_name": "高压柜 ZG4",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 32124.08,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 29573.55,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 10,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 10,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030402017005",
+   "code_kind": "STANDARD",
+   "item_name": "高压柜 ZG5",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 32124.08,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 29573.55,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 11,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 11,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030402017006",
+   "code_kind": "STANDARD",
+   "item_name": "高压柜 ZG6",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 32124.08,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 29573.55,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 12,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 12,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030402017007",
+   "code_kind": "STANDARD",
+   "item_name": "高压柜 ZG7",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 32124.08,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 29573.55,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 13,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 13,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030403006001",
+   "code_kind": "STANDARD",
+   "item_name": "封闭母线槽2000A/4P",
+   "unit": "m",
+   "q0": 10.0,
+   "cap": 3205.65,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 10.0,
+   "c_i": 2946.33,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 30,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 30,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030403006002",
+   "code_kind": "STANDARD",
+   "item_name": "封闭母线槽3200A/4P",
+   "unit": "m",
+   "q0": 5.0,
+   "cap": 4669.72,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 5.0,
+   "c_i": 4290.42,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 31,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 31,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030403007001",
+   "code_kind": "STANDARD",
+   "item_name": "始端箱2000A",
+   "unit": "台",
+   "q0": 2.0,
+   "cap": 2105.61,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 1952.34,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 33,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 33,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030403007002",
+   "code_kind": "STANDARD",
+   "item_name": "始端箱3200A",
+   "unit": "台",
+   "q0": 4.0,
+   "cap": 2688.29,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 4.0,
+   "c_i": 2493.64,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 34,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 34,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004001",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)1D1",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 39221.17,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 35984.95,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 16,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 16,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004002",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)1D2",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 24877.81,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 22841.21,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 17,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 17,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004003",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)1D3",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 26579.58,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 24400.65,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 18,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 18,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004004",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)1D4",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 24384.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 22388.7,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 19,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 19,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004005",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)1D5",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 26455.68,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 24287.11,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 20,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 20,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004006",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)1D6",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 34388.43,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 31556.41,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 21,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 21,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004007",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)1D7",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 25342.41,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 23266.96,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 22,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 22,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004008",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)1D8",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 23897.28,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 21942.69,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 23,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 23,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004009",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)2D6",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 30989.31,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 28441.57,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 24,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 24,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004010",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)2D5",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 26078.25,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 23941.26,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 25,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 25,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004011",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)2D4",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 20972.5,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 19262.53,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 26,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 26,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004012",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)2D3",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 18096.39,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 16626.97,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 27,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 27,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004013",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)2D2",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 18096.39,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 16626.97,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 28,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 28,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404004014",
+   "code_kind": "STANDARD",
+   "item_name": "低压开关柜(屏)2D1",
+   "unit": "台",
+   "q0": 1.0,
+   "cap": 26493.74,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 24321.99,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 29,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 29,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030404017001",
+   "code_kind": "STANDARD",
+   "item_name": "24Ah直流电源箱",
+   "unit": "套",
+   "q0": 1.0,
+   "cap": 6614.19,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 6004.31,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 35,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 35,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408001001",
+   "code_kind": "STANDARD",
+   "item_name": "高压电缆WDZB-YJY22-8.7/15kV-3x70mm2",
+   "unit": "m",
+   "q0": 15.0,
+   "cap": 228.08,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 15.0,
+   "c_i": 211.98,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 36,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 36,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408001002",
+   "code_kind": "STANDARD",
+   "item_name": "高压电缆WDZB-YJY22-8.7/15kV-3x95mm2",
+   "unit": "m",
+   "q0": 15.0,
+   "cap": 273.77,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 15.0,
+   "c_i": 254.15,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 37,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 37,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408001003",
+   "code_kind": "STANDARD",
+   "item_name": "高压电缆WDZB-YJY22-8.7/15kV-3x185mm2",
+   "unit": "m",
+   "q0": 523.0,
+   "cap": 642.4,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 523.0,
+   "c_i": 595.65,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 38,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 38,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408001004",
+   "code_kind": "STANDARD",
+   "item_name": "电力电缆 ZB-YJV-5x10",
+   "unit": "m",
+   "q0": 40.0,
+   "cap": 47.94,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 40.0,
+   "c_i": 44.59,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 44,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 44,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408001005",
+   "code_kind": "STANDARD",
+   "item_name": "电力电缆 ZB-YJV-4x6",
+   "unit": "m",
+   "q0": 40.0,
+   "cap": 25.8,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 40.0,
+   "c_i": 24.19,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 45,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 45,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408001006",
+   "code_kind": "STANDARD",
+   "item_name": "拆除高压电缆YJY22-8.7/15 3x50",
+   "unit": "m",
+   "q0": 280.0,
+   "cap": 5.37,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 280.0,
+   "c_i": 4.5,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 50,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 50,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408002001",
+   "code_kind": "STANDARD",
+   "item_name": "控制电缆KVVP-0.45-8x2.5",
+   "unit": "m",
+   "q0": 40.0,
+   "cap": 34.05,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 40.0,
+   "c_i": 31.11,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 46,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 46,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408002002",
+   "code_kind": "STANDARD",
+   "item_name": "控制电缆KVVP-0.45-2x2.5",
+   "unit": "m",
+   "q0": 40.0,
+   "cap": 14.06,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 40.0,
+   "c_i": 13.37,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 47,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 47,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408006001",
+   "code_kind": "STANDARD",
+   "item_name": "终端电缆头-3*70mm2",
+   "unit": "个",
+   "q0": 2.0,
+   "cap": 568.64,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 534.74,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 39,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 39,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408006002",
+   "code_kind": "STANDARD",
+   "item_name": "终端电缆头-3*95mm2",
+   "unit": "个",
+   "q0": 2.0,
+   "cap": 643.67,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 607.32,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 40,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 40,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408006003",
+   "code_kind": "STANDARD",
+   "item_name": "终端电缆头-3*185mm2",
+   "unit": "个",
+   "q0": 2.0,
+   "cap": 924.17,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 874.96,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 41,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 41,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408006004",
+   "code_kind": "STANDARD",
+   "item_name": "户外中间电缆头-3*185mm2",
+   "unit": "个",
+   "q0": 1.0,
+   "cap": 1617.42,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 1501.92,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 42,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 42,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030408008001",
+   "code_kind": "STANDARD",
+   "item_name": "防火堵料",
+   "unit": "t",
+   "q0": 0.1,
+   "cap": 11821.7,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 0.1,
+   "c_i": 9457.52,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 48,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 48,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030413001001",
+   "code_kind": "STANDARD",
+   "item_name": "母线槽支架",
+   "unit": "kg",
+   "q0": 48.44,
+   "cap": 16.68,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 48.44,
+   "c_i": 15.67,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 32,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 32,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030414001001",
+   "code_kind": "STANDARD",
+   "item_name": "电力变压器系统",
+   "unit": "系统",
+   "q0": 2.0,
+   "cap": 4193.09,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 3719.91,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 53,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 53,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030414002001",
+   "code_kind": "STANDARD",
+   "item_name": "整套启动调试",
+   "unit": "系统",
+   "q0": 1.0,
+   "cap": 1734.01,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 1701.07,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 52,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 52,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030414002002",
+   "code_kind": "STANDARD",
+   "item_name": "10KV送配电装置系统",
+   "unit": "系统",
+   "q0": 7.0,
+   "cap": 1373.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 7.0,
+   "c_i": 1306.02,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 54,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 54,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030414002003",
+   "code_kind": "STANDARD",
+   "item_name": "1KV送配电装置系统（综合）",
+   "unit": "系统",
+   "q0": 14.0,
+   "cap": 394.48,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 14.0,
+   "c_i": 388.31,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 55,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 55,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030414002004",
+   "code_kind": "STANDARD",
+   "item_name": "1KV送配电装置系统（直流供电）",
+   "unit": "系统",
+   "q0": 1.0,
+   "cap": 815.3,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 742.7,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 56,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 56,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030414008001",
+   "code_kind": "STANDARD",
+   "item_name": "母线系统调试",
+   "unit": "段",
+   "q0": 2.0,
+   "cap": 1406.69,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 1349.73,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 51,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 51,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "030414015001",
+   "code_kind": "STANDARD",
+   "item_name": "电缆试验",
+   "unit": "根",
+   "q0": 3.0,
+   "cap": 5639.65,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 3.0,
+   "c_i": 4859.51,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 57,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 57,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "031301017001",
+   "code_kind": "STANDARD",
+   "item_name": "脚手架搭拆",
+   "unit": "项",
+   "q0": 1.0,
+   "cap": null,
+   "no_cap": true,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 1370.75,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [
+    "missing_limit"
+   ],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 施工技术措施项目清单计价表【电气设备安装工程】",
+     "source_row": 7,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 施工技术措施项目清单计价表【电气设备安装工程】",
+     "source_row": 7,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B001",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "阻燃防爆盒",
+   "unit": "个",
+   "q0": 1.0,
+   "cap": 1327.43,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 1223.82,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 43,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 43,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B002",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "气溶胶灭火装置0.15kg",
+   "unit": "套",
+   "q0": 1.0,
+   "cap": 212.39,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 186.68,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 58,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 58,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B003",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "高压绝缘手套",
+   "unit": "套",
+   "q0": 2.0,
+   "cap": 140.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 116.63,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 60,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 60,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B004",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "高压绝缘靴",
+   "unit": "套",
+   "q0": 2.0,
+   "cap": 66.37,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 55.29,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 61,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 61,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B005",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "高压绝缘隔板",
+   "unit": "套",
+   "q0": 2.0,
+   "cap": 800.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 666.45,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 62,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 62,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B006",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "高压验电笔",
+   "unit": "套",
+   "q0": 1.0,
+   "cap": 150.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 124.96,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 63,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 63,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B007",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "户内接地线",
+   "unit": "套",
+   "q0": 2.0,
+   "cap": 300.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 259.17,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 64,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 64,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B008",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "安全隔离网",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 327.43,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 272.77,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 65,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 65,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B009",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "绝缘胶垫",
+   "unit": "m",
+   "q0": 50.0,
+   "cap": 30.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 50.0,
+   "c_i": 24.96,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 83,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 83,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B010",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "档鼠板0.9m*0.6m",
+   "unit": "块",
+   "q0": 1.0,
+   "cap": 60.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 49.98,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 84,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 84,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B011",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "档鼠板1.7m*0.6m",
+   "unit": "块",
+   "q0": 1.0,
+   "cap": 60.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 49.98,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 85,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 85,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B012",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "专用门锁",
+   "unit": "把",
+   "q0": 2.0,
+   "cap": 50.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 41.65,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 86,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 86,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B013",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "安全帽",
+   "unit": "个",
+   "q0": 2.0,
+   "cap": 50.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 41.65,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 87,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 87,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "03B014",
+   "code_kind": "SUPPLEMENTARY",
+   "item_name": "工具、钥匙柜",
+   "unit": "个",
+   "q0": 1.0,
+   "cap": 300.0,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 249.92,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 88,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 88,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004001",
+   "code_kind": "STANDARD",
+   "item_name": "止步、高压危险 标识牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 66,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 66,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004002",
+   "code_kind": "STANDARD",
+   "item_name": "配电重地、闲人免进 标识牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 67,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 67,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004003",
+   "code_kind": "STANDARD",
+   "item_name": "配电重地、严禁烟火 标识牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 68,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 68,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004004",
+   "code_kind": "STANDARD",
+   "item_name": "有人工作、严禁合闸 标识牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 69,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 69,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004005",
+   "code_kind": "STANDARD",
+   "item_name": "“正在检修,禁止合闸” 标识牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 70,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 70,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004006",
+   "code_kind": "STANDARD",
+   "item_name": "线路有人工作/严禁合闸 标识牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 71,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 71,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004007",
+   "code_kind": "STANDARD",
+   "item_name": "配电室铭牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 72,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 72,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004008",
+   "code_kind": "STANDARD",
+   "item_name": "室外)“禁止吸烟”“未经许可不得入内”\n“当心触电”警示牌",
+   "unit": "块",
+   "q0": 4.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 4.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 73,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 73,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004009",
+   "code_kind": "STANDARD",
+   "item_name": "灭火器使用说明牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 74,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 74,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004010",
+   "code_kind": "STANDARD",
+   "item_name": "高压柜编号牌",
+   "unit": "块",
+   "q0": 7.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 7.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 75,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 75,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004011",
+   "code_kind": "STANDARD",
+   "item_name": "变压器编号牌",
+   "unit": "块",
+   "q0": 2.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 2.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 76,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 76,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004012",
+   "code_kind": "STANDARD",
+   "item_name": "低压柜编号牌",
+   "unit": "块",
+   "q0": 14.0,
+   "cap": 53.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 14.0,
+   "c_i": 43.35,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 77,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 77,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004013",
+   "code_kind": "STANDARD",
+   "item_name": "配电房值班制度",
+   "unit": "块",
+   "q0": 1.0,
+   "cap": 103.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 85.0,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 78,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 78,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004014",
+   "code_kind": "STANDARD",
+   "item_name": "电器操作规程",
+   "unit": "块",
+   "q0": 1.0,
+   "cap": 103.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 85.0,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 79,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 79,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004015",
+   "code_kind": "STANDARD",
+   "item_name": "防火管理制度",
+   "unit": "块",
+   "q0": 1.0,
+   "cap": 103.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 85.0,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 80,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 80,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004016",
+   "code_kind": "STANDARD",
+   "item_name": "高压一次接线图板",
+   "unit": "块",
+   "q0": 1.0,
+   "cap": 503.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 427.48,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 81,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 81,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  },
+  {
+   "project_id": "xiyong_l_district",
+   "unit_work": "电气设备安装工程",
+   "item_id": "040205004017",
+   "code_kind": "STANDARD",
+   "item_name": "低压一次接线图板",
+   "unit": "块",
+   "q0": 1.0,
+   "cap": 503.49,
+   "no_cap": false,
+   "cap_row": true,
+   "q1_point": 1.0,
+   "c_i": 427.48,
+   "cost_row": true,
+   "attribution": null,
+   "pass_through": false,
+   "missing": [],
+   "anomalies": [],
+   "provenance": {
+    "cap": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 82,
+     "source_table_no": "表-09",
+     "side": "cap"
+    },
+    "cost": {
+     "source_sheet": "表-09 分部分项工程项目清单计价表【电气设备安装工程】",
+     "source_row": 82,
+     "source_table_no": "表-09",
+     "side": "cost"
+    }
+   }
+  }
+ ],
+ "inputs": {
+  "cap_xlsx": "../真实案件示例/中标限价/西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx",
+  "cap_sha256": "f5dc3abb5588",
+  "cost_xlsx": "../真实案件示例/报价/西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx",
+  "cost_sha256": "0ec27c099890",
+  "project_id": "xiyong_l_district",
+  "attribution": "UNKNOWN"
+ }
+}

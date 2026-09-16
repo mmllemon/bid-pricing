@@ -101,6 +101,17 @@ class TestSpecImplementationLock(unittest.TestCase):
             self.assertTrue(r.get("rebase", "").strip(),
                             f"{r['id']} 缺 rebase 依据")
 
+    def test_basis_declarations_artifact_has_required_keys(self):
+        """D08 事实源制品：必填键存在且口径在词表内（结构断言，不耦合取值）。"""
+        bd = json.loads(
+            (REPO / "config" / "basis_declarations.json").read_text(encoding="utf-8"))
+        for k in ("cap_tax_scope", "cost_tax_scope", "default_attribution"):
+            self.assertIn(k, bd, f"basis_declarations 缺 {k}")
+        vocab = set(bd["tax_scope_vocabulary"])
+        self.assertIn(bd["cap_tax_scope"], vocab)
+        self.assertIn(bd["cost_tax_scope"], vocab)
+        self.assertIn(bd["default_attribution"], bd["attribution_vocabulary"])
+
 
 class TestBlockingRules(unittest.TestCase):
     """阻断级：FAIL（数据违反）与 BLOCKED（未定态）两条路径都要可触发。"""

@@ -74,6 +74,22 @@ class RegistryTest(unittest.TestCase):
     def test_undetermined_rule_set_reports_all_known_values(self):
         self.assertEqual(set(SCOPE.allowed_for(None)), {"FULL", "SEGMENT"})
 
+    def test_contract_type_registered_without_default(self):
+        """D09：合同类型是项目级选择项（单价/总价最优解不同，不设默认值）。"""
+        opt = SELECTABLE_OPTIONS.get("contract_type")
+        self.assertIsNotNone(opt, "contract_type 未注册")
+        self.assertIsNone(opt.default)
+        for rid in ("GB/T50500-2024", "GB50500-2013"):
+            self.assertEqual(set(opt.allowed_for(rid)), {"UNIT_PRICE", "LUMP_SUM"})
+
+    def test_loss_acceptance_registered_without_default(self):
+        """ADR-0009：亏损承接口径是项目级选择项，未声明 = 严格地板。"""
+        opt = SELECTABLE_OPTIONS.get("loss_acceptance")
+        self.assertIsNotNone(opt, "loss_acceptance 未注册")
+        self.assertIsNone(opt.default)
+        for rid in ("GB/T50500-2024", "GB50500-2013"):
+            self.assertEqual(set(opt.allowed_for(rid)), {"ACCEPT", "DECLINE"})
+
 
 class ResolvePrecedenceTest(unittest.TestCase):
     def test_cli_wins_over_file(self):

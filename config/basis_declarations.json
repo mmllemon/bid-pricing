@@ -1,0 +1,28 @@
+{
+  "spec_id": "basis_declarations_v1",
+  "task": "T01-06 D08（税口径一致性）",
+  "artifact_kind": "PROJECT_INPUT",
+  "schema_note": "税口径是**声明**不是数据——清单文件本身不带口径标签，故本文件是 D08 的唯一事实源。key 完全缺失 = 未定态（D08 BLOCKED），**不得用默认值填**；两侧不一致 = FAIL。",
+  "cap_tax_scope": "EXCL_VAT",
+  "cost_tax_scope": "EXCL_VAT",
+  "default_attribution": "DRAWING_DIFF",
+  "tax_scope_vocabulary": {
+    "EXCL_VAT": "综合单价不含增值税（GB/T 50500-2024 2.0.8 明确「不包括增值税」），增值税单列于表-12",
+    "INCL_VAT": "综合单价含增值税（2013 及部分地方口径；与 2024 不可混合比价）"
+  },
+  "attribution_vocabulary": {
+    "DRAWING_DIFF": "工程量预判依据：图纸（含施工图深化差异）",
+    "CHANGE_ORDER": "工程量预判依据：已发生/预期变更或签证",
+    "BOTH": "两者兼有",
+    "UNKNOWN": "依据不明（W01/W04 会据此告警）"
+  },
+  "field_semantics": {
+    "cap_tax_scope": "限价清单综合单价的税口径（本项目：含不含增值税）",
+    "cost_tax_scope": "成本清单综合单价的税口径——必须与 cap 侧一致，否则比价与优化全盘失效",
+    "default_attribution": "q1_point（成本清单工程量 = 结算量预判）的**项目级默认归属标签**；个别变更项由用户另行逐项覆盖（保留升级路径，不预先编造）"
+  },
+  "declared_by": "operator（用户 2026-09-16 裁定）",
+  "declared_at": "2026-09-16T23:35:00+08:00",
+  "rationale": "用户 2026-09-16 原话：『税口径两侧均不含增值税』；『attribution 全部按图纸标 DRAWING_DIFF（少数变更项我再单独说）』——故默认标签为 DRAWING_DIFF，变更项留待后续逐项声明，不预先替用户编造。",
+  "status": "DECLARED"
+}

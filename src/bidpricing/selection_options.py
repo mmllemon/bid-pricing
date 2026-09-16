@@ -172,10 +172,37 @@ LOSS_ACCEPTANCE = SelectableOption(
     },
 )
 
+CONTRACT_TYPE = SelectableOption(
+    key="contract_type",
+    title="合同类型（结算方式）",
+    gate="phase_0",
+    spec_ref="T01-06 D09 / §3.5(R2)",
+    consumers=(
+        "D09 校验（契约级输入完整）",
+        "C13 不平衡报价条款是否生效（量变是否改单价）",
+        "WP3 判定层结算口径、WP6 报价表",
+    ),
+    allowed_by_rule_set={
+        "GB/T50500-2024": ("UNIT_PRICE", "LUMP_SUM"),
+        "GB50500-2013": ("UNIT_PRICE", "LUMP_SUM"),
+    },
+    rationale=(
+        "单价合同（UNIT_PRICE）按清单综合单价 × 实际工程量结算，工程量变化不改单价，"
+        "故不平衡报价（C13）与 q1_point 预判才有收益空间；总价合同（LUMP_SUM）"
+        "量变不过价，优化目标退化为报价结构本身。二者最优解不同，须显式声明，"
+        "**不设默认值**（未声明 = 未定态，D09 BLOCKED）。"
+    ),
+    impact={
+        "UNIT_PRICE": "按量结算：工程量偏差 §8.9 / 不平衡报价条款生效，q1_point 预判直接进收益模型",
+        "LUMP_SUM": "总价包干：量变不过价；>15% 工程量变化须额外告警（W05）",
+    },
+)
+
 #: 全局选择项注册表
 SELECTABLE_OPTIONS: dict[str, SelectableOption] = {
     ADJUSTMENT_SCOPE.key: ADJUSTMENT_SCOPE,
     LOSS_ACCEPTANCE.key: LOSS_ACCEPTANCE,
+    CONTRACT_TYPE.key: CONTRACT_TYPE,
 }
 
 

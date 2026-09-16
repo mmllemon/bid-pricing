@@ -977,8 +977,23 @@ def cmd_validate_boq(args) -> int:
         print(f"■ 解析失败：{exc}")
         return 1
 
+    # 税口径声明（D08）+ 默认 attribution：以 config/basis_declarations.json 为事实源，
+    # CLI 参数可覆盖；制品缺失 → D08 BLOCKED（未定态，不得默认）。
+    basis: dict | None = None
+    default_attr = None
+    bd = config_dir() / "basis_declarations.json"
+    if bd.exists():
+        bd_json = _json.loads(bd.read_text(encoding="utf-8"))
+        basis = {k: bd_json.get(k) for k in ("cap_tax_scope", "cost_tax_scope")}
+        if basis.get("cap_tax_scope") is None or basis.get("cost_tax_scope") is None:
+            basis = None        # 声明不完整 = 未定态，不降级为默认值
+        default_attr = bd_json.get("default_attribution")
+    if getattr(args, "basis_json", None):
+        basis = _json.loads(_P(args.basis_json).read_text(encoding="utf-8"))
+    attribution = args.attribution or default_attr
+
     cap_rows, _ = clean_listing_rows(cap_parsed.rows, "cap")
-    cost_rows, _ = clean_listing_rows(cost_parsed.rows, "cost", args.attribution)
+    cost_rows, _ = clean_listing_rows(cost_parsed.rows, "cost", attribution)
     rep = match_canonical_rows(cap_rows, cost_rows)
 
     # sheet → source_list 映射（D10 行级覆盖判据的机械输入）
@@ -995,9 +1010,6 @@ def cmd_validate_boq(args) -> int:
     sel = _json.loads((cdir / "project_selection.json").read_text(encoding="utf-8"))
     rules_cfg = load_validation_rules(cdir)
 
-    basis = None
-    if getattr(args, "basis_json", None):
-        basis = _json.loads(_P(args.basis_json).read_text(encoding="utf-8"))
 
     vrep = run_validation(
         rep,
@@ -1031,7 +1043,9 @@ def cmd_validate_boq(args) -> int:
         "cap_xlsx": str(args.cap_xlsx), "cost_xlsx": str(args.cost_xlsx),
         "p_star": args.p_star, "p_star_max": args.p_star_max,
         "p_star_min": args.p_star_min,
-        "basis": basis, "sheet_roles": sheet_roles,
+        "basis": basis,
+        "attribution": attribution,
+        "sheet_roles": sheet_roles,
         "rules_config": "config/validation_rules.json",
     }
     out_path = out_dir / "validation_report.json"

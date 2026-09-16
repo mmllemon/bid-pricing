@@ -17,6 +17,14 @@
       "actor": "operator",
       "selected_at": "2026-09-16T15:09:02+00:00",
       "rationale": "用户 2026-09-16 裁定：考虑整体利润，本来单项清单就是有亏有赚的——C4 地板钳制到 cap，亏损总量由 C6 兜底（ADR-0009）"
+    },
+    "contract_type": {
+      "value": "UNIT_PRICE",
+      "rule_set_id": "GB/T50500-2024",
+      "source": "OPERATOR",
+      "actor": "operator",
+      "selected_at": "2026-09-16T15:36:24+00:00",
+      "rationale": "用户 2026-09-16 裁定：单价合同（按清单综合单价×实际工程量结算），工程量变化不改单价，故不平衡报价条款与 q1_point 预判生效"
     }
   }
 }

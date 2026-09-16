@@ -57,9 +57,17 @@ class RealRepoTest(_MutatingCase):
         items = self._check()
         bad = [i for i in items if i.status is not Status.PASS]
         self.assertEqual(bad, [], [i.to_dict() for i in bad])
-        # 10 项制品间判据 + 1 项「代码侧别名表 ↔ 契约」镜像判据
-        self.assertEqual(len(items), 11)
-        self.assertIn("io.column_aliases_mirror", {i.item for i in items})
+        # 判据条数随制品增加而增加（10 制品间判据 + 别名镜像 + 规则卡 4 项）。
+        # **不断言固定条数**——新增判据不应要求回头改这里；改为断言关键判据
+        # 齐备 + 下界，既防「判据被删而不知」，也防「加判据就红」。
+        self.assertGreaterEqual(len(items), 15)
+        names = {i.item for i in items}
+        for key in ("io.column_aliases_mirror",
+                    "pricing_rule_card.present",
+                    "pricing_rule_card.adjustment_scope",
+                    "pricing_rule_card.contract_type",
+                    "pricing_rule_card.rule_set_id"):
+            self.assertIn(key, names)
 
     def test_missing_artifact_blocks_not_vacuous(self):
         (self.cdir / ARTIFACTS["constraint_schema"]).unlink()

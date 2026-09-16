@@ -360,6 +360,90 @@ def _check_code_alias_mirror(input_art: dict) -> list[CheckItem]:
     )]
 
 
+def _check_pricing_card_selection(config_dir: Path) -> list[CheckItem]:
+    """规则卡（T00-01）↔ 项目级落值（Phase 0）跨制品一致。
+
+    规则卡里的 ``adjustment_scope`` / ``contract_type`` / ``rule_set_id`` 是
+    **项目级取值**，其事实源分别是 ``project_selection.json`` 与
+    ``project_classification_table.json``。三处一旦漂移，WP3/WP4 会拿着
+    A 口径的参数去解 B 口径的问题——本项目已因此返工数次（13/15 位编码、
+    ``GBT50500-2024`` vs ``GB/T50500-2024`` 两种写法均属同类）。
+
+    注意：此处检查的是**落值与声明是否一致**，不是「落值是否合规」——
+    后者是 Phase 0 输入门的职责，两环正交。
+    """
+
+    def _read(fname: str) -> dict | None:
+        p = Path(config_dir) / fname
+        if not p.exists():
+            return None
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+
+    out: list[CheckItem] = []
+
+    card = _read("pricing_rule_card.json")
+    if card is None:
+        out.append(_bad("pricing_rule_card.present",
+                        "规则卡缺失/不可解析：T00-01 未冻结，P1 口径悬空"))
+        return out
+    out.append(_ok("pricing_rule_card.present",
+                   f"规则卡已冻结（{card.get('card_id')}）"))
+
+    sel = _read("project_selection.json") or {}
+    options = sel.get("options") or {}
+    for key in ("adjustment_scope", "contract_type"):
+        declared = card.get(key)
+        item = f"pricing_rule_card.{key}"
+        if declared is None:
+            out.append(_bad(item, "规则卡未声明该取值"))
+            continue
+        entry = options.get(key)
+        value = entry.get("value") if isinstance(entry, dict) else None
+        if value is None:
+            out.append(_bad(
+                item,
+                f"规则卡声明 {key}={declared!r}，但 project_selection 未落值——"
+                "声明与落值两处真相", actual=None, expected=declared))
+        elif value != declared:
+            out.append(_bad(
+                item,
+                f"规则卡声明 {key}={declared!r} 与落值 {value!r} 不一致——"
+                "改落值后须同步规则卡", actual=value, expected=declared))
+        else:
+            out.append(_ok(item, f"与 project_selection 落值一致（{value}）",
+                           actual=value, expected=declared))
+
+    tbl = _read("project_classification_table.json") or {}
+    # code_system 既可能在顶层（单项目表），也可能在 rows[] 内（多项目表）。
+    # 两种位置都收，出现**两个不同值**即判矛盾——不做「取第一个」的猜测。
+    systems: set[str] = set()
+    if isinstance(tbl.get("code_system"), str):
+        systems.add(tbl["code_system"])
+    for r in (tbl.get("rows") or []):
+        if isinstance(r, dict) and isinstance(r.get("code_system"), str):
+            systems.add(r["code_system"])
+    systems_sorted = sorted(systems)
+    item = "pricing_rule_card.rule_set_id"
+    if not systems_sorted:
+        out.append(_bad(item, "分类表未声明 code_system → 规则集选择无据",
+                        actual=None, expected=card.get("rule_set_id")))
+    elif len(systems_sorted) > 1:
+        out.append(_bad(item, f"分类表内 code_system 不一致：{systems_sorted}",
+                        actual=systems_sorted, expected=[card.get("rule_set_id")]))
+    elif systems_sorted[0] != card.get("rule_set_id"):
+        out.append(_bad(item,
+                        f"规则卡 rule_set_id={card.get('rule_set_id')!r} 与"
+                        f"分类表 code_system={systems_sorted[0]!r} 不一致",
+                        actual=systems_sorted[0], expected=card.get("rule_set_id")))
+    else:
+        out.append(_ok(item, f"与分类表 code_system 一致（{systems_sorted[0]}）",
+                       actual=systems_sorted[0], expected=card.get("rule_set_id")))
+    return out
+
+
 def check_contract_consistency(config_dir: Path) -> list[CheckItem]:
     """执行全部跨制品一致性判据。返回判据列表（不抛异常，供闸门聚合）。"""
     try:
@@ -375,4 +459,5 @@ def check_contract_consistency(config_dir: Path) -> list[CheckItem]:
     out += _check_listing_structure(loaded["input_protocol_schema"])
     out += _check_open_issues_naming(loaded["input_protocol_schema"])
     out += _check_code_alias_mirror(loaded["input_protocol_schema"])
+    out += _check_pricing_card_selection(config_dir)
     return out

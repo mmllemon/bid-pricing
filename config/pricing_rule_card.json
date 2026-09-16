@@ -1,0 +1,160 @@
+{
+  "card_id": "pricing_rule_card_v1",
+  "task": "T00-01",
+  "title": "合同计价与调价口径冻结 —— 计价规则卡 v1",
+  "role": "T00-01 交付物《计价规则卡》。规则集选择器（T00-08）给出 rule_set_id 之后，本卡回答『拿到 Q0/Q1/P0 之后 P1 怎么算』——这是 WP3 判定层 R_i(·) 与 WP4 求解层的唯一参数来源。",
+  "frozen_at": "2026-09-16",
+  "implementation": "bidpricing.contracts.pricing_card",
+
+  "rule_set_id": "GB/T50500-2024",
+  "rule_set_source": "config/ruleset_selector_spec.json + src/bidpricing/contracts/selector.py",
+  "legal_basis": "《建设工程工程量清单计价标准》GB/T 50500-2024 §8.2.1、§8.9.1~8.9.3、§10.2（住建部公告 2024 年第 212 号，自 2025-09-01 施行）",
+
+  "adjustment_scope": "SEGMENT",
+  "adjustment_scope_source": "config/project_selection.json（项目级选择项，2026-09-16 落值）",
+  "adjustment_scope_note": "2024 §8.9.2 条文未明说是否分段，FULL/SEGMENT 两种解读均合法 → 属项目级选择项，无默认值。本项目落 SEGMENT。副作用：SEGMENT 下 2024 与 2013 的 r_eff 机械指纹同形，规则集区分退回条款覆盖（2024 拆 §8.2+§8.9，2013 单条 §9.6.2）。",
+
+  "contract_type": "UNIT_PRICE",
+  "contract_type_source": "config/project_selection.json（2026-09-16 用户裁定）",
+  "contract_type_consequence": "单价合同（2024 §8.2.3）：分部分项清单准确性与完整性由发包人负责，清单缺陷风险由发包人承担 → Q1≠Q0 的差额由发包人承担，故 Q1 预判直接改变收入，不平衡报价条款与 q1_point 预判均生效。总价合同（LUMP_SUM）下已标价清单由投标人负责、合同总价不因清单缺陷调整 → 目标函数形态不同。",
+
+  "symbols": {
+    "Q0": {
+      "name": "招标清单工程量",
+      "binding": "q0",
+      "source": "限价清单（输入 A）工程量列",
+      "note": "阈值 15% 的起算基准；q0<=0 项须在数据层按 MISSING_POLICY 处理（rule_sets 对 q0<=0 直接 raise）。"
+    },
+    "Q1": {
+      "name": "结算预期工程量",
+      "binding": "q1_point",
+      "source": "成本清单工程量（用户 2026-09-16 裁定：q1_point := 成本清单量，须补 attribution）",
+      "note": "不是限价清单量。判据 r = Q1/Q0。attribution 默认 DRAWING_DIFF（config/basis_declarations.json）。"
+    },
+    "P0": {
+      "name": "中标综合单价（决策变量）",
+      "binding": "p_i",
+      "constraints": ["C2 上界 cap_i", "C4 地板 min(floor_i, cap_i)（ADR-0009 ACCEPT 时钳制）", "C5 非零", "C13 不平衡报价"],
+      "note": "不含增值税（2024 2.0.8）；与 c_i 同口径（D08）。"
+    },
+    "P1": {
+      "name": "调整后综合单价",
+      "binding": "p1",
+      "formula_ref": "p1_formula",
+      "note": "2024 下为『在 P0 上合理下调/上调』；2013 下为『重新确定』。"
+    },
+    "S": {
+      "name": "结算金额（未含税）",
+      "binding": "settlement_amount(...)",
+      "note": "rule_sets.settlement_amount 的返回值。"
+    },
+    "r": {
+      "name": "工程量变化比",
+      "definition": "r = Q1 / Q0",
+      "branches": {"DECREASE": "r < 0.85", "IN_RANGE": "0.85 <= r <= 1.15", "INCREASE": "r > 1.15"}
+    }
+  },
+
+  "parameters": {
+    "increase_threshold": 1.15,
+    "decrease_threshold": 0.85,
+    "threshold_basis": "r = Q1/Q0（工程量比，非金额比）。2024 §8.9 / 2013 §9.6.2 同阈值。",
+    "rho_plus": 0.0,
+    "rho_minus": 0.0,
+    "rho_meaning": "ρ⁺ = 增量越界时合同单价的下调幅度；ρ⁻ = 减量越界时合同单价的上调幅度。",
+    "rho_source": "ADR：规范明『合理下调/上调』但**未给量化系数**，故默认取 0（即投标期无法预知调整幅度）；非 0 值须由招标文件/合同明示或走敏感性扫描区间 [0, 0.15]。",
+    "rho_default_is_mechanism_not_data": "ρ=0 是机制层默认（无依据即不编造），**不是**项目数据缺省——不得据此声称『规范规定不调整』。",
+    "progress_payment_floor": 0.8,
+    "progress_payment_basis": "2024 第 10.2 节施工过程结算支付比例不低于 80%（C10 ρ_i 下限依据）"
+  },
+
+  "p1_clarifications": [
+    {
+      "id": "P1-A",
+      "question": "P1 是『重新确定综合单价』还是『在原合同单价上按系数调整』？",
+      "resolution": "ADJUST_ON_CONTRACT_PRICE",
+      "basis": "2024 §8.9.2 表述为『合理下调/上调**其合同单价**』→ 以 P0 为基数调整；2013 §9.6.2 为『重新确定』→ 与 P0 脱钩。两版生成方式不同，不得混用。",
+      "status": "RESOLVED"
+    },
+    {
+      "id": "P1-B",
+      "question": "调整幅度 ρ± 取多少？",
+      "resolution": "rho_plus = rho_minus = 0（默认）+ 敏感性扫描",
+      "basis": "规范只写『合理』，无量化系数，投标期不可知。取 0 表示『按不调整计算基准解』，同时输出 ρ∈[0,0.15] 的敏感性。",
+      "status": "RESOLVED"
+    },
+    {
+      "id": "P1-C",
+      "question": "15% 阈值的起算基准是什么？",
+      "resolution": "r = Q1/Q0（工程量比）",
+      "basis": "2013 §9.6.2 与 2024 §8.9 均以工程量偏差比例触发；金额比会受单价结构干扰，本模型不采用。",
+      "status": "RESOLVED"
+    },
+    {
+      "id": "P1-D",
+      "question": "调整作用域是全额（FULL）还是分段（SEGMENT）？",
+      "resolution": "SEGMENT（本项目）",
+      "basis": "2024 条文未明说 → 项目级选择项，已落值 SEGMENT。减量侧两者等价（『减少后剩余部分』本就是全部 Q1），差异只在增量侧。",
+      "status": "RESOLVED"
+    },
+    {
+      "id": "P1-E",
+      "question": "减量侧是否对称上调？ρ⁺ 与 ρ⁻ 是否必须相等？",
+      "resolution": "对称成立；ρ⁺ 与 ρ⁻ 独立取值",
+      "basis": "2024 §8.9.3 为减量侧的对应条款；用户提供的合同 10.4.1.3〔变更估价原则〕对偏高/偏低两侧对称约定。两系数独立，因『获得价格优惠』与『失去优惠』成因不同。",
+      "status": "RESOLVED"
+    }
+  ],
+
+  "p1_formula": {
+    "IN_RANGE": {"p1": "P0", "S": "Q1 * P0"},
+    "INCREASE": {
+      "p1": "P0 * (1 - rho_plus)",
+      "S_FULL": "Q1 * p1",
+      "S_SEGMENT": "1.15 * Q0 * P0 + (Q1 - 1.15 * Q0) * p1"
+    },
+    "DECREASE": {
+      "p1": "P0 * (1 + rho_minus)",
+      "S": "Q1 * p1",
+      "note": "减量侧 FULL 与 SEGMENT 等价，故不区分。"
+    }
+  },
+
+  "precedence_chain": ["Contract", "Tender", "Regional", "Standard"],
+  "precedence_note": "2024 1.0.3 确立『法定优先、有约从约』。合同特殊约定（contract_override）优先级最高；规则卡参数属 Standard 层，可被上层覆盖。",
+  "override_policy": {
+    "unknown_key": "BLOCKED",
+    "unknown_key_rationale": "出现规则卡未登记的 override 键 → 阻断并列出未知键，**不得静默忽略**（ADR-0004/0007：沉默不是断言）。",
+    "registered_overrides": ["rho_plus", "rho_minus", "increase_threshold", "decrease_threshold", "adjustment_scope"],
+    "adjustment_scope_override_note": "2013 规则集下 adjustment_scope 被规范明文确定为 SEGMENT（§9.6.2），落值 FULL 判为与规则集冲突 → BLOCKED，不静默覆盖。"
+  },
+
+  "unbalanced_price_clause": {
+    "clause_ref": "合同专用条款（用户 2026-09-16 提供原文）；OI-05 / OI-06",
+    "benchmark": "cap_i（限价单价），双向 ±50%",
+    "high_side": "(p_i - cap_i) / cap_i > 50% → 严重偏高",
+    "low_side": "(cap_i - p_i) / cap_i > 50% → 严重偏低",
+    "consequence": "SETTLEMENT_ADJUSTMENT（结算修正，非投标有效性）",
+    "trigger": "合同履行期在招标清单工程量基础上增加超过 15% 且发包人认定 → 按修正综合单价办理竣工结算（触发阈值 15% 与 §8.9 r_eff 同源）",
+    "high_side_dead_branch": "C2 恒 p_i <= cap_i → 偏高侧触发条件在模型内恒不成立（死分支），仅偏低侧实际生效。该结论是推导而非假设。",
+    "p_rev_handling": "修正价 p_rev_i 投标期不可知（与审计/甲方共定），唯一确定的是不高于限价 → 名义值取 cap_i，并对 [c_i, cap_i] 做敏感性扫描。",
+    "binding_constraint": "C13"
+  },
+
+  "binding": {
+    "module": "bidpricing.contracts.rule_sets",
+    "constant_map": {
+      "increase_threshold": "base.INCREASE_THRESHOLD",
+      "decrease_threshold": "base.DECREASE_THRESHOLD",
+      "branch_names": "base.BRANCH_DECREASE / BRANCH_IN_RANGE / BRANCH_INCREASE"
+    },
+    "lock_note": "阈值与分支名的**唯一事实源在代码常量**；本卡的值由 tests/test_pricing_card.py 双向锁定——改任一侧而不同步另一侧，测试即失败（防『同一规则两处说法』）。"
+  },
+
+  "consumers": [
+    "WP3 判定层 R_i(·) 分段逻辑",
+    "WP4 求解层目标函数与约束（C2/C4/C6/C13）",
+    "WP5 对拍与敏感性：ρ± ∈ [0, 0.15]、p_rev ∈ [c_i, cap_i] 扫描",
+    "WP6 报价表与结算口径披露"
+  ]
+}

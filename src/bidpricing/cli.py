@@ -745,6 +745,23 @@ def build_parser() -> argparse.ArgumentParser:
                       help="税口径声明 JSON（cap_tax_scope/cost_tax_scope）")
     p_vb.set_defaults(func=cmd_validate_boq)
 
+    # ---- T00-01 计价规则卡 -----------------------------------------------
+    p_pc = sub.add_parser(
+        "pricing-card", help="T00-01 计价规则卡：展示口径 / 试算单项 P1")
+    p_pc.add_argument("--q0", type=float, default=None,
+                      help="招标清单工程量 Q0（试算用）")
+    p_pc.add_argument("--q1", type=float, default=None,
+                      help="结算预期工程量 Q1（试算用）")
+    p_pc.add_argument("--p0", type=float, default=None,
+                      help="中标综合单价 P0（试算用）")
+    p_pc.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                      help="override：rho_plus/rho_minus/adjustment_scope 等"
+                           "（未登记键一律阻断）")
+    p_pc.add_argument("--from-match", default=None, metavar="MATCH_REPORT",
+                      help="读取 T01-04 匹配报告，统计真实各项的 r 分支分布"
+                           "（分支只依赖 r=Q1/Q0，与 P0 无关）")
+    p_pc.set_defaults(func=cmd_pricing_card)
+
     return parser
 
 
@@ -1101,6 +1118,122 @@ def cmd_import_verify(args) -> int:
               f"file_version={r.record.file_version} "
               f"导入于 {r.record.import_timestamp}")
     return 0 if r.status == "PASS" else 1
+
+
+def _pricing_card_branch_scan(card: dict, override: dict | None, path) -> int:
+    import json as _json
+    from pathlib import Path as _P
+
+    """按规则卡对匹配报告逐项判分支——分支只依赖 r=Q1/Q0，与 P0 无关。
+
+    输出的是**优化空间的第一手证据**：区间内项无论怎么报价结算结构不变；
+    越界项才是 P1 生效的地方，也是不平衡报价条款的作用域。
+    """
+    from collections import Counter
+
+    from .contracts.pricing_card import classify_branch, resolve_parameters
+
+    report = _json.loads(_P(path).read_text(encoding="utf-8"))
+    items = report.get("items", report if isinstance(report, list) else [])
+    params = resolve_parameters(card, override)
+
+    counts: Counter = Counter()
+    undetermined: list[str] = []
+    out_of_range: list[tuple[str, float]] = []
+    for it in items:
+        q0, q1 = it.get("q0"), it.get("q1_point")
+        if q0 is None or q1 is None or not q0:
+            undetermined.append(it.get("item_id", "?"))
+            continue
+        r = q1 / q0
+        branch = classify_branch(r, params)
+        counts[branch] += 1
+        if branch != "IN_RANGE":
+            out_of_range.append((it.get("item_id", "?"), r))
+
+    total = sum(counts.values())
+    print(f"\n 分支扫描 ← {path}（Q0/Q1 齐备 {total} 项）")
+    for branch in ("IN_RANGE", "DECREASE", "INCREASE"):
+        n = counts.get(branch, 0)
+        pct = (n / total * 100) if total else 0.0
+        print(f"   {branch:<9} {n:>4} 项（{pct:5.1f}%）")
+    if out_of_range:
+        print("   越界项（P1 生效 / 不平衡报价条款作用域）：")
+        for item_id, r in sorted(out_of_range, key=lambda x: x[1]):
+            print(f"     · {item_id}  r={r:.4f}")
+    if undetermined:
+        print(f"   未定态 {len(undetermined)} 项（Q0 或 Q1 缺失）："
+              f"{undetermined[:5]}{' …' if len(undetermined) > 5 else ''}")
+    return 0
+
+
+def cmd_pricing_card(args) -> int:
+    """T00-01：展示计价规则卡；给定 Q0/Q1/P0 时试算 P1 与结算金额。"""
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import (
+        PricingCardError,
+        compute_p1,
+        load_pricing_card,
+        resolve_parameters,
+    )
+
+    try:
+        card = load_pricing_card(config_dir())
+    except PricingCardError as exc:
+        print(f"■ 规则卡不可用：{exc}")
+        return 1
+
+    override: dict = {}
+    for pair in args.set:
+        if "=" not in pair:
+            print(f"■ --set 须为 KEY=VALUE 形式：{pair!r}")
+            return 1
+        k, v = pair.split("=", 1)
+        try:
+            override[k] = float(v)
+        except ValueError:
+            override[k] = v
+
+    print(f" 计价规则卡 {card['card_id']}（{card['title']}）")
+    print(f"   规则集      ：{card['rule_set_id']}")
+    print(f"   合同类型    ：{card.get('contract_type')}")
+    print(f"   调价作用域  ：{card.get('adjustment_scope')}"
+          f"（来源：{card.get('adjustment_scope_source', '—')}）")
+    try:
+        params = resolve_parameters(card, override or None)
+    except PricingCardError as exc:
+        print(f"■ 参数解析阻断：{exc}")
+        return 1
+    print(f"   阈值        ：r<{params.decrease_threshold} 减量 / "
+          f"r>{params.increase_threshold} 增量（r = Q1/Q0）")
+    print(f"   ρ±          ：({params.rho_plus}, {params.rho_minus})"
+          f" ← {params.sources['rho_plus']}")
+    print("   五项澄清    ：" + "、".join(
+        f"{c['id']}={c['status']}" for c in card["p1_clarifications"]))
+
+    if getattr(args, "from_match", None):
+        return _pricing_card_branch_scan(card, override or None,
+                                         _P(args.from_match))
+
+    if args.q0 is None and args.q1 is None and args.p0 is None:
+        print("\n （未给 --q0/--q1/--p0，仅展示口径；试算请补齐三者）")
+        return 0
+
+    try:
+        res = compute_p1(args.q0, args.q1, args.p0, card, override or None)
+    except PricingCardError as exc:
+        print(f"■ 试算阻断：{exc}")
+        return 1
+    if res.status != "PASS":
+        print(f"■ [BLOCKED] {res.blocked_reason}")
+        return 1
+    print(f"\n   r = Q1/Q0 = {res.r:.6f} → 分支 {res.branch}")
+    print(f"   P0 = {res.p0}  →  P1 = {res.p1}")
+    print(f"   结算金额 S = {res.settlement}")
+    for b in res.basis:
+        print(f"     · {b}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

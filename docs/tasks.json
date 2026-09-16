@@ -35,8 +35,8 @@
      "path": "src/bidpricing/contracts/selector.py"
     }
    ],
-   "status": "not_started",
-   "note": ""
+   "status": "done",
+   "note": "2026-09-16 复核确认已完成（任务板此前滞后未落账）：config/ruleset_selector_spec.json（spec v2）+ src/bidpricing/contracts/selector.py（select_rule_set / ruleset_self_test 指纹自检）+ 规则集三实现（2013/2024/base）。判据：输入 9 键、precedence_chain=Contract>Tender>Regional>Standard、2013 过渡双条件成立才回落否则 BLOCKED、adjustment_scope 未定态即 key 缺失。"
   },
   {
    "id": "T00-01",
@@ -51,8 +51,8 @@
    "summary": "$Q_0/Q_1/P_0/P_1$ 定义完成；规则表按 `rule_set_id` 可机器执行；$P_1$ 计算规则来源已回答 5 项澄清（见 §8.3）；「合同约定优先」显式化；必须落定 `adjustment_scope ∈ {FULL, SEGMENT}`——2024 §8.9.2 未明说是否分段，两种解读下最优…",
    "gate": "Gate 0a / 0b",
    "evidence": [],
-   "status": "partial",
-   "note": "规则集已承载调价口径；adjustment_scope 为选择项，取值待项目落值"
+   "status": "done",
+   "note": "2026-09-16 完成《计价规则卡 v1》config/pricing_rule_card.json（Gate 0a 受控制品，freeze 后 hash sha256:cf6efb75b63c）：符号绑定 Q0/Q1/P0/P1/S/r、阈值与 ρ±、P1 公式三分支、**P1 五项澄清 P1-A~E 全 RESOLVED**、override 链与未登记键阻断、不平衡报价条款口径（OI-05/06）。实现 src/bidpricing/contracts/pricing_card.py + CLI pricing-card（展示/试算/--from-match 分支扫描）。ADR-0010 记录 re-base 与「ρ±=0 是机制层默认而非数据缺省」的性质区分。规范↔代码常量↔项目落值三层双向锁定（contract-check 第 12 判据）。真实数据：82 键中 IN_RANGE 75 / DECREASE 6 / INCREASE 0。"
   },
   {
    "id": "T00-02",

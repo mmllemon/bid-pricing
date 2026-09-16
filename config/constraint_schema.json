@@ -292,7 +292,14 @@
     "mechanism": "SETTLEMENT_ADJUSTMENT（条件触发：工程量增/减超 15% + 发包人认定）",
     "trigger_threshold": "0.15（与 §8.9/§9.6.2 的 r_eff 阈值同源）",
     "dead_branch_note": "偏高侧修正分支因 C2 恒不触发——实现时不得产生永远不激活的分支代码路径（与 C3 上浮侧 δ⁺ 失效同型）",
-    "source": "用户提供的合同专用条款原文（存 OI-05.user_actual_words）"
+    "source": "用户提供的合同专用条款原文（存 OI-05.user_actual_words）",
+    "p_rev_handling": {
+     "ruled_at": "2026-09-16",
+     "known": "p_rev_i ≤ cap_i（唯一确定约束，用户裁定）；实际值由后续与审计单位、甲方共同确定，投标期不可知",
+     "nominal": "p_rev_i := cap_i（主求解名义值 = 唯一已知锚点）",
+     "sensitivity": "Z 对 p_rev_i 的弹性扫描，区间 [c_i, cap_i]；下界 c_i 为设计假设（变更估价含成本+利润），非用户断言，产出须显式标注",
+     "disclosure": "名义口径误差 = cap_i − p_rev_actual，逐项披露"
+    }
    }
   }
  ],

@@ -59,11 +59,18 @@ class TestCardArtifact(unittest.TestCase):
             self.assertTrue(c["basis"].strip(), c["id"])
 
     def test_symbols_bind_to_canonical_fields(self):
+        """符号绑定必须是字段字典里真实存在的字段名。
+
+        2026-09-17 实测：P0 曾误绑 ``p_i``（字段字典无此字段）。决策变量实为
+        ``p_bid``；``p0`` 是控制价/合同价，本项目取值等于 cap_i。字段名的事实源
+        在字段字典，规则卡只应引用——此处与 contract-check 第 13 判据双保险。
+        """
         sym = self.card["symbols"]
         self.assertEqual(sym["Q0"]["binding"], "q0")
         self.assertEqual(sym["Q1"]["binding"], "q1_point")
-        self.assertEqual(sym["P0"]["binding"], "p_i")
+        self.assertEqual(sym["P0"]["binding"], "p_bid")
         self.assertEqual(sym["P1"]["binding"], "p1")
+        self.assertEqual(sym["S"]["binding"], "settlement_amount")
 
     def test_rho_default_is_declared_as_mechanism(self):
         """ρ=0 必须被显式说明为机制层默认，而非项目数据缺省。"""

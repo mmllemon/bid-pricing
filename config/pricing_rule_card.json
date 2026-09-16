@@ -32,10 +32,10 @@
       "note": "不是限价清单量。判据 r = Q1/Q0。attribution 默认 DRAWING_DIFF（config/basis_declarations.json）。"
     },
     "P0": {
-      "name": "中标综合单价（决策变量）",
-      "binding": "p_i",
+      "name": "中标综合单价 = 合同单价（决策变量）",
+      "binding": "p_bid",
       "constraints": ["C2 上界 cap_i", "C4 地板 min(floor_i, cap_i)（ADR-0009 ACCEPT 时钳制）", "C5 非零", "C13 不平衡报价"],
-      "note": "不含增值税（2024 2.0.8）；与 c_i 同口径（D08）。"
+      "note": "不含增值税（2024 2.0.8）；与 c_i 同口径（D08）。**字段正名（2026-09-17）**：决策变量是 `p_bid`——`p0` 在字段字典里是『合同/控制价综合单价』，本项目 base_i := cap_i，故 p0 取值等于 cap_i，与 P0（中标价）不是同一个量。此处曾误写为 p_i（字段字典无此字段），由 contract-check 第 13 判据拦截。"
     },
     "P1": {
       "name": "调整后综合单价",
@@ -45,7 +45,7 @@
     },
     "S": {
       "name": "结算金额（未含税）",
-      "binding": "settlement_amount(...)",
+      "binding": "settlement_amount",
       "note": "rule_sets.settlement_amount 的返回值。"
     },
     "r": {

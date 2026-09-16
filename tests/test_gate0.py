@@ -419,9 +419,15 @@ class Gate0bTest(unittest.TestCase):
         report = check_gate_0b(registry, cdir)
         self.assertIs(report.status, Status.BLOCKED)
         blocked = {i.item for i in report.blockers}
-        for field in ("contract_ruleset_version", "cost_basis_spec",
-                      "cost_assumption_spec", "q1_assumption_spec", "profit_bridge_spec"):
-            self.assertIn(field, blocked)
+        # **不写死具体清单**：哪些制品已冻结会随推进变化（cost_basis_spec /
+        # cost_assumption_spec 已于 2026-09-17 冻结），断言的应是**机制**——
+        # 注册表里 version 仍为 null 的制品必须出现在阻塞项中，一个都不能漏。
+        unfrozen = {k for k, spec in (registry.get("gate_0b") or {}).items()
+                    if isinstance(spec, dict) and spec.get("kind") == "versioned"
+                    and not spec.get("hash")}
+        self.assertTrue(unfrozen, "若全部冻结，本用例的前提已变，须改写")
+        for field in unfrozen:
+            self.assertIn(field, blocked, f"{field} 未冻结却未阻塞")
         self.assertIn("approvals", blocked)
 
     def test_single_checkbox_cannot_freeze_business_caliber(self):

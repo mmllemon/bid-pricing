@@ -444,6 +444,55 @@ def _check_pricing_card_selection(config_dir: Path) -> list[CheckItem]:
     return out
 
 
+def _check_pricing_card_bindings(config_dir: Path, field_art: dict) -> list[CheckItem]:
+    """规则卡符号绑定 ↔ 字段字典字段名（第 13 判据）。
+
+    **存在理由（2026-09-17 实测）**：T00-01 写规则卡时把 P0 绑定为 ``p_i``——
+    字段字典里根本没有这个字段（决策变量实为 ``p_bid``，``p0`` 是控制价，
+    本项目取值等于 cap_i）。这类漂移与早前「13/15 位编码」「两种 GBT 写法」
+    同构：**改口径时只改了被讨论的那份文件**。字段字典是字段名的事实源，
+    规则卡只应引用、不应自造。
+
+    绑定值还须与 ``conventions.item_id_unique_key`` 一致检验之外的字段存在性
+    检查；``S`` / ``r`` 为派生量（无字段绑定）时跳过。
+    """
+    card_path = Path(config_dir) / "pricing_rule_card.json"
+    if not card_path.exists():
+        return [_bad("pricing_rule_card.symbol_bindings",
+                     "规则卡缺失，无法校验符号绑定")]
+    try:
+        card = json.loads(card_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [_bad("pricing_rule_card.symbol_bindings",
+                     f"规则卡 JSON 解析失败：{exc}")]
+
+    declared = {f.get("name") for f in (field_art.get("fields") or [])
+                if isinstance(f, dict) and f.get("name")}
+    out: list[CheckItem] = []
+    unknown: list[str] = []
+    bound: list[str] = []
+    for sym, spec in (card.get("symbols") or {}).items():
+        binding = (spec or {}).get("binding")
+        if not binding:
+            continue                      # S / r 等派生量：无字段绑定，跳过
+        if binding not in declared:
+            unknown.append(f"{sym}→{binding}")
+        else:
+            bound.append(f"{sym}→{binding}")
+
+    if unknown:
+        out.append(_bad(
+            "pricing_rule_card.symbol_bindings",
+            f"规则卡符号绑定了字段字典中不存在的字段：{sorted(unknown)}。"
+            "字段字典是字段名的事实源，规则卡只应引用（2026-09-17 实测："
+            "P0 曾误绑 p_i，实为 p_bid）",
+            actual=sorted(unknown), expected=sorted(declared)))
+    else:
+        out.append(_ok("pricing_rule_card.symbol_bindings",
+                       f"{len(bound)} 个符号绑定均存在于字段字典：{sorted(bound)}"))
+    return out
+
+
 def check_contract_consistency(config_dir: Path) -> list[CheckItem]:
     """执行全部跨制品一致性判据。返回判据列表（不抛异常，供闸门聚合）。"""
     try:
@@ -460,4 +509,5 @@ def check_contract_consistency(config_dir: Path) -> list[CheckItem]:
     out += _check_open_issues_naming(loaded["input_protocol_schema"])
     out += _check_code_alias_mirror(loaded["input_protocol_schema"])
     out += _check_pricing_card_selection(config_dir)
+    out += _check_pricing_card_bindings(config_dir, loaded["field_schema"])
     return out

@@ -72,8 +72,8 @@
      "key": "field_schema_version"
     }
    ],
-   "status": "not_started",
-   "note": ""
+   "status": "done",
+   "note": "2026-09-17 复核闭环（制品早已冻结，任务板滞后）：field_schema 36→38 字段。本轮补两处真缺口——①c_i=0 处理未表态（T00-02 四项要求之一，q0 已表态而 c_i 没有）→ 补：仅 PASS_THROUGH 项合法，OPTIMIZABLE 而 c_i=0 判 BLOCKED，且 0 与缺失必须机器可区分；②派生量 p1 / settlement_amount 未登记 → 补字段并新增 missing_policy 取值 DERIVED（值域增项，checker 仍以制品域为事实源）。另修契约矛盾：rho_plus/rho_minus 原为字段级 DEFAULT 0.0，与 conventions 声明的「合同口径类禁止 DEFAULT」自相矛盾 → 改 BLOCK，默认值改由 T00-01 规则卡提供（ADR-0010：机制层默认可审计，字段级静默填值不可）。tests/test_t0002_field_dictionary.py（15）：八属性齐全/值域/精度/唯一键与 key_spec 一致/百分比小数/零值表态/派生量。"
   },
   {
    "id": "T00-03",
@@ -220,8 +220,8 @@
    "summary": "明确 $C_{\\text{individual}}$ 的八项分解：`labor / material / equipment / subcontract / management / allocated_overhead / tax_and_fee_treatment / risk_reserve`；显式声明 $C_{…",
    "gate": "Gate 0a / 0b",
    "evidence": [],
-   "status": "not_started",
-   "note": "需造价专业取数（八项成本分解）"
+   "status": "done",
+   "note": "2026-09-17 完成 config/cost_basis_spec.json 成本构成规范：C_individual 八项分解（labor/material/equipment/subcontract/management/allocated_overhead/tax_and_fee_treatment/risk_reserve），显式声明 ≠ 社会平均成本；含 2024 科目重映射（规费拆分、安全生产措施费、综合单价不含税）、分摊规则与风险储备的显式声明要求、partial_declaration_policy=BLOCKED。Gate 0b 受控制品已冻结。"
   },
   {
    "id": "T00-10A",
@@ -276,8 +276,8 @@
    "summary": "与 T00-10A 同格式三要素：① 来源（成本库 / 历史结算 / 供应商询价 / 专家估计）；② 格式（点值 / 区间，须与 T00-02 字段字典一致）；③ 冻结时点（Gate 0b 前冻结）；产出 `cost_assumption_spec_version / hash / frozen_at`，与 T00-0…",
    "gate": "Gate 0a / 0b",
    "evidence": [],
-   "status": "not_started",
-   "note": "需人工：c_i 来源与冻结时点声明"
+   "status": "done",
+   "note": "2026-09-17 完成 config/cost_assumption_spec.json c_i 假设声明书（三要素：来源/格式/冻结时点）+ src/bidpricing/validation/cost_basis.py + CLI cost-check。来源词表 COST_DB/HISTORICAL_SETTLEMENT/SUPPLIER_QUOTE/EXPERT_ESTIMATE 且各有 required_when 附证要求；**未声明=BLOCKED 不静默补全**；说了但不在词表=FAIL（数据违反≠声明缺失）；未冻结=WARN（Gate 0b 前）。--declare-source/--evidence/--freeze 落值；**带病拒冻**（有阻断项时 --freeze 退出码 1）。当前真实状态：AS-01 BLOCKED（成本清单已提供但来源未声明，待用户一句话确认）。"
   },
   {
    "id": "T00-12",

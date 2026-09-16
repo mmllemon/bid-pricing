@@ -1,0 +1,104 @@
+{
+  "spec_id": "cost_basis_spec_v1",
+  "task": "T00-09",
+  "title": "成本口径证明包 —— 成本构成规范",
+  "role": "定义 c_i 是什么、由什么构成、能追溯什么。C4 地板、C6 亏损、C8/C9 全部引用本规范；**引用 c_i 的约束必须能追溯至本证明包的具体科目**。",
+  "frozen_at": "2026-09-17",
+  "applies_to_rule_set": ["GB/T50500-2024", "GB50500-2013"],
+
+  "cost_object": {
+    "key": "INDIVIDUAL",
+    "label": "投标人自身个别成本 C_individual",
+    "declaration": "**本模型中的『成本』一律指投标人自身个别成本 C_individual，不等于社会平均成本 C_market_average。**",
+    "why_it_matters": "两者差异常被当作『低于成本』的判据（2013 语境下的最低价否决）。本模型不判断投标是否有效，但**所有引用 c_i 的约束（C4/C6/C8/C9）必须能追溯至具体科目**——否则『成本』只是个没有证据的数字。",
+    "not_equal_to": {
+      "MARKET_AVERAGE": "社会平均成本。不得用于 C4 地板——用平均值当地板会把个别成本高于平均的项判成『必然亏损』。",
+      "QUOTED_PRICE": "供应商报价本身。报价须经询价记录或合同价证据才成为成本（见 components.material.evidence）。",
+      "FULLY_LOADED_CORPORATE": "公司层面完全成本。分摊口径见 allocated_overhead。"
+    }
+  },
+
+  "components": [
+    {
+      "key": "labor",
+      "label": "人工费",
+      "definition": "直接从事施工的工人薪酬及相关支出。",
+      "included": ["基本工资", "工资性补贴", "生产工人辅助工资", "职工福利费", "劳动保护费"],
+      "excluded": ["管理人员薪酬（属 management）"],
+      "rule_set_delta_2024": "**2024 删除『规费』**：原规费中生产工人的五险一金**并入人工费**。2013 口径下这部分在规费里，跨规则集比对时须先做科目重映射。",
+      "evidence": ["劳务分包合同 / 工资表 / 社保缴纳记录"]
+    },
+    {
+      "key": "material",
+      "label": "材料费",
+      "definition": "构成工程实体的原材料、辅助材料、构配件、零件、半成品的费用。",
+      "included": ["材料原价", "运杂费", "运输损耗费", "采购及保管费"],
+      "excluded": ["甲供材（属 pass_through，不进 c_i）", "暂估价材料未确定价部分"],
+      "evidence": ["供应商询价记录（日期、品牌、规格、含税/不含税）", "采购合同", "入库单"],
+      "note": "2024 物价调差设 5% 涨跌幅阈值（暂估价材料除外）——区间情景复检的阈值依据。"
+    },
+    {
+      "key": "equipment",
+      "label": "施工机具使用费",
+      "definition": "施工机械、仪器仪表的使用费及安拆费、场外运费。",
+      "included": ["折旧费", "大修理费", "经常修理费", "安拆费及场外运费", "人工费（机上司机）", "燃料动力费", "税费"],
+      "evidence": ["自有设备台账 / 租赁合同 / 台班记录"]
+    },
+    {
+      "key": "subcontract",
+      "label": "分包费",
+      "definition": "专业分包与劳务分包的合同价款。",
+      "included": ["专业分包工程款", "劳务分包工程款"],
+      "excluded": ["总包管理费（属 management）", "暂列金额"],
+      "evidence": ["分包合同 / 分包报价单"]
+    },
+    {
+      "key": "management",
+      "label": "企业管理费",
+      "definition": "施工企业组织施工生产和经营管理所需费用。",
+      "included": ["管理人员薪酬", "办公费", "差旅交通费", "固定资产使用费", "工具用具使用费", "劳动保险和职工福利费", "财产保险费", "财务费", "税金（房产税/车船税/印花税等）"],
+      "rule_set_delta_2024": "原规费中**管理人员**部分并入企业管理费。",
+      "evidence": ["企业费率标准 / 上年度实际费率"]
+    },
+    {
+      "key": "allocated_overhead",
+      "label": "分摊费用",
+      "definition": "不能直接归属到单项、需按约定基数分摊的费用。",
+      "included": ["临时设施费", "大型机械进出场分摊", "现场管理费分摊"],
+      "allocation_rule": "**分摊基数与费率必须显式声明**（按人工费 / 按直接费 / 按产值）。未声明分摊规则的分摊额不进 c_i。",
+      "evidence": ["分摊计算表（基数 × 费率）"]
+    },
+    {
+      "key": "tax_and_fee_treatment",
+      "label": "税金与费用处理",
+      "definition": "c_i 的**税口径**与不可竞争费的落点。",
+      "declaration": "c_i 与 p_i **同为不含增值税口径**（2024 2.0.8：综合单价不包括增值税）。增值税单列，不进入 c_i。",
+      "included_in_c_i": ["城市维护建设税、教育费附加等价内税（随企业管理费计入）"],
+      "excluded_from_c_i": ["增值税（单列）", "安全生产措施费中按规定的不可竞争部分（按项目声明落点）"],
+      "binding": "D08 税口径一致性校验；config/basis_declarations.json（本项目 cap/cost 两侧均 EXCL_VAT）",
+      "evidence": ["计税口径声明 / 综合单价分析表"]
+    },
+    {
+      "key": "risk_reserve",
+      "label": "风险储备",
+      "definition": "针对价格波动、工程量偏差、工期风险的预留。",
+      "included": ["材料价格波动预备（不超过约定上限）", "风险费"],
+      "declaration": "**风险储备是否计入 c_i 必须显式声明**：计入 → 抬高 C4 地板（更保守）；不计入 → 地板更低但 C6 亏损风险更大。两者都合法，但**不得默认**。",
+      "evidence": ["风险费率取值依据"]
+    }
+  ],
+
+  "aggregation": {
+    "formula": "c_i = labor + material + equipment + subcontract + management + allocated_overhead + tax_and_fee_treatment + risk_reserve（末两项可能为 0，但须声明是否为 0）",
+    "tolerance_note": "逐项明细求和与 c_i 的容差由 config/precision_profile.json 统一规定，本规范不另设容差。",
+    "partial_declaration_policy": "**BLOCKED**：只声明部分科目而其余留空，等于『成本口径未知』。八项中的每一项都必须有明确取值（含显式 0）。"
+  },
+
+  "traceability": {
+    "requirement": "每个 c_i 必须能落到本规范的具体科目；无法追溯的 c_i 在 C4/C6 中不得作为地板依据。",
+    "minimum_evidence": "至少一项 evidence 来源（询价记录 / 合同 / 结算 / 分摊表）。",
+    "audit_note": "WP6 报价表须披露 c_i 的构成口径摘要，供审计与甲方复核。"
+  },
+
+  "consumers": ["C4 成本地板", "C6 亏损总量约束", "C8/C9", "D07 亏损项判定", "WP6 报价表披露"]
+}

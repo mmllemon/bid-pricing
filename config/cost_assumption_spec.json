@@ -1,0 +1,83 @@
+{
+  "spec_id": "cost_assumption_spec_v1",
+  "task": "T00-11",
+  "title": "成本 c_i 假设声明书",
+  "role": "与 T00-10A（q¹ 假设声明书·格式篇）同构的三要素声明：来源 / 格式 / 冻结时点。未声明即 BLOCKED——成本是本模型的地板，来源不明等于地板悬空。",
+  "frozen_at": null,
+  "frozen_at_note": "**冻结时点：Gate 0b 之前**。当前为 null = 尚未冻结（未定态）。落值后由 `bidpricing freeze` 写入 hash 与 frozen_at。",
+  "cost_basis_ref": "config/cost_basis_spec.json（T00-09 八项分解，c_i 的构成口径）",
+  "three_elements": {
+    "source": {
+      "value": null,
+      "vocabulary": [
+        "COST_DB",
+        "HISTORICAL_SETTLEMENT",
+        "SUPPLIER_QUOTE",
+        "EXPERT_ESTIMATE"
+      ],
+      "vocabulary_definition": {
+        "COST_DB": "企业成本库 / 内部定额库",
+        "HISTORICAL_SETTLEMENT": "历史项目结算数据",
+        "SUPPLIER_QUOTE": "供应商询价（须有询价日期与品牌规格）",
+        "EXPERT_ESTIMATE": "造价专家估计"
+      },
+      "multi_source_policy": "允许多来源加权，但**须逐来源标注权重与样本信息**；不得写『综合确定』这种无法复核的表述。",
+      "required_when": {
+        "COST_DB": [
+          "库版本/更新时间",
+          "覆盖项目类型"
+        ],
+        "HISTORICAL_SETTLEMENT": [
+          "样本量",
+          "时间跨度",
+          "覆盖项目类型"
+        ],
+        "SUPPLIER_QUOTE": [
+          "询价日期",
+          "品牌规格",
+          "含税/不含税口径"
+        ],
+        "EXPERT_ESTIMATE": [
+          "估计人/角色",
+          "估计依据"
+        ]
+      },
+      "status": "UNDETERMINED",
+      "status_note": "**待用户声明（2026-09-17）**：真实成本清单已提供（成本/西永L分区…成本清单.xlsx，sha256 7a8110d65b24），但其单价属于上列哪一来源，模型不得代为推断——不同来源的可信度与复核路径完全不同。"
+    },
+    "format": {
+      "value": "POINT",
+      "allowed": [
+        "POINT",
+        "INTERVAL",
+        "SCENARIO_SET"
+      ],
+      "field_binding": "c_i（config/field_schema.json：type=number / unit=元 / precision=2 / missing_policy=BLOCK）",
+      "consistency_rule": "格式必须与字段字典一致——区间/场景集时须用 q1_lo/q1_hi 同类字段族，不得在 c_i 单字段里塞区间文本。",
+      "status": "RESOLVED",
+      "status_note": "当前成本清单为单一成本单价 → 点估计（POINT）。"
+    },
+    "freeze_timing": {
+      "value": "BEFORE_GATE_0B",
+      "rule": "Gate 0b 之前冻结；冻结后改动 c_i 必须留变更记录（谁、何时、为什么）。",
+      "status": "RESOLVED"
+    }
+  },
+  "per_item_override": {
+    "mechanism": "逐项来源可覆盖全局声明（如仅电缆项采用供应商询价）。",
+    "location": "匹配/清洗产出的行级字段，或独立 JSON（item_id → source）。",
+    "policy": "逐项覆盖**只增不减**：未列出的项沿用全局 source；列出但取值不在词表内 → BLOCKED。",
+    "current": "未设置（全局 source 尚为未定态，逐项覆盖无从谈起）"
+  },
+  "undetermined_consequence": {
+    "level": "BLOCKED",
+    "reason": "c_i 是 C4 地板的唯一依据。来源未声明时，『地板』的可靠性无从判断——这与『地板取多少』是两个问题：取值可以有，但**没有来源的取值不能作为约束依据**。",
+    "not_silently_defaulted": "禁止按『成本库』等任一取值静默补全（ADR-0004：未定态不得降级为默认值）。"
+  },
+  "cross_checks": [
+    "与 T00-09 八项分解一致：声明了来源的成本仍须能落到具体科目",
+    "与 D08 一致：c_i 与 p_i 同为不含增值税口径",
+    "与 basis_declarations.json 一致：本项目 cap/cost 两侧均 EXCL_VAT"
+  ],
+  "status_note_rollback": "2026-09-17：曾由 Agent 代为落值 SUPPLIER_QUOTE，已回滚——成本来源属用户商务声明，模型不得代为断定（ADR-0007）。待用户执行 `cost-check --declare-source ...` 或口头声明后落值。"
+}

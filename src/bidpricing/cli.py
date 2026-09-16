@@ -762,6 +762,20 @@ def build_parser() -> argparse.ArgumentParser:
                            "（分支只依赖 r=Q1/Q0，与 P0 无关）")
     p_pc.set_defaults(func=cmd_pricing_card)
 
+    # ---- T00-09 / T00-11 成本口径 ----------------------------------------
+    p_cc = sub.add_parser(
+        "cost-check", help="T00-09 成本口径证明包 + T00-11 c_i 假设声明书校验")
+    p_cc.add_argument("--declare-source", default=None,
+                      choices=["COST_DB", "HISTORICAL_SETTLEMENT",
+                               "SUPPLIER_QUOTE", "EXPERT_ESTIMATE"],
+                      help="声明 c_i 来源并落值（写入假设声明书，需 --actor）")
+    p_cc.add_argument("--actor", default=None, help="声明人（与 --declare-source 同用）")
+    p_cc.add_argument("--evidence", action="append", default=[],
+                      help="来源证据条目（可多次），如 '询价日期=2026-09-10'")
+    p_cc.add_argument("--freeze", action="store_true",
+                      help="冻结假设声明书（写 frozen_at；须先解除全部阻断项）")
+    p_cc.set_defaults(func=cmd_cost_check)
+
     return parser
 
 
@@ -1118,6 +1132,79 @@ def cmd_import_verify(args) -> int:
               f"file_version={r.record.file_version} "
               f"导入于 {r.record.import_timestamp}")
     return 0 if r.status == "PASS" else 1
+
+
+def cmd_cost_check(args) -> int:
+    """T00-09 / T00-11：成本口径与 c_i 来源声明校验（可顺带落值声明）。"""
+    import json as _json
+    from datetime import datetime as _dt, timezone as _tz
+    from pathlib import Path as _P
+
+    from .validation.cost_basis import check_cost_basis
+
+    _NL = chr(10)
+    cdir = config_dir()
+
+    if args.declare_source:
+        spec_path = cdir / "cost_assumption_spec.json"
+        if not spec_path.exists():
+            print(f"■ 假设声明书缺失：{spec_path}")
+            return 1
+        spec = _json.loads(spec_path.read_text(encoding="utf-8"))
+        src = spec.setdefault("three_elements", {}).setdefault("source", {})
+        src["value"] = args.declare_source
+        src["status"] = "RESOLVED"
+        evidence = {}
+        for pair in args.evidence:
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                evidence[k.strip()] = v.strip()
+        src["declared_evidence"] = evidence
+        src["declared_by"] = args.actor or "UNKNOWN"
+        src["declared_at"] = _dt.now(_tz.utc).isoformat()
+        spec_path.write_text(
+            _json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f" ✓ 已落值 c_i 来源 = {args.declare_source}"
+              f"（声明人：{src['declared_by']}）")
+        if evidence:
+            print(f"   证据：{evidence}")
+        need = (src.get("required_when") or {}).get(args.declare_source) or []
+        lack = [k for k in need if k not in evidence]
+        if lack:
+            print(f" ⚠ 该来源要求附证：{need}；仍缺：{lack}")
+
+    if args.freeze:
+        spec_path = cdir / "cost_assumption_spec.json"
+        if not spec_path.exists():
+            print(f"■ 假设声明书缺失：{spec_path}")
+            return 1
+        probe = check_cost_basis(cdir)
+        if probe.blocking:
+            print("■ 拒绝冻结：尚有阻断项 " +
+                  "、".join(r.rule_id for r in probe.blocking) +
+                  "——带病冻结等于把未定态伪装成已定态")
+            return 1
+        spec = _json.loads(spec_path.read_text(encoding="utf-8"))
+        spec["frozen_at"] = _dt.now(_tz.utc).isoformat()
+        spec_path.write_text(
+            _json.dumps(spec, ensure_ascii=False, indent=2) + _NL,
+            encoding="utf-8")
+        print(f" ✓ 已冻结：frozen_at = {spec['frozen_at']}")
+
+    rep = check_cost_basis(cdir)
+    for r in rep.results:
+        mark = {"PASS": "✓", "WARN": "⚠", "BLOCKED": "■",
+                "FAIL": "■", "SKIP": "–"}[r.status]
+        print(f" {mark} [{r.status:>7}] {r.rule_id}  {r.detail}")
+        for e in r.evidence:
+            print(f"            · {e}")
+    s = rep.to_dict()["summary"]
+    print(f"\n 汇总：{rep.status}   （" +
+          " / ".join(f"{k} {v}" for k, v in sorted(s.items())) + "）")
+    if rep.status != "PASS":
+        print(" 阻断项（c_i 不得进入 C4/C6 约束直至解除）：" +
+              "、".join(r.rule_id for r in rep.blocking))
+    return 0 if rep.status == "PASS" else 1
 
 
 def _pricing_card_branch_scan(card: dict, override: dict | None, path) -> int:

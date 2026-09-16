@@ -35,6 +35,8 @@ from .contracts.consistency import check_contract_consistency
 from .contracts.scope_impact import compare_scopes
 from .contracts.selector import ruleset_self_test, select_rule_set
 from .gates.gate0 import evaluate_gate_0
+from .io.boq import parse_listing, write_report
+from .io.xlsx import XlsxError
 from .identity import (
     check_component_sum,
     check_identity,
@@ -658,6 +660,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_cc.add_argument("--json", action="store_true", help="输出 JSON")
     p_cc.set_defaults(func=cmd_contract_check)
 
+    # ------------------------------------------------------------ parse-boq
+    p_pb = sub.add_parser(
+        "parse-boq",
+        help="T01-00B：解析清单 xlsx 为规范行（解析日志 + 字段映射报告 + 失败样本清单）",
+    )
+    p_pb.add_argument("xlsx", help="清单文件路径（限价/报价/成本清单同构）")
+    p_pb.add_argument("--project-id", required=True,
+                      help="项目编号（主键第一段；身份命名空间，不携带计价规则）")
+    p_pb.add_argument("--out-dir", default=None,
+                      help="三项产出的落盘目录（默认 docs/parsed/<文件名>）")
+    p_pb.set_defaults(func=cmd_parse_boq)
+
     return parser
 
 
@@ -693,6 +707,61 @@ def cmd_contract_check(args) -> int:
     print(f" 汇总：{worst.value}   （PASS {sum(1 for i in items if i.status is Status.PASS)}"
           f" / 共 {len(items)}）")
     return 0 if worst is Status.PASS else 1
+
+
+def cmd_parse_boq(args) -> int:
+    """T01-00B：清单 xlsx → 规范行 + 三项产出。
+
+    解析器只做机械信号命中：命不中的行进失败样本清单并给原因，
+    **不猜列、不补数、不静默丢弃**——数值化与清洗属 T01-03，不在此处。
+    """
+    from pathlib import Path as _P
+
+    out_dir = _P(args.out_dir) if args.out_dir else (
+        repo_root() / "docs" / "parsed" / _P(args.xlsx).stem
+    )
+    try:
+        report = parse_listing(args.xlsx, args.project_id)
+    except XlsxError as exc:
+        print(f"■ 解析失败：{exc}")
+        return 1
+
+    print("=" * 78)
+    print(f"清单解析：{_P(args.xlsx).name}")
+    print("=" * 78)
+    print(f" sha256[:12] = {report.source_sha256}   project_id = {args.project_id}")
+    for s in report.sheets:
+        print(f" · {s['sheet_name']}")
+        print(f"     角色 {s['role']} ｜ 单位工程「{s['unit_work']}」｜ {s['state']}")
+        mapping = report.column_mapping.get(s["sheet_name"])
+        if mapping:
+            print("     列映射: " + "  ".join(
+                f"{k}←{m['header']}" for k, m in mapping.items()))
+    print("-" * 78)
+    print(" " + report.summary_line())
+
+    by_kind: dict[str, int] = {}
+    for r in report.rows:
+        by_kind[r.code_kind] = by_kind.get(r.code_kind, 0) + 1
+    if by_kind:
+        print(" 编码形态: " + "、".join(f"{k} {v}" for k, v in sorted(by_kind.items()))
+              + "（位数不参与合法性判定，UNKNOWN 不阻塞、交人工确认）")
+
+    if report.failures:
+        print(f" 失败样本（前 {min(10, len(report.failures))} 条 / 共 "
+              f"{len(report.failures)}）:")
+        for f in report.failures[:10]:
+            print(f"   ■ {f.source_sheet} r{f.source_row}: {f.reason}")
+    if report.notes:
+        for n in report.notes:
+            print(f"   ! {n}")
+
+    paths = write_report(report, out_dir)
+    print("-" * 78)
+    print(" 三项产出：")
+    for k, v in paths.items():
+        print(f"   {k:>9}: {v}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

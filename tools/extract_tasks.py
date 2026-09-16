@@ -72,7 +72,7 @@ SEED_STATUS: dict[str, dict] = {
     "T00-11": {"status": "not_started", "note": "需人工：c_i 来源与冻结时点声明"},
     "T00-12": {"status": "not_started", "note": "依赖 T00-06B、T00-09"},
     "T00-06B": {"status": "partial", "note": "恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落"},
-    "T01-00B": {"status": "ready", "note": "Gate 0a 已放行；列结构实测口径已就位，且已有 1 份真实配对样本可作输入"},
+    "T01-00B": {"status": "done", "note": "解析器 src/bidpricing/io/（零依赖 xlsx 读取器 + 表号/别名双键识别 + 双行表头合并 + 分节标题四信号判据）；三项产出经 CLI parse-boq 在真实配对样本上验证（82 行/0 失败/加权下浮 8.0084% 与 pair.json 交叉印证）；tests/test_io_boq.py 19 项"},
     "T01-02C": {"status": "partial", "note": "首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定"},
 }
 

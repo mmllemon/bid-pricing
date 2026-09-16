@@ -302,6 +302,50 @@ def _check_open_issues_naming(ip_art: dict) -> list[CheckItem]:
 # --------------------------------------------------------------------------- 入口
 
 
+def _check_code_alias_mirror(input_art: dict) -> list[CheckItem]:
+    """**代码侧列名别名表必须与契约逐字一致**。
+
+    ``io/boq.py::COLUMN_ALIASES`` 是契约 ``listing_structure.column_aliases``
+    的代码侧投影。两处独立存在就有漂移风险——而解析器行为直接由代码侧决定，
+    契约改了代码没改 = 解析器按旧口径工作还以为自己没错。
+    """
+    from ..io.boq import COLUMN_ALIASES  # 局部导入：避免无谓的加载链
+
+    contract_aliases = (input_art.get("listing_structure") or {}).get(
+        "column_aliases"
+    ) or {}
+    drift: list[str] = []
+    for logical, code_aliases in sorted(COLUMN_ALIASES.items()):
+        node = contract_aliases.get(logical)
+        if not isinstance(node, dict):
+            drift.append(f"{logical}: 契约无此逻辑字段，代码侧却有 {list(code_aliases)}")
+            continue
+        contract_list = tuple(node.get("aliases") or ())
+        if tuple(code_aliases) != contract_list:
+            drift.append(
+                f"{logical}: 代码={list(code_aliases)} vs 契约={list(contract_list)}"
+            )
+    contract_only = sorted(
+        k for k in contract_aliases
+        if isinstance(contract_aliases.get(k), dict)
+        and (contract_aliases[k].get("aliases") is not None)
+        and k not in COLUMN_ALIASES
+    )
+    if drift or contract_only:
+        return [_bad(
+            "io.column_aliases_mirror",
+            "代码侧列名别名表与契约不一致（解析器实际按代码侧工作）："
+            + "；".join(drift)
+            + (f"；契约声明但代码未实现：{contract_only}" if contract_only else ""),
+            actual={"drift": drift, "contract_only": contract_only},
+            expected="两侧逐字一致",
+        )]
+    return [_ok(
+        "io.column_aliases_mirror",
+        f"代码侧别名表与契约逐字一致（{len(COLUMN_ALIASES)} 个逻辑字段）",
+    )]
+
+
 def check_contract_consistency(config_dir: Path) -> list[CheckItem]:
     """执行全部跨制品一致性判据。返回判据列表（不抛异常，供闸门聚合）。"""
     try:
@@ -316,4 +360,5 @@ def check_contract_consistency(config_dir: Path) -> list[CheckItem]:
     out += _check_enum_agreement(loaded["field_schema"])
     out += _check_listing_structure(loaded["input_protocol_schema"])
     out += _check_open_issues_naming(loaded["input_protocol_schema"])
+    out += _check_code_alias_mirror(loaded["input_protocol_schema"])
     return out

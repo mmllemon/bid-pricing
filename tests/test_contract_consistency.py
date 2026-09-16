@@ -57,7 +57,9 @@ class RealRepoTest(_MutatingCase):
         items = self._check()
         bad = [i for i in items if i.status is not Status.PASS]
         self.assertEqual(bad, [], [i.to_dict() for i in bad])
-        self.assertEqual(len(items), 10)
+        # 10 项制品间判据 + 1 项「代码侧别名表 ↔ 契约」镜像判据
+        self.assertEqual(len(items), 11)
+        self.assertIn("io.column_aliases_mirror", {i.item for i in items})
 
     def test_missing_artifact_blocks_not_vacuous(self):
         (self.cdir / ARTIFACTS["constraint_schema"]).unlink()

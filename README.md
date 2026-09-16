@@ -111,6 +111,9 @@ PYTHONPATH=src python -m bidpricing.cli status --json
 
 # 跨制品一致性（拦截「两份已冻结制品对同一规则说法相反」）
 PYTHONPATH=src python -m bidpricing.cli contract-check
+
+# T01-00B 清单解析（限价/报价/成本清单同构；产出解析日志+字段映射报告+失败样本清单）
+PYTHONPATH=src python -m bidpricing.cli parse-boq <file.xlsx> --project-id <pid>
 ```
 
 快照内容：版本锚点（git commit / tag / 工作区状态）、三个闸门的状态与阻塞项、

@@ -19,7 +19,7 @@
   "fields": [
     {"name": "project_id", "label": "项目编号", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "主键组成部分"},
     {"name": "unit_work", "label": "单位工程", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "多标段/多单位工程时的区分维度"},
-    {"name": "item_id", "label": "清单项目编码", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "编码补零见 T01-03；13/15 位编码体系由 code_system 区分"},
+    {"name": "item_id", "label": "清单项目编码", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "编码补零见 T01-03。**编码位数不参与合法性判定**，合法性只要求 item_id 在同一 (project_id, unit_work) 内唯一；code_system 由用户显式声明，不得由位数或前缀推断——见 input_protocol_schema.code_identity_policy（本注释原写「13/15 位编码体系由 code_system 区分」，系已撤销的旧口径，2026-09-16 修正）"},
     {"name": "item_name", "label": "项目名称", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "WARN", "note": null},
     {"name": "item_feature", "label": "项目特征描述", "type": "string", "unit": null, "range": null, "default": null, "nullable": true, "precision": null, "missing_policy": "WARN", "note": "C11 离散度分组时可作为分组键"},
     {"name": "unit", "label": "计量单位", "type": "string", "unit": null, "range": null, "default": null, "nullable": false, "precision": null, "missing_policy": "BLOCK", "note": "单位换算的基准；D3 判据要求比较换算后等价值"},

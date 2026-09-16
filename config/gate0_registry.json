@@ -8,7 +8,7 @@
       "artifact_path": "ruleset_selector_spec.json",
       "version": "sha256:0dd335b5a8ae",
       "hash": "sha256:0dd335b5a8ae",
-      "frozen_at": "2026-09-16T07:11:53+00:00",
+      "frozen_at": "2026-09-16T08:12:52+00:00",
       "note": "T00-08 规格制品"
     },
     "field_schema_version": {
@@ -16,7 +16,7 @@
       "artifact_path": "field_schema.json",
       "version": "sha256:26b940c21e0b",
       "hash": "sha256:26b940c21e0b",
-      "frozen_at": "2026-09-16T07:11:53+00:00",
+      "frozen_at": "2026-09-16T08:12:52+00:00",
       "note": "T00-02 字段字典"
     },
     "constraint_schema_version": {
@@ -24,7 +24,7 @@
       "artifact_path": "constraint_schema.json",
       "version": "sha256:ebed21c439e8",
       "hash": "sha256:ebed21c439e8",
-      "frozen_at": "2026-09-16T07:11:53+00:00",
+      "frozen_at": "2026-09-16T08:12:52+00:00",
       "note": "T00-03 约束字典 C1–C12"
     },
     "precision_profile_version": {
@@ -32,7 +32,7 @@
       "artifact_path": "precision_profile.json",
       "version": "sha256:6ce483e8d221",
       "hash": "sha256:6ce483e8d221",
-      "frozen_at": "2026-09-16T07:11:53+00:00",
+      "frozen_at": "2026-09-16T08:12:52+00:00",
       "note": "T00-04 精度与容差策略"
     },
     "architecture_decision_version": {
@@ -40,7 +40,7 @@
       "artifact_path": "architecture_decision.json",
       "version": "sha256:3601adeed46c",
       "hash": "sha256:3601adeed46c",
-      "frozen_at": "2026-09-16T07:11:53+00:00",
+      "frozen_at": "2026-09-16T08:12:52+00:00",
       "note": "T00-05 三层分割架构地位"
     },
     "competitiveness_classification": {
@@ -48,15 +48,15 @@
       "artifact_path": "competitiveness_classification.json",
       "version": "sha256:2913378715d5",
       "hash": "sha256:2913378715d5",
-      "frozen_at": "2026-09-16T07:11:53+00:00",
+      "frozen_at": "2026-09-16T08:12:52+00:00",
       "note": "T00-06 可竞争性**分类规则书**（角色集合 + 启发式 + 覆盖范围 + 外生常量）。本制品是跨项目复用的机制，不含任何具体项目的分类结果——逐项落值在 phase_0.project_classification_table"
     },
     "input_protocol_schema": {
       "kind": "versioned",
       "artifact_path": "input_protocol_schema.json",
-      "version": "sha256:41dc4f1bbd6e",
-      "hash": "sha256:41dc4f1bbd6e",
-      "frozen_at": "2026-09-16T07:11:53+00:00",
+      "version": "sha256:808f482d7d09",
+      "hash": "sha256:808f482d7d09",
+      "frozen_at": "2026-09-16T08:12:52+00:00",
       "note": "T01-00A 输入协议 Schema（v3.2.1 由 WP1 移入 WP0 以解 Gate 0a 死锁）"
     },
     "adjustment_scope": {

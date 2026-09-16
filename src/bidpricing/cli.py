@@ -15,6 +15,7 @@
         --rationale "招标文件 §12.3 未约定分段，按 2024 字面口径"
     PYTHONPATH=src python -m bidpricing.cli options clear --key adjustment_scope
     PYTHONPATH=src python -m bidpricing.cli scope-impact --q0 100 --q1 130 --p0 10
+    PYTHONPATH=src python -m bidpricing.cli contract-check
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from .artifact import (
     parse_records,
     save_registry,
 )
+from .contracts.consistency import check_contract_consistency
 from .contracts.scope_impact import compare_scopes
 from .contracts.selector import ruleset_self_test, select_rule_set
 from .gates.gate0 import evaluate_gate_0
@@ -53,7 +55,7 @@ from .selection_options import (
 from .status import collect as collect_status
 from .status import render as render_status
 from .status import write_state
-from .states import Status
+from .states import Status, aggregate
 
 _STATUS_MARK = {"PASS": "PASS", "WARN": "WARN", "FAIL": "FAIL", "BLOCKED": "BLOCKED"}
 
@@ -169,17 +171,27 @@ def cmd_gate_check(args) -> int:
         print("Phase 0 输入门未通过：以下项目级输入尚未就位 —— "
               f"{', '.join(blocked_now)}")
         print("      注意：这**不阻塞** Gate 0a 与 WP1/WP2/WP3。")
-        print("      它们都是「求解启动前必须有、开发期不需要」的输入：")
-        print("      · 选择项取值未定 → 两条分支都要求被实现，选择只决定哪条生效")
-        print("      · 分类声明未就位 → 它随项目而异，规则书（分类机制）已冻结即可开工")
-        print("      落值命令：")
-        print("      bidpricing options set --key adjustment_scope "
-              "--value <FULL|SEGMENT> --rule-set <rid> --rationale \"...\"")
-        print("      分类声明：填 config/project_classification_table.json —— "
-              "逐张清单声明**缺省角色** + 登记**例外**。")
-        print("      注意：不需要逐行填分类（清单内缺省即可竞争项，例外由清单自带列机械命中）；")
-        print("            exceptions / external_constants 取 [] 是合法结论，"
-              "但 key 必须存在——缺失会被判「没声明」。")
+        print("      它们都是「求解启动前必须有、开发期不需要」的输入——")
+        print("      机制（规则集/字段/分类规则书）已冻结即可开工，只有**取值/数据**被卡住。")
+        # 提示只针对**实际**阻塞项输出，避免提示指向一个已经做完的动作
+        # （历史上出现过：adjustment_scope 已落值，提示仍写「选择项取值未定」）。
+        if "adjustment_scope" in blocked_now:
+            print("      · 选择项取值未定（adjustment_scope）→ 两条分支都要求被实现，"
+                  "选择只决定哪条生效")
+            print("        落值：bidpricing options set --key adjustment_scope "
+                  "--value <FULL|SEGMENT> --rule-set <rid> --rationale \"...\"")
+            print("        撤销：bidpricing options clear --key adjustment_scope")
+        if "project_classification_table" in blocked_now:
+            print("      · 分类声明未就位 → 它随项目而异，规则书（分类机制）已冻结即可开工")
+            print("        落地：填 config/project_classification_table.json —— "
+                  "逐张清单声明**缺省角色** + 登记**例外**。")
+            print("        注意：不需要逐行填分类（清单内缺省即可竞争项，例外由清单自带列机械命中）；")
+            print("              exceptions / external_constants 取 [] 是合法结论，"
+                  "但 key 必须存在——缺失会被判「没声明」。")
+        other = [b for b in blocked_now
+                 if b not in ("adjustment_scope", "project_classification_table")]
+        if other:
+            print(f"      · 其余未就位项：{', '.join(other)}（无内置提示，见制品说明）")
 
     return 0 if gate_0a_ok else 1
 
@@ -638,7 +650,49 @@ def build_parser() -> argparse.ArgumentParser:
     p_id.add_argument("--json", action="store_true", help="输出 JSON")
     p_id.set_defaults(func=cmd_identity_check)
 
+    # ------------------------------------------------------ contract-check
+    p_cc = sub.add_parser(
+        "contract-check",
+        help="跨制品契约一致性判据（拦截「同一规则在两份制品里说法不同」）",
+    )
+    p_cc.add_argument("--json", action="store_true", help="输出 JSON")
+    p_cc.set_defaults(func=cmd_contract_check)
+
     return parser
+
+
+def cmd_contract_check(args) -> int:
+    """跨制品契约一致性判据。
+
+    与 ``gate-check`` 的分工：``gate-check`` 判「制品是否就绪、能不能开工」；
+    本命令判「已就绪的制品**彼此之间**是否自相矛盾」。后者是历史上多次靠人眼
+    才发现的失效模式（例如字段字典写 13/15 位体系、输入协议写位数不参与判定），
+    因此必须机械化——人的纪律只能降低概率，不能拦截。
+    """
+    items = check_contract_consistency(config_dir())
+    worst = aggregate(i.status for i in items)
+
+    if args.json:
+        print(json.dumps(
+            {"worst": worst.value, "checks": [i.to_dict() for i in items]},
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return 0 if worst is Status.PASS else 1
+
+    print("=" * 78)
+    print("跨制品契约一致性检查")
+    print("=" * 78)
+    for it in items:
+        mark = {"PASS": "✓", "WARN": "!", "FAIL": "✗", "BLOCKED": "■"}[it.status.value]
+        print(f" {mark} [{it.status.value:>7}] {it.item}")
+        print(f"      {it.reason}")
+        if it.status is not Status.PASS and it.actual is not None:
+            print(f"      actual = {json.dumps(it.actual, ensure_ascii=False, default=str)[:300]}")
+            print(f"      expect = {json.dumps(it.expected, ensure_ascii=False, default=str)[:300]}")
+    print("-" * 78)
+    print(f" 汇总：{worst.value}   （PASS {sum(1 for i in items if i.status is Status.PASS)}"
+          f" / 共 {len(items)}）")
+    return 0 if worst is Status.PASS else 1
 
 
 def main(argv: list[str] | None = None) -> int:

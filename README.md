@@ -108,6 +108,9 @@ PYTHONPATH=src python -m bidpricing.cli status
 
 # 机器可读
 PYTHONPATH=src python -m bidpricing.cli status --json
+
+# 跨制品一致性（拦截「两份已冻结制品对同一规则说法相反」）
+PYTHONPATH=src python -m bidpricing.cli contract-check
 ```
 
 快照内容：版本锚点（git commit / tag / 工作区状态）、三个闸门的状态与阻塞项、
@@ -121,6 +124,13 @@ PYTHONPATH=src python -m bidpricing.cli status --json
 | **Gate 0a** | 机制：规则集、字段字典、分类规则书是否冻结 | WP1/WP2/WP3 开发 |
 | **Phase 0 输入门** | 取值/数据：`adjustment_scope` 取值、项目级分类声明 | **仅**求解启动 |
 | **Gate 0b** | 商务口径与合规：成本口径、假设声明书、桥接表 | WP4 求解层 |
+
+另有两条**与闸门正交**的判据，不判「能不能开工」，判「已就绪的制品是否可信」：
+
+| 判据 | 判什么 |
+|---|---|
+| `identity-check` | 数值：对真实样本执行总价恒等式与输入保真校验 |
+| `contract-check` | 一致性：字段字典 / 约束字典 / 精度档案 / 输入协议 / 分类规则书之间是否自相矛盾 |
 
 ## 跨会话延续机制
 

@@ -10,6 +10,105 @@
 
 ## [未发布]
 
+## [bound-clauses-v1] — 2026-09-16
+
+### 单项下界的两类真实依据；输入 A 结构按真实文件固化
+
+**背景**：用户指出两件事，都成立——
+
+1. 用户实际提供的限价清单**就是**那份真实文件的结构（只是清单项与数据会不同）。
+   此前所有输入口径都是照 3 份**示例模板**推的，而那些示例是**结算期**的表格。
+2. 记录者把用户「只会限制①各项单价②整个项目总价」外推成了
+   「用户明确：**没有给出单价下限**」。用户否认：原意是**有最高限价**，
+   且**单项报价不能为 0**，且**有时有不平衡报价条款（如 ±50%）**。
+
+#### 修正（本里程碑最重要的一条）
+- `input_protocol_schema.open_issues[OI-04]` 重写，并**永久保留纠正留痕**：
+  `correction.what_was_wrong` / `user_actual_words` / `failure_mode`。
+  撤销的旧结论不删除——它解释了为什么 C3 曾经按 `δ⁻` 单来源设计。
+- 新增 `docs/adr/ADR-0007-沉默不是断言.md`：把「用户未提及」记成「用户已声明为无」
+  是一类结构性失效，与 ADR-0004（未定态 = key 完全缺失）同源——
+  那条管机器，本条管人。
+
+#### 变更 — 输入 A 结构固化
+- `input_protocol_schema.listing_structure`（新增）：按真实文件固化
+  6 张表（表-04 / 表-09 分部分项 / 表-09 技术措施 / 表-10 组织措施 / 表-11 其他 / 表-12 规费税金）、
+  双行表头、**列名别名表**、分节标题行、单位工程维度、空值口径、总价限价位置。
+  **关键修正**：真实限价清单单价列名是「**综合单价**」，而示例模板是「**最高限价**」
+  → **禁止硬编码列名**，必须走「表号 + 别名集合」双键识别。
+- 新增口径 **空值 ≠ 缺列/缺行**：限价侧普遍「列在、行在、值空」
+  （合价列存在但为空、合计行存在但为空）。与 ADR-0006 同源。
+
+#### 变更 — 约束层
+- `constraint_schema.C3` **重定义**：由 `p_i >= base_i(1-δ⁻)` 单一来源
+  改为**多来源取大**。δ⁻ 只在招标文件明示幅度时参与，否则不得编造；
+  δ⁻ 取 0 会把报价钉死在限价上，是荒谬解。
+- `constraint_schema.C5` **由 P1 升为 P0 且不可关**：语义由「非负性（求解器保险）」
+  改为「**单项报价不得为零**」——用户明确这是招标条款，`p_i = 0` 算术上满足
+  `p_i >= 0` 却直接违反招标文件。
+- `constraint_schema.C13`（**新增**）：不平衡报价幅度约束（条件性）。
+  声明 **4 条机制分支**（`BID_VALIDITY` / `SETTLEMENT_ADJUSTMENT` / `SCORING` / `NONE`）——
+  前者是 `X_opt` 硬约束，中者是 `R_i(·)` 的改造而**不约束** `X_opt`，二者落点完全不同。
+  机制进 Gate 0a（两分支都要实装），取值属 Phase 0。
+- `constraint_schema.C4` 注释更新：显式声明它引用的是**重定义后**的 C3。
+
+#### 新增 — 字段
+- `field_schema` 新增 5 字段：`zero_price_prohibited`、`unbalanced_clause`（整块声明）、
+  `unbalanced_reference`、`unbalanced_tolerance`、`unbalanced_mechanism`。
+  全部 `missing_policy=BLOCK` 且**无默认值**。
+
+#### 新增 — 第四条验证环 `contract-check`
+- `src/bidpricing/contracts/consistency.py` — **跨制品一致性判据**（10 项）。
+  与 `gate-check` 正交：后者判「制品是否被改动」，本判据判「制品彼此是否自洽」。
+  一份**未被改动**的制品集照样可以自相矛盾——本项目已实测两次，两次都靠人眼发现：
+  ① `field_schema` 写「13/15 位体系」而 `input_protocol_schema` 写「位数不参与判定」；
+  ② `code_system.range` 与 `rule_set_id.range` 两个**本应相等**的枚举两种写法。
+- 核心判据 `constraint_schema.inputs_declared`：约束引用的每个输入必须已在
+  字段字典中声明（拦截「新增约束忘了加字段」）。
+- 判据 `field_schema.enum_agreement` **必须比对原始字符串，不得先归一化**——
+  归一化会把事故里的两种写法折叠成同一个值，等于判据自我取消。
+- **反向断言**：`test_historical_code_system_spelling_bug_blocks` 精确复现事故写法，
+  锁住该判据不得退化为归一化比对。
+- `bidpricing contract-check` 子命令；`README` / `GOVERNANCE` 同步（三环 → 四环）。
+
+#### 清理
+- `tools/xlsx_dump.py` / `tools/xlsx_compact.py` — 零依赖 xlsx 读取器
+  （本机无 openpyxl / pandas；xlsx 即 zip + XML，直接解析即可）。
+- `cli.py` gate-check 的提示文案改为**只针对实际阻塞项**输出——
+  原先 `adjustment_scope` 已落值却仍打印「选择项取值未定」，指向一个不存在的动作
+  （与 `d3f358e` 修的是同一类毛病）。
+
+#### 制品重新冻结
+| 制品 | 旧 hash | 新 hash |
+|---|---|---|
+| `field_schema_version` | `sha256:7837eac655a6` | `sha256:26b940c21e0b` |
+| `constraint_schema_version` | `sha256:9…` | `sha256:ebed21c439e8` |
+| `input_protocol_schema` | `sha256:d6a26c25f5aa` | `sha256:41dc4f1bbd6e` |
+| `rule_set_selector_spec` | `sha256:0dd335b5a8ae` | 不变 |
+| `precision_profile_version` | `sha256:6ce483e8d221` | 不变 |
+| `architecture_decision_version` | `sha256:3601adeed46c` | 不变 |
+| `competitiveness_classification` | `sha256:2913378715d5` | 不变 |
+
+#### 测试
+- 165 → **192** 项（新增 `tests/test_contract_consistency.py` 25 项 + `test_status.py` 2 项）。
+- `src/bidpricing/status.py` 采集并渲染跨制品一致性——**状态数字一律不手写**，
+  快照里的「10/10」是复算出来的，不是抄的。
+- Gate 0a 仍 **PASS 8/8**；`contract-check` **PASS 10/10**；
+  Phase 0 输入门仍 BLOCKED（仅 `project_classification_table`）。
+
+#### 待用户裁定（新增 OI-05）
+- 「±50%」的**基准**是什么（cap / 控制价 / 评标基准价 / 成本占比）？
+  若基准 = cap，则上浮侧与 C2 矛盾，条款实际只约束下浮侧。
+- 超幅的**后果**是投标有效性问题，还是结算调整条款？
+- 该条款在什么条件下出现（逐项目 / 金额门槛 / 计价方式）？
+
+#### 同时发现的待确认项
+- **总价限价不在限价清单文件内**：实测该文件表-04「投标报价合计 8,623.74」
+  只等于措施 7,834.06 + 税金 789.68（分部分项为空），而单项就有 176,068.11 的变压器
+  ——它绝不可能是总价限价。`P*_max` 须由用户**另行提供**，不得外推。
+
+---
+
 ### 真实样本接入：总价恒等式获得外部锚点（2026-09-16）
 
 **背景**：拿到第一份**同一项目**的「招标限价 + 投标报价」配对样本
@@ -244,3 +343,4 @@
 | `classification-split-v1` | 2026-09-16 | 分类表拆为规则书 / 项目落值表 |
 | `project-governance-v1` | 2026-09-16 | 状态快照自动派生 + 任务板 + ADR 目录 |
 | `classification-declaration-v1` | 2026-09-16 | 分类改为「声明 + 例外」；判据由行数改为声明式就绪 |
+| `bound-clauses-v1` | 2026-09-16 | 单项下界的两类真实依据（不得为零 / 不平衡条款）；输入 A 结构按真实文件固化；新增 `contract-check` 第四环 |

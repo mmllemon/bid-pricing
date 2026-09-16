@@ -229,6 +229,25 @@ class RealRepoStateTest(unittest.TestCase):
         self.assertEqual(len(snap["tasks"]), 68)
         self.assertIn(snap["gates"]["gate_0a"], {"PASS", "BLOCKED"})
 
+    def test_contract_consistency_is_collected_and_green(self):
+        """跨制品一致性必须进快照，且真实仓库上应为 PASS。
+
+        进快照的理由与测试数同理：**状态数字一律不手写**。若把「10/10」写进
+        README 或 CHANGELOG，它迟早会漂移；派生出来才不会。
+        """
+        snap = collect(run_test_suite=False)
+        cc = snap["contract_consistency"]
+        self.assertEqual(cc["worst"], "PASS", [i for i in cc["items"]
+                                               if i["status"] != "PASS"])
+        self.assertTrue(cc["items"], "判据清单不应为空")
+        self.assertIn("约束", cc["headline"])
+
+    def test_contract_consistency_is_rendered(self):
+        snap = collect(run_test_suite=False)
+        text = render(snap)
+        self.assertIn("跨制品一致性", text)
+        self.assertIn("contract-check", text)
+
     def test_all_evidence_backed_tasks_resolve(self):
         """声明了证据的任务，其证据必须真的成立——否则任务板在撒谎。"""
         cdir = config_dir()

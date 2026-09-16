@@ -50,9 +50,11 @@ from datetime import datetime
 from pathlib import Path
 
 from .artifact import load_registry, parse_records
+from .contracts.consistency import check_contract_consistency
 from .contracts.selector import select_rule_set
 from .gates.gate0 import evaluate_gate_0
 from .paths import GATE0_REGISTRY, config_dir, docs_dir, repo_root
+from .states import aggregate
 
 STATE_FILE = "STATE.md"
 TASKS_FILE = "tasks.json"
@@ -325,6 +327,18 @@ def collect(
     else:
         tests = {"ran": None, "ok": None, "detail": "已跳过（run_test_suite=False）"}
 
+    # 跨制品一致性：与闸门正交的第四条验证环。此处**现场复算**而非读缓存，
+    # 与测试同理——缓存过的结论会撒谎。
+    cc_items = check_contract_consistency(cfg)
+    contract_consistency = {
+        "worst": aggregate(i.status for i in cc_items).value,
+        "items": [i.to_dict() for i in cc_items],
+        "headline": next(
+            (i.reason for i in cc_items
+             if i.item == "constraint_schema.inputs_declared"), ""
+        ),
+    }
+
     return {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "contract_date": contract_date,
@@ -333,6 +347,7 @@ def collect(
         "gate_0a_items": gate["gate_0a"]["items"],
         "artifacts": artifacts,
         "tests": tests,
+        "contract_consistency": contract_consistency,
         "tasks": tasks,
         "task_counts": tasks_raw.get("counts", {}),
         "next_steps": derive_next_steps(tasks),
@@ -444,6 +459,22 @@ def render(snap: dict) -> str:
         L += [
             "```bash",
             "cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests",
+            "```",
+            "",
+        ]
+
+    cc = snap.get("contract_consistency") or {}
+    if cc:
+        ok_n = sum(1 for i in cc.get("items", []) if i["status"] == "PASS")
+        tot_n = len(cc.get("items", []))
+        L += [
+            f"- 跨制品一致性：**{cc.get('worst', '?')}**（{ok_n}/{tot_n} 项判据通过）"
+            " —— 判「已冻结制品彼此是否自洽」，与闸门正交；"
+            "两者的关系是「hash 对不对」与「说法一致不一致」，缺一不可",
+            f"  - 核心判据：{cc.get('headline', '')}",
+            "",
+            "```bash",
+            "cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check",
             "```",
             "",
         ]

@@ -91,7 +91,7 @@ ls -t ../.workbuddy/memory/*.md | head -3
 
 | 改了什么 | 必须同步 | 为什么 |
 |---|---|---|
-| `config/*.json`（受控制品） | `bidpricing freeze --all` → `gate-check` | hash 失配会让闸门失效，必须重新冻结并复核 |
+| `config/*.json`（受控制品） | `bidpricing freeze --all` → `gate-check` → `contract-check` | hash 失配会让闸门失效；**且改动会让制品间产生新的不一致**（例如新增约束引用了字典里还没有的字段） |
 | `config/project_classification_table.json` | `status --write` | 影响 Phase 0 输入门判据 |
 | `src/**` | 跑全量测试 → `status --write` | 测试数是快照的一部分 |
 | 新增/删除受控制品 | 更新 `config/gate0_registry.json` | 未声明的制品不会被校验；**注册表未声明时判 BLOCKED** |
@@ -155,15 +155,28 @@ ls -t ../.workbuddy/memory/*.md | head -3
 |---|---|---|
 | 结构漂移 | `python tools/extract_tasks.py --check` | 路线文档改了但任务板未重提取 |
 | 契约漂移 | `bidpricing gate-check` | 制品被改但未重新冻结（hash 失配） |
+| **制品间矛盾** | `bidpricing contract-check` | **两份已冻结制品对同一规则说法相反**（hash 全部匹配、闸门全绿，但互相打架） |
 | 状态漂移 | `bidpricing status`（复算） | 快照与代码实际不一致 |
 
-三环均可在 CI 中串成一条流水线：
+**第四环（`contract-check`）与前三环正交，不是它的加强版。** `gate-check` 判的是
+「制品是否被改动过」（hash 对不对），`contract-check` 判的是「制品彼此是否自洽」。
+一份**未被改动**的制品集照样可以自相矛盾——本项目已实测两次：
+
+- `field_schema.item_id.note` 写「13/15 位编码体系由 code_system 区分」，
+  而 `input_protocol_schema.code_identity_policy` 明写「位数不参与合法性判定」；
+- `field_schema.code_system.range` 用 `GBT50500-2024`，同文件的 `rule_set_id.range`
+  用 `GB/T50500-2024`，而前者又要求「与 rule_set_id 一致性校验」。
+
+两次都是**靠人眼**发现的，两次都不是 hash 能拦住的。因此机械化为第四条判据。
+
+四环均可在 CI 中串成一条流水线：
 
 ```bash
 cd bid-pricing
 python tools/extract_tasks.py --check          \
   && PYTHONPATH=src python -m unittest discover -s tests \
-  && PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01
+  && PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01 \
+  && PYTHONPATH=src python -m bidpricing.cli contract-check
 ```
 
 > **CI 接线状态**：尚未配置（当前为纯本地仓库，无远端）。

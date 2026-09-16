@@ -5,17 +5,17 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-16 10:38:03** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-16 13:44:00** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`d4170eb` ｜ 累计 6 次提交
-- 最新提交信息：chore(governance): 状态自动派生 + 任务板 + ADR —— 消除文档漂移
+- 提交：`b6a3774` ｜ 累计 7 次提交
+- 最新提交信息：docs(state): 快照自述固有滞后 —— 记录 HEAD 通常比当前少一次提交
 - 最近里程碑标签：`project-governance-v1`
-- 工作区：有 1 处未提交改动
+- 工作区：有 9 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -58,7 +58,7 @@
 
 ## 四、质量门
 
-- 单元测试：**123** 项，结果 **通过**（OK）
+- 单元测试：**153** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -70,8 +70,8 @@ cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
 
 | WP | 任务数 | 状态分布 |
 |---|---|---|
-| WP0 | 15 | done 7、not_started 6、partial 2 |
-| WP1 | 11 | not_started 10、ready 1 |
+| WP0 | 15 | done 7、not_started 5、partial 3 |
+| WP1 | 11 | not_started 9、partial 1、ready 1 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | not_started 7 |
 | WP4 | 13 | not_started 13 |
@@ -83,7 +83,7 @@ cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
 
 ### 已启动 / 已完成任务
 
-> 共 10 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 12 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -94,9 +94,11 @@ cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
 | T00-04 | 精度与容差策略冻结 | done | ✓ 成立 | precision_profile_version 已冻结 sha256:6ce483e8d221 |
 | T00-05 | 三层分割架构地位确认 | done | ✓ 成立 | architecture_decision_version 已冻结 sha256:3601adeed46c |
 | T00-06 | 报价项可竞争性分类与变量集合冻结 | partial | ✓ 成立 | 规则书已冻结；项目级落值表为空，属 Phase 0 输入门判据；competitiveness_classification 已冻结 sha256:5610c8d879dd |
+| T00-06B | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | partial | ✓ 成立 | 恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落；src/bidpricing/identity.py 存在 |
 | T00-07 | 规则集优先级冻结 | done | ✓ 成立 | rule_set_selector_spec 已冻结 sha256:0dd335b5a8ae |
 | T01-00A | 招标文件计价口径与输入协议 Schema 冻结 | done | ✓ 成立 | input_protocol_schema 已冻结 sha256:92c3edea3d46 |
-| T01-00B | 招标文件解析器实现 | ready | — | Gate 0a 已放行；列结构实测口径已就位，可直开 |
+| T01-00B | 招标文件解析器实现 | ready | — | Gate 0a 已放行；列结构实测口径已就位，且已有 1 份真实配对样本可作输入 |
+| T01-02C | Golden Dataset 建设与版本锁定 | partial | ✓ 成立 | 首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定；tests/data/xiyong_l_district/pair.json 存在（35937 字节） |
 
 ---
 
@@ -108,7 +110,7 @@ cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
 |---|---|---|---|---|
 | T00-01 | WP0 | 合同计价与调价口径冻结 | 《计价规则卡》 | partial |
 | T00-06 | WP0 | 报价项可竞争性分类与变量集合冻结 | 分类表 + 变量集合定义 | partial |
-| T00-06B | WP0 | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | 总价分解计算规范（T00-06 的补充附件，冲突时以本规范为准） | not_started |
+| T00-06B | WP0 | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | 总价分解计算规范（T00-06 的补充附件，冲突时以本规范为准） | partial |
 | T00-09 | WP0 | 成本口径证明包 | 成本构成规范 | not_started |
 | T00-10A | WP0 | $q^1$ 假设声明：格式与冻结时点 | 《$q^1$ 假设声明书（格式篇）》 | not_started |
 | T01-00B | WP1 | 招标文件解析器实现 | 解析器 + 解析日志 + 字段映射报告 + 失败样本清单 | ready |

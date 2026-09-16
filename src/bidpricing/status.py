@@ -137,6 +137,17 @@ def check_evidence(task: dict, registry: dict, root: Path) -> tuple[bool | None,
             else:
                 ok = False
                 details.append(f"{e.get('path')} 缺失")
+        elif kind == "file":
+            # 数据类证据（真实样本、Golden Dataset 等）。
+            # 与 module 的区别只在语义：module 是代码，file 是数据；
+            # 判定方式相同（存在即成立），因为数据未就位时也确实做不出下一步。
+            p = root / str(e.get("path", ""))
+            if p.exists():
+                size = p.stat().st_size
+                details.append(f"{e.get('path')} 存在（{size} 字节）")
+            else:
+                ok = False
+                details.append(f"{e.get('path')} 缺失")
         else:
             ok = False
             details.append(f"未知证据类型 {kind!r}")

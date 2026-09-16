@@ -175,9 +175,14 @@
       ],
       "summary": "① 扣减式 $P_{\\text{competitive}}(p)=P^*(p)-\\sum_{i\\notin X_{\\text{opt}}}p_iq_i^0-\\sum(\\text{暂列金额})-\\sum(\\text{甲供材})$；② 总价恒等式（v3.2.1 补全） $P^*(p)=P_{\\text{competitiv…",
       "gate": "Gate 0a / 0b",
-      "evidence": [],
-      "status": "not_started",
-      "note": "依赖 T00-06 项目级分类结果"
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "src/bidpricing/identity.py"
+        }
+      ],
+      "status": "partial",
+      "note": "恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落"
     },
     {
       "id": "T00-07",
@@ -333,7 +338,7 @@
       "gate": "Gate 1",
       "evidence": [],
       "status": "ready",
-      "note": "Gate 0a 已放行；列结构实测口径已就位，可直开"
+      "note": "Gate 0a 已放行；列结构实测口径已就位，且已有 1 份真实配对样本可作输入"
     },
     {
       "id": "T01-01",
@@ -403,9 +408,14 @@
       ],
       "summary": "六类分层用例齐备：A 正常随机 / B 边界随机 / C 退化随机 / D 不可行随机 / E 极端尺度 / F 对抗构造；每类含正例与负例；固定随机种子；Gate 1 的「100% 通过」必须绑定本数据集版本号，不允许开发人员用一个简单 Excel 声称通过",
       "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "tests/data/xiyong_l_district/pair.json"
+        }
+      ],
+      "status": "partial",
+      "note": "首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定"
     },
     {
       "id": "T01-03",

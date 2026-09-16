@@ -33,7 +33,16 @@ from .artifact import (
 from .contracts.scope_impact import compare_scopes
 from .contracts.selector import ruleset_self_test, select_rule_set
 from .gates.gate0 import evaluate_gate_0
-from .paths import GATE0_REGISTRY, PROJECT_SELECTION, config_dir
+from .identity import (
+    check_component_sum,
+    check_identity,
+    decompose,
+    load_pair_fixture,
+    rates_from_fixture,
+    stated_from_fixture,
+    totals_from_fixture,
+)
+from .paths import GATE0_REGISTRY, PROJECT_SELECTION, config_dir, repo_root
 from .selection_options import (
     SELECTABLE_OPTIONS,
     clear_option,
@@ -44,6 +53,7 @@ from .selection_options import (
 from .status import collect as collect_status
 from .status import render as render_status
 from .status import write_state
+from .states import Status
 
 _STATUS_MARK = {"PASS": "PASS", "WARN": "WARN", "FAIL": "FAIL", "BLOCKED": "BLOCKED"}
 
@@ -460,6 +470,69 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_identity_check(args) -> int:
+    """总价恒等式核验 —— 对真实样本执行可执行判据。
+
+    与 ``gate-check`` 的分工：``gate-check`` 判「能不能开工」，
+    本命令判「算出来的总价链条是否与真实数据一致」。前者是流程闸门，
+    后者是**数值判据**，二者都不依赖人工记忆。
+    """
+    fx = load_pair_fixture(args.fixture)
+    side = args.side
+    dec = decompose(
+        totals_from_fixture(fx, side),
+        *rates_from_fixture(fx, side),
+    )
+    stated = stated_from_fixture(fx, side)
+
+    items = []
+    # 输入保真：逐项明细求和 == 表列小计（只对报价侧有意义——限价侧无合价列）
+    if side == "bid":
+        known = [i for i in fx["items"] if i.get("amount_bid")]
+        items.append(
+            check_component_sum(
+                {i["item_id"]: i["amount_bid"] for i in known},
+                float(fx["summary_table_04"]["bid"]["分部分项工程费"]),
+                "分部分项工程费（逐项明细 vs 表-04）",
+            )
+        )
+    items += check_identity(
+        dec, stated["总价"], stated["增值税"], stated["税金"]
+    )
+
+    if args.json:
+        print(json.dumps(
+            {"decomposition": dec.to_dict(),
+             "checks": [i.to_dict() for i in items]},
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return 0 if all(i.status is not Status.FAIL for i in items) else 1
+
+    print("=" * 78)
+    print(f"总价恒等式核验 ｜ {fx['fixture_id']} ｜ 口径：{'投标报价' if side == 'bid' else '招标限价'}")
+    print("=" * 78)
+    d = dec.to_dict()
+    for k in ("分部分项工程费", "措施项目费", "其他项目费", "规费", "甲供材料费"):
+        print(f"  {k:<12} {d[k]:>18,.2f}")
+    print(f"  {'-' * 32}")
+    print(f"  {'计税基数':<12} {d['计税基数']:>18,.2f}")
+    print(f"  {'增值税':<12} {d['增值税']:>18,.2f}   （{d['增值税率']:.0%}）")
+    print(f"  {'附加税':<12} {d['附加税']:>18,.2f}   （{d['附加税率']:.0%}）")
+    print(f"  {'税金合计':<12} {d['税金合计']:>18,.2f}")
+    print(f"  {'总价':<12} {d['总价']:>18,.2f}")
+    print()
+    for i in items:
+        tag = {Status.PASS: "  PASS", Status.WARN: "  WARN",
+               Status.FAIL: "  FAIL", Status.BLOCKED: "BLOCKED"}[i.status]
+        print(f"[{tag}] {i.item}")
+        print(f"           {i.reason}")
+    print()
+    ok = all(i.status is not Status.FAIL for i in items)
+    print("结论：恒等式闭合。" if ok else "结论：恒等式**不闭合** —— 这不是精度问题，"
+          "须先确认各分项是否同源于同一项目的同一单位工程。")
+    return 0 if ok else 1
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -546,6 +619,21 @@ def build_parser() -> argparse.ArgumentParser:
                         help="配合 --write 时仍打印完整 Markdown")
     p_stat.add_argument("--json", action="store_true", help="输出 JSON 原始快照")
     p_stat.set_defaults(func=cmd_status)
+
+    # ------------------------------------------------------ identity-check
+    p_id = sub.add_parser(
+        "identity-check",
+        help="总价恒等式核验（对真实样本执行数值判据）",
+    )
+    p_id.add_argument(
+        "--fixture",
+        default=str(repo_root() / "tests" / "data" / "xiyong_l_district" / "pair.json"),
+        help="限价/报价配对样本 JSON 路径",
+    )
+    p_id.add_argument("--side", choices=["bid", "cap"], default="bid",
+                      help="核验哪一侧：bid=投标报价（默认，数据完整）/ cap=招标限价")
+    p_id.add_argument("--json", action="store_true", help="输出 JSON")
+    p_id.set_defaults(func=cmd_identity_check)
 
     return parser
 

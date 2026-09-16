@@ -731,6 +731,20 @@ def build_parser() -> argparse.ArgumentParser:
                       help="清单侧")
     p_iv.set_defaults(func=cmd_import_verify)
 
+    p_vb = sub.add_parser("validate-boq",
+                          help="T01-06：D01–D12 数据校验（9 阻断 + 3 告警）")
+    p_vb.add_argument("--cap-xlsx", required=True, help="限价清单 xlsx")
+    p_vb.add_argument("--cost-xlsx", required=True, help="成本清单 xlsx")
+    p_vb.add_argument("--project-id", required=True)
+    p_vb.add_argument("--attribution", default=None,
+                      help="q1_point 归属标签（DRAWING_DIFF/CHANGE_ORDER/BOTH/UNKNOWN）")
+    p_vb.add_argument("--p-star", type=float, default=None, help="报价总价（用户给定）")
+    p_vb.add_argument("--p-star-max", type=float, default=None, help="总价限价")
+    p_vb.add_argument("--p-star-min", type=float, default=None, help="总价下界（可选）")
+    p_vb.add_argument("--basis-json", default=None,
+                      help="税口径声明 JSON（cap_tax_scope/cost_tax_scope）")
+    p_vb.set_defaults(func=cmd_validate_boq)
+
     return parser
 
 
@@ -936,6 +950,96 @@ def cmd_match_boq(args) -> int:
     print("-" * 78)
     print(f" 匹配报告: {out_path}")
     return 1 if rep.blocked else 0
+
+
+def cmd_validate_boq(args) -> int:
+    """T01-06：D01–D12 校验 —— 求解前数据体检（9 阻断 + 3 告警）。
+
+    复用 T01-04 管线（解析→清洗→匹配），再对 MatchReport 执行校验。
+    规范事实源 = config/validation_rules.json。阻断级 FAIL/BLOCKED → 退出码 1。
+    """
+    import json as _json
+    from pathlib import Path as _P
+
+    from .io.clean import clean_listing_rows
+    from .io.match import match_canonical_rows
+    from .validation.checks import (
+        STATUS_FAIL,
+        STATUS_SKIP,
+        load_validation_rules,
+        run_validation,
+    )
+
+    try:
+        cap_parsed = parse_listing(args.cap_xlsx, args.project_id)
+        cost_parsed = parse_listing(args.cost_xlsx, args.project_id)
+    except XlsxError as exc:
+        print(f"■ 解析失败：{exc}")
+        return 1
+
+    cap_rows, _ = clean_listing_rows(cap_parsed.rows, "cap")
+    cost_rows, _ = clean_listing_rows(cost_parsed.rows, "cost", args.attribution)
+    rep = match_canonical_rows(cap_rows, cost_rows)
+
+    # sheet → source_list 映射（D10 行级覆盖判据的机械输入）
+    _ROLE2LIST = {"DETAIL_BOQ": "BOQ", "TECH_MEASURE": "TECH_MEASURE",
+                  "ORG_MEASURE": "ORG_MEASURE", "OTHER": "OTHER"}
+    sheet_roles = {
+        s["sheet_name"]: _ROLE2LIST[s["role"]]
+        for s in cap_parsed.sheets if s.get("role") in _ROLE2LIST
+    }
+
+    cdir = config_dir()
+    cls = _json.loads(
+        (cdir / "project_classification_table.json").read_text(encoding="utf-8"))
+    sel = _json.loads((cdir / "project_selection.json").read_text(encoding="utf-8"))
+    rules_cfg = load_validation_rules(cdir)
+
+    basis = None
+    if getattr(args, "basis_json", None):
+        basis = _json.loads(_P(args.basis_json).read_text(encoding="utf-8"))
+
+    vrep = run_validation(
+        rep,
+        classification=cls, selection=sel, sheet_roles=sheet_roles,
+        basis=basis, history=None,
+        p_star=args.p_star, p_star_max=args.p_star_max,
+        p_star_min=args.p_star_min,
+        thresholds=rules_cfg["thresholds"],
+    )
+
+    print("=" * 78)
+    print(f"D01–D12 数据校验（T01-06）：{args.project_id}")
+    print("=" * 78)
+    print(" " + rep.summary_line())
+    print(" " + vrep.summary_line())
+    print("-" * 78)
+    for r in vrep.results:
+        mark = {"PASS": "✓", "FAIL": "■", "BLOCKED": "▲", "WARN": "⚠", "SKIP": "–"}[
+            r.status]
+        print(f" {mark} [{r.rule_id:^4}] {r.status:<8} {r.detail}")
+        for ev in r.evidence[:8]:
+            print(f"          · {ev}")
+        if len(r.evidence) > 8:
+            print(f"          …其余 {len(r.evidence) - 8} 条见报告文件")
+
+    out_dir = repo_root() / "docs" / "validated" / args.project_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload = vrep.to_dict()
+    payload["inputs"] = {
+        "project_id": args.project_id,
+        "cap_xlsx": str(args.cap_xlsx), "cost_xlsx": str(args.cost_xlsx),
+        "p_star": args.p_star, "p_star_max": args.p_star_max,
+        "p_star_min": args.p_star_min,
+        "basis": basis, "sheet_roles": sheet_roles,
+        "rules_config": "config/validation_rules.json",
+    }
+    out_path = out_dir / "validation_report.json"
+    out_path.write_text(
+        _json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    print("-" * 78)
+    print(f" 校验报告: {out_path}")
+    return 1 if vrep.blocked else 0
 
 
 def cmd_import_register(args) -> int:

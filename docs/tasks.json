@@ -522,8 +522,8 @@
    "summary": "9 条阻断级 + 3 条告警级规则可触发并给出明确原因",
    "gate": "Gate 1",
    "evidence": [],
-   "status": "not_started",
-   "note": ""
+   "status": "done",
+   "note": "2026-09-16 实现 src/bidpricing/validation/checks.py + CLI validate-boq + config/validation_rules.json（规范事实源）。27 测试双向锁定规范↔实现。D01–D12 按 ADR-0008 re-base：D02→q1_point>0、D03→cap>0或no_cap、D05→两侧并集覆盖率、W02→价值比cap/c。真实文件 e2e：D01–D05/D07/D10/D11 PASS（覆盖率1.0）；D06 FAIL（82项attribution未标注=OI-01待补）；D08 BLOCKED（税口径未声明）；D09 BLOCKED（contract_type未声明）——三项均为真实 Phase 0 输入缺口，退出码 1。"
   },
   {
    "id": "T02-01",

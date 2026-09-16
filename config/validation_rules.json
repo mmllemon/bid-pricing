@@ -1,0 +1,108 @@
+{
+  "spec_id": "validation_rules_v1",
+  "task": "T01-06",
+  "source_spec": "model_v0.3.md §3.5（D01–D09 阻断 + D10–D12 告警）；model_v0.3_R2.md §3.6（D09/D10 重定义、告警改名 W01–W05）。任务板 T01-06 引用 v0.3 编号：D01–D12 = 9 阻断 + 3 告警。",
+  "rebase_note": "多条规则在 2026-09-16 已裁定输入模型下 re-base（见 docs/adr/ADR-0008）：①输入 B 由输入 C 兼任 → 无投标清单量 q0 的独立来源，q1_point := 成本清单量（OI-01）；②base_i := cap_i → D03 的 base 判据收缩；③「三表」收缩为两侧 → D05 覆盖度分母改 master 并集；④无双向量比 → D11(w) 效率比 re-base 为价值比 cap/c。每条规则的 rebase 字段记录映射依据，规范与实现由 tests/test_validation_rules.py 双向锁定。",
+  "status_vocabulary": {
+    "PASS": "判据通过",
+    "FAIL": "数据违反规则（阻断级 → 拒绝运行；ADR-0005：违反 ≠ 未定态）",
+    "BLOCKED": "前置声明缺失，无法判定（未定态 = key 完全缺失，ADR-0004/0006）",
+    "WARN": "告警触发（写入体检单，不阻断）",
+    "SKIP": "输入数据不足，显式跳过（不静默通过）"
+  },
+  "thresholds": {
+    "D05_min_coverage": 0.98,
+    "D06_max_unknown_ratio": 0.20,
+    "W01_max_unknown_value_share": 0.15,
+    "W02_ratio_band": [0.2, 5.0],
+    "W03_sigma": 3.0
+  },
+  "rules": [
+    {
+      "id": "D01", "level": "BLOCK",
+      "predicate": "清单编码唯一且格式合法",
+      "rebase": "唯一性 = 同侧重复 key（T01-04A/T01-04 已在匹配时点 BLOCK，本层对 canonical 行复核）。格式合法性按 D1 裁定：位数不参与合法性、UNKNOWN 不阻塞——故本条只判唯一性，UNKNOWN 仅记录不判死。",
+      "inputs": ["MatchReport.blocked", "MatchReport.duplicate_keys", "items[].code_kind"]
+    },
+    {
+      "id": "D02", "level": "BLOCK",
+      "predicate": "q1_point > 0（pass_through 项豁免）",
+      "rebase": "原『q_i^0 > 0』：投标清单量 q0 在新输入模型下无独立来源（限价清单只有单价），结算量预判 = 成本清单量（OI-01 裁定），故判据改 q1_point > 0。『截断项除外』对应 pass_through 豁免。",
+      "inputs": ["items[].q1_point", "items[].cost_row", "items[].pass_through"]
+    },
+    {
+      "id": "D03", "level": "BLOCK",
+      "predicate": "cap_i > 0 或 no_cap（合法空语义）",
+      "rebase": "原『base_i > 0 且 cap_i ≥ base_i』：base := cap（用户裁定，δ⁺ 失效、C2 纯单边上界）后 cap ≥ base 恒真，判据收缩为上界自身有效：cap > 0（不得为 0/负，C5 同源）或走 no_cap 通道（ALLOW_EMPTY_NO_CAP 裁定，上界由 P* ≤ P*_max 兜底）。",
+      "inputs": ["items[].cap", "items[].no_cap", "items[].cap_row"]
+    },
+    {
+      "id": "D04", "level": "BLOCK",
+      "predicate": "c_i > 0（cost_row 项）",
+      "rebase": "『口径一致』部分独立为 D08（R2 同构）；本条只判成本为正。零价即 C4 地板信号（ZERO_PRICE_COST）。",
+      "inputs": ["items[].c_i", "items[].cost_row"]
+    },
+    {
+      "id": "D05", "level": "BLOCK",
+      "predicate": "匹配覆盖率 = n_matched / n_master ≥ 0.98，失败输出缺失清单",
+      "rebase": "『三表』在输入 B 由 C 兼任后收缩为两侧（cap ∪ cost），分母改 master 并集。未匹配项（ONLY_IN_CAP/ONLY_IN_COST）由匹配器 100% 进异常清单，本条给聚合判据。",
+      "inputs": ["MatchReport.n_matched", "MatchReport.n_master", "MatchReport.anomalies"]
+    },
+    {
+      "id": "D06", "level": "BLOCK",
+      "predicate": "q1_point 归属标注完成：cost_row 非 pass_through 项 attribution 不得为空，且 UNKNOWN 占比 ≤ 20%",
+      "rebase": "标注对象由 q1 预估改为 q1_point（同一裁定来源）；『未标注（None）』与『标注为 UNKNOWN』是两种失败：前者违反 OI-01『须同时补 attribution』，后者超 20% 上限。",
+      "inputs": ["items[].attribution", "items[].cost_row", "items[].pass_through"]
+    },
+    {
+      "id": "D07", "level": "BLOCK",
+      "predicate": "c_i ≤ cap_i（逐项，两者齐备时）",
+      "rebase": "L := floor := c_i（C4 成本地板）、U := cap_i（C2 单边上界，base=cap 裁定后无独立 base 下界）。no_cap 项无上界，不参与。规格 §7.4『floor_i > U_i → 可行域为空 → D07 拦截』。",
+      "inputs": ["items[].c_i", "items[].cap", "items[].no_cap"]
+    },
+    {
+      "id": "D08", "level": "BLOCK",
+      "predicate": "两侧税口径声明一致（EXCL_VAT）",
+      "rebase": "R2 要求 c_i 与 p_i 均不含增值税。税口径是**声明**不是数据——两侧文件本身不带口径标签，故本条判『口径声明是否存在且一致』：声明缺失 = 未定态 BLOCKED（沉默不是断言，ADR-0007）；声明不一致 = FAIL。",
+      "inputs": ["basis.cap_tax_scope", "basis.cost_tax_scope"]
+    },
+    {
+      "id": "D09", "level": "BLOCK",
+      "predicate": "契约级输入完整：contract_type 非空（rule_set_id 取分类表 code_system；rho 未声明按 0）",
+      "rebase": "rule_set_id 已由分类表 code_system 承载（用户裁定西永L=2024），不重复要求；rho± 无规范依据、默认 0（既有裁定）——缺 key 不判死，仅记录；contract_type 是真正的未定态输入，缺失 → BLOCKED。",
+      "inputs": ["selection.options.contract_type", "classification.code_system"]
+    },
+    {
+      "id": "D10", "level": "BLOCK",
+      "predicate": "pricing_role 判定完整：分类声明就位（covered_lists key 不得缺失），且（提供 sheet_roles 时）每个数据行可解析到已覆盖清单",
+      "rebase": "逐行填表已改『声明 + 例外』（T00-06），故本条判声明的就位与例外行结构合法（每行须含 item_id/unit_work/pricing_role），外加数据行 → covered_lists 的机械映射（sheet_roles 由解析器 sheet 角色表提供；未提供时该子判据记 SKIP，只判声明层）。",
+      "inputs": ["classification.covered_lists", "classification.exceptions", "sheet_roles"]
+    },
+    {
+      "id": "D11", "level": "BLOCK",
+      "predicate": "P* 落在 [P*_min, P*_max]（给的才判）",
+      "rebase": "P* 与 P*_max 由用户给定（裁定）；P*_min 无来源则不判下侧。P* 未提供 = 未定态 BLOCKED（不得默认）。",
+      "inputs": ["p_star", "p_star_max", "p_star_min"]
+    },
+    {
+      "id": "D12", "level": "WARN",
+      "rebase": "v0.3 的 D10/D11/D12 三条告警在 R2 改名 W01/W02/W03（R2 的 D09/D10 转为阻断、D11 转 Phase 0）；任务板 T01-06 引用 v0.3 编号故保留 D12 作为告警组容器，子规则按 R2 编号。W02 的判据对象在输入模型裁定下 re-base（价值比 cap/c 替代双向量比 q̂1/q0）。",
+      "predicate": "三条告警（v0.3 编号 D10/D11/D12，R2 改名 W01/W02/W03）：",
+      "subrules": [
+        {
+          "id": "W01",
+          "predicate": "UNKNOWN 归属项的金额占比 > 15% → 告警（金额 = (cap ?? c_i) × q1_point，分母为 cost_row 可计值项合计）"
+        },
+        {
+          "id": "W02",
+          "predicate": "单项价值比 cap_i / c_i 超出 [0.2, 5.0] → 告警（原效率比 q̂1/q0 在无双向量后 re-base 为价值比——上浮/下探幅度异常检测，意图不变）"
+        },
+        {
+          "id": "W03",
+          "predicate": "整体价值比偏离历史分布超 3σ → 告警；history 未提供 → SKIP（显式记录『数据不足』，不静默通过）"
+        }
+      ],
+      "inputs": ["items[].attribution", "items[].cap", "items[].c_i", "items[].q1_point", "history"]
+    }
+  ]
+}

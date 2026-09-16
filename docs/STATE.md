@@ -5,16 +5,16 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-16 22:08:11** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-16 22:38:27** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`ead2172` ｜ 累计 24 次提交
-- 最新提交信息：feat(t01-05,t01-04a): 源文件版本锁定 + Key 规范成文 —— WP1 完整性闸门前置
-- 最近里程碑标签：`import-lock-keyspec-v1`
+- 提交：`93f7699` ｜ 累计 25 次提交
+- 最新提交信息：feat(t01-02b,t01-02c): 输入变体测试集 + Golden Dataset 版本锁定 —— WP1 数据层验收资产
+- 最近里程碑标签：`golden-dataset-v1`
 - 工作区：有 7 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
@@ -59,7 +59,7 @@
 
 ## 四、质量门
 
-- 单元测试：**276** 项，结果 **通过**（OK）
+- 单元测试：**303** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -79,7 +79,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP | 任务数 | 状态分布 |
 |---|---|---|
 | WP0 | 15 | done 7、not_started 5、partial 3 |
-| WP1 | 11 | done 8、not_started 3 |
+| WP1 | 11 | done 9、not_started 2 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | not_started 7 |
 | WP4 | 13 | not_started 13 |
@@ -91,7 +91,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ### 已启动 / 已完成任务
 
-> 共 18 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 19 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -113,6 +113,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T01-04 | 三表交叉匹配 | done | — | 2026-09-16 实现 src/bidpricing/io/match.py + CLI match-boq + 10 测试。master=cap∪cost 键并集；未匹配项 100% 进异常清单；同侧重复 key BLOCK 禁止自动合并；no_cap=合法语义单列计数。真实文件 e2e：82 键全匹配、0 异常、missing_limit=1（脚手架搭拆，合法 no_cap）。 |
 | T01-04A | 多级 key 与重复 key 治理 | done | — | 2026-09-16 落 config/key_spec.json（canonical_key=(project_id,unit_work,item_id)；扩展键仅人工裁定触发；序号/名称键明令禁止；重复 key BLOCK 禁止自动合并）+ tests/test_key_spec.py 规范↔实现双向锁定。机械部分已于 T01-04 前移至 match.py。 |
 | T01-05 | 源文件版本锁定与完整性 | done | — | 2026-09-16 实现 src/bidpricing/io/import_registry.py + CLI import-register/import-verify。整文件 sha256 + 逐 sheet 值矩阵哈希双层指纹；登记表追加式不可变；未登记=BLOCKED；文件被替换→BLOCKED+定位变化 sheet。真实文件 e2e：登记→PASS；字节级改动单字符串→BLOCKED 且精确定位「表-09 分部分项」。deps T01-02 属数据侧验收（真实成本清单到位后对 cost 侧补登记即可，机制不受阻）。 |
+| T01-06 | D01–D12 校验实现 | done | — | 2026-09-16 实现 src/bidpricing/validation/checks.py + CLI validate-boq + config/validation_rules.json（规范事实源）。27 测试双向锁定规范↔实现。D01–D12 按 ADR-0008 re-base：D02→q1_point>0、D03→cap>0或no_cap、D05→两侧并集覆盖率、W02→价值比cap/c。真实文件 e2e：D01–D05/D07/D10/D11 PASS（覆盖率1.0）；D06 FAIL（82项attribution未标注=OI-01待补）；D08 BLOCKED（税口径未声明）；D09 BLOCKED（contract_type未声明）——三项均为真实 Phase 0 输入缺口，退出码 1。 |
 
 ---
 

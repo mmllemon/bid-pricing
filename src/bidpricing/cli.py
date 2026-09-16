@@ -147,14 +147,23 @@ def cmd_gate_check(args) -> int:
         print("      未通过项见上方 BLOCKED 行；技术接口类阻塞必须补齐后才放行。")
 
     if phase0_ok:
-        print("Phase 0 输入门通过：项目级选择项取值已定，可启动 Phase 0 求解。")
+        print("Phase 0 输入门通过：项目级选择项与项目级输入数据均已就位，可启动 Phase 0 求解。")
     else:
-        print("Phase 0 输入门未通过：存在未落值的项目级选择项。")
-        print("      注意：这**不阻塞** Gate 0a 与 WP1/WP2/WP3 —— "
-              "两条分支都要求被实现，")
-        print("      选择只决定哪条生效。仅在启动求解（Phase 0）前需要落值：")
+        blocked_now = [
+            i["item"] for i in report["phase_0_input_gate"]["items"]
+            if i["status"] in ("BLOCKED", "FAIL")
+        ]
+        print("Phase 0 输入门未通过：以下项目级输入尚未就位 —— "
+              f"{', '.join(blocked_now)}")
+        print("      注意：这**不阻塞** Gate 0a 与 WP1/WP2/WP3。")
+        print("      它们都是「求解启动前必须有、开发期不需要」的输入：")
+        print("      · 选择项取值未定 → 两条分支都要求被实现，选择只决定哪条生效")
+        print("      · 逐项分类表为空 → 它随项目而异，规则书（分类机制）已冻结即可开工")
+        print("      落值命令：")
         print("      bidpricing options set --key adjustment_scope "
               "--value <FULL|SEGMENT> --rule-set <rid> --rationale \"...\"")
+        print("      逐项分类表：由真实招标清单经 T01-00B 解析器产出后填入 "
+              "config/project_classification_table.json")
 
     return 0 if gate_0a_ok else 1
 

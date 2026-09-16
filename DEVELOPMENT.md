@@ -15,16 +15,20 @@
 | §5 全局四态状态机 | `src/bidpricing/states.py` | [已完成] |
 | §7.1 Gate 0a / 0b 机械判据 | `gates/gate0.py::check_gate_0a / check_gate_0b` | [已完成] |
 | §7.1.1 断言 1 未定态表示法 | `gate0.guard_representation` | [已完成] |
-| §7.1.1 断言 2 未定态熔断 | `check_gate_0a`（选择项判 BLOCKED） | [已完成] |
+| §7.1.1 断言 2 未定态熔断 | `check_phase0_inputs`（Phase 0 输入门） | [已完成] |
 | §7.1.1 断言 3 双闸门独立 + 放行清单 | `check_gate_0a::release_scope` | [已完成] |
 | §7.1.1 断言 4 字段有效性机械化 | `artifact.verify_versioned` | [已完成] |
 | §7.1.1 断言 5 时序断言 | `gate0.assertion_5_sequence` | [已完成] |
 | §7.1.1 断言 6 CI 门禁 | `gate0.assertion_6_config_zero_defaults`、`assert_wp4_build_allowed` | [已完成] |
 | **选择项判据**（本增量新增） | `gate0.check_selectable_option` + `selection_options.py` | [已完成] |
 
-> **为什么先做闸门**：按 §7.1.1 断言 2，`adjustment_scope` 未定则 Phase 0 直接 BLOCKED，
-> WP1/WP2/WP3 不得开工。若闸门只停留在文档里，这个约束就靠人的自觉；
-> 变成代码后，"未定态"会在构建阶段被机械拦下。
+> **为什么先做闸门**：若闸门只停留在文档里，「未定态熔断」就靠人的自觉；
+> 变成代码后，"未定态"与"未冻结"会在构建阶段被机械拦下。
+>
+> **但不等于把一切未就绪都塞进开工闸门**。断言 2 的原文落点是
+> **Phase 0**（`check_phase0_inputs`），不是 Gate 0a —— 早期实现曾把
+> `adjustment_scope` 与逐项分类表都挂在 Gate 0a，结果用一个晚期决策
+> 卡住了 WP1/WP2/WP3 的开发。判定时点必须与消耗时点对齐，见下节。
 
 ---
 
@@ -87,7 +91,7 @@ $ PYTHONPATH=src python -m bidpricing.cli scope-impact --q0 100 --q1 130 --p0 10
 | T00-03 约束字典冻结 | 《约束字典 C1–C12》 | `config/constraint_schema.json`（已冻结） | [已完成] |
 | T00-04 精度与容差策略冻结 | 《精度策略表》 | `config/precision_profile.json`（已冻结，含 2 项遗留） | [已完成] |
 | T00-05 三层分割架构地位确认 | 架构决策记录 | `config/architecture_decision.json` + `docs/ADR-0001-*.md` | [已完成] |
-| **T00-06** 可竞争性分类与变量集合冻结 | 分类表 + 变量集合 | 5 个 role + 启发式规则就位；分类表为空，待真实清单 | [待人工落值] |
+| **T00-06** 可竞争性分类与变量集合冻结 | 分类规则书 + 变量集合 | `config/competitiveness_classification.json`（**规则书**：5 role + 启发式 + 覆盖范围 + 外生常量，已冻结）+ `config/project_classification_table.json`（**项目级落值表**，空表→Phase 0 输入门） | [机制已完成 / 数据待项目] |
 | **T00-06B** P_competitive 与基数联动 | 总价分解计算规范 | 未开工（依赖 T00-06 分类结果） | [未开工] |
 | **T00-07** 规则集优先级冻结 | 《规则优先级卡》 | 优先级链 + 强制指纹测试；**已登记指纹退化条件** | [已完成] |
 | **T00-09** 成本口径证明包 | 成本构成规范 | 未开工（需造价专业取数） | [未开工] |
@@ -97,7 +101,7 @@ $ PYTHONPATH=src python -m bidpricing.cli scope-impact --q0 100 --q1 130 --p0 10
 | **T00-12** 利润口径桥接表 | 《利润口径桥接表》 | 未开工（依赖 T00-06B、T00-09） | [未开工] |
 | **T01-00A** 输入协议 Schema 冻结（**属 WP0**） | 输入协议规范 | `config/input_protocol_schema.json`（已冻结） | [已完成] |
 
-**WP0 已完成 7 / 15**，其余 8 项均需人工领域输入（合同解读 / 成本取数 / 真实清单）。
+**WP0 已完成 8 / 15**，其余 7 项均需人工领域输入（合同解读 / 成本取数 / 项目清单数据）。
 
 ---
 
@@ -105,9 +109,9 @@ $ PYTHONPATH=src python -m bidpricing.cli scope-impact --q0 100 --q1 130 --p0 10
 
 | WP | 任务数 | 状态 |
 |---|---|---|
-| WP1 数据层 | 11 | [门禁阻塞] Gate 0a |
-| WP2 配置层 | 5 | [门禁阻塞] Gate 0a |
-| WP3 判定层 | 7 | [门禁阻塞] Gate 0a |
+| WP1 数据层 | 11 | [**已放行**] Gate 0a 通过 |
+| WP2 配置层 | 5 | [**已放行**] Gate 0a 通过 |
+| WP3 判定层 | 7 | [**已放行**] Gate 0a 通过 |
 | WP4 求解层 | 13 | [门禁阻塞] Gate 0b（§7.1.1 断言 6② 硬门禁） |
 | WP5 鲁棒性 | 5 | [门禁阻塞] Gate 3 |
 | WP6 交付层 | 8 | [门禁阻塞] Gate 5A |
@@ -115,21 +119,42 @@ $ PYTHONPATH=src python -m bidpricing.cli scope-impact --q0 100 --q1 130 --p0 10
 
 ---
 
-## 五、当前阻塞项（Gate 0a 评审结论）
+## 五、当前阻塞项
 
 ```
 $ PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01
-Gate 0a = BLOCKED   （7/8 判据通过）
+Gate 0a = PASS      （8/8 判据通过）
+Gate 0b = BLOCKED   （5 项制品 + 分级审批待定）
+Phase 0 输入门 = BLOCKED
 ```
 
-| # | 阻塞项 | 性质 | 解除方式 |
+### 5.1 Gate 0a — 已通过
+
+技术接口与规则集全部冻结，**放行 WP1 / WP2 / WP3**（放行清单不含 T00-10B）。
+
+### 5.2 Phase 0 输入门 — 阻塞求解，**不阻塞开发**
+
+| # | 未就位项 | 性质 | 解除方式 |
 |---|---|---|---|
-| 1 | `adjustment_scope` | **人工选择**（可选，非裁决） | `bidpricing options set --key adjustment_scope --value {FULL\|SEGMENT} --rule-set GB/T50500-2024 --rationale "..."` |
-| 2 | `competitiveness_classification` | **数据依赖** | 提供真实招标清单，逐项标注 `pricing_role` |
+| 1 | `adjustment_scope` | **机制已就绪，取值待选** | `bidpricing options set --key adjustment_scope --value {FULL\|SEGMENT} --rule-set GB/T50500-2024 --rationale "..."` |
+| 2 | `project_classification_table` | **项目级数据** | 真实招标清单 → T01-00B 解析器逐行初判 → 人工确认 `pricing_role` 与依据 |
 
-落值后 Gate 0a **仅剩第 2 项**（已实测）。两项闭合后放行 WP1 / WP2 / WP3（放行清单不含 T00-10B）。
+这两项**只挡求解**，不挡 WP1/WP2/WP3：
 
-Gate 0b 的 5 项制品与分级审批独立于 Gate 0a，不阻塞 WP1/WP2/WP3，但**阻塞 WP4 求解层**。
+* 选择项未选 —— 契约要求 WP3/WP4 **同时实现** FULL 与 SEGMENT 两条分支，
+  选择只决定哪条生效，不影响分支代码能否开工；
+* 分类表为空 —— 它是**随项目而异的数据**，而 Gate 0a 判的是**跨项目复用的
+  规则书**（已冻结）。用某个项目的清单数据去阻塞解析器开发，等于把
+  「机制就绪」与「某个项目的数据就绪」混成一个判据。
+
+> **口径修正记录**：早前版本把逐项分类表直接放进 Gate 0a 制品，导致
+> 「提供真实招标清单」被列为开工前置条件。这是与 `adjustment_scope` 同型的
+> 判定时点错误，现已拆为「规则书（Gate 0a 机制）」+「落值表（Phase 0 数据）」。
+
+### 5.3 Gate 0b — 阻塞 WP4 求解层
+
+5 项制品与分级审批独立于 Gate 0a，不阻塞 WP1/WP2/WP3，但按 §7.1.1 断言 6②
+硬门禁阻塞 WP4。
 
 ---
 
@@ -184,8 +209,9 @@ PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01 --
 
 | 优先级 | 动作 | 说明 |
 |---|---|---|
-| P0 | 选择 `adjustment_scope` | 落值即解除 Gate 0a 一半阻塞，且决定 WP3 的 R_i 分段代码结构；建议先跑 `scope-impact` 看本项目的规则层分叉 |
-| P0 | 提供 1 套真实招标清单 | 解除 `competitiveness_classification`，同时为 T01-00B 解析器与 T01-02B 变体测试集提供样本 |
+| P0 | **开工 WP1 数据层** | Gate 0a 已通过，技术侧无剩余阻塞。T01-00B 解析器可先按已探明的列结构落地（分部分项 5 子表 / 115 条明细的实测口径已记入 `input_protocol_schema.json`） |
+| P0 | 选择 `adjustment_scope`（启动求解前） | 不阻塞 WP1/WP2/WP3，但决定 WP3 的 R_i 分段代码结构，早定可少返工；建议先跑 `scope-impact` 看本项目的规则层分叉 |
+| P0 | 提供 1 套**完整**项目清单（启动求解前） | 解除 Phase 0 输入门的 `project_classification_table`。需**同一项目**的分部分项 + 措施 + 其他三套（跨项目不闭合，实测差 3.21 倍）；同时为 T01-02B 变体测试集提供样本 |
 | P1 | 确认精度策略 §8.2 的模式 A / B | 当前 `precision_profile.json` 的 `equality_tolerance_mode.current` 为 null |
 | P1 | 启动 T00-09 / T00-10A / T00-11 / T00-12 | 四项均需造价与合同专业输入，可并行推进，是 Gate 0b 的主体 |
 | P2 | 决定选择项落值文件是否纳入受控注册表 | 纳入即获得"一改就失效"的契约语义 |

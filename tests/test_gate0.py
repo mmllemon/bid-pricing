@@ -18,10 +18,15 @@ from bidpricing.gates.gate0 import (
     check_gate_0a,
     check_gate_0b,
     check_phase0_inputs,
+    check_project_input_artifacts,
     evaluate_gate_0,
     guard_representation,
 )
-from bidpricing.paths import GATE0_REGISTRY, config_dir
+from bidpricing.paths import (
+    GATE0_REGISTRY,
+    PROJECT_CLASSIFICATION_TABLE,
+    config_dir,
+)
 from bidpricing.states import Status
 
 TECH_ARTIFACTS = {
@@ -34,6 +39,19 @@ TECH_ARTIFACTS = {
     "input_protocol_schema": "input_protocol_schema.json",
 }
 
+CLASSIFICATION_ROLES = (
+    "OPTIMIZABLE", "FIXED", "NON_COMPETITIVE", "PASS_THROUGH", "CONTRACT_DEFINED",
+)
+
+STUB_ROW = {
+    "item_id": "030404017001",
+    "unit_work": "000001 配电工程",
+    "item_name": "配电箱",
+    "source_list": "BOQ",
+    "pricing_role": "OPTIMIZABLE",
+    "evidence": "stub——仅用于机制测试",
+}
+
 
 def _stub_config(root: Path) -> None:
     """为正向测试构造一套可冻结的最小制品集（不含 freeze_blocker）。"""
@@ -41,6 +59,10 @@ def _stub_config(root: Path) -> None:
         (root / path).write_text(
             json.dumps({"schema_id": path}, ensure_ascii=False), encoding="utf-8"
         )
+    (root / PROJECT_CLASSIFICATION_TABLE).write_text(
+        json.dumps({"spec_id": "stub", "rows": [STUB_ROW]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def _stub_registry() -> dict:
@@ -50,7 +72,21 @@ def _stub_registry() -> dict:
         for key, path in TECH_ARTIFACTS.items()
     }
     gate_0a["adjustment_scope"] = {"kind": "enum", "allowed": ["FULL", "SEGMENT"]}
-    return {"gate_0a": gate_0a, "gate_0b": {}}
+    return {
+        "gate_0a": gate_0a,
+        "gate_0b": {},
+        "phase_0": {
+            "project_classification_table": {
+                "kind": "project_input",
+                "artifact_path": PROJECT_CLASSIFICATION_TABLE,
+                "min_rows": 1,
+                "allowed_roles": list(CLASSIFICATION_ROLES),
+                "required_row_fields": [
+                    "item_id", "unit_work", "item_name", "source_list", "pricing_role",
+                ],
+            }
+        },
+    }
 
 
 class RepresentationGuardTest(unittest.TestCase):
@@ -109,7 +145,7 @@ class Gate0aTest(unittest.TestCase):
             self.assertIn("WP1 数据层", release.reason)
 
             # 同一份选择：Phase 0 输入门必须熔断
-            phase0 = check_phase0_inputs(registry, {})
+            phase0 = check_phase0_inputs(registry, {}, cdir)
             self.assertIs(phase0.status, Status.BLOCKED)
             self.assertIn("adjustment_scope", {i.item for i in phase0.blockers})
 
@@ -123,7 +159,9 @@ class Gate0aTest(unittest.TestCase):
                 freeze_record(registry, "gate_0a", key, cdir)
             selection = {"rule_set_id": "GB50500-2013", "adjustment_scope": "FULL"}
             self.assertIs(check_gate_0a(registry, cdir, selection).status, Status.BLOCKED)
-            self.assertIs(check_phase0_inputs(registry, selection).status, Status.BLOCKED)
+            self.assertIs(
+                check_phase0_inputs(registry, selection, cdir).status, Status.BLOCKED
+            )
 
     def test_release_list_excludes_t00_10b(self):
         """断言 3：放行清单不含 T00-10B（依赖 WP1 的 T01-00B 产出）。"""
@@ -138,9 +176,16 @@ class Gate0aTest(unittest.TestCase):
             self.assertIn("T00-10B", release.reason)
             self.assertEqual(GATE_0A_RELEASE_EXCLUSIONS[0][0], "T00-10B")
 
-    def test_real_config_0a_blocks_only_on_classification(self):
-        """真实仓库现状：技术制品可冻结，``competitiveness_classification`` 空表
-        是 Gate 0a 的唯一阻塞项。
+    def test_real_config_0a_passes_and_phase0_blocks_on_project_inputs(self):
+        """真实仓库现状：Gate 0a 8/8 通过，阻塞全部落在 Phase 0 输入门。
+
+        这是对早前版本的修正。早前 ``competitiveness_classification`` 直接把
+        「逐项分类表」当 Gate 0a 制品，于是**任一具体项目的清单数据未就绪**
+        都会阻塞解析器/配置层/判定层的开发。修正后 T00-06 拆成两层：
+
+        * Gate 0a 判据 = 分类**规则书**（角色集合 + 启发式 + 覆盖范围），
+          跨项目复用 → 已冻结即通过；
+        * Phase 0 输入门判据 = **逐项落值表**，随项目而异 → 空表即熔断。
 
         显式关闭项目落值文件——该用例断言"未选择 adjustment_scope"这一状态，
         不得随本机 config/project_selection.json 内容变化。
@@ -150,18 +195,91 @@ class Gate0aTest(unittest.TestCase):
         selection = select_rule_set(
             contract_date="2026-03-01", use_project_selection=False
         ).to_dict()
-        report = check_gate_0a(registry, cdir, selection)
-        self.assertIs(report.status, Status.BLOCKED)
-        blocked = {i.item for i in report.blockers}
-        self.assertIn("competitiveness_classification", blocked)
-        # 机制就绪 → 未落值不再进入 Gate 0a 阻塞清单，但仍出现在判据清单里
-        self.assertNotIn("adjustment_scope", blocked)
-        self.assertIn("adjustment_scope", {i.item for i in report.items})
 
-        # 同一份选择结果下，Phase 0 输入门因 adjustment_scope 未定而熔断
-        phase0 = check_phase0_inputs(registry, selection)
+        report = check_gate_0a(registry, cdir, selection)
+        self.assertIs(
+            report.status, Status.PASS, [i.to_dict() for i in report.items]
+        )
+        self.assertNotIn("competitiveness_classification", {i.item for i in report.blockers})
+
+        # 项目级输入仍未就位 → Phase 0 输入门熔断（两类阻塞：选择项取值 + 逐项表）
+        phase0 = check_phase0_inputs(registry, selection, cdir)
         self.assertIs(phase0.status, Status.BLOCKED)
-        self.assertIn("adjustment_scope", {i.item for i in phase0.blockers})
+        blocked = {i.item for i in phase0.blockers}
+        self.assertIn("adjustment_scope", blocked)
+        self.assertIn("project_classification_table", blocked)
+
+
+class ProjectInputArtifactTest(unittest.TestCase):
+    """断言 2 的第二类判据：项目级逐项落值表。"""
+
+    def _registry(self, **spec_overrides) -> dict:
+        spec = {
+            "kind": "project_input",
+            "artifact_path": PROJECT_CLASSIFICATION_TABLE,
+            "min_rows": 1,
+            "allowed_roles": list(CLASSIFICATION_ROLES),
+            "required_row_fields": [
+                "item_id", "unit_work", "item_name", "source_list", "pricing_role",
+            ],
+        }
+        spec.update(spec_overrides)
+        return {"phase_0": {"project_classification_table": spec}}
+
+    def _write(self, cdir: Path, payload) -> None:
+        (cdir / PROJECT_CLASSIFICATION_TABLE).write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def test_empty_table_blocks_with_correct_attribution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            self._write(cdir, {"rows": []})
+            item = check_project_input_artifacts(self._registry(), cdir)[0]
+            self.assertIs(item.status, Status.BLOCKED)
+            self.assertIn("项目级数据", item.reason)
+            # 归因必须写明「不阻塞 Gate 0a」，否则会被误读为开工阻塞
+            self.assertIn("不阻塞 Gate 0a", item.reason)
+
+    def test_valid_rows_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            self._write(cdir, {"rows": [STUB_ROW, {**STUB_ROW, "item_id": "03B001",
+                                                  "source_list": "ORG_MEASURE",
+                                                  "pricing_role": "NON_COMPETITIVE"}]})
+            item = check_project_input_artifacts(self._registry(), cdir)[0]
+            self.assertIs(item.status, Status.PASS, item.to_dict())
+            self.assertEqual(item.actual, 2)
+
+    def test_illegal_role_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            self._write(cdir, {"rows": [{**STUB_ROW, "pricing_role": "CHEAP"}]})
+            item = check_project_input_artifacts(self._registry(), cdir)[0]
+            self.assertIs(item.status, Status.BLOCKED)
+            self.assertEqual(item.actual[0]["problems"][0].startswith("pricing_role="), True)
+
+    def test_missing_required_field_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            row = {k: v for k, v in STUB_ROW.items() if k != "unit_work"}
+            self._write(cdir, {"rows": [row]})
+            item = check_project_input_artifacts(self._registry(), cdir)[0]
+            self.assertIs(item.status, Status.BLOCKED)
+            self.assertIn("unit_work 缺失", item.actual[0]["problems"])
+
+    def test_missing_file_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            item = check_project_input_artifacts(self._registry(), Path(tmp))[0]
+            self.assertIs(item.status, Status.BLOCKED)
+            self.assertIn("缺失", item.reason)
+
+    def test_undeclared_registry_blocks_not_vacuous(self):
+        """注册表没声明 = 没有判据，不能当空真通过。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            items = check_project_input_artifacts({}, Path(tmp))
+            self.assertIs(items[0].status, Status.BLOCKED)
+            self.assertIn("空真", items[0].reason)
 
 
 class Gate0bTest(unittest.TestCase):
@@ -286,12 +404,70 @@ class EndToEndTest(unittest.TestCase):
             contract_date="2026-03-01", use_project_selection=False
         ).to_dict()
         report = evaluate_gate_0(registry, cdir, selection)
-        self.assertEqual(report["summary"]["gate_0a"], "BLOCKED")
+        # 机制层已冻结 → Gate 0a 放行 WP1/WP2/WP3
+        self.assertEqual(report["summary"]["gate_0a"], "PASS")
+        # 数据层未就位 → Phase 0 仍熔断（含 adjustment_scope 与逐项分类表）
         self.assertEqual(report["summary"]["phase_0_input_gate"], "BLOCKED")
         self.assertEqual(report["summary"]["phase_0"], "BLOCKED")
         self.assertEqual(report["summary"]["wp4_solver_layer"], "BLOCKED")
-        # 遗留项必须被显式暴露，避免"已冻结"被误读为"已完备"
-        self.assertTrue(any(a["kind"] == "freeze_blocker" for a in report["advisories"]))
+        phase0_blocked = {
+            i["item"] for i in report["phase_0_input_gate"]["items"]
+            if i["status"] in ("BLOCKED", "FAIL")
+        }
+        self.assertEqual(
+            phase0_blocked, {"adjustment_scope", "project_classification_table"}
+        )
+        # advisories 仍须存在（可能为空）——"已冻结"不得被误读为"已完备"
+        # 早前 T00-06 的 freeze_blocker 是"分类表依赖真实清单"，随机制/数据
+        # 两层拆分一并消除：规则书自身已完备，数据缺口改由 Phase 0 输入门表达。
+        self.assertIsInstance(report["advisories"], list)
+
+
+class AdvisoryTest(unittest.TestCase):
+    def test_self_declared_blocker_is_surfaced_not_swallowed(self):
+        """制品自声明未完成时必须被显式暴露，而不是被当成已冻结静默通过。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            (cdir / "field_schema.json").write_text(
+                json.dumps({"freeze_blocker": "尚待合同条款核对"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            registry = {
+                "gate_0a": {
+                    "field_schema_version": {
+                        "kind": "versioned", "artifact_path": "field_schema.json",
+                        "version": None, "hash": None, "frozen_at": None,
+                    }
+                },
+                "gate_0b": {},
+            }
+            from bidpricing.artifact import advisories
+
+            advs = advisories(registry, cdir)
+            self.assertEqual(len(advs), 1)
+            self.assertEqual(advs[0]["kind"], "freeze_blocker")
+            self.assertIn("合同条款核对", advs[0]["text"])
+
+    def test_blocker_refuses_freezing(self):
+        """freeze_blocker 非空时必须拒绝写 hash——防止未完成制品被当成已通过。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            (cdir / "field_schema.json").write_text(
+                json.dumps({"freeze_blocker": "未完成"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            registry = {
+                "gate_0a": {
+                    "field_schema_version": {
+                        "kind": "versioned", "artifact_path": "field_schema.json",
+                        "version": None, "hash": None, "frozen_at": None,
+                    }
+                }
+            }
+            from bidpricing.artifact import ArtifactNotFreezable
+
+            with self.assertRaises(ArtifactNotFreezable):
+                freeze_record(registry, "gate_0a", "field_schema_version", cdir)
 
 
 if __name__ == "__main__":

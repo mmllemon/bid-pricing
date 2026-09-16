@@ -23,6 +23,23 @@ v3.2 / v3.2.1 因此把 Gate 0 拆为 **0a（技术接口）/ 0b（业务口径�
 4       字段有效性机械化（hash 绑定 + 占位符黑名单）          :mod:`bidpricing.artifact`
 5       Gate 0b 必须早于 WP4 Phase 1                          :func:`assertion_5_sequence`
 6       CI 门禁：配置层零默认值 + 求解层硬门禁                :func:`assertion_6_config_zero_defaults`
+
+Phase 0 输入门判两类东西
+------------------------
+
+断言 2 的落点 :func:`check_phase0_inputs` 判**两类项目级输入**，二者
+性质相同、都属"求解启动前必须有、但开发期不需要"：
+
+1. **项目级选择项取值**（``adjustment_scope``）—— :func:`check_selectable_option`
+   的 ``phase_0`` 时点；
+2. **项目级逐项落值表**（``project_classification_table``，T00-06 数据侧）
+   —— :func:`check_project_input_artifacts`。
+
+第 2 类是本版新增，修正的是一处与第 1 类**同型**的判定时点错误：早前把
+「逐项可竞争性分类表」直接放在 Gate 0a 制品里，于是任一具体项目的清单数据
+未就绪就阻塞解析器/配置层/判定层的开发。正确切法是——``T00-06`` 的
+**规则书**（角色集合 + 启发式 + 覆盖范围，跨项目复用）属 Gate 0a；
+**逐项分类结果**（随项目而异）属 Phase 0 输入。
 ======  ==================================================  ==========================
 
 此外新增一条**选择项判据**（:func:`check_selectable_option`）：
@@ -321,25 +338,125 @@ def check_gate_0a(
 # --------------------------------------------------------- Phase 0 输入门
 
 
-def check_phase0_inputs(registry: dict, selection: dict) -> GateReport:
+def check_project_input_artifacts(registry: dict, config_dir: Path) -> list[CheckItem]:
+    """项目级输入制品判据 —— 注册表 ``phase_0`` 段声明的数据侧制品。
+
+    与 :func:`verify_versioned` 的区别：受控制品（Gate 0a/0b）判的是
+    「契约是否冻结」，本判据判的是「**某个项目的数据是否已就位**」。
+    前者跨项目复用，后者一项目一份。
+    """
+    specs = registry.get("phase_0") or {}
+    if not specs:
+        return [
+            CheckItem(
+                scope="§7.1.1-2", item="phase_0_input_registry", status=Status.BLOCKED,
+                reason=(
+                    "注册表未声明任何 Phase 0 项目级输入制品。这不是空真通过——"
+                    "没有声明就没有判据，等于把项目数据的就绪性检查静默取消"
+                ),
+                actual=[], expected="phase_0 段至少声明一项",
+            )
+        ]
+    return [
+        _check_project_input(key, spec, config_dir) for key, spec in specs.items()
+    ]
+
+
+def _check_project_input(key: str, spec: dict, config_dir: Path) -> CheckItem:
+    scope = "§7.1.1-2"
+
+    def bad(reason: str, actual=None, expected=None) -> CheckItem:
+        return CheckItem(
+            scope=scope, item=key, status=Status.BLOCKED,
+            reason=reason, actual=actual, expected=expected,
+        )
+
+    rel = spec.get("artifact_path")
+    if not rel:
+        return bad(f"{key} 未声明 artifact_path，无法校验")
+    path = config_dir / rel
+    if not path.exists():
+        return bad(f"项目级输入制品缺失：{rel}", actual=None, expected=rel)
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return bad(f"JSON 解析失败：{exc}", actual=None, expected="合法 JSON")
+    if not isinstance(payload, dict):
+        return bad("顶层须为 JSON 对象", actual=type(payload).__name__, expected="object")
+
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        return bad("缺少 rows 列表", actual=type(rows).__name__, expected="list")
+
+    min_rows = int(spec.get("min_rows", 1))
+    if len(rows) < min_rows:
+        return bad(
+            (
+                f"逐项分类表为空（rows={len(rows)}，要求 >= {min_rows}）。"
+                "本表是**项目级数据**：须由真实招标清单经 T01-00B 解析器逐行初判、"
+                "再人工确认 pricing_role 与依据。空表 → Phase 0 输入门 BLOCKED，"
+                "但**不阻塞 Gate 0a / WP1 / WP2 / WP3** —— Gate 0a 判的是规则书"
+                "（competitiveness_classification）是否冻结，规则书是跨项目复用的"
+                "机制，逐项落值是每个项目各自的输入"
+            ),
+            actual=0, expected=f">= {min_rows} 行",
+        )
+
+    required = tuple(spec.get("required_row_fields") or ())
+    allowed_roles = tuple(spec.get("allowed_roles") or ())
+    bad_rows: list[dict] = []
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            bad_rows.append({"index": idx, "problems": ["非对象行"]})
+            continue
+        problems = [f"{f} 缺失" for f in required if not row.get(f)]
+        role = row.get("pricing_role")
+        if allowed_roles and role and role not in allowed_roles:
+            problems.append(f"pricing_role={role!r} 不在 {list(allowed_roles)}")
+        if problems:
+            bad_rows.append(
+                {"index": idx, "item_id": row.get("item_id"), "problems": problems}
+            )
+    if bad_rows:
+        return bad(
+            f"{len(bad_rows)} 行不合格（共 {len(rows)} 行）：字段缺失或角色取值非法",
+            actual=bad_rows[:10], expected=f"每行含 {list(required)}，角色 ∈ {list(allowed_roles)}",
+        )
+
+    return CheckItem(
+        scope=scope, item=key, status=Status.PASS,
+        reason=(
+            f"逐项分类表已就位：{len(rows)} 行，字段齐备且 pricing_role 取值合法"
+        ),
+        actual=len(rows), expected=f">= {min_rows} 行",
+    )
+
+
+def check_phase0_inputs(
+    registry: dict, selection: dict, config_dir: Path
+) -> GateReport:
     """Phase 0 输入门 —— §7.1.1 断言 2「未定态熔断：Phase 0 直接 BLOCKED」的落点。
 
     为什么单独设这一道门，而不是把「未落值」挂在 Gate 0a
     ----------------------------------------------------
-    ``adjustment_scope`` 是**项目级选择项**：契约要求 WP3 / WP4 同时实现
-    FULL 与 SEGMENT 两条分支，选择只决定「哪条分支生效」。因此
+    项目级输入（选择项取值、逐项分类表）有一个共同性质：
 
-    * **开发期不需要它** —— 两条分支都要写，没选也能开工；
-    * **求解期必须有它** —— 没选就跑求解器，等于在该误差区间内做优化，
-      而两种口径下最优报价结构相反、利润差约 4.5 倍。
+    * **开发期不需要它** —— 契约要求 WP3 / WP4 同时实现 FULL 与 SEGMENT
+      两条分支，逐项分类表则是数据不是机制；两者都改变不了"代码该不该写"；
+    * **求解期必须有它** —— 没选 ``adjustment_scope`` 就跑求解器，等于在该
+      误差区间内做优化（两种口径下最优报价结构相反、利润差约 4.5 倍）；
+      没有逐项分类表则 ``X_opt`` 无从生成。
 
-    把它挂在 Gate 0a 会同时造成两个后果：解析器被一个晚期决策无故阻塞，
-    以及「机制就绪」与「取值已定」两类不同性质的失败被混在同一个闸门里
+    把它挂在 Gate 0a 会同时造成两个后果：解析器被晚期决策无故阻塞，
+    以及「机制就绪」与「数据就绪」两类不同性质的失败被混在同一个闸门里
     无法区分归因。本函数把后者独立出来，**判定时点与消耗时点对齐**。
     """
     report = GateReport(
         gate="Phase 0 输入门",
-        purpose="求解层启动前，全部项目级选择项取值必须已定（未定即熔断）",
+        purpose=(
+            "求解层启动前，项目级选择项取值与项目级输入数据必须均已就位"
+        ),
     )
 
     enum_recs = [r for r in parse_records(registry, "gate_0a") if r.is_enum]
@@ -354,6 +471,10 @@ def check_phase0_inputs(registry: dict, selection: dict) -> GateReport:
                 actual=0, expected=">= 0",
             )
         )
+
+    for item in check_project_input_artifacts(registry, config_dir):
+        report.add(item)
+
     return report
 
 
@@ -573,11 +694,12 @@ def evaluate_gate_0(
     """执行 Gate 0 全部判据，返回可直接序列化的总报告。
 
     ``phase_0`` 由**两个条件共同**决定：Gate 0a 通过（技术接口冻结）
-    **且** Phase 0 输入门通过（选择项取值已定）。二者缺一即 BLOCKED。
+    **且** Phase 0 输入门通过（选择项取值已定 + 项目级输入数据已就位）。
+    二者缺一即 BLOCKED。
     """
     gate_0a = check_gate_0a(registry, config_dir, selection)
     gate_0b = check_gate_0b(registry, config_dir)
-    phase0 = check_phase0_inputs(registry, selection)
+    phase0 = check_phase0_inputs(registry, selection, config_dir)
     ci = assertion_6_config_zero_defaults(config_dir)
     ci.add(assert_wp4_build_allowed(gate_0b))
     seq = assertion_5_sequence(gate_0b_passed_at, phase1_first_build_at)

@@ -59,9 +59,10 @@ def _placeholder_hit(value: str) -> str | None:
 class ArtifactNotFreezable(RuntimeError):
     """制品自声明尚不完整（``freeze_blocker`` 非空），拒绝冻结。
 
-    这是防止「把未完成制品冻成已通过」的安全阀：例如
-    ``competitiveness_classification.json`` 的分类表为空、依赖真实招标清单，
-    若仅因文件存在就获得 hash，Gate 0a 会误判其为已冻结。
+    这是防止「把未完成制品冻成已通过」的安全阀：只要制品自己在文件里
+    写了 ``freeze_blocker``，就说明它尚未完备（例如《计价规则卡》尚待
+    合同条款核对、成本口径证明包尚缺八项分解），此时若仅因文件存在就
+    发放 hash，闸门会把「未完成」误读为「已通过」。
     """
 
 

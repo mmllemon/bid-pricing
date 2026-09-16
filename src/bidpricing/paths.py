@@ -31,3 +31,6 @@ GATE0_REGISTRY = "gate0_registry.json"
 
 #: 项目级选择项落值文件（adjustment_scope 等）。未选择 = 不写 value 字段。
 PROJECT_SELECTION = "project_selection.json"
+
+#: 项目级逐项可竞争性分类表（T00-06 的数据侧）。空表 = Phase 0 输入门 BLOCKED。
+PROJECT_CLASSIFICATION_TABLE = "project_classification_table.json"

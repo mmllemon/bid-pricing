@@ -8,7 +8,7 @@
       "artifact_path": "ruleset_selector_spec.json",
       "version": "sha256:0dd335b5a8ae",
       "hash": "sha256:0dd335b5a8ae",
-      "frozen_at": "2026-09-16T01:47:55+00:00",
+      "frozen_at": "2026-09-16T02:18:09+00:00",
       "note": "T00-08 规格制品"
     },
     "field_schema_version": {
@@ -16,7 +16,7 @@
       "artifact_path": "field_schema.json",
       "version": "sha256:858b0c997f85",
       "hash": "sha256:858b0c997f85",
-      "frozen_at": "2026-09-16T01:47:55+00:00",
+      "frozen_at": "2026-09-16T02:18:09+00:00",
       "note": "T00-02 字段字典"
     },
     "constraint_schema_version": {
@@ -24,7 +24,7 @@
       "artifact_path": "constraint_schema.json",
       "version": "sha256:49966cbda4b7",
       "hash": "sha256:49966cbda4b7",
-      "frozen_at": "2026-09-16T01:47:55+00:00",
+      "frozen_at": "2026-09-16T02:18:09+00:00",
       "note": "T00-03 约束字典 C1–C12"
     },
     "precision_profile_version": {
@@ -32,7 +32,7 @@
       "artifact_path": "precision_profile.json",
       "version": "sha256:6ce483e8d221",
       "hash": "sha256:6ce483e8d221",
-      "frozen_at": "2026-09-16T01:47:55+00:00",
+      "frozen_at": "2026-09-16T02:18:09+00:00",
       "note": "T00-04 精度与容差策略"
     },
     "architecture_decision_version": {
@@ -40,23 +40,23 @@
       "artifact_path": "architecture_decision.json",
       "version": "sha256:3601adeed46c",
       "hash": "sha256:3601adeed46c",
-      "frozen_at": "2026-09-16T01:47:55+00:00",
+      "frozen_at": "2026-09-16T02:18:09+00:00",
       "note": "T00-05 三层分割架构地位"
     },
     "competitiveness_classification": {
       "kind": "versioned",
       "artifact_path": "competitiveness_classification.json",
-      "version": null,
-      "hash": null,
-      "frozen_at": null,
-      "note": "T00-06 可竞争性分类——分类表为空，依赖真实招标清单，属启动前阻塞项"
+      "version": "sha256:5610c8d879dd",
+      "hash": "sha256:5610c8d879dd",
+      "frozen_at": "2026-09-16T02:18:09+00:00",
+      "note": "T00-06 可竞争性**分类规则书**（角色集合 + 启发式 + 覆盖范围 + 外生常量）。本制品是跨项目复用的机制，不含任何具体项目的分类结果——逐项落值在 phase_0.project_classification_table"
     },
     "input_protocol_schema": {
       "kind": "versioned",
       "artifact_path": "input_protocol_schema.json",
       "version": "sha256:92c3edea3d46",
       "hash": "sha256:92c3edea3d46",
-      "frozen_at": "2026-09-16T01:47:55+00:00",
+      "frozen_at": "2026-09-16T02:18:09+00:00",
       "note": "T01-00A 输入协议 Schema（v3.2.1 由 WP1 移入 WP0 以解 Gate 0a 死锁）"
     },
     "adjustment_scope": {
@@ -67,6 +67,28 @@
       ],
       "source": "T00-08 select_rule_set() 输出",
       "note": "v3.2.1 由 Gate 0b 前移至 Gate 0a（它直接决定 WP3 的 R_i 分段逻辑）。未定态必须表现为 key 缺失，不得写 null 或 '未定' 等字符串（§7.1.1 断言 1）"
+    }
+  },
+  "phase_0": {
+    "project_classification_table": {
+      "kind": "project_input",
+      "artifact_path": "project_classification_table.json",
+      "min_rows": 1,
+      "allowed_roles": [
+        "OPTIMIZABLE",
+        "FIXED",
+        "NON_COMPETITIVE",
+        "PASS_THROUGH",
+        "CONTRACT_DEFINED"
+      ],
+      "required_row_fields": [
+        "item_id",
+        "unit_work",
+        "item_name",
+        "source_list",
+        "pricing_role"
+      ],
+      "note": "T00-06 的**项目级落值表**（数据侧）。Gate 0a 判据是规则书（gate_0a.competitiveness_classification）；本表是 Phase 0 输入门判据。拆分依据：规则书跨项目复用、逐项分类随项目而异，两者判定时点不同（同 adjustment_scope 的处理）。空表 → Phase 0 BLOCKED，不阻塞 WP1/WP2/WP3。"
     }
   },
   "gate_0b": {

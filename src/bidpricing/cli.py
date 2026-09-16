@@ -705,6 +705,32 @@ def build_parser() -> argparse.ArgumentParser:
                       help="产出落盘目录（默认 docs/matched/<project_id>）")
     p_mb.set_defaults(func=cmd_match_boq)
 
+    # -------------------------------------------------------- import-register
+    p_ir = sub.add_parser(
+        "import-register",
+        help="T01-05：登记一次源文件导入（指纹 + 逐 sheet 哈希，追加式）",
+    )
+    p_ir.add_argument("xlsx", help="源清单 xlsx")
+    p_ir.add_argument("--project-id", required=True, help="项目编号")
+    p_ir.add_argument("--side", required=True, choices=["cap", "cost"],
+                      help="清单侧（登记表按 project×side 分文件）")
+    p_ir.add_argument("--source-owner", default="UNKNOWN",
+                      help="文件来源方（招标人/用户/…）")
+    p_ir.add_argument("--version-note", default=None,
+                      help="人工版本说明（缺省=内容指纹 sha256[:12]）")
+    p_ir.set_defaults(func=cmd_import_register)
+
+    # ---------------------------------------------------------- import-verify
+    p_iv = sub.add_parser(
+        "import-verify",
+        help="T01-05：复算前校验源文件指纹（被替换 → 拒绝复用旧复算结果）",
+    )
+    p_iv.add_argument("xlsx", help="源清单 xlsx")
+    p_iv.add_argument("--project-id", required=True, help="项目编号")
+    p_iv.add_argument("--side", required=True, choices=["cap", "cost"],
+                      help="清单侧")
+    p_iv.set_defaults(func=cmd_import_verify)
+
     return parser
 
 
@@ -910,6 +936,53 @@ def cmd_match_boq(args) -> int:
     print("-" * 78)
     print(f" 匹配报告: {out_path}")
     return 1 if rep.blocked else 0
+
+
+def cmd_import_register(args) -> int:
+    """T01-05：登记导入。登记表 = 事实记录，追加式不删旧行。"""
+    from pathlib import Path as _P
+
+    from .io.import_registry import register_import, registry_path_for
+
+    try:
+        rec = register_import(
+            args.xlsx, args.project_id, args.side, repo_root(),
+            source_owner=args.source_owner,
+            file_version_note=args.version_note,
+        )
+    except FileNotFoundError as exc:
+        print(f"■ {exc}")
+        return 1
+    except XlsxError as exc:
+        print(f"■ xlsx 打不开：{exc}")
+        return 1
+    print("=" * 78)
+    print(f"导入登记（T01-05）：{_P(args.xlsx).name}  [{args.project_id}/{args.side}]")
+    print(f" import_seq      = {rec.import_seq}")
+    print(f" file_hash       = {rec.file_hash}")
+    print(f" file_version    = {rec.file_version}")
+    print(f" import_time     = {rec.import_timestamp}")
+    print(f" source_owner    = {rec.source_owner}")
+    print(f" sheets          = {len(rec.sheet_hash)} 张（逐 sheet 哈希已记录）")
+    print(f" 登记表          = {registry_path_for(repo_root(), args.project_id, args.side)}")
+    return 0
+
+
+def cmd_import_verify(args) -> int:
+    """T01-05：复算前校验。BLOCKED = 拒绝复用旧复算结果（硬判据）。"""
+    from .io.import_registry import registry_path_for, verify_import
+
+    r = verify_import(args.xlsx, args.project_id, args.side, repo_root())
+    mark = "✓" if r.status == "PASS" else "■"
+    print(f" {mark} [{r.status}] {args.project_id}/{args.side} ← {args.xlsx}")
+    print(f"   {r.reason}")
+    if r.changed_sheets:
+        print(f"   变化 sheet：{r.changed_sheets}")
+    if r.record:
+        print(f"   比对基准：import_seq={r.record.import_seq} "
+              f"file_version={r.record.file_version} "
+              f"导入于 {r.record.import_timestamp}")
+    return 0 if r.status == "PASS" else 1
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -5,16 +5,16 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-16 18:23:45** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-16 21:41:44** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`95cb2e1` ｜ 累计 22 次提交
-- 最新提交信息：feat(t01-01,t01-03): Canonical Schema + 规范化清洗 —— WP1 第二、三块（tag canonical-clean-v1）
-- 最近里程碑标签：`canonical-clean-v1`
+- 提交：`4b56409` ｜ 累计 23 次提交
+- 最新提交信息：feat(t01-04): 三表交叉匹配器 —— master 并集 LEFT JOIN + 异常清单；Phase 0 分类声明落值（西永L/2024）
+- 最近里程碑标签：`classification-declared-t0104-v1`
 - 工作区：有 7 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
@@ -59,7 +59,7 @@
 
 ## 四、质量门
 
-- 单元测试：**238** 项，结果 **通过**（OK）
+- 单元测试：**252** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -79,7 +79,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP | 任务数 | 状态分布 |
 |---|---|---|
 | WP0 | 15 | done 7、not_started 5、partial 3 |
-| WP1 | 11 | done 4、not_started 6、partial 1 |
+| WP1 | 11 | done 6、not_started 4、partial 1 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | not_started 7 |
 | WP4 | 13 | not_started 13 |
@@ -91,7 +91,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ### 已启动 / 已完成任务
 
-> 共 15 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 17 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -110,6 +110,8 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T01-02C | Golden Dataset 建设与版本锁定 | partial | ✓ 成立 | 首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定；tests/data/xiyong_l_district/pair.json 存在（35937 字节） |
 | T01-03 | 规范化与清洗 | done | — | src/bidpricing/io/clean.py + CLI clean-boq：数值归一（千分位/全角/空白）、编码标准化（不补零）、单位归一、精度归一（q 6 位/金额 2 位）、cap 空值语义 → no_cap、C5 零价信号、透传信号、数值失败进报告不猜；真实文件实测 82→82 两侧行、0 解析失败、031301017001 正确标记不限价；tests/test_io_clean.py 16 项 |
 | T01-04 | 三表交叉匹配 | done | — | 2026-09-16 实现 src/bidpricing/io/match.py + CLI match-boq + 10 测试。master=cap∪cost 键并集；未匹配项 100% 进异常清单；同侧重复 key BLOCK 禁止自动合并；no_cap=合法语义单列计数。真实文件 e2e：82 键全匹配、0 异常、missing_limit=1（脚手架搭拆，合法 no_cap）。 |
+| T01-04A | 多级 key 与重复 key 治理 | done | — | 2026-09-16 落 config/key_spec.json（canonical_key=(project_id,unit_work,item_id)；扩展键仅人工裁定触发；序号/名称键明令禁止；重复 key BLOCK 禁止自动合并）+ tests/test_key_spec.py 规范↔实现双向锁定。机械部分已于 T01-04 前移至 match.py。 |
+| T01-05 | 源文件版本锁定与完整性 | done | — | 2026-09-16 实现 src/bidpricing/io/import_registry.py + CLI import-register/import-verify。整文件 sha256 + 逐 sheet 值矩阵哈希双层指纹；登记表追加式不可变；未登记=BLOCKED；文件被替换→BLOCKED+定位变化 sheet。真实文件 e2e：登记→PASS；字节级改动单字符串→BLOCKED 且精确定位「表-09 分部分项」。deps T01-02 属数据侧验收（真实成本清单到位后对 cost 侧补登记即可，机制不受阻）。 |
 
 ---
 

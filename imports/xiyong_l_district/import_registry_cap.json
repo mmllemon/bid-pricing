@@ -1,0 +1,24 @@
+{
+ "records": [
+  {
+   "import_seq": 1,
+   "project_id": "xiyong_l_district",
+   "side": "cap",
+   "file_name": "西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx",
+   "file_path": "..\\真实案件示例\\中标限价\\西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx",
+   "file_hash": "f5dc3abb5588a31b18fe36590446af51d8019969a61e4fe075f09617573053aa",
+   "file_version": "f5dc3abb5588",
+   "sheet_hash": {
+    "表-04 单位工程投标报价汇总表【电气设备安装工程】": "bf99aadc9f43d807e8190812eab2841aec8772dfbb7f4d7a606f577e48d0d391",
+    "表-09 分部分项工程项目清单计价表【电气设备安装工程】": "9e0faae350c27c853e9859007ff3bb458579f0675f8ddd9ef514f59b995cf6fc",
+    "表-09 施工技术措施项目清单计价表【电气设备安装工程】": "8cc846ce2e93ad6c680042ef56357fc60a704eda6c272217506b9ee12e4c4b5a",
+    "表-10 施工组织措施项目清单计价表【电气设备安装工程】": "732288447d3264d7915c9a5457c5f0c28f36132cf98d204f33aab1558a5ce3c8",
+    "表-11 其他项目清单计价汇总表【电气设备安装工程】": "751e058d88041b20a2fbf3ac541c8e48fa17f29f6fae913a48287b53f8bc592e",
+    "表-12 规费、税金项目计价表【电气设备安装工程】": "b9db9d99f506ddd0986f61b2123b6dbdfa004919b215f295a28e8b28813652aa"
+   },
+   "sheet_hash_combined": "0f9b4431282fdb91e17562709af58dfcfe5a3559e8599dc970a0e5cff488e156",
+   "import_timestamp": "2026-09-16T21:38:33+0800",
+   "source_owner": "招标人"
+  }
+ ]
+}

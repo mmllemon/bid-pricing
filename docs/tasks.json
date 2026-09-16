@@ -486,8 +486,8 @@
    "summary": "Canonical key = `(project, unit, item_id)`，必要时 `+(description, unit)`；重复 key 必须 BLOCK，禁止自动合并",
    "gate": "Gate 1",
    "evidence": [],
-   "status": "not_started",
-   "note": ""
+   "status": "done",
+   "note": "2026-09-16 落 config/key_spec.json（canonical_key=(project_id,unit_work,item_id)；扩展键仅人工裁定触发；序号/名称键明令禁止；重复 key BLOCK 禁止自动合并）+ tests/test_key_spec.py 规范↔实现双向锁定。机械部分已于 T01-04 前移至 match.py。"
   },
   {
    "id": "T01-05",
@@ -504,8 +504,8 @@
    "summary": "每次导入记录 `file_name / file_hash / file_version / sheet_hash / import_timestamp / source_owner`；源文件被替换后必须能识别并拒绝复用旧复算结果",
    "gate": "Gate 1",
    "evidence": [],
-   "status": "not_started",
-   "note": ""
+   "status": "done",
+   "note": "2026-09-16 实现 src/bidpricing/io/import_registry.py + CLI import-register/import-verify。整文件 sha256 + 逐 sheet 值矩阵哈希双层指纹；登记表追加式不可变；未登记=BLOCKED；文件被替换→BLOCKED+定位变化 sheet。真实文件 e2e：登记→PASS；字节级改动单字符串→BLOCKED 且精确定位「表-09 分部分项」。deps T01-02 属数据侧验收（真实成本清单到位后对 cost 侧补登记即可，机制不受阻）。"
   },
   {
    "id": "T01-06",

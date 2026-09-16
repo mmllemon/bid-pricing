@@ -1,0 +1,38 @@
+{
+  "spec_id": "canonical_key_spec_v1",
+  "task": "T01-04A（WP1，Gate 1 前置）",
+  "title": "Canonical Key 规范 —— 多级 key 与重复 key 治理",
+  "mechanism_owner": "src/bidpricing/io/match.py（match_key / _dup_anomalies）",
+  "declared_at": "2026-09-16T21:45:00+08:00",
+  "key_definition": {
+    "canonical_key": "(project_id, unit_work, item_id)",
+    "fields": {
+      "project_id": "项目身份命名空间（project_classification_table 落值；不携带计价规则）",
+      "unit_work": "单位工程。**无独立列**，由 sheet 名【…】+ A3「工程名称：…」承担（input_protocol_schema.listing_structure）；解析器不跨 sheet 合并——同一文件多单位工程时天然分段",
+      "item_id": "清单编码。**位数不参与合法性判定**（D1）；标准化=空白/全角/大小写归一（clean.py::_normalize_code），**不做位数补零**——补零等于改主键"
+    },
+    "extension_rule": {
+      "when": "同键仍冲突时（同项目同单位工程同编码出现多行且人工裁定**均为真数据**，如按特征拆分的同名项）",
+      "extended_key": "(project_id, unit_work, item_id, item_feature, unit)",
+      "constraint": "扩展键**只能由人工裁定触发**（裁定结果记入异常清单处置），机器不得自动升级键位——自动升级=自动合并的另一种形态"
+    }
+  },
+  "prohibited_keys": {
+    "row_number": "序号在分节内各自从 1 重算（真实限价文件实证：C 安装工程/B.3 分节），跨分节必撞",
+    "item_name": "同名不同项常态存在（如多台变压器按容量区分靠特征列）",
+    "item_name_plus_unit": "同上；且两侧名称/单位本就允许存在机械不一致（match 层会上报 ATTRIBUTE_MISMATCH）"
+  },
+  "duplicate_key_policy": {
+    "rule": "同侧同键出现 ≥2 行 → **BLOCK，禁止自动合并**",
+    "behavior": [
+      "MatchReport.blocked = true（match_canonical_rows）",
+      "全部副本逐行进异常清单（DUPLICATE_KEY_CAP / DUPLICATE_KEY_COST），每条带 source 定位",
+      "match-boq 退出码 1；下游求解层不得在 blocked=true 时启动",
+      "融合行取首行仅为报告完整性，不代表裁定结果"
+    ],
+    "rationale": "合并等于机器替用户决定哪一行是真数据。两行同键可能是：复制行/错误行/按特征应拆分项——三种处置完全不同，必须人工裁定",
+    "enforcement_point": "匹配时点（T01-04 机械部分前移至此）；本任务补的是规范成文与对齐测试"
+  },
+  "consistency_tests": "tests/test_key_spec.py 断言本文件与 match.py 实现一致（键函数逐字段、重复处理行为）",
+  "related": ["input_protocol_schema.listing_structure", "canonical_schema.json", "project_classification_table.json"]
+}

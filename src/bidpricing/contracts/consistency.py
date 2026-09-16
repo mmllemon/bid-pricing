@@ -35,7 +35,19 @@ ARTIFACTS = {
 }
 
 #: 金额/数量类字段必须声明缺失策略（否则「非空即通过」会绕过熔断点）。
-_MISSING_POLICY_DOMAIN = {"BLOCK", "WARN", "DEFAULT", "IMPUTE", "IGNORE"}
+#: **唯一事实源是 field_schema 自身的 ``conventions.missing_policy_domain``**——
+#: checker 不硬编码值域。教训（2026-09-16 实测）：cap 空值语义裁定新增
+#: ``ALLOW_EMPTY_NO_CAP`` 时，制品与 checker 两处维护，制品改了 checker 仍按旧
+#: 值域报 BLOCKED。判据应校验「字段取值 ∈ 制品自己声明的值域」，
+#: 而不是「∈ checker 作者记忆里的值域」。
+_MISSING_POLICY_FALLBACK = {"BLOCK", "WARN", "DEFAULT", "IMPUTE", "IGNORE"}
+
+
+def _missing_policy_domain(field_art: dict) -> set[str]:
+    dom = (field_art.get("conventions") or {}).get("missing_policy_domain")
+    if isinstance(dom, list) and dom:
+        return {str(x) for x in dom}
+    return set(_MISSING_POLICY_FALLBACK)
 
 
 class _LoadError(Exception):
@@ -88,18 +100,20 @@ def _check_field_schema(art: dict) -> list[CheckItem]:
         _ok("field_schema.唯一性", f"{len(names)} 个字段名唯一")
     )
 
+    domain = _missing_policy_domain(art)
     illegal = [
         f.get("name") for f in fields
-        if isinstance(f, dict) and f.get("missing_policy") not in _MISSING_POLICY_DOMAIN
+        if isinstance(f, dict) and f.get("missing_policy") not in domain
     ]
     out.append(
         _bad(
             "field_schema.missing_policy",
             f"{len(illegal)} 个字段的 missing_policy 不在取值域内：{illegal[:8]}",
-            actual=illegal[:8], expected=sorted(_MISSING_POLICY_DOMAIN),
+            actual=illegal[:8], expected=sorted(domain),
         ) if illegal else
         _ok("field_schema.missing_policy",
-            f"{len(names)} 个字段的 missing_policy 均在取值域内")
+            f"{len(names)} 个字段的 missing_policy 均在取值域内"
+            f"（值域取自制品自身声明，共 {len(domain)} 个）")
     )
 
     # 声明了「禁止 DEFAULT」的字段族，不得真的带 default

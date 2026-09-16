@@ -40,7 +40,7 @@
    "name": "单项上界",
    "severity": "P0",
    "toggleable": false,
-   "expression": "p_i <= U_i = min(cap_i, base_i(1 + delta_eff_i))",
+   "expression": "p_i <= U_i = cap_i（δ⁺ 已失效，见 OI-02）；**cap_i 为空时本约束对该项不适用**",
    "inputs": [
     "cap",
     "p0",
@@ -49,7 +49,18 @@
    "metric": "p_i - U_i",
    "tolerance": "eps_price",
    "implementation": "直接线性约束",
-   "note": null
+   "note": null,
+   "null_cap_semantics": {
+    "ruled_at": "2026-09-16",
+    "meaning": "cap 空 = 招标不限制该项单价（报多少都可以，但不得为 0）",
+    "must_not": [
+     "不得把空 cap 当数据缺口拒收（旧 missing_policy=BLOCK 与裁定冲突，已改 ALLOW_EMPTY_NO_CAP）",
+     "不得按 cap=0 处理（p_i ≤ 0 将直接不可行——数值实现最危险的静默错误）",
+     "不得凭空造一个 cap（ADR-0007：沉默不是断言）"
+    ],
+    "effective_bounds": "该项上界由总价约束 P* ≤ P*_max 聚合兜底；下界仍由 C5（≠0）与 C4 成本地板承担",
+    "source": "用户裁定（背景：实测样本 031301017001 脚手架搭拆 限价综合单价为空）"
+   }
   },
   {
    "id": "C3",

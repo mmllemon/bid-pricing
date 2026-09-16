@@ -5,15 +5,15 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-16 16:13:17** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-16 16:21:16** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`fe3f041` ｜ 累计 17 次提交
-- 最新提交信息：chore(tasks): T01-00B -> done（任务板人工字段直接更新；SEED_STATUS 仅对新任务生效，教训入记忆）
+- 提交：`0ce988a` ｜ 累计 18 次提交
+- 最新提交信息：docs(contracts): 登记裁定——总价限价与报价总价均由用户给定
 - 最近里程碑标签：`boq-parser-v1`
 - 工作区：有 3 处未提交改动
 
@@ -43,13 +43,13 @@
 
 | 制品 key | 类型 | hash | 冻结时间 |
 |---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-16T08:12:52+00:00 |
-| `field_schema_version` | versioned | sha256:26b940c21e0b | 2026-09-16T08:12:52+00:00 |
-| `constraint_schema_version` | versioned | sha256:ebed21c439e8 | 2026-09-16T08:12:52+00:00 |
-| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-16T08:12:52+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-16T08:12:52+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-16T08:12:52+00:00 |
-| `input_protocol_schema` | versioned | sha256:808f482d7d09 | 2026-09-16T08:12:52+00:00 |
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-16T08:21:11+00:00 |
+| `field_schema_version` | versioned | sha256:26b940c21e0b | 2026-09-16T08:21:11+00:00 |
+| `constraint_schema_version` | versioned | sha256:d1aab9dcce04 | 2026-09-16T08:21:11+00:00 |
+| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-16T08:21:11+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-16T08:21:11+00:00 |
+| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-16T08:21:11+00:00 |
+| `input_protocol_schema` | versioned | sha256:a0cd5f95c786 | 2026-09-16T08:21:11+00:00 |
 | `adjustment_scope` | enum | **未冻结** | — |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
@@ -97,13 +97,13 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T00-08 | 规则集选择器 | done | ✓ 成立 | src/bidpricing/contracts/selector.py 存在 |
 | T00-01 | 合同计价与调价口径冻结 | partial | — | 规则集已承载调价口径；adjustment_scope 为选择项，取值待项目落值 |
 | T00-02 | 字段字典冻结 | done | ✓ 成立 | field_schema_version 已冻结 sha256:26b940c21e0b |
-| T00-03 | 约束字典冻结 | done | ✓ 成立 | constraint_schema_version 已冻结 sha256:ebed21c439e8 |
+| T00-03 | 约束字典冻结 | done | ✓ 成立 | constraint_schema_version 已冻结 sha256:d1aab9dcce04 |
 | T00-04 | 精度与容差策略冻结 | done | ✓ 成立 | precision_profile_version 已冻结 sha256:6ce483e8d221 |
 | T00-05 | 三层分割架构地位确认 | done | ✓ 成立 | architecture_decision_version 已冻结 sha256:3601adeed46c |
 | T00-06 | 报价项可竞争性分类与变量集合冻结 | partial | ✓ 成立 | 规则书已冻结；项目级落值表为空，属 Phase 0 输入门判据；competitiveness_classification 已冻结 sha256:2913378715d5 |
 | T00-06B | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | partial | ✓ 成立 | 恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落；src/bidpricing/identity.py 存在 |
 | T00-07 | 规则集优先级冻结 | done | ✓ 成立 | rule_set_selector_spec 已冻结 sha256:0dd335b5a8ae |
-| T01-00A | 招标文件计价口径与输入协议 Schema 冻结 | done | ✓ 成立 | input_protocol_schema 已冻结 sha256:808f482d7d09 |
+| T01-00A | 招标文件计价口径与输入协议 Schema 冻结 | done | ✓ 成立 | input_protocol_schema 已冻结 sha256:a0cd5f95c786 |
 | T01-00B | 招标文件解析器实现 | done | — | 解析器 src/bidpricing/io/（零依赖读取器 + 表号/别名双键 + 双行表头合并 + 分节标题四信号判据）；CLI parse-boq 三项产出在真实配对样本上验证：82 行/0 失败/加权下浮 8.0084% 与 pair.json 交叉印证；tests/test_io_boq.py 19 项 |
 | T01-02C | Golden Dataset 建设与版本锁定 | partial | ✓ 成立 | 首份真实配对样本已固化；六类分层用例（A–F）未建，版本未锁定；tests/data/xiyong_l_district/pair.json 存在（35937 字节） |
 

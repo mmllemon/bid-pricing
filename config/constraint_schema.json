@@ -1,285 +1,294 @@
 {
-  "schema_id": "constraint_schema_v1",
-  "task": "T00-03",
-  "title": "约束字典 C1–C13",
-  "source_of_truth": "model_v0.3_R2.md §5.4 约束全集 C1–C12（C13 为 2026-09-16 由用户实际招标条款引出的新增约束，见 input_protocol_schema.open_issues[OI-04]/[OI-05]）",
-  "status_domain": [
-    "PASS",
-    "WARN",
-    "FAIL",
-    "BLOCKED"
-  ],
-  "tuple_fields": [
-    "constraint_id",
-    "status",
-    "actual",
-    "limit",
-    "slack",
-    "severity"
-  ],
-  "constraints": [
+ "schema_id": "constraint_schema_v1",
+ "task": "T00-03",
+ "title": "约束字典 C1–C13",
+ "source_of_truth": "model_v0.3_R2.md §5.4 约束全集 C1–C12（C13 为 2026-09-16 由用户实际招标条款引出的新增约束，见 input_protocol_schema.open_issues[OI-04]/[OI-05]）",
+ "status_domain": [
+  "PASS",
+  "WARN",
+  "FAIL",
+  "BLOCKED"
+ ],
+ "tuple_fields": [
+  "constraint_id",
+  "status",
+  "actual",
+  "limit",
+  "slack",
+  "severity"
+ ],
+ "constraints": [
+  {
+   "id": "C1",
+   "name": "总价锁定（作用域限为可竞争部分）",
+   "severity": "P0",
+   "toggleable": false,
+   "expression": "sum_{i in X_opt} p_i q_i^0 = P*_competitive",
+   "inputs": [
+    "p_bid",
+    "q0",
+    "pricing_role",
+    "P*_competitive"
+   ],
+   "metric": "|sum_{i in X_opt} p_i q_i^0 - P*_competitive|",
+   "tolerance": "eps_total",
+   "implementation": "按 §8.2 容差带实现（模式 A / B 二选一，两层须同口径），P*_competitive 由 T00-06B 的 compute_P_competitive(p) 提供，禁止重实现",
+   "note": "税金/安全生产措施费/暂列金额/暂估价/合同指定固定金额项不可自由优化——若一并投入求和，会产生「数学最优、投标非法」的解"
+  },
+  {
+   "id": "C2",
+   "name": "单项上界",
+   "severity": "P0",
+   "toggleable": false,
+   "expression": "p_i <= U_i = min(cap_i, base_i(1 + delta_eff_i))",
+   "inputs": [
+    "cap",
+    "p0",
+    "delta_eff"
+   ],
+   "metric": "p_i - U_i",
+   "tolerance": "eps_price",
+   "implementation": "直接线性约束",
+   "note": null
+  },
+  {
+   "id": "C3",
+   "name": "单项下界（合规）",
+   "severity": "P0",
+   "toggleable": false,
+   "expression": "p_i >= L_i = max( L_i^tender , 0 )",
+   "expression_detail": "L_i^tender = 招标文件明示的单价下限（若有条款则取其值，否则不参与取大）；「非零下界」由 C5 单独承担，不在本式内重复。",
+   "inputs": [
+    "unbalanced_clause",
+    "unbalanced_reference",
+    "unbalanced_tolerance",
+    "delta_eff"
+   ],
+   "metric": "L_i - p_i",
+   "tolerance": "eps_price",
+   "implementation": "多来源取大后作直接线性约束。**两版实现差异**：2013 与 2024 对下界的规范依据不同，但本约束是招标文件级而非规范级——不得从规范集反推 δ⁻。",
+   "note": "**2026-09-16 重定义**。原式 `p_i >= L_i = base_i(1 - δ_i^-)` 被否决，理由有二：\n① `δ⁻` 在招标文件中**没有依据**——记录者曾把「用户未提及下限」误记为「用户声明没有下限」（见 ADR-0007），据此得出的「无下界」结论不成立；\n② 用户实际的条款形态是**两类**：单项报价不得为 0（→ C5）、不平衡报价条款（如 ±50%，→ C13）。\n因此 C3 改为**多来源取大**：只在招标文件真的写了幅度时才出现 L_i^tender，否则本约束对可行域无作用（`L_i = 0`），而**不得**用一个编造的 δ⁻ 假装有下界。\n`δ⁻` 仍是合法字段（招标文件明示允许下浮幅度时使用），但**不再有默认意义**。",
+   "redefined_at": "2026-09-16",
+   "supersedes": "p_i >= L_i = base_i(1 - delta_eff_i)（仅 δ⁻ 单来源）",
+   "original_note_for_audit": null
+  },
+  {
+   "id": "C4",
+   "name": "地板（成本止损）",
+   "severity": "P0",
+   "toggleable": false,
+   "expression": "p_i >= floor_i = max(L_i, c_i(1 - mu_i))",
+   "inputs": [
+    "floor",
+    "p0",
+    "delta_eff",
+    "c_i",
+    "mu"
+   ],
+   "metric": "floor_i - p_i",
+   "tolerance": "eps_price",
+   "implementation": "按取大计算；config 保留独立「合规下浮限」字段供审计",
+   "note": "C4 与 C6 必须并存：只留 C6 允许个别项压至 p_i≈0（数值可行、工程荒谬、触发清标废标）；只留 C4 则累计亏损可突破 theta*P*。**2026-09-16**：本式中的 `L_i` 指 C3 **重定义后**的多来源取大下界，实现时须引用 C3 而非各自硬编码——C3 的定义在本次变更中已改变。"
+  },
+  {
+   "id": "C5",
+   "name": "单项报价不得为零",
+   "severity": "P0",
+   "toggleable": false,
+   "expression": "p_i >= eps_price  （由 zero_price_prohibited 声明；本项目恒真）",
+   "inputs": [
+    "p_bid",
+    "zero_price_prohibited"
+   ],
+   "metric": "eps_price - p_i",
+   "tolerance": "0（严格正）",
+   "implementation": "**2026-09-16 由 P1 可关升级为 P0 不可关**。原定义为「非负性 p_i >= 0，由 C4 蕴含、仅作求解器保险」。用户明确招标文件「单项报价不能为 0」后，它成为**有招标依据的硬性条款**，不再是保险措施：`p_i = 0` 在算术上满足 p_i ≥ 0，却直接违反招标文件（漏项/恶意低价）。因此下界提到 eps_price 并由 zero_price_prohibited 驱动。",
+   "note": "**为什么不能只靠 C4**：C4 的下界是 `max(L_i, c_i(1-μ_i))`。若某项 `c_i` 本身很小（例如补充编码的小五金、标识牌），`c_i(1-μ_i)` 也小，C4 允许近零报价；而「不得为 0」是一条**与成本无关**的合规下界。二者不同源，不可互推。",
+   "upgraded_at": "2026-09-16",
+   "supersedes": "p_i >= 0（P1，可关，由 C4 蕴含）",
+   "original_note_for_audit": null
+  },
+  {
+   "id": "C6",
+   "name": "亏损风险总量约束",
+   "severity": "P0",
+   "toggleable": true,
+   "expression": "sum_{i in I} s_i q_i^1 <= theta * P*,  s_i >= c_i - p_i,  s_i >= 0",
+   "inputs": [
+    "c_i",
+    "p_bid",
+    "q1_point",
+    "theta",
+    "P*"
+   ],
+   "metric": "sum s_i q_i^1 - theta*P*",
+   "tolerance": "eps_total",
+   "implementation": "线性化 s_i >= max(0, c_i - p_i)，问题保持 LP",
+   "note": null
+  },
+  {
+   "id": "C7",
+   "name": "亏损项数上限（升为 MILP）",
+   "severity": "P0",
+   "toggleable": true,
+   "expression": "sum_i I(p_i < c_i) <= N_max",
+   "inputs": [
+    "c_i",
+    "p_bid",
+    "N_max"
+   ],
+   "metric": "sum z_i - N_max",
+   "tolerance": "0（整数）",
+   "implementation": "引入二元变量 z_i in {0,1}，p_i >= c_i - M z_i；问题升为 MILP，须走 T04-07 独立验收协议",
+   "note": "引入二元变量是本项目进入 MILP 的唯一来源"
+  },
+  {
+   "id": "C8",
+   "name": "单项亏损深度上限",
+   "severity": "P0",
+   "toggleable": true,
+   "expression": "(c_i - p_i) / c_i <= d_max  for all i",
+   "inputs": [
+    "c_i",
+    "p_bid",
+    "d_max"
+   ],
+   "metric": "(c_i - p_i)/c_i - d_max",
+   "tolerance": "eps_price",
+   "implementation": "建议 d_max 与 mu 绑定并在 config 显式声明，避免维护两套数字",
+   "note": null
+  },
+  {
+   "id": "C9",
+   "name": "整体盈利门槛",
+   "severity": "P0",
+   "toggleable": true,
+   "expression": "C9a 绝对：Z >= Z_min ；C9b 相对：Z / sum_i c_i q_i^1 >= pi_target",
+   "inputs": [
+    "Z",
+    "c_i",
+    "q1_point",
+    "Z_min",
+    "pi_target"
+   ],
+   "metric": "Z 或 Z/sum(c_i q_i^1)",
+   "tolerance": "eps_total",
+   "implementation": "推荐 C9b（与项目规模无关，阈值可直接继承企业决策惯例）",
+   "note": "C9 与 C1 联立后可行域可能为空——此时必须返回无可行解并转入放弃投标判据，不得通过放松 C6 或 C4 强行找回解"
+  },
+  {
+   "id": "C10",
+   "name": "现金流前载约束",
+   "severity": "P0",
+   "toggleable": true,
+   "expression": "sum_{i in T_front} (rho_i p_i - c_i) q_i^0 >= 0",
+   "inputs": [
+    "rho_i",
+    "p_bid",
+    "c_i",
+    "q0",
+    "T_front"
+   ],
+   "metric": "sum (rho_i p_i - c_i) q_i^0",
+   "tolerance": "eps_total",
+   "implementation": "硬约束，不得被优化器自动权衡掉；若导致不可行则交人决策",
+   "note": "rho_i >= 0.8 有规范下限支撑（GB/T 50500-2024 第 10.2 节：施工过程结算款支付比例不低于 80%）"
+  },
+  {
+   "id": "C11",
+   "name": "报价离散度控制",
+   "severity": "P1",
+   "toggleable": true,
+   "expression": "sigma(d) <= sigma_max,  d_i = (p_i - base_i)/base_i",
+   "inputs": [
+    "p_bid",
+    "p0",
+    "sigma_max",
+    "kappa_max"
+   ],
+   "metric": "MAD 或 sigma(d)",
+   "tolerance": "eps_price",
+   "implementation": "原始 sigma 为二阶锥约束，标准 LP 不支持；推荐 MAD 线性化 (1/n) sum |p_i - p_bar| <= kappa_max，引入 u_i >= p_i - p_bar、u_i >= p_bar - p_i 两条线性约束即可，问题仍为 LP",
+   "note": null
+  },
+  {
+   "id": "C12",
+   "name": "总价成本比",
+   "severity": "P1",
+   "toggleable": true,
+   "expression": "R_pc = sum_i p_i q_i^0 / sum_i c_i q_i^0 >= R_min",
+   "inputs": [
+    "p_bid",
+    "q0",
+    "c_i",
+    "R_min"
+   ],
+   "metric": "R_pc",
+   "tolerance": "eps_price",
+   "implementation": "R_min > 1 是 C9b 的等价形态",
+   "note": "价值在于它是投标前的可解释指标"
+  },
+  {
+   "id": "C13",
+   "name": "不平衡报价幅度约束（条件性）",
+   "severity": "P0",
+   "toggleable": true,
+   "toggleable_note": "**开关本身是 Phase 0 声明**：用户明确「**有些时候**会有不平衡报价条款」——该条款存在与否随项目而异。按 ADR-0006，`unbalanced_clause.enabled=false`（已核查、本项目无该条款）是**合法结论**；`enabled` key 缺失才是「没声明」→ BLOCKED。",
+   "expression": "（本项目已裁定 = SETTLEMENT_ADJUSTMENT 条件修正，不构成投标约束）\n偏高判定（死分支）：(p_i − cap_i)/cap_i > 0.50 —— 因 C2 恒有 p_i ≤ cap_i，**永不触发**；\n偏低判定（唯一活跃分支）：(cap_i − p_i)/cap_i > 0.50 且该子目工程量减少 > 15%\n　→ 该子目结算单价被修正为 p_rev_i（按 10.4.1.3，取值待 OI-06），R_i 直接用 p_rev_i。",
+   "expression_detail": "`ref_i` 由 `unbalanced_reference` 决定（CAP / CONTROL_PRICE / EVAL_BASE / COST_SHARE）；`tol_lo`/`tol_hi` 由 `unbalanced_tolerance` 给出（统一小数，用户举例 ±50% → 0.50/0.50）。",
+   "inputs": [
+    "p_bid",
+    "unbalanced_clause",
+    "unbalanced_reference",
+    "unbalanced_tolerance"
+   ],
+   "metric": "max( (ref_i(1-tol_lo) - p_i) , (p_i - ref_i(1+tol_hi)) )",
+   "tolerance": "eps_price",
+   "mechanism_branches": [
     {
-      "id": "C1",
-      "name": "总价锁定（作用域限为可竞争部分）",
-      "severity": "P0",
-      "toggleable": false,
-      "expression": "sum_{i in X_opt} p_i q_i^0 = P*_competitive",
-      "inputs": [
-        "p_bid",
-        "q0",
-        "pricing_role",
-        "P*_competitive"
-      ],
-      "metric": "|sum_{i in X_opt} p_i q_i^0 - P*_competitive|",
-      "tolerance": "eps_total",
-      "implementation": "按 §8.2 容差带实现（模式 A / B 二选一，两层须同口径），P*_competitive 由 T00-06B 的 compute_P_competitive(p) 提供，禁止重实现",
-      "note": "税金/安全生产措施费/暂列金额/暂估价/合同指定固定金额项不可自由优化——若一并投入求和，会产生「数学最优、投标非法」的解"
+     "mechanism": "BID_VALIDITY",
+     "what": "超幅即扣分 / 要求澄清 / 废标 —— 投标有效性问题",
+     "lands_in": "X_opt 的**硬线性约束**（本例 expression 即此分支）",
+     "solver_impact": "可行域收缩；可能致 C1+C9 不可行（须返回无可行解并转放弃投标判据，不得放松）"
     },
     {
-      "id": "C2",
-      "name": "单项上界",
-      "severity": "P0",
-      "toggleable": false,
-      "expression": "p_i <= U_i = min(cap_i, base_i(1 + delta_eff_i))",
-      "inputs": [
-        "cap",
-        "p0",
-        "delta_eff"
-      ],
-      "metric": "p_i - U_i",
-      "tolerance": "eps_price",
-      "implementation": "直接线性约束",
-      "note": null
+     "mechanism": "SETTLEMENT_ADJUSTMENT",
+     "what": "中标单价**有效**，但结算时超幅部分的单价被拉回 `ref_i(1±tol)`",
+     "lands_in": "**R_i(·) 的有效单价**，**不约束 X_opt**",
+     "solver_impact": "可行域不变，但目标函数被改造：报价高于上限时增量收益在结算期被削平，因此最优解仍会自动避开超幅区——**但这是目标驱动的，不是约束驱动的**，两者在不可行诊断与敏感性分析上表现完全不同，不得混为一谈。"
     },
     {
-      "id": "C3",
-      "name": "单项下界（合规）",
-      "severity": "P0",
-      "toggleable": false,
-      "expression": "p_i >= L_i = max( L_i^tender , 0 )",
-      "expression_detail": "L_i^tender = 招标文件明示的单价下限（若有条款则取其值，否则不参与取大）；「非零下界」由 C5 单独承担，不在本式内重复。",
-      "inputs": [
-        "unbalanced_clause",
-        "unbalanced_reference",
-        "unbalanced_tolerance",
-        "delta_eff"
-      ],
-      "metric": "L_i - p_i",
-      "tolerance": "eps_price",
-      "implementation": "多来源取大后作直接线性约束。**两版实现差异**：2013 与 2024 对下界的规范依据不同，但本约束是招标文件级而非规范级——不得从规范集反推 δ⁻。",
-      "note": "**2026-09-16 重定义**。原式 `p_i >= L_i = base_i(1 - δ_i^-)` 被否决，理由有二：\n① `δ⁻` 在招标文件中**没有依据**——记录者曾把「用户未提及下限」误记为「用户声明没有下限」（见 ADR-0007），据此得出的「无下界」结论不成立；\n② 用户实际的条款形态是**两类**：单项报价不得为 0（→ C5）、不平衡报价条款（如 ±50%，→ C13）。\n因此 C3 改为**多来源取大**：只在招标文件真的写了幅度时才出现 L_i^tender，否则本约束对可行域无作用（`L_i = 0`），而**不得**用一个编造的 δ⁻ 假装有下界。\n`δ⁻` 仍是合法字段（招标文件明示允许下浮幅度时使用），但**不再有默认意义**。",
-      "redefined_at": "2026-09-16",
-      "supersedes": "p_i >= L_i = base_i(1 - delta_eff_i)（仅 δ⁻ 单来源）",
-      "original_note_for_audit": null
+     "mechanism": "SCORING",
+     "what": "仅影响评标得分",
+     "lands_in": "**不在本项目范围内**（§1.3 把评分博弈列为范围外）",
+     "solver_impact": "无——立项时须显式声明该条款不影响 X_opt，而不是静默忽略"
     },
     {
-      "id": "C4",
-      "name": "地板（成本止损）",
-      "severity": "P0",
-      "toggleable": false,
-      "expression": "p_i >= floor_i = max(L_i, c_i(1 - mu_i))",
-      "inputs": [
-        "floor",
-        "p0",
-        "delta_eff",
-        "c_i",
-        "mu"
-      ],
-      "metric": "floor_i - p_i",
-      "tolerance": "eps_price",
-      "implementation": "按取大计算；config 保留独立「合规下浮限」字段供审计",
-      "note": "C4 与 C6 必须并存：只留 C6 允许个别项压至 p_i≈0（数值可行、工程荒谬、触发清标废标）；只留 C4 则累计亏损可突破 theta*P*。**2026-09-16**：本式中的 `L_i` 指 C3 **重定义后**的多来源取大下界，实现时须引用 C3 而非各自硬编码——C3 的定义在本次变更中已改变。"
-    },
-    {
-      "id": "C5",
-      "name": "单项报价不得为零",
-      "severity": "P0",
-      "toggleable": false,
-      "expression": "p_i >= eps_price  （由 zero_price_prohibited 声明；本项目恒真）",
-      "inputs": [
-        "p_bid",
-        "zero_price_prohibited"
-      ],
-      "metric": "eps_price - p_i",
-      "tolerance": "0（严格正）",
-      "implementation": "**2026-09-16 由 P1 可关升级为 P0 不可关**。原定义为「非负性 p_i >= 0，由 C4 蕴含、仅作求解器保险」。用户明确招标文件「单项报价不能为 0」后，它成为**有招标依据的硬性条款**，不再是保险措施：`p_i = 0` 在算术上满足 p_i ≥ 0，却直接违反招标文件（漏项/恶意低价）。因此下界提到 eps_price 并由 zero_price_prohibited 驱动。",
-      "note": "**为什么不能只靠 C4**：C4 的下界是 `max(L_i, c_i(1-μ_i))`。若某项 `c_i` 本身很小（例如补充编码的小五金、标识牌），`c_i(1-μ_i)` 也小，C4 允许近零报价；而「不得为 0」是一条**与成本无关**的合规下界。二者不同源，不可互推。",
-      "upgraded_at": "2026-09-16",
-      "supersedes": "p_i >= 0（P1，可关，由 C4 蕴含）",
-      "original_note_for_audit": null
-    },
-    {
-      "id": "C6",
-      "name": "亏损风险总量约束",
-      "severity": "P0",
-      "toggleable": true,
-      "expression": "sum_{i in I} s_i q_i^1 <= theta * P*,  s_i >= c_i - p_i,  s_i >= 0",
-      "inputs": [
-        "c_i",
-        "p_bid",
-        "q1_point",
-        "theta",
-        "P*"
-      ],
-      "metric": "sum s_i q_i^1 - theta*P*",
-      "tolerance": "eps_total",
-      "implementation": "线性化 s_i >= max(0, c_i - p_i)，问题保持 LP",
-      "note": null
-    },
-    {
-      "id": "C7",
-      "name": "亏损项数上限（升为 MILP）",
-      "severity": "P0",
-      "toggleable": true,
-      "expression": "sum_i I(p_i < c_i) <= N_max",
-      "inputs": [
-        "c_i",
-        "p_bid",
-        "N_max"
-      ],
-      "metric": "sum z_i - N_max",
-      "tolerance": "0（整数）",
-      "implementation": "引入二元变量 z_i in {0,1}，p_i >= c_i - M z_i；问题升为 MILP，须走 T04-07 独立验收协议",
-      "note": "引入二元变量是本项目进入 MILP 的唯一来源"
-    },
-    {
-      "id": "C8",
-      "name": "单项亏损深度上限",
-      "severity": "P0",
-      "toggleable": true,
-      "expression": "(c_i - p_i) / c_i <= d_max  for all i",
-      "inputs": [
-        "c_i",
-        "p_bid",
-        "d_max"
-      ],
-      "metric": "(c_i - p_i)/c_i - d_max",
-      "tolerance": "eps_price",
-      "implementation": "建议 d_max 与 mu 绑定并在 config 显式声明，避免维护两套数字",
-      "note": null
-    },
-    {
-      "id": "C9",
-      "name": "整体盈利门槛",
-      "severity": "P0",
-      "toggleable": true,
-      "expression": "C9a 绝对：Z >= Z_min ；C9b 相对：Z / sum_i c_i q_i^1 >= pi_target",
-      "inputs": [
-        "Z",
-        "c_i",
-        "q1_point",
-        "Z_min",
-        "pi_target"
-      ],
-      "metric": "Z 或 Z/sum(c_i q_i^1)",
-      "tolerance": "eps_total",
-      "implementation": "推荐 C9b（与项目规模无关，阈值可直接继承企业决策惯例）",
-      "note": "C9 与 C1 联立后可行域可能为空——此时必须返回无可行解并转入放弃投标判据，不得通过放松 C6 或 C4 强行找回解"
-    },
-    {
-      "id": "C10",
-      "name": "现金流前载约束",
-      "severity": "P0",
-      "toggleable": true,
-      "expression": "sum_{i in T_front} (rho_i p_i - c_i) q_i^0 >= 0",
-      "inputs": [
-        "rho_i",
-        "p_bid",
-        "c_i",
-        "q0",
-        "T_front"
-      ],
-      "metric": "sum (rho_i p_i - c_i) q_i^0",
-      "tolerance": "eps_total",
-      "implementation": "硬约束，不得被优化器自动权衡掉；若导致不可行则交人决策",
-      "note": "rho_i >= 0.8 有规范下限支撑（GB/T 50500-2024 第 10.2 节：施工过程结算款支付比例不低于 80%）"
-    },
-    {
-      "id": "C11",
-      "name": "报价离散度控制",
-      "severity": "P1",
-      "toggleable": true,
-      "expression": "sigma(d) <= sigma_max,  d_i = (p_i - base_i)/base_i",
-      "inputs": [
-        "p_bid",
-        "p0",
-        "sigma_max",
-        "kappa_max"
-      ],
-      "metric": "MAD 或 sigma(d)",
-      "tolerance": "eps_price",
-      "implementation": "原始 sigma 为二阶锥约束，标准 LP 不支持；推荐 MAD 线性化 (1/n) sum |p_i - p_bar| <= kappa_max，引入 u_i >= p_i - p_bar、u_i >= p_bar - p_i 两条线性约束即可，问题仍为 LP",
-      "note": null
-    },
-    {
-      "id": "C12",
-      "name": "总价成本比",
-      "severity": "P1",
-      "toggleable": true,
-      "expression": "R_pc = sum_i p_i q_i^0 / sum_i c_i q_i^0 >= R_min",
-      "inputs": [
-        "p_bid",
-        "q0",
-        "c_i",
-        "R_min"
-      ],
-      "metric": "R_pc",
-      "tolerance": "eps_price",
-      "implementation": "R_min > 1 是 C9b 的等价形态",
-      "note": "价值在于它是投标前的可解释指标"
-    },
-    {
-      "id": "C13",
-      "name": "不平衡报价幅度约束（条件性）",
-      "severity": "P0",
-      "toggleable": true,
-      "toggleable_note": "**开关本身是 Phase 0 声明**：用户明确「**有些时候**会有不平衡报价条款」——该条款存在与否随项目而异。按 ADR-0006，`unbalanced_clause.enabled=false`（已核查、本项目无该条款）是**合法结论**；`enabled` key 缺失才是「没声明」→ BLOCKED。",
-      "expression": "（VALIDITY 分支） (p_i - ref_i) / ref_i ∈ [ -tol_lo , +tol_hi ]",
-      "expression_detail": "`ref_i` 由 `unbalanced_reference` 决定（CAP / CONTROL_PRICE / EVAL_BASE / COST_SHARE）；`tol_lo`/`tol_hi` 由 `unbalanced_tolerance` 给出（统一小数，用户举例 ±50% → 0.50/0.50）。",
-      "inputs": [
-        "p_bid",
-        "unbalanced_clause",
-        "unbalanced_reference",
-        "unbalanced_tolerance"
-      ],
-      "metric": "max( (ref_i(1-tol_lo) - p_i) , (p_i - ref_i(1+tol_hi)) )",
-      "tolerance": "eps_price",
-      "mechanism_branches": [
-        {
-          "mechanism": "BID_VALIDITY",
-          "what": "超幅即扣分 / 要求澄清 / 废标 —— 投标有效性问题",
-          "lands_in": "X_opt 的**硬线性约束**（本例 expression 即此分支）",
-          "solver_impact": "可行域收缩；可能致 C1+C9 不可行（须返回无可行解并转放弃投标判据，不得放松）"
-        },
-        {
-          "mechanism": "SETTLEMENT_ADJUSTMENT",
-          "what": "中标单价**有效**，但结算时超幅部分的单价被拉回 `ref_i(1±tol)`",
-          "lands_in": "**R_i(·) 的有效单价**，**不约束 X_opt**",
-          "solver_impact": "可行域不变，但目标函数被改造：报价高于上限时增量收益在结算期被削平，因此最优解仍会自动避开超幅区——**但这是目标驱动的，不是约束驱动的**，两者在不可行诊断与敏感性分析上表现完全不同，不得混为一谈。"
-        },
-        {
-          "mechanism": "SCORING",
-          "what": "仅影响评标得分",
-          "lands_in": "**不在本项目范围内**（§1.3 把评分博弈列为范围外）",
-          "solver_impact": "无——立项时须显式声明该条款不影响 X_opt，而不是静默忽略"
-        },
-        {
-          "mechanism": "NONE",
-          "what": "条款存在但不构成约束（例如仅作评标说明）",
-          "lands_in": "无",
-          "solver_impact": "无"
-        }
-      ],
-      "implementation": "**机制进 Gate 0a，取值进 Phase 0**（ADR-0002）：规则书须声明本约束支持 VALIDITY 与 SETTLEMENT_ADJUSTMENT 两条分支，两个 WP 都要实装；本项目是否启用、基准与幅度属 Phase 0 输入。**当 reference=CAP 时注意**：上浮侧与 C2（`p_i <= cap_i`）直接矛盾（不能既 p_i ≤ cap_i 又允许 p_i ≤ 1.5·cap_i 的下界意义上放宽），此时 C13 实际只约束**下浮侧**，即等价于 C3 的 `L_i^tender = cap_i(1-tol_lo)` —— 实现须检测并归约，不得产生一个永远不激活的上浮约束。",
-      "note": "**为什么不是 C11**：C11「报价离散度控制」是**统计性**指标（MAD/σ 对全局），语义是投标人**自设**的稳健性偏好；C13 是**逐项、外部给定**的招标条款。二者一个内一个外，一个统计一个逐项，不得合并。",
-      "raised_at": "2026-09-16",
-      "open_question": "input_protocol_schema.open_issues[OI-05]（基准 / 后果 / 出现条件 三项未定）"
+     "mechanism": "NONE",
+     "what": "条款存在但不构成约束（例如仅作评标说明）",
+     "lands_in": "无",
+     "solver_impact": "无"
     }
-  ],
-  "global_notes": [
-    "C1–C12 是「判定层每约束返回六元组」的枚举来源（T03-04）",
-    "无可行解时的诊断输出见 T03-06（conflict set + suggested_relaxation）",
-    "合规口径（决定 C4 / theta 取值）依赖 T00-09 成本口径证明包，未冻结前相关约束只能标 BLOCKED",
-    "**2026-09-16**：C3 与 C5 因用户阐明的真实招标条款而重定义——「单项报价不得为 0」升为 P0 硬约束（C5），不平衡报价条款新增为 C13。原 C3 的 `δ⁻` 单来源口径已废止：δ⁻ 只在招标文件明示幅度时才参与，否则不得编造。变更动因为「把用户未提及误记为用户已声明」（ADR-0007）。"
-  ]
+   ],
+   "implementation": "**机制进 Gate 0a，取值进 Phase 0**（ADR-0002）：规则书须声明本约束支持 VALIDITY 与 SETTLEMENT_ADJUSTMENT 两条分支，两个 WP 都要实装；本项目是否启用、基准与幅度属 Phase 0 输入。**当 reference=CAP 时注意**：上浮侧与 C2（`p_i <= cap_i`）直接矛盾（不能既 p_i ≤ cap_i 又允许 p_i ≤ 1.5·cap_i 的下界意义上放宽），此时 C13 实际只约束**下浮侧**，即等价于 C3 的 `L_i^tender = cap_i(1-tol_lo)` —— 实现须检测并归约，不得产生一个永远不激活的上浮约束。",
+   "note": "**为什么不是 C11**：C11「报价离散度控制」是**统计性**指标（MAD/σ 对全局），语义是投标人**自设**的稳健性偏好；C13 是**逐项、外部给定**的招标条款。二者一个内一个外，一个统计一个逐项，不得合并。",
+   "raised_at": "2026-09-16",
+   "open_question": "input_protocol_schema.open_issues[OI-06]（修正价 p_rev_i 的计算规则未定）",
+   "resolved": {
+    "resolved_at": "2026-09-16",
+    "reference": "cap_i（限价单价，双向）",
+    "tolerance": "0.50 / 0.50（偏高 / 偏低）",
+    "mechanism": "SETTLEMENT_ADJUSTMENT（条件触发：工程量增/减超 15% + 发包人认定）",
+    "trigger_threshold": "0.15（与 §8.9/§9.6.2 的 r_eff 阈值同源）",
+    "dead_branch_note": "偏高侧修正分支因 C2 恒不触发——实现时不得产生永远不激活的分支代码路径（与 C3 上浮侧 δ⁺ 失效同型）",
+    "source": "用户提供的合同专用条款原文（存 OI-05.user_actual_words）"
+   }
+  }
+ ],
+ "global_notes": [
+  "C1–C12 是「判定层每约束返回六元组」的枚举来源（T03-04）",
+  "无可行解时的诊断输出见 T03-06（conflict set + suggested_relaxation）",
+  "合规口径（决定 C4 / theta 取值）依赖 T00-09 成本口径证明包，未冻结前相关约束只能标 BLOCKED",
+  "**2026-09-16**：C3 与 C5 因用户阐明的真实招标条款而重定义——「单项报价不得为 0」升为 P0 硬约束（C5），不平衡报价条款新增为 C13。原 C3 的 `δ⁻` 单来源口径已废止：δ⁻ 只在招标文件明示幅度时才参与，否则不得编造。变更动因为「把用户未提及误记为用户已声明」（ADR-0007）。"
+ ]
 }

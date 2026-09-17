@@ -1,0 +1,19 @@
+{
+  "_why_this_file": "T04-08 三层隔离证明的第③层（ISO-3）：独立实现不得由生产代码作者单人完成。机械判据无法证明『作者不是同一人』，故本文件是唯一来源；未签署 ⇒ 隔离③ BLOCKED ⇒ T04-04 对拍结论强制标 BLOCKED（路线 v3.2.1 P2-⑩）。",
+  "_instruction": "复核人须为**非参考实现编写者**（人，或另一条独立实现路径的作者）。复核后把 signed 置 true、填写 reviewer 与 date，并在 notes 里写明核对了哪些文件。",
+  "signed": false,
+  "reviewer": "",
+  "date": "",
+  "reviewer_role": "",
+  "files_reviewed": [
+    "src/bidpricing/refimpl/reference.py",
+    "src/bidpricing/refimpl/isolation.py"
+  ],
+  "against": [
+    "src/bidpricing/solver/instance.py",
+    "src/bidpricing/contracts/pricing_card.py",
+    "src/bidpricing/solver/formulation.py"
+  ],
+  "notes": "待复核：确认参考实现的 R_i 三分支 × 作用域、Z = Σ[R_i − c_i·q^1] 与路线 §5.3 S0 / 规则卡 / 利润桥接表一致，且未复用生产侧计算逻辑。",
+  "owner": "用户（Liam）"
+}

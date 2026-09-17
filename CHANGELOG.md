@@ -10,6 +10,34 @@
 
 ## [未发布]
 
+### T04-08 完成：独立参考实现（第二条计算路径 + 三层隔离证明，ADR-0027）
+
+**新增**
+- `config/reference_impl_spec.json`：重算范围、公式来源、ε_Z 组成与具名、
+  三层隔离证明规则、RI-01..RI-11 判据、branch_domain 基准。
+- `src/bidpricing/refimpl/{reference,isolation}.py`：**不 import 任何生产模块**
+  （连数据结构也不 import，靠冻结快照取属性）⇒「源码文件不重叠」是可审计的事实。
+  公式由路线 §5.3 S0 + `profit_bridge_spec` + `pricing_rule_card` 推导。
+- `tests/test_reference_impl.py`：39 项，含**手算钉死**六分支组合、
+  注入错 Z / 篡改逐项必 FAIL、制品少声明分支必 BLOCKED、审计抓
+  `settlement_revenue`、ISO-2 运行时复读探针。
+- CLI `ref-check`（--probe/--instance/--p-json/--z-solver/--json）。
+- `docs/reference_review_signoff.json`：ISO-3 签署记录占位（`signed=false`）。
+
+**变更**
+- `Z_total`（全量，§5.3 S0）与 `Z_competitive`（目标层，X_opt）**两个名字**
+  + `constant_part`（与 DV-02 同族：混用即静默偏掉一个常数）。
+- `verify-solution` 未给 `--reference` 时默认向参考层索取 `Z_ref` 并自述来源
+  ⇒ **SV-13 挂账闭合**：LP/MILP 两变体均 PASS（Δ=0 ≤ ε_Z≈0.0105）。
+
+**修正**
+- ★ 接线首跑即抓到真 bug：C7 的二值 `z_i` 与 `p_i` **共用 `item_id`**，按
+  `item_id` 建 p 向量映射时 0/1 把单价覆盖掉（不报错，只让 `Z_ref` 静默偏小）。
+  按变量族 `family == "p"` 过滤修复。★ 这条正是跨来源对照的价值实证——
+  若参考层只是生产层的复制，该错误不会被任何判据发现。
+- ★ 隔离③（作者分离）**不伪造**：机械判据无法证明「作者不是同一人」，
+  故只读签署记录；未签 ⇒ BLOCKED，owner = 用户。未签前 T04-04 对拍结论强制 BLOCKED。
+
 ### extract_tasks --check 长期红修复（非破坏性，9 项漂移清零）
 
 **修正**

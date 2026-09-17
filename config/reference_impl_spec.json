@@ -1,0 +1,195 @@
+{
+  "spec_id": "reference_impl_spec_v1",
+  "task": "T04-08",
+  "title": "独立 Reference Implementation（第二实现路径 + 三层隔离证明）",
+  "role": "用**独立于生产代码**的路径重算 R_i(·)、约束残差、目标函数，输出 Z_ref，供 Phase 3（T04-02D 的 SV-13）与 Phase 1/2 对拍（T04-04）做**跨来源**对照。",
+  "why_a_separate_path": "路线 v3.2.1 第 8 条失效模式 / §5.3 S0：**solver objective 正确 ≠ 业务利润正确**。若复核层与生产层共用同一份 R_i/constraint/objective 实现，则「两条路径一致」只是同一错误的两次复现（共因错误），对拍恒绿而无信息量。",
+  "formula_source_of_truth": [
+    {
+      "quantity": "Z_ref",
+      "formula": "Σ_i [ R_i(p_i) − c_i · q_i^1 ]",
+      "source": "路线 §5.3 判据 S0（原文）",
+      "note": "★ 公式来源是**路线文档与制品**，不是生产代码——这正是本层存在的意义。"
+    },
+    {
+      "quantity": "objective level",
+      "formula": "Σ_{i∈X_opt} [ 结算收入_i − 成本_i ]（EXCL_VAT）",
+      "source": "config/profit_bridge_spec.json: objective.level=Z_OBJECTIVE / tax_caliber_of_objective=EXCL_VAT",
+      "note": "目标**层**只含可竞争部分；Z_ref 另给出全量口径，二者差 = 常数部分（不影响最优分配，但影响目标值）。"
+    },
+    {
+      "quantity": "R_i(p) 三分支",
+      "formula": "DECREASE: q1·p·(1+ρ⁻)；INCREASE: p1=p·(1−ρ⁺)，FULL→q1·p1，SEGMENT→θ_inc·q0·p+(q1−θ_inc·q0)·p1；IN_RANGE: FULL→q1·p·(1+α)，SEGMENT→q1·p",
+      "source": "config/pricing_rule_card.json（P1 公式三分支 + 阈值 + ρ±）与 ADR-0010",
+      "note": "★ 阈值 θ_inc 本身已是 (1+θ_dev)，写成 1+θ_inc 会系统性高估越界段——这是历史上真实踩过的坑，参考实现必须独立地再踩不到它。"
+    }
+  ],
+  "recomputed_here": [
+    "R_i(p_i)：单项结算收入（三分支 × 作用域）",
+    "Z_total := Σ_all [R_i − c_i·q1]、Z_competitive := Σ_{i∈X_opt}、constant_part := Z_total − Z_competitive",
+    "约束残差：C1（Σ_{opt} q0·p − B）、盒式（L_i/U_i，仅可优化项）、C5（p>0）"
+  ],
+  "not_recomputed_here": [
+    "求解本身（不调任何求解器、不构造 LP/MILP）——本层只做**给定 p 的重算**",
+    "外层复核的目标/可行性结论（属 T04-02D verifier，本层只供 Z_ref 一个数值与逐项表）",
+    "对拍判定（属 T04-04）"
+  ],
+  "inputs": [
+    {"field": "instance（items/q0/q1_point/c_i/p0/alpha/L/U/is_optimizable/in_c1_scope、B、params）", "source": "调用方传入的 Phase1Instance", "missing_policy": "BLOCK", "readiness": "缺 ⇒ R_i 与 Z 算不出"},
+    {"field": "p_by_id", "source": "待复核的解", "missing_policy": "BLOCK", "readiness": "缺 ⇒ 无从重算"},
+    {"field": "参数（rho_plus/rho_minus/decrease_threshold/increase_threshold/adjustment_scope）", "source": "instance.params.to_resolved(resolved)（**数据层**，非计算层）", "missing_policy": "BLOCK", "readiness": "缺 ⇒ 分支与系数不可定"},
+    {"field": "eps_abs / eps_rel_price", "source": "config/precision_profile.json（经 resolve_tolerances）", "missing_policy": "BLOCK", "readiness": "缺 ⇒ ε_Z 不可定；★ 不得按 0 静默放行"}
+  ],
+  "epsilon_Z": {
+    "formula": "ε_Z = eps_abs + eps_rel_price · max(|Z_solver|, |Z_ref|)",
+    "why_mixed": "§4.1：单价量级可跨 0.01 至 1e5，须相对+绝对混合，不得用统一 1e-7。",
+    "two_names": "★ eps_abs（绝对，元）与 eps_rel_price（相对，无量纲）是**两个名字**，与 DV-02 同族：混用即把同一个量乘两遍。",
+    "missing_policy": "BLOCK",
+    "note": "两项均由精度画像具名供给；本层不得自带常数。"
+  },
+  "isolation_proof": {
+    "layers": [
+      {
+        "id": "ISO-1",
+        "name": "源码文件不重叠",
+        "statement": "参考实现不得 import 生产侧**核心计算**符号；可共享底层不可变数据结构与参数解析（数据层）。",
+        "mechanism": "AST 审计：禁名清单住本制品（不是住代码——被测对象不得自带答案）。",
+        "forbidden_symbols": [
+          "settlement_revenue",
+          "compute_p1",
+          "compute_r_eff",
+          "check_solution",
+          "build_formulation",
+          "compile_model",
+          "evaluate",
+          "solve_compiled",
+          "verify_solution"
+        ],
+        "forbidden_module_suffixes": [
+          "solver/instance.py",
+          "solver/formulation.py",
+          "solver/compiler.py",
+          "solver/backend.py",
+          "solver/verifier.py",
+          "contracts/pricing_card.py"
+        ],
+        "on_violation": "BLOCKED"
+      },
+      {
+        "id": "ISO-2",
+        "name": "数据结构不得共享可变状态",
+        "statement": "参考实现入场即把实例**冻结快照**（frozen dataclass / tuple），之后调用方改动输入不得影响已产结果。",
+        "mechanism": "运行时判据：产结果后改输入，复读结果必须不变；且快照类型必须是不可变容器。",
+        "on_violation": "FAIL"
+      },
+      {
+        "id": "ISO-3",
+        "name": "独立实现不得由生产代码作者单人完成",
+        "statement": "须有**第二人**复核签署（人或其他独立实现者），并给出可核查的文件/模块清单。",
+        "mechanism": "签署记录文件 docs/reference_review_signoff.json；未签署 ⇒ BLOCKED。",
+        "on_violation": "BLOCKED",
+        "owner": "用户（Liam）",
+        "why_not_fakeable": "★ 机械判据无法证明「作者不是同一人」。不得伪造为 PASS——伪造即把共因错误重新引进来，且比不做更隐蔽。"
+      }
+    ],
+    "consequence": "三层任一层非 PASS ⇒ T04-08 独立性验收未完成 ⇒ **T04-04 对拍结论栏强制标 BLOCKED，禁止出现『对拍通过』字样**（路线 v3.2.1 P2-⑩）。"
+  },
+  "status_domain": {
+    "values": ["FAIL", "BLOCKED", "WARN", "SKIP", "PASS"],
+    "semantics": {
+      "FAIL": "查出了问题（两条路径不一致 / 隔离被破坏）",
+      "BLOCKED": "查不成（输入缺失、ε 不可定、隔离未签署）——**不得与 FAIL 或 SKIP 合并**",
+      "WARN": "查到了但只是可解释性不足（如存在未声明的口径差异需人工裁定）",
+      "SKIP": "本轮没走到（如无样本）——**SKIP ≠ PASS**",
+      "PASS": "该条判据确实走到且未发现问题"
+    }
+  },
+  "verdict_aggregation": {
+    "order": ["FAIL", "BLOCKED", "WARN", "SKIP", "PASS"],
+    "rule": "取序位最高者；判据集为空 ⇒ BLOCKED（空集不是 PASS）。"
+  },
+  "branch_domain": {
+    "branches": ["DECREASE", "IN_RANGE", "INCREASE"],
+    "scopes": ["FULL", "SEGMENT"],
+    "note": "RI-02 的基准：实现分支集必须与本声明**双向一致**（任一侧多一个即漏算一类项，不报错而静默偏小）。"
+  },
+  "judges": [
+    {
+      "id": "RI-01",
+      "name": "就绪性：实例 / 解 / 参数齐备",
+      "statement": "缺任一 ⇒ BLOCKED；★「键缺失」与「键存在但为 null」是**两种**未定态，须可区分（ADR-0004）。",
+      "on_violation": "BLOCKED"
+    },
+    {
+      "id": "RI-02",
+      "name": "分支覆盖：实现分支集 == 制品声明分支集",
+      "statement": "三分支 × {FULL, SEGMENT} 的组合集合必须与制品一致；少一个分支即漏算一类项（不报错而静默偏小）。",
+      "on_violation": "BLOCKED"
+    },
+    {
+      "id": "RI-03",
+      "name": "参数具名：ρ± / 阈值 / 作用域 必须具名记录",
+      "statement": "每个参与计算的参数都要有名字与来源；无名数值 ⇒ BLOCKED（与 CC-12「数值必须具名」同族）。",
+      "on_violation": "BLOCKED"
+    },
+    {
+      "id": "RI-04",
+      "name": "空值不降级：q0/q1/c_i 缺失 ⇒ BLOCKED",
+      "statement": "q0 ≤ 0 ⇒ r 无定义 ⇒ BLOCKED（不得跳过该项静默累加，也不得按 0 计入）。",
+      "on_violation": "BLOCKED"
+    },
+    {
+      "id": "RI-05",
+      "name": "目标值对照 |Z_solver − Z_ref| ≤ ε_Z",
+      "statement": "ε_Z 两项缺一 ⇒ BLOCKED（不按 0 放行）；超过 ⇒ FAIL 并给出 Δ 与两个口径。",
+      "on_violation": "FAIL"
+    },
+    {
+      "id": "RI-06",
+      "name": "逐项可核对：给出每项 R_i / 分支 / 成本，Σ 与 Z_ref 自洽",
+      "statement": "★ 本条是**同源自洽**，只证明「加总没错」，不证明公式对——公式由 RI-05 跨来源对照守。二者不可互相替代。",
+      "on_violation": "FAIL"
+    },
+    {
+      "id": "RI-07",
+      "name": "隔离①：源码文件不重叠（AST 审计）",
+      "statement": "禁名清单住制品；命中 ⇒ BLOCKED（参考实现一旦引用生产公式即失去存在意义）。",
+      "on_violation": "BLOCKED"
+    },
+    {
+      "id": "RI-08",
+      "name": "隔离②：不共享可变状态",
+      "statement": "入场冻结快照；产结果后改输入，结果必须不变（可注入验证）。",
+      "on_violation": "FAIL"
+    },
+    {
+      "id": "RI-09",
+      "name": "隔离③：作者分离已签署",
+      "statement": "未签署 ⇒ BLOCKED（owner 用户）；★ 不得伪造 PASS。",
+      "on_violation": "BLOCKED"
+    },
+    {
+      "id": "RI-10",
+      "name": "声明↔实现对账",
+      "statement": "制品声明的输入集 == 实现实际读取的输入集；实现多读一项不报错，判据会整体变严却没信号（PS-11 同族）。",
+      "on_violation": "FAIL"
+    },
+    {
+      "id": "RI-11",
+      "name": "聚合序与空集",
+      "statement": "FAIL > BLOCKED > WARN > SKIP > PASS；判据集为空 ⇒ BLOCKED。",
+      "on_violation": "BLOCKED"
+    }
+  ],
+  "consumers": [
+    {"task": "T04-02D", "use": "SV-13 的 Z_ref 唯一来源（此前恒 BLOCKED 的挂账由此闭合）", "status": "wired"},
+    {"task": "T04-04", "use": "对拍器 A/B 组的 Z_ref 侧；报告首部须声明 T04-08 独立性验收状态", "status": "pending"},
+    {"task": "T04-05", "use": "Phase 3 验证的 objective recomputation 独立对照", "status": "pending"}
+  ],
+  "open_items": [
+    {"id": "OI-RI-A", "statement": "隔离③（ISO-3）需第二人复核签署；未签署前 T04-04 对拍结论强制 BLOCKED。", "owner": "用户（Liam）"},
+    {"id": "OI-RI-B", "statement": "成本口径 c_i·q_i^1 的**独立制品声明**目前只有路线 §5.3 S0 与利润桥接表（后者按 i∈X_opt 表述）；全量 vs 可竞争的差已显式拆为 constant_part，若用户裁定目标口径应改用 Z_competitive，须改**制品**而非改实现。", "owner": "用户（Liam）"},
+    {"id": "OI-RI-C", "statement": "ε_Z 现由 precision_profile 的 eps_abs + eps_rel_price 组合；若 T00-04 后续引入专属 eps_Z，本制品须同步（两处不得各说一套）。", "owner": "T00-04"}
+  ],
+  "evidence_pointer": "ADR-0027-reference-implementation.md"
+}

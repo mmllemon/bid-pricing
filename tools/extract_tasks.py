@@ -128,6 +128,12 @@ EVIDENCE: dict[str, list[dict]] = {
         {"kind": "module", "path": "tests/test_derived.py"},
         {"kind": "adr", "path": "ADR-0025-derived-quantities.md"},
     ],
+    "T04-08": [
+        {"kind": "file", "path": "config/reference_impl_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/refimpl/reference.py"},
+        {"kind": "module", "path": "tests/test_reference_impl.py"},
+        {"kind": "adr", "path": "ADR-0027-reference-implementation.md"},
+    ],
     "T04-01": [
         {"kind": "file", "path": "config/phase1_solver_spec.json"},
         {"kind": "module", "path": "src/bidpricing/solver/phase1.py"},

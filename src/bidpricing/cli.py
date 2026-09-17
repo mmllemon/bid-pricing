@@ -996,6 +996,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_p1s.add_argument("--json", action="store_true", help="输出 JSON")
     p_p1s.set_defaults(func=cmd_phase1_solve)
 
+    # ---- T04-08 独立参考实现 --------------------------------------------
+    p_ref = sub.add_parser(
+        "ref-check",
+        help="T04-08 独立参考实现（第二条路径重算 R_i/残差/Z + 三层隔离证明）")
+    p_ref.add_argument("--instance", default=None,
+                       help="对自定义实例 JSON 重算（结构见 Phase1Instance.from_dict）")
+    p_ref.add_argument("--probe", default="free-cap", choices=("free-cap", "simple"),
+                       help="无 --instance 时用哪个内置探针")
+    p_ref.add_argument("--p-json", default=None,
+                       help="显式报价向量 JSON：{item_id: p}。不给则用 T04-01 "
+                            "解析解（仅作「给参考层喂一组 p」的用途）")
+    p_ref.add_argument("--z-solver", type=float, default=None,
+                       help="对照侧的 Z_solver（不给则用独立裁判 check_solution 的 Z）")
+    p_ref.add_argument("--json", action="store_true", help="输出 JSON")
+    p_ref.set_defaults(func=cmd_ref_check)
+
     p_cc = sub.add_parser(
         "compile-check",
         help="T04-02B 约束编译判定（Formulation → CompiledModel 的保真性）")
@@ -1411,6 +1427,147 @@ def cmd_phase1_solve(args) -> int:
     return 0 if report.verdict() == STATUS_PASS else 1
 
 
+def cmd_ref_check(args) -> int:
+    """T04-08 独立参考实现 —— 第二条计算路径的重算与三层隔离证明。
+
+    与 ``verify-solution`` 的 SV-13 是同一件事的两面：本命令把参考层**摊开**
+    （逐项 R_i / 分支 / 成本 / 残差 + 三层隔离状态）供人工核对；
+    SV-13 只取其中的 ``Z_ref`` 一个数值做跨来源对照。
+
+    ★ 隔离③（ISO-3：作者分离）未签署时本命令返回 1 且**不宣称验收通过**——
+    机械判据无法证明「作者不是同一人」，伪造 PASS 即把共因错误重新引进来。
+    """
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .refimpl import isolation as _I
+    from .refimpl import reference as _R
+    from .solver.instance import Phase1Instance, check_solution
+    from .solver.phase1 import (
+        phase1_probe_instance,
+        phase1_simple_probe_instance,
+        solve_phase1,
+    )
+    from .solver.verifier import load_verifier_spec, resolve_tolerances
+
+    cfg = config_dir()
+    resolved = resolve_parameters(load_pricing_card(cfg))
+    spec = _R.load_reference_spec(cfg)
+    prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
+    vspec = load_verifier_spec(cfg)
+
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        instance = Phase1Instance.from_dict(
+            json.loads(path.read_text(encoding="utf-8")), source=str(path)
+        )
+        title = str(path)
+    else:
+        instance = (
+            phase1_simple_probe_instance()
+            if args.probe == "simple" else phase1_probe_instance()
+        )
+        title = f"内置探针（{args.probe}）"
+
+    sol = solve_phase1(instance, resolved)
+    p_by_id = dict(sol.p_by_id)
+    if args.p_json:
+        pj = _P(args.p_json)
+        if not pj.exists():
+            print(f"■ 报价向量文件不存在：{pj}")
+            return 1
+        p_by_id = {str(k): float(v)
+                   for k, v in json.loads(pj.read_text(encoding="utf-8")).items()}
+
+    snap = _R.snapshot(instance, resolved)
+    iso = _I.collect_isolation(
+        source_paths=[
+            _P(__file__).resolve().parents[0] / "refimpl" / "reference.py",
+            _P(__file__).resolve().parents[0] / "refimpl" / "isolation.py",
+        ],
+        snapshot_obj=snap,
+        docs_dir=_P(__file__).resolve().parents[1] / "docs",
+        spec=spec,
+    )
+    tolerances, _ = resolve_tolerances(
+        prof, vspec, P_ref=instance.P_star if instance.P_star else instance.B
+    )
+    # 对照侧（Z_solver）：显式给就用给的；否则用**生产侧** check_solution 的 Z。
+    # ★ 这正是本命令要干的事——拿生产路径与参考路径对拍；若对照侧也由参考层
+    #   自算，就成了同源相减恒为 0 的恒真式（ADR-0015 / CC-07 同族）。
+    z_solver = (
+        float(args.z_solver) if args.z_solver is not None
+        else check_solution(
+            instance, p_by_id, resolved,
+            eps_total=tolerances.get("eps_total"),
+        ).Z
+    )
+    report = _R.reference_report(
+        instance, p_by_id, resolved=resolved, spec=spec,
+        tolerances=tolerances, z_solver=z_solver, isolation=iso,
+    )
+
+    if args.json:
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if report.verdict() == _R.STATUS_PASS else 1
+
+    _print_reference(report, title, iso, z_solver)
+    return 0 if report.verdict() == _R.STATUS_PASS else 1
+
+
+def _print_reference(report, title: str, iso, z_solver) -> None:
+    obj = report.objective
+    print("=" * 78)
+    print(f"T04-08 独立参考实现（第二条计算路径）｜ {title}")
+    print("=" * 78)
+    print("  公式来源：路线 §5.3 S0  Z = Σ[R_i(p_i) − c_i·q_i^1]；"
+          "分支与系数取自规则卡与利润桥接表（**不由生产代码抄录**）")
+    if obj is not None:
+        print(f"  Z_total（全量，§5.3 S0）      = {obj.Z_total:,.4f} 元")
+        print(f"  Z_competitive（目标层，X_opt）= {obj.Z_competitive:,.4f} 元")
+        print(f"  constant_part（常数差）       = {obj.constant_part:,.4f} 元")
+        if z_solver is not None:
+            print(f"  Z_solver（对照侧）            = {z_solver:,.4f} 元")
+        print()
+        print("  项目          分支        r          p         R_i           成本         贡献")
+        for l in obj.lines:
+            r = "—" if l.r is None else f"{l.r:.4f}"
+            p = "—" if l.p is None else f"{l.p:.2f}"
+            rev = "—" if l.revenue is None else f"{l.revenue:,.2f}"
+            cost = "—" if l.cost is None else f"{l.cost:,.2f}"
+            ctr = "—" if l.contribution is None else f"{l.contribution:,.2f}"
+            print(f"  {l.item_id:<12}  {l.branch:<9}  {r:>7}  {p:>9}  "
+                  f"{rev:>13}  {cost:>12}  {ctr:>13}")
+        if obj.blocked:
+            print()
+            for b in obj.blocked:
+                print(f"  ✗ {b}")
+    print()
+    print("  三层隔离证明（路线 v3.2.1 P2-⑩）：")
+    for key, label in (("ISO-1", "① 源码文件不重叠"),
+                       ("ISO-2", "② 不共享可变状态"),
+                       ("ISO-3", "③ 作者分离已签署")):
+        layer = iso.get(key, {})
+        print(f"    {label}：{layer.get('status','?')}　{layer.get('reason','')}")
+    print()
+    print("-" * 78)
+    for c in report.checks:
+        print(f"[{c.status:>7}] {c.item}　{c.reason}")
+    print("-" * 78)
+    tally: dict[str, int] = {}
+    for c in report.checks:
+        tally[c.status] = tally.get(c.status, 0) + 1
+    summary = "  ".join(f"{k}×{tally[k]}" for k in
+                        ("FAIL", "BLOCKED", "WARN", "SKIP", "PASS") if tally.get(k))
+    print(f"  {summary}　⇒ 聚合结论 {report.verdict()}")
+    if iso.get("ISO-3", {}).get("status") != "PASS":
+        print("  ★ 隔离③未成立 ⇒ T04-04 对拍结论栏**强制 BLOCKED**，"
+              "不得出现『对拍通过』字样")
+
+
 def _print_phase1(report, title: str) -> None:
     sol = report.solution
     print("=" * 78)
@@ -1766,6 +1923,69 @@ def cmd_derive_check(args) -> int:
     return 0 if report.verdict() == "PASS" else 1
 
 
+def _resolve_z_ref(cfg, instance, resolved, model, variables, explicit=None):
+    """``Z_ref`` 的来源解析 —— **唯一实现**（与 floor 同款「必须自述来源」）。
+
+    三条优先级：
+
+    ① 显式 ``--reference`` ⇒ 人工实验/外部对照值，最高优先；
+    ② 否则由 **T04-08 独立参考实现**（``bidpricing.refimpl``）现场重算——
+       它是 §5.3 S0 要求的**第二条路径**，不 import 任何生产计算模块；
+    ③ 无解或参考层不可用 ⇒ ``None``（下游 SV-13 如实判 BLOCKED，
+       不得拿生产侧自算值顶替——那是同源对账，恒真式）。
+
+    返回 ``(Z_ref 或 None, 来源描述)``。
+    """
+    from pathlib import Path as _P
+
+    if explicit is not None:
+        return float(explicit), f"显式 --reference {float(explicit):g}"
+    if not variables:
+        return None, "无解 ⇒ 不产 Z_ref"
+    try:
+        from .refimpl import reference as _R
+        from .refimpl import isolation as _I
+
+        # ★ 必须按**变量族**过滤：C7 的二值 z_i 与 p_i 共用同一个 item_id，
+        #   不过滤的话 0/1 会把单价覆盖掉（而且不报错，只是 Z_ref 静默偏掉）。
+        #   ——这个 bug 正是被 SV-13 的跨来源对照抓到的。
+        p_by_id = {
+            v.item_id: float(variables[v.symbol])
+            for v in model.variables
+            if v.family == "p" and v.item_id and v.symbol in variables
+        }
+        if not p_by_id:
+            return None, "模型中无单价变量 ⇒ 不产 Z_ref"
+        spec = _R.load_reference_spec(cfg)
+        snap = _R.snapshot(instance, resolved)
+        iso = _I.collect_isolation(
+            source_paths=[
+                _P(__file__).resolve().parents[0] / "refimpl" / "reference.py",
+                _P(__file__).resolve().parents[0] / "refimpl" / "isolation.py",
+            ],
+            snapshot_obj=snap,
+            docs_dir=_P(__file__).resolve().parents[1] / "docs",
+            spec=spec,
+        )
+        rep = _R.reference_report(
+            instance, p_by_id, resolved=resolved, spec=spec, isolation=iso,
+        )
+        obj = rep.objective
+        if obj is None or obj.blocked:
+            return None, (
+                "T04-08 参考层未产出 Z_ref（" +
+                ("；".join(obj.blocked) if obj else "无快照") + "）"
+            )
+        iso_txt = "、".join(
+            f"{k}={iso[k]['status']}" for k in ("ISO-1", "ISO-2", "ISO-3")
+        )
+        return obj.Z_total, (
+            f"T04-08 参考实现重算（{len(p_by_id)} 项，隔离 {iso_txt}）"
+        )
+    except Exception as exc:  # pragma: no cover - 参考层不可用不应中断复核
+        return None, f"参考层不可用（{type(exc).__name__}）"
+
+
 def _resolve_floor_by_id(cfg, instance, resolved, explicit_json=None):
     """``floor_i`` 的来源解析 —— **唯一实现**（verify-solution 与 phase1-solve 共用）。
 
@@ -1913,6 +2133,13 @@ def cmd_verify_solution(args) -> int:
             model, spec=bspec, instance=instance, resolved=resolved,
             prefer=args.prefer, eps_total=eps_abs, tolerances=tolerances,
         )
+        # ---- Z_ref 的来源：唯一生产者是 T04-08 独立参考实现 --------------
+        z_ref, z_ref_source = _resolve_z_ref(
+            cfg, instance, resolved, model,
+            None if not result.solved else result.variables,
+            explicit=args.reference,
+        )
+        print(f"■ Z_ref 来源：{z_ref_source}")
         # 只把**原始量**交给复核层：不传 SolveResult（SV-12 的接口级独立性）。
         report = verify_solution(
             model,
@@ -1920,7 +2147,7 @@ def cmd_verify_solution(args) -> int:
             spec=vspec, profile=prof, instance=instance,
             reported_objective=result.reported_objective,
             floor_by_id=floor_by_id,
-            reference=args.reference,
+            reference=z_ref,
             verifier_source=source_text,
             resolution=resolution,
         )

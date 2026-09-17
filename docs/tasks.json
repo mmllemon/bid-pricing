@@ -1110,9 +1110,26 @@
       ],
       "summary": "用独立于生产代码的路径重算 $R_i(\\cdot)$、约束残差、目标函数，输出 $Z_{\\text{ref}}$；要求 $\\left|Z_{\\text{solver}}-Z_{\\text{ref}}\\right|\\le\\epsilon_Z$；禁止 Phase 3 复用 Phase 2 的 $R_i$/constrain…",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/reference_impl_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/refimpl/reference.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_reference_impl.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0027-reference-implementation.md"
+        }
+      ],
+      "status": "done",
+      "note": "2026-09-17：独立参考实现落地。spec=config/reference_impl_spec.json（RI-01..RI-11 + ISO-1/2/3）；实现 src/bidpricing/refimpl/{reference,isolation}.py，**不 import 任何生产模块**（连数据结构也不 import，靠冻结快照取属性），公式由路线 §5.3 S0 + 利润桥接表 + 规则卡推导；Z_total/Z_competitive 两个口径两个名字；ε_Z=eps_abs+eps_rel_price·max（缺项 BLOCKED）。39 项测试（全量 838→877），含手算钉死六分支组合、注入错 Z/篡改逐项必 FAIL、制品少声明分支必 BLOCKED、审计抓 settlement_revenue、ISO-2 运行时复读探针。CLI ref-check；verify-solution 默认向参考层取 Z_ref ⇒ **SV-13 挂账闭合**（LP/MILP 两变体均 PASS，Δ=0）。接线首跑即抓到真 bug：C7 二值 z_i 与 p_i 共用 item_id，映射被 0/1 覆盖（按 family==\"p\" 过滤修复）。遗留 OI-RI-A：ISO-3 作者分离需第二人签署（docs/reference_review_signoff.json，signed=false）⇒ 未签前 T04-04 对拍结论强制 BLOCKED。"
     },
     {
       "id": "T04-04",

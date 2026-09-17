@@ -311,9 +311,9 @@
       "id": "SV-13",
       "name": "参考对照 |Z_solver − Z_ref| ≤ ε_Z",
       "statement": "若提供独立参考实现给出的 Z_ref，则要求 |Z_solver − Z_ref| ≤ ε_Z；未提供 ⇒ BLOCKED。",
-      "check": "reference 为 None ⇒ BLOCKED 并写明 owner = T04-08 与复跑条件；否则按 SV-05 同一 ε_Z 判。",
+      "check": "reference 为 None ⇒ BLOCKED 并写明复跑条件（2026-09-17：T04-08 已落地，Z_ref 的唯一生产者是 src/bidpricing/refimpl/reference.py，verify-solution 默认向其索取；仍缺席即代表参考层被显式跳过或该实例无解）；否则按 SV-05 同一 ε_Z 判。",
       "on_violation": "BLOCKED",
-      "why": "§5.3 S0：solver objective 正确 ≠ 业务利润正确，Z_ref 必须来自**独立于生产代码**的路径（T04-08 的三层隔离证明）。在 T04-08 落地前，这一族**不得**由本层自造一个『业务式重算』顶替——那会与 CC-07 构成同源对账。"
+      "why": "§5.3 S0：solver objective 正确 ≠ 业务利润正确，Z_ref 必须来自**独立于生产代码**的路径（T04-08 的三层隔离证明）。这一族**不得**由本层自造一个『业务式重算』顶替——那会与 CC-07 构成同源对账。★ 隔离③（作者分离）未签署前，本条数值可 PASS，但 T04-04 的对拍结论仍须强制 BLOCKED。"
     }
   ],
   "verdict_aggregation": {

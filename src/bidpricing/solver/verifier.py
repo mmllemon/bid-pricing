@@ -982,8 +982,9 @@ def verify_solution(
         checks.append(VerifierCheck(
             SCOPE, "SV-13 参考对照 |Z_solver − Z_ref| ≤ ε_Z",
             STATUS_BLOCKED,
-            "有解但未提供独立参考实现给出的 Z_ref（owner = T04-08，"
-            "当前 NOT_STARTED）⇒ 「业务利润是否正确」这一族**没检查成**。"
+            "有解但未提供独立参考实现给出的 Z_ref ⇒ 「业务利润是否正确」"
+            "这一族**没检查成**（2026-09-17：T04-08 已落地，Z_ref 的唯一生产者是 "
+            "src/bidpricing/refimpl/reference.py；此处仍空即为参考层被跳过）。"
             "禁止用本层自算的业务式顶替——那与 CC-07 同源，构成恒真式。",
             actual=None, expected="T04-08 的 Z_ref",
         ))

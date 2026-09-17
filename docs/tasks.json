@@ -66,8 +66,8 @@
       ],
       "status": "done",
       "note": "2026-09-16 完成《计价规则卡 v1》config/pricing_rule_card.json（Gate 0a 受控制品，freeze 后 hash sha256:cf6efb75b63c）：符号绑定 Q0/Q1/P0/P1/S/r、阈值与 ρ±、P1 公式三分支、**P1 五项澄清 P1-A~E 全 RESOLVED**、override 链与未登记键阻断、不平衡报价条款口径（OI-05/06）。实现 src/bidpricing/contracts/pricing_card.py + CLI pricing-card（展示/试算/--from-match 分支扫描）。ADR-0010 记录 re-base 与「ρ±=0 是机制层默认而非数据缺省」的性质区分。规范↔代码常量↔项目落值三层双向锁定（contract-check 第 12 判据）。真实数据：82 键中 IN_RANGE 75 / DECREASE 6 / INCREASE 0。",
-      "status_note": "2026-09-16 完成《计价规则卡 v1》config/pricing_rule_card.json。2026-09-17 补充**最终版**：新增 contract_review 字段，合同条款核对结论 = USER_DISCRETION（用户亲述『合同条款用户自行斟酌』），Agent 不作核对断言（ADR-0007/0017）。Gate 0b 的 contract_ruleset_version 已冻结（sha256:d88298683924），与 gate_0a.pricing_rule_card_version 为同一制品两阶段冻结；原声明路径 contract_ruleset_card.json 系笔误已修正。新增判据 _check_contract_review（五态词表 + 署名 + findings 齐备）。",
-      "updated_at": "2026-09-17T10:15:00+08:00"
+      "status_note": "2026-09-16 完成《计价规则卡 v1》config/pricing_rule_card.json。2026-09-17 补充**最终版**：新增 contract_review 字段，合同条款核对结论 = USER_DISCRETION（用户亲述『合同条款用户自行斟酌』），Agent 不作核对断言（ADR-0007/0017）。Gate 0b 的 contract_ruleset_version 已冻结（sha256:d88298683924），与 gate_0a.pricing_rule_card_version 为同一制品两阶段冻结；原声明路径 contract_ruleset_card.json 系笔误已修正。新增判据 _check_contract_review（五态词表 + 署名 + findings 齐备）。 【2026-09-17 10:06 补记】Gate 0b 全部判据通过：5 项受控制品冻结 + contract_review 结论合法 + 分级审批四角色（合同/造价/法务/项目经理）均由用户本人签署各自责任制品 hash（经用户对话授权，逐角色分别签署）→ **WP4 求解层解封**。",
+      "updated_at": "2026-09-17T10:10:00+08:00"
     },
     {
       "id": "T00-02",

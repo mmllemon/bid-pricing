@@ -417,25 +417,33 @@ class ProjectInputArtifactTest(unittest.TestCase):
 
 
 class Gate0bTest(unittest.TestCase):
-    def test_real_config_blocked_on_all_items(self):
+    def test_real_config_gate_0b_matches_registry_self_declaration(self):
+        """真实仓库：Gate 0b 结论必须与注册表自声明一致。
+
+        **不写死当前状态**（哪些制品已冻结、审批是否已签都会随推进变化），
+        断言的是机制：
+
+          * 任何未冻结的 versioned 制品都必须出现在阻塞项中，一个都不能漏；
+          * approvals 未签 → 必须阻塞；已签 → 不得阻塞。
+        """
         cdir = config_dir()
         registry = load_registry(cdir / GATE0_REGISTRY)
         report = check_gate_0b(registry, cdir)
-        self.assertIs(report.status, Status.BLOCKED)
         blocked = {i.item for i in report.blockers}
-        # **不写死具体清单**：哪些制品已冻结会随推进变化（cost_basis_spec /
-        # cost_assumption_spec 已于 2026-09-17 冻结），断言的应是**机制**——
-        # 注册表里 version 仍为 null 的制品必须出现在阻塞项中，一个都不能漏。
-        # 未冻结的制品必须出现在阻塞项中，一个都不能漏。
-        # 2026-09-17 起 5 项制品全部冻结，故 unfrozen 为空是**正常状态**——
-        # 但这条机制断言仍须生效，否则「未冻结却不阻塞」将无人发现。
-        unfrozen = {k for k, spec in (registry.get("gate_0b") or {}).items()
+
+        gate = registry.get("gate_0b") or {}
+        unfrozen = {k for k, spec in gate.items()
                     if isinstance(spec, dict) and spec.get("kind") == "versioned"
                     and not spec.get("hash")}
         for field in unfrozen:
             self.assertIn(field, blocked, f"{field} 未冻结却未阻塞")
-        # approvals 未签署 → 必须阻塞（当前真实仓库状态）
-        self.assertIn("approvals", blocked)
+
+        signed = (gate.get("approvals") or {}).get("signed") or {}
+        if signed:
+            self.assertNotIn("approvals", blocked,
+                             "已签署却仍判阻塞——签署格式可能不被判据识别")
+        else:
+            self.assertIn("approvals", blocked)
 
     def _env(self, tmp: Path, responsibility: dict | None = None,
              signed: dict | None = None) -> dict:
@@ -571,6 +579,28 @@ class Gate0bTest(unittest.TestCase):
             self.assertIs(approvals.status, Status.BLOCKED)
             self.assertIn("未给理由", approvals.reason)
 
+    def test_cross_gate_artifact_can_be_signed(self):
+        """角色责任制品可能注册在 Gate 0a（如法务视角的可竞争性分类）。
+
+        签署校验必须认**全体已声明制品**；只查 gate_0b 会把合法的跨闸门
+        签署误报为「签署了未声明制品」，逼人去签一个无关制品。
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            registry = self._env(cdir)
+            # 把 cost 记录挪到 gate_0a，模拟跨闸门制品
+            registry["gate_0a"] = {"cost_rec": registry["gate_0b"].pop("cost")}
+            hc = compute_artifact_hash(cdir / "cost.json")
+            registry["gate_0b"]["approvals"]["responsibility"] = {
+                role: {"artifacts": ["cost.json"]} for role in GATE_0B_APPROVAL_ROLES
+            }
+            registry["gate_0b"]["approvals"]["signed"] = {
+                role: {"by": "user", "artifacts": {"cost.json": hc}}
+                for role in GATE_0B_APPROVAL_ROLES
+            }
+            approvals = self._approvals(registry, cdir)
+            self.assertIs(approvals.status, Status.PASS, approvals.reason)
+
     def test_contract_review_missing_is_blocked(self):
         """规则卡缺 contract_review = 用「文件没改」冒充「条款已核对」→ BLOCKED。"""
         with tempfile.TemporaryDirectory() as tmp:
@@ -688,7 +718,13 @@ class EndToEndTest(unittest.TestCase):
         # 数据层未就位 → Phase 0 仍熔断（含 adjustment_scope 与逐项分类表）
         self.assertEqual(report["summary"]["phase_0_input_gate"], "BLOCKED")
         self.assertEqual(report["summary"]["phase_0"], "BLOCKED")
-        self.assertEqual(report["summary"]["wp4_solver_layer"], "BLOCKED")
+        # WP4 求解层与 Gate 0b 联动（2026-09-17：业务口径已冻结 + 四角色已签署
+        # → Gate 0b PASS → 求解层解封）。断言写成**联动关系**而非写死状态：
+        # 写死会在下次 Gate 0b 状态变化时变成假失败，掩盖真实回归。
+        expected_wp4 = (
+            "BLOCKED" if report["summary"]["gate_0b"] == "BLOCKED" else "ALLOWED"
+        )
+        self.assertEqual(report["summary"]["wp4_solver_layer"], expected_wp4)
         phase0_blocked = {
             i["item"] for i in report["phase_0_input_gate"]["items"]
             if i["status"] in ("BLOCKED", "FAIL")

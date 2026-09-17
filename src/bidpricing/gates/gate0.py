@@ -706,7 +706,15 @@ def _check_approvals(registry: dict, config_dir: Path) -> list[CheckItem]:
     resp = raw.get("responsibility") or {}
     signed = raw.get("signed") or {}
 
-    recs = [r for r in parse_records(registry, "gate_0b") if r.kind != "approvals"]
+    # 「已声明制品」取 Gate 0a ∪ Gate 0b：角色要签的制品未必都注册在 gate_0b——
+    # 例如法务视角的可竞争性分类是 Gate 0a 受控制品。只查 gate_0b 会把
+    # 合法的跨闸门签署误报为「签署了未声明制品」。
+    recs = [
+        r
+        for gate in ("gate_0a", "gate_0b")
+        for r in parse_records(registry, gate)
+        if r.kind != "approvals"
+    ]
     live = {r.artifact_path: r.hash for r in recs if r.artifact_path}
 
     ok_roles: list[str] = []

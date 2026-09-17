@@ -189,7 +189,44 @@
         "法务",
         "项目经理"
       ],
-      "signed": {},
+      "signed": {
+        "合同": {
+          "by": "user",
+          "artifacts": {
+            "pricing_rule_card.json": "sha256:d88298683924"
+          },
+          "signed_at": "2026-09-17T10:06:16+08:00",
+          "note": "经用户 2026-09-17 对话授权：四角色均由本人承担，逐个角色确认各自责任制品（非一次签署覆盖多角色）。"
+        },
+        "造价": {
+          "by": "user",
+          "artifacts": {
+            "cost_basis_spec.json": "sha256:7b46f09f6022",
+            "cost_assumption_spec.json": "sha256:e72892bf68d9",
+            "q1_assumption_spec.json": "sha256:3181c6935394"
+          },
+          "signed_at": "2026-09-17T10:06:16+08:00",
+          "note": "经用户 2026-09-17 对话授权：四角色均由本人承担，逐个角色确认各自责任制品（非一次签署覆盖多角色）。"
+        },
+        "法务": {
+          "by": "user",
+          "artifacts": {
+            "competitiveness_classification.json": "sha256:2913378715d5",
+            "profit_bridge_spec.json": "sha256:295530cf91f7"
+          },
+          "signed_at": "2026-09-17T10:06:16+08:00",
+          "note": "经用户 2026-09-17 对话授权：四角色均由本人承担，逐个角色确认各自责任制品（非一次签署覆盖多角色）。"
+        },
+        "项目经理": {
+          "by": "user",
+          "artifacts": {
+            "profit_bridge_spec.json": "sha256:295530cf91f7",
+            "q1_assumption_spec.json": "sha256:3181c6935394"
+          },
+          "signed_at": "2026-09-17T10:06:16+08:00",
+          "note": "经用户 2026-09-17 对话授权：四角色均由本人承担，逐个角色确认各自责任制品（非一次签署覆盖多角色）。"
+        }
+      },
       "note": "每角色须签署**其责任制品**的 hash（责任制品见 responsibility）。v3.2 的 all_required_approvals 布尔位可被一人勾选通过，业务口径并未真正冻结。★ 本版追加：签署对象必须指向已声明制品且覆盖该角色责任制品——只校验『hash 非空』时，签一个与任何制品都无关的字符串与打勾无异。",
       "responsibility": {
         "合同": {

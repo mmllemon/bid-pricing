@@ -47,7 +47,9 @@
       "deliverable": "《计价规则卡》",
       "type": "CON",
       "review": "REV",
-      "deps": [],
+      "deps": [
+        "T00-08"
+      ],
       "summary": "$Q_0/Q_1/P_0/P_1$ 定义完成；规则表按 `rule_set_id` 可机器执行；$P_1$ 计算规则来源已回答 5 项澄清（见 §8.3）；「合同约定优先」显式化；必须落定 `adjustment_scope ∈ {FULL, SEGMENT}`——2024 §8.9.2 未明说是否分段，两种解读下最优…",
       "gate": "Gate 0a / 0b",
       "evidence": [
@@ -242,7 +244,9 @@
       "deliverable": "《规则优先级卡》",
       "type": "CON",
       "review": "REV",
-      "deps": [],
+      "deps": [
+        "T00-08"
+      ],
       "summary": "明确 $\\text{Precedence}(\\text{Contract},\\text{Tender},\\text{Regional},\\text{Standard})$；各版 RuleSet 独立实现、仅共享接口、禁止共享核心调价公式；附强制测试：同一输入下两套 RuleSet 输出不得仅因条文号不同而相同（机械判据…",
       "gate": "Gate 0a / 0b",
       "evidence": [
@@ -843,7 +847,8 @@
       "type": "SOL",
       "review": "REV",
       "deps": [
-        "T00-05"
+        "T00-05",
+        "T00-10A"
       ],
       "summary": "输出形式化命题：Phase 1 精确 iff（统一排序指标 $r^{\\text{eff}}$ 存在且单调、单一 $\\lambda$ 阈值成立、$R_i(p_i)$ 保持目标函数结构、$L_i/U_i/\\text{floor}_i$ 与总价约束共同存在时最优性成立）；并给出违反条件的反例集。未完成前，§4.1 不得称为「…",
       "gate": "Gate 3",
@@ -1098,10 +1103,12 @@
       "title": "独立 Reference Implementation",
       "revision_note": "v3 新增/P0；v3.2.1 增独立性验收",
       "deliverable": "第二实现路径 + 独立性验收记录",
-      "type": "Z_{\\text{solver}}-Z_{\\text{ref}}\\right",
-      "review": "\\le\\epsilon_Z$；禁止 Phase 3 复用 Phase 2 的 $R_i$/constraint/objective 实现（底层数据结构可共享，核心计算逻辑不得共用），以消除共因错误。v3.2.1 新增独立性验收（P2-⑩）：须输出三层隔离证明（① 源码文件不重叠 ② 数据结构不得共享可变状态 ③ 独立实现不得由生产代码作者单人完成），并给出可核查的文件/模块清单；验收未通过时，T04-04 的对拍结论一律标 BLOCKED（见 T04-04）",
-      "deps": [],
-      "summary": "用独立于生产代码的路径重算 $R_i(\\cdot)$、约束残差、目标函数，输出 $Z_{\\text{ref}}$；要求 $\\left",
+      "type": "REV",
+      "review": "SOL",
+      "deps": [
+        "T04-02D"
+      ],
+      "summary": "用独立于生产代码的路径重算 $R_i(\\cdot)$、约束残差、目标函数，输出 $Z_{\\text{ref}}$；要求 $\\left|Z_{\\text{solver}}-Z_{\\text{ref}}\\right|\\le\\epsilon_Z$；禁止 Phase 3 复用 Phase 2 的 $R_i$/constrain…",
       "gate": "Gate 3",
       "evidence": [],
       "status": "not_started",
@@ -1118,7 +1125,8 @@
       "review": "SOL",
       "deps": [
         "T04-01",
-        "T04-02D"
+        "T04-02D",
+        "T04-08"
       ],
       "summary": "见 §4.1 三级判定 + A/B 两组验收；仅在 T04-00 适用子集内要求一致性；实例集来自 `golden_dataset_v1`（分层 A–F）。v3.2.1 独立性前置（P2-⑩）：对拍报告首部必须声明 T04-08 独立性验收状态；状态非 PASS 时，报告结论栏强制标记 BLOCKED，禁止出现\"对拍通…",
       "gate": "Gate 3",
@@ -1170,10 +1178,12 @@
       "title": "退化与多最优解处理",
       "revision_note": "v3 拆分/P1",
       "deliverable": "退化处理规范",
-      "type": "p_i-p_i^{\\text{canonical}}\\right",
-      "review": "$）使变量比对可判定；输出边界对偶区间",
-      "deps": [],
-      "summary": "识别并显式标记：边界对偶非唯一、$r^{\\text{eff}}$ 相等项、多最优解；定义 canonical tie-break（次级目标 $\\min\\sum w_i\\left",
+      "type": "SOL",
+      "review": "REV",
+      "deps": [
+        "T04-06"
+      ],
+      "summary": "识别并显式标记：边界对偶非唯一、$r^{\\text{eff}}$ 相等项、多最优解；定义 canonical tie-break（次级目标 $\\min\\sum w_i\\left|p_i-p_i^{\\text{canonical}}\\right|$）使变量比对可判定；输出边界对偶区间",
       "gate": "Gate 3",
       "evidence": [],
       "status": "not_started",

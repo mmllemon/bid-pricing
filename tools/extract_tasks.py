@@ -158,6 +158,35 @@ def _clean(text: str) -> str:
     return text.replace("**", "").strip()
 
 
+#: 任务表的列数（任务号/任务/产出物/完成判据/Owner/Reviewer/Depends）
+TABLE_COLUMNS = 7
+
+
+def _split_cells(line: str) -> list[str]:
+    """按 ``|`` 切列，**跳过行内公式 ``$...$`` 里的竖线**。
+
+    完成判据里出现 ``$\\left|Z_{\\text{solver}}-Z_{\\text{ref}}\\right|$`` 这类
+    LaTeX 绝对值竖线时，朴素 ``split("|")`` 会把一行切成更多列 ⇒ 后面的
+    Owner/Reviewer/Depends **整段错位**，依赖被静默读成空（T04-08 曾因此
+    deps=[]）。★ 结构性错位**必须有信号**，不能只靠「读出来是空的」。
+    """
+    cells: list[str] = []
+    buf: list[str] = []
+    in_math = False
+    for ch in line.strip().strip("|"):
+        if ch == "$":
+            in_math = not in_math
+            buf.append(ch)
+            continue
+        if ch == "|" and not in_math:
+            cells.append("".join(buf).strip())
+            buf = []
+            continue
+        buf.append(ch)
+    cells.append("".join(buf).strip())
+    return cells
+
+
 def parse_plan(path: Path) -> tuple[list[dict], list[str]]:
     """解析路线文档，返回 (任务列表, 警告列表)。"""
     if not path.exists():
@@ -180,10 +209,17 @@ def parse_plan(path: Path) -> tuple[list[dict], list[str]]:
             warnings.append(f"第 {lineno} 行任务出现在任何 WP 分节之前，已跳过")
             continue
 
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        cells = _split_cells(line)
         if len(cells) < 4:
             warnings.append(f"第 {lineno} 行只有 {len(cells)} 列，期望 ≥4，已跳过")
             continue
+        if len(cells) != TABLE_COLUMNS:
+            # 列数不符 ⇒ 后面几列（Owner/Reviewer/Depends）**整段错位**，
+            # 读出来的依赖是假的。宁可报警，不可静默。
+            warnings.append(
+                f"第 {lineno} 行 {len(cells)} 列 ≠ {TABLE_COLUMNS} 列："
+                "列错位，该行 Depends 不可信（请检查是否有未转义的 |）"
+            )
 
         raw_title = cells[1]
         # 标题形如：**成本口径证明包**（v3 新增/P0）、**规则集优先级冻结**（P0）
@@ -195,8 +231,19 @@ def parse_plan(path: Path) -> tuple[list[dict], list[str]]:
         title = _clean(raw_title[: paren.start()] if paren else raw_title)
         revision = paren.group(1) if paren else ""
 
-        deps_raw = cells[6] if len(cells) >= 7 else ""
-        deps = [d.strip() for d in re.split(r"[,\s、]+", deps_raw) if re.fullmatch(r"T\d{2}-\d{2}[A-Z]?", d.strip())]
+        deps_raw = cells[6] if len(cells) >= TABLE_COLUMNS else ""
+        # ★ 依赖单元格里的**粗体任务号**（v3/v3.2.1 新增前置几乎都是粗体，
+        #   如 ``**T04-08**``）必须先去 ``**`` 再匹配：否则 fullmatch 失败 ⇒
+        #   **静默丢弃整条前置依赖**，任务板会把「未齐备」报成「齐备」。
+        #   （2026-09-17 修复：原丢 T00-01→T00-08、T00-07→T00-08、
+        #   T04-00→T00-10A、T04-04→T04-08 四条。）
+        deps = [
+            _clean(d)
+            for d in re.split(r"[,\s、]+", deps_raw)
+            if re.fullmatch(r"T\d{2}-\d{2}[A-Z]?", _clean(d))
+        ]
+        if deps_raw.strip() and not deps and re.search(r"T\d{2}-\d{2}", deps_raw):
+            warnings.append(f"第 {lineno} 行 Depends 格「{deps_raw}」含任务号却未解析出依赖")
 
         desc = _clean(cells[3]) if len(cells) >= 4 else ""
         if len(desc) > 160:

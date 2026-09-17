@@ -1,0 +1,315 @@
+{
+  "spec_id": "phase1_solver_spec_v1",
+  "task": "T04-01",
+  "title": "Phase 1 解析解（排序 + 二分 + 贪心定容）",
+  "wp": "WP4",
+  "gate": "Gate 3",
+  "source_of_truth": "impl_plan_v321.md §4（T04-01 行：「$O(n\\log n)$ 仅适用于 T04-00 已证明的适用子集；输出 $\\lambda$ 与层归属；定位为 candidate / 上界，不承担最终解职责」）§4.1（三级判定）§4.2（层集合命名）§4.5（架构保险条款）+ model_v0.3_R2.md §7.2.1/§7.3 + config/phase1_exactness_spec.json（A 组 EC-1..EC-7 即适用子集的机械判据）+ config/derived_quantities_spec.json（floor_i / r_eff_i 的唯一来源）+ config/lp_formulation_spec.json（C1/C2 的系数与右端口径）+ ADR-0019（交换论证证明路径）",
+  "role": "把 T04-00 已证明的适用子集上的 P_A 用**闭式算法**解出来：按统一排序键降序排序 → 前缀和上做二分找阈值位次 → 贪心逐项定容。输出**候选解 + 阈值 λ + 层归属**。本层**不做可行性复核**（交 check_solution 与 T04-02D）、**不做数值稳定化**（交 T04-06）、**不做对拍**（交 T04-04）。",
+  "positioning": {
+    "solution_role": "candidate",
+    "is_final": false,
+    "relates_to_full_problem": "P_A 是完整模型（含 C6..C12）在「关闭会改变 LP 结构的软约束」后的**松弛**，故本层目标值 Z_P1 是完整问题最优值的**上界**。不得把本层输出当成最终报价（T04-05 才验收最终解）。",
+    "why_not_final": "impl_plan_v321 §4.1：z 一致性只在「唯一最优或设置 canonical tie-break 后」才可判（T04-06B）；§4.5 条款 2：phase1_role 默认 candidate，且 candidate **不等同** warm-start；§4.5 条款 3：任何情况下 Phase 3 独立复核必须执行，包括 Phase 1 给出解析解时。",
+    "must_not": [
+      "不得自称 FINAL / OPTIMAL_FOR_FULL_PROBLEM（把松弛解当最终解，会让 T04-05 的验收失去对象）",
+      "不得在本层做「舍入到分辨率」的收敛（T04-06 的职责；此处舍入会破坏 C1 等式并不再是 P_A 的解）",
+      "不得在本层调用求解器包或复用 compiler/backend 的路径（解析解与 LP 是两条独立路线，T04-04 靠它们对拍）"
+    ]
+  },
+  "applicability_guard": {
+    "rule": "**只在 check_exactness 判 EXACT 时产出解**。判 INAPPLICABLE（A 组有 FAIL）⇒ 本层不给解，返回 BLOCKED 并逐条点名被否定的 A 组条件；判 BLOCKED（A 组有 BLOCKED，例如 B 未给）⇒ 同判 BLOCKED。",
+    "rationale": "在适用子集之外，「阈值分割解」根本不是 P_A 的最优解——此时给出一个解比拒绝给出更危险：T04-04 会把它与 Phase 2 的解判成「不一致」，而**不一致是正确行为**，于是真正的 bug 被噪声淹没。",
+    "verdict_mapping": {
+      "EXACT": "继续求解（若后续平台/tie-break 检查不通过再转 BLOCKED）",
+      "INAPPLICABLE": "BLOCKED（reason 逐条列 A 组 FAIL 的条件 id 与名称）",
+      "BLOCKED": "BLOCKED（reason 逐条列 A 组 BLOCKED 的条件 id）"
+    },
+    "B_group": "EC-8/EC-9 的 WARN 不阻断（B 组只加实现性义务）。EC-9 的实现性义务「不限价项须固定为临界项」由本层算法**内建**（见 algorithm.null_cap_branch），EC-8 的舍入义务随 notes 透传给下游（T06-06）。"
+  },
+  "algorithm": {
+    "problem": "P_A：max Z = Σ_i [R_i(p_i) − c_i·q1_i]，s.t. C1: Σ_{i∈C1_scope} q0_i·p_i = B；箱型 lb_i ≤ p_i ≤ ub_i；C5 已折入 lb_i。∂Z/∂p_i = q0_i·r_eff_i（F-02 已锁定的口径，**不是** q1_i·r_eff_i）。",
+    "exchange_argument": "对两个内点项 i,j 作 p_i += δ/q0_i、p_j −= δ/q0_j（保持 C1 与箱型），ΔZ = δ·(r_eff_i − r_eff_j)。最优要求两方向都 ≤ 0 ⇒ 内点项 r_eff 全相等 ⇒ 存在单一阈值 λ：r_eff_i > λ ⇒ p_i = ub_i；r_eff_i < λ ⇒ p_i = lb_i；r_eff_i = λ ⇒ 箱内自由。",
+    "steps": [
+      "① 适用范围守卫：check_exactness ⇒ 非 EXACT 即 BLOCKED（见 applicability_guard）。",
+      "② 逐项构造行：q0_i（须 > 0）、r_eff_i（须算得出）、lb_i（merged_lower，与 LP 同一口径）、ub_i（= U_i，可为 None）。任一可优化项算不出 ⇒ BLOCKED 并点名。",
+      "③ 排序：按 (−r_eff_i, item_id) 升序排列——**先键是 r_eff 而非 r**（EC-2）；次键 item_id 给出确定性（platform 下的 canonical tie-break）。",
+      "④ 前缀和：S(0) = Σ q0·lb；S(k) = S(k−1) + q0_{i_k}·(ub_{i_k} − lb_{i_k})。任一前 k 项 ub 为 None ⇒ S(k) = +∞。",
+      "⑤ 二分：k* = max{ k ∈ [0,n] : S(k) ≤ B + eps_total }。S(0) > B + eps_total ⇒ INFEASIBLE（B < P_min）；k* = n ⇒ 全部取 ub（须 B ≈ S(n)，否则 INFEASIBLE）。",
+      "⑥ 定容：i_1..i_{k*} ⇒ p = ub（BOUNDARY_HIGH）；i_{k*+2}..i_n ⇒ p = lb（BOUNDARY_LOW）；临界项 i_{k*+1} ⇒ p = lb + (B − S(k*))/q0（因 S(k*+1) ≥ B 故 p ≤ ub 自动成立）。",
+      "⑦ λ：取临界项的 r_eff。R = B − S(k*) > tol ⇒ 临界项在箱内，λ 唯一确定（INTERIOR）；R ≈ 0 ⇒ 临界项落在 lb，合法 λ 是闭区间 [r_eff_{k*+1}, r_eff_{k*}]，报下端并标 BOUNDARY_EXACT。"
+    ],
+    "null_cap_branch": {
+      "rule": "**内建「不限价项（ub = None）只可能是临界项或触底项，永远不会被推到 ub」**。",
+      "why_it_falls_out": "若 i_m 是首个不限价项，则 S(m) = +∞ > B，故必有 k* ≤ m−1；于是 i_1..i_{k*} 全部上界有限，不限价项要么是临界项（k*+1 = m），要么留在 lb。**这不是特判，是前缀和的自然结果**——把 +∞ 写成一个大 M 反而会把不限价项推到 M 并给出错误解。",
+      "must_not": [
+        "不得把 ub = None 折成 0（会得到 0 < lb 的『不可行』假象；DQ-03/EC-9 已两次警告）",
+        "不得用一个大 M 代替 +∞ 参与前缀和（M 会在 B 较大时被『推满』，解不再是 P_A 的解）",
+        "不得因存在不限价项而拒收实例（cap 空是合法语义 ALLOW_EMPTY_NO_CAP）"
+      ]
+    },
+    "tie_break": {
+      "supported": [
+        "CANONICAL_ITEM_ID"
+      ],
+      "semantics": "platform（多个项 r_eff 相同且可容纳总价分配）下，剩余预算按 item_id 升序依次填满，最后一个承载残差的项即临界项。",
+      "unknown_policy": "实例声明了 tie_break_policy 但不在 supported 里 ⇒ **BLOCKED（机制缺失）**，不得静默改用默认次序——那等于替被复核对象选了一个它没声明过的解（never_downgrade）。",
+      "no_platform": "无 platform 时排序唯一，tie_break_policy 可缺省（EC-5 只在存在可分配平台时才要求声明）。"
+    }
+  },
+  "lambda_definition": {
+    "meaning": "C1 的对偶乘子，等价于「排序键阈值」：r_eff > λ 的项顶格、< λ 的项触底。",
+    "value_rule": "取临界项（排序后第 k*+1 项）的 r_eff。",
+    "kinds": {
+      "INTERIOR": "残差使临界项严格落在箱内 ⇒ λ 唯一确定。",
+      "BOUNDARY_EXACT": "残差为 0（S(k*) 恰等于 B）⇒ λ 只能在闭区间取值，报告下端并声明区间。",
+      "PLATFORM": "临界项与相邻项 r_eff 相同（EC-5 平台）⇒ λ 唯一，但临界组内部取值由 tie_break 决定。",
+      "ALL_AT_UPPER": "k* = n 且全部上界有限 ⇒ 无临界项，λ 无上界（报 None 并具名）。"
+    },
+    "must_not": [
+      "不得把 λ 报成 r 或 (1+alpha)（排序键的历史误用，EC-2/CE-02）",
+      "λ 为 None 时必须给出 kind 与理由，不得静默留空（未定态不得降级）"
+    ]
+  },
+  "layer_domain": {
+    "values": [
+      "BOUNDARY_LOW",
+      "INTERIOR",
+      "BOUNDARY_HIGH",
+      "FIXED",
+      "INFEASIBLE"
+    ],
+    "source": "impl_plan_v321 §4.2 的三集合命名（BOUNDARY_LOW / INTERIOR / BOUNDARY_HIGH / INFEASIBLE）",
+    "extension": "FIXED = lb_i 与 ub_i 相等（退化箱型）。§4.2 未列此项；不加会产生归属二义（p 同时『等于 lb』也『等于 ub』）。本层的判定次序是 FIXED → BOUNDARY_LOW/HIGH → INTERIOR，次序写死以保证确定性。",
+    "INFEASIBLE": "§4.2 定义：「p_i < L_i 或 p_i > U_i（理论上不可行，出现即实现错误）」。本层把非空 INFEASIBLE 集合当成**实现错误信号**，判 FAIL（不是 WARN）——它只能来自实现把 lb/ub 用反或定容算错。",
+    "partition_rule": "每个可优化项恰好属于一个层；非可优化项不参与分层（其单价由招标给定，不是决策变量）。"
+  },
+  "inputs": [
+    {
+      "field": "instance",
+      "source": "Phase1Instance（T04-00 的输入载体；from_dict / from_master 两条入口）",
+      "missing_policy": "BLOCK",
+      "semantics": "含 items / B / P_star / params / active_soft_constraints / tie_break_policy",
+      "readiness": "B 缺失 ⇒ check_exactness 判 BLOCKED（EC-7）⇒ 本层 BLOCKED"
+    },
+    {
+      "field": "resolved",
+      "source": "规则卡解析 resolve_parameters（**不得由本层自造阈值**）",
+      "missing_policy": "BLOCK",
+      "semantics": "rho± / adjustment_scope / increase·decrease_threshold",
+      "readiness": "缺 ⇒ r_eff 算不出"
+    },
+    {
+      "field": "floor_by_id",
+      "source": "T03-02 派生量层（derived.compute_derived ⇒ DerivedReport.floor_by_id）",
+      "missing_policy": "ALLOW_NONE",
+      "semantics": "floor_i 的唯一生产者；None = 本轮派生量层没产出 floor（如 μ 未落值）",
+      "readiness": "为 None 时本层**不得**用 c_i 或 L_i 冒充地板（merged_lower 的同一条纪律）；此时若 loss_acceptance=ACCEPT 的钳制本应生效，则 C1 可行域会比 LP 宽 ⇒ 与 T04-04 对拍时必须把 floor 来源一并声明"
+    },
+    {
+      "field": "eps_abs",
+      "source": "config/precision_profile.json 的 eps_abs.value（元）",
+      "missing_policy": "BLOCK",
+      "semantics": "总价类残差的绝对下限（= 分项舍入分辨率 0.01 元）；eps_total = max(eps_abs, eps_price·B)",
+      "readiness": "缺 ⇒ eps_total 算不出 ⇒ PS-02 判 BLOCKED（不得按 0 判 PASS）"
+    },
+    {
+      "field": "eps_price",
+      "source": "config/precision_profile.json 的 eps_price.value",
+      "missing_policy": "BLOCK",
+      "semantics": "★ **相对量**（乘以 P* 才是绝对宽度）。lb_C5 = max(eps_price·P*, resolution)（DV-02：绝对/相对两个名字，混用会把 P* 乘两遍）",
+      "readiness": "缺 ⇒ lb_C5 算不出（merged_lower 的第三路），箱型口径不可比"
+    },
+    {
+      "field": "resolution",
+      "source": "config/precision_profile.json 的 rounding.resolution（0.01 元）",
+      "missing_policy": "BLOCK",
+      "semantics": "报价分辨率；lb_C5 取大的一侧，层归属判定用其半宽作为具名容差",
+      "readiness": "缺 ⇒ lb_C5 与层归属容差都算不出"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "assignments",
+      "shape": "[{item_id, r_eff, p, lower, upper, layer, reason}]",
+      "note": "只含可优化项（决策变量）；按排序位次给出，便于与 λ 对照"
+    },
+    {
+      "name": "p_by_id",
+      "shape": "{item_id: p}",
+      "note": "**完整**报价向量：可优化项取算法值，非可优化项取其给定基准 p0（招标给定，不是决策变量）。任一非可优化项缺 p0 ⇒ BLOCKED（否则向量不完整，check_solution 会逐项报缺变量）"
+    },
+    {
+      "name": "lambda",
+      "shape": "{value, kind, interval, critical_item}",
+      "note": "见 lambda_definition"
+    },
+    {
+      "name": "layers",
+      "shape": "{item_id: layer}",
+      "note": "见 layer_domain"
+    },
+    {
+      "name": "notes",
+      "shape": "[string]",
+      "note": "B 组实现性义务（EC-8 舍入调和 / EC-9 不限价）随解透传，不阻断"
+    }
+  ],
+  "status_domain": [
+    "OPTIMAL",
+    "INFEASIBLE",
+    "BLOCKED"
+  ],
+  "status_domain_note": "**求解器的答案**（P_A 有没有解）与**判据的答案**（这一环走样没有）分域：求解域只有 OPTIMAL / INFEASIBLE / BLOCKED；判据域用 PASS / WARN / FAIL / BLOCKED / SKIP。把两者塞进同一枚举正是本仓反复出现的根因（Skill §命名与编号）。**注意 INFEASIBLE 不是 BLOCKED**：前者是「算出来了，可行域为空」，后者是「算不出」，混同会让『B 定得太低』以『数据没齐』的样子长期留档。",
+  "verdict_aggregation": {
+    "order": [
+      "FAIL",
+      "BLOCKED",
+      "WARN",
+      "SKIP",
+      "PASS"
+    ],
+    "rule": "取最严；空判据集 ⇒ BLOCKED（「没判过」不得记成 PASS）",
+    "rationale": "与 T04-02D / T03-02 同口径。SKIP = 本轮没查（如无实例可查），**SKIP ≠ PASS**。"
+  },
+  "judges": [
+    {
+      "id": "PS-01",
+      "group": "APPLICABILITY",
+      "claim": "只在 check_exactness 判 EXACT 时给解；INAPPLICABLE / BLOCKED ⇒ 本层 BLOCKED 且逐条点名 A 组被否定的条件。",
+      "on_violation": "BLOCKED",
+      "source": "impl_plan_v321 §4.1（一致性只在适用子集内要求）；ADR-0019 影响段",
+      "distinction": "★ 用 EC-5 FAIL 的探针（P-IN 与 P-FREE 同为 r_eff=1.0 且平台可分配）⇒ 必须 BLOCKED 且 reason 含 EC-5；声明 tie_break_policy 后同实例 ⇒ 必须给解。两个方向都进测试。"
+    },
+    {
+      "id": "PS-02",
+      "group": "C1_SATISFACTION",
+      "claim": "解满足 C1 等式：|Σ_{C1_scope} q0_i·p_i − B| ≤ eps_total。由 check_solution **跨来源**代回（不是用本层的前缀和自证——同源相减恒为 0）。",
+      "on_violation": "FAIL",
+      "source": "ADR-0015 规则⑥（判据不得自证）；ADR-0014（总价是划分）",
+      "distinction": "注入「按 r 排序 + 只填 ub 不调临界项」的解 ⇒ 残差超限 ⇒ FAIL；正确解 ⇒ PASS。"
+    },
+    {
+      "id": "PS-03",
+      "group": "BOX_SATISFACTION",
+      "claim": "逐项 lb_i ≤ p_i ≤ ub_i（lb_i 取 merged_lower，与 LP 同一口径；具名容差 eps_price）。不限价项（ub=None）**不判上界**。",
+      "on_violation": "FAIL",
+      "source": "C2/C3/C4/C5 + ADR-0013（缺数值让算式算不出才 BLOCKED）",
+      "distinction": "注入 p_i = ub_i + 1 ⇒ FAIL；注入「把 ub=None 当 0」⇒ p_i ≤ 0 触发 C5 ⇒ FAIL。"
+    },
+    {
+      "id": "PS-04",
+      "group": "SORT_KEY",
+      "claim": "分配由 **r_eff 降序**驱动：存在 (i,j) 使 r_eff_i > r_eff_j 却 p_i < ub_i（i 未顶格）而 p_j > lb_j（j 未触底）⇒ FAIL。",
+      "on_violation": "FAIL",
+      "source": "T04-00 EC-2 / CE-02；formulation 的 ∂Z/∂p = q0·r_eff（历史 bug q1·r_eff 同族）",
+      "distinction": "★ 构造 r 与 r_eff **严格逆序**的实例（EC-2 判 WARN，不阻断）：按 r_eff 排序 ⇒ 解给出 Z_A；按 r 排序 ⇒ 解给出 Z_B < Z_A。断言实现给出 Z_A。这是「能被错误的值否定」的硬要求——在 r 与 r_eff 同序的实例上该判据没有区分力。"
+    },
+    {
+      "id": "PS-05",
+      "group": "THRESHOLD_STRUCTURE",
+      "claim": "存在阈值 λ 使 {i : p_i = ub_i} ⊆ {i : r_eff_i ≥ λ} 且 {i : p_i = lb_i} ⊆ {i : r_eff_i ≤ λ}，且每个内点项 r_eff_i = λ（容差 eps_r）。",
+      "on_violation": "FAIL",
+      "source": "ADR-0019 决策一（交换论证的结论）；impl_plan_v321 §4.2（三集合）",
+      "distinction": "注入「高 r_eff 项触底、低 r_eff 项顶格」的解 ⇒ 不存在这样的 λ ⇒ FAIL。"
+    },
+    {
+      "id": "PS-06",
+      "group": "LOCAL_OPTIMALITY",
+      "claim": "**数值交换见证**：对每一对 (i,j)（i 可下调、j 可上调）作保 C1 的成对交换，用 check_solution 复算 Z'，要求 Z' ≤ Z + eps_Z。至少要有一个可测交换被真正走到，否则判 SKIP。",
+      "on_violation": "FAIL",
+      "source": "ADR-0019 决策一；「自洽的错公式仍然自洽」——只有换一条求值路径（settlement_revenue）才照得出来",
+      "distinction": "★ 注入一个「满足全部约束但次优」的解（把最高 r_eff 项压在 lb）⇒ 存在有利交换 ⇒ FAIL。**这一条是唯一能抓到「约束全满足但次优」的判据**（可行性判据全绿）。"
+    },
+    {
+      "id": "PS-07",
+      "group": "NULL_CAP",
+      "claim": "含不限价项时：解仍可行；不限价项 p_i > 0 且 p_i ≥ lb_i；**不得**出现「不限价项被推到一个大 M」的痕迹（即 p_i 恰好等于某个 round 的大数）。不限价项若是临界项，须 p_i > lb_i。",
+      "on_violation": "FAIL",
+      "source": "EC-9 的实现性义务；ADR-0019 影响段（「必须内建空 cap 项固定为临界项的分支」）",
+      "distinction": "★ 现实：本项目西永L 样本 031301017001 不限价（EC-9 WARN）。注入「ub=None ⇒ 用 1e9 当上界」的实现 ⇒ 该 p_i = 1e9 ⇒ FAIL。"
+    },
+    {
+      "id": "PS-08",
+      "group": "LAYER_PARTITION",
+      "claim": "每个可优化项恰属一个层；INFEASIBLE 集合必须为空；层与数值一致（BOUNDARY_HIGH ⇔ p ≈ ub、BOUNDARY_LOW ⇔ p ≈ lb、FIXED ⇔ lb = ub）。",
+      "on_violation": "FAIL",
+      "source": "impl_plan_v321 §4.2；ADR-0013（层归属是可解释性产物）",
+      "distinction": "注入 p > ub 的解 ⇒ INFEASIBLE 非空 ⇒ FAIL；注入「层标签写反」⇒ 与数值不一致 ⇒ FAIL。"
+    },
+    {
+      "id": "PS-09",
+      "group": "POSITIONING",
+      "claim": "解对象自述 role=candidate、is_final=false，并声明它与完整问题的关系（松弛 ⇒ 上界）。",
+      "on_violation": "FAIL",
+      "source": "impl_plan_v321 §4.5 条款 2/3；T00-05（phase1_role 默认 candidate）",
+      "distinction": "注入 role=final 的实现 ⇒ FAIL。**这一条不判数值，只判自述**——但它是 T04-05 验收的对象，必须有机械判据。"
+    },
+    {
+      "id": "PS-10",
+      "group": "REFEREE",
+      "claim": "解的可行性结论与目标值以 **check_solution**（独立裁判，只代回原式）为准；解对象不得自报一个与裁判不一致的 Z。",
+      "on_violation": "FAIL",
+      "source": "solver/instance.py 的模块说明（check_solution 刻意不复用求解路径）",
+      "distinction": "实现若自行算 Z（重实现 R_i）⇒ 与裁判的 Z 必然在分段边界处分岔；测试断言解对象**没有**自报 Z 字段，只有裁判给的。"
+    },
+    {
+      "id": "PS-11",
+      "group": "RECONCILIATION",
+      "claim": "实现读的输入必须都在本制品 inputs 里声明过；实现的算法步骤必须与 algorithm.steps 对得上（无样本 ⇒ SKIP，**不得判 PASS 也不得判 FAIL**）。",
+      "on_violation": "FAIL",
+      "source": "T03-02 DQ-10 的同族；CC-01..CC-12（声明 vs 实现的跨来源对账）",
+      "distinction": "★ 与 DQ-10 首版同一个坑的镜像：**「这一轮没走到」既不是 PASS 也不是 FAIL**。本层在适用范围守卫处 BLOCKED（未产出解）时，无样本可对账 ⇒ SKIP。注入一个读了未声明输入的实现 ⇒ FAIL。"
+    }
+  ],
+  "consumers": [
+    {
+      "task": "T04-04",
+      "uses": "★ 主要消费方：对拍器的一方。§4.1 三级判定（可行性 / 目标值 / 变量一致性）在**适用子集内**比对本层与 Phase 2 的解；本层的 applicability_guard 必须与 T04-00 的 verdict 一致，否则对拍的可比性丧失。"
+    },
+    {
+      "task": "T04-05",
+      "uses": "Phase 3 验收：本层自述 role=candidate（PS-09），最终解由 Phase 2 + Phase 3 独立复核产出，本层不参与最终解职责"
+    },
+    {
+      "task": "T04-06",
+      "uses": "notes 里的 EC-8 舍入义务；T04-06 负责 ε 截断 / 系数尺度归一 / 平台效应识别（本层只**报告**平台，不消解）"
+    },
+    {
+      "task": "T04-06B",
+      "uses": "canonical tie-break 的正式定义。本层当前只支持 CANONICAL_ITEM_ID；T04-06B 定义更多策略时，本层按 tie_break.supported 扩展（扩展即改本制品，须先与用户确认）"
+    },
+    {
+      "task": "T04-02D",
+      "uses": "本层的 p_by_id 可作为 verify_solution 的入参之一（原始量，不经 SolveResult）——复核层因此对解析解与 LP 解一视同仁"
+    },
+    {
+      "task": "T04-08",
+      "uses": "第三层独立参考实现落地后，本层（第一实现）与 T04-02A/B（第二实现）与 T04-08（第三实现）构成三层隔离；本层的交换论证证明路径（ADR-0019）刻意不走 KKT，正是为这条独立性服务"
+    }
+  ],
+  "open_items": [
+    {
+      "id": "OI-PS-A",
+      "item": "真实项目入口未开：跑本层需要 B（= P*_competitive）、c_i、q0/q1_point 的逐项落值，而当前 master 表两侧只有 cap 与成本单价（attribution / q1_point 尚未落值，与 T04-00 遗留 4 同因）。故 CLI 默认跑**内置探针**，真实项目须由 T04-04 的 golden_dataset_v1 提供实例。",
+      "owner": "T04-04 / T01-02C（golden_dataset_v1）",
+      "not_silently_defaulted": "本层不得为缺 B 的实例子造 B；缺即 BLOCKED（EC-7）。"
+    },
+    {
+      "id": "OI-PS-B",
+      "item": "floor_i 在本项目上恒 BLOCKED（μ 未落值，见 OI-DQ-A）⇒ 本层在真实项目上用的 lb_i 不含地板项，与 LP 一致地「都不含」；一旦 μ 落值，本层与 LP 必须**同时**取到 floor，否则对拍出现假不一致。",
+      "owner": "用户（商务声明）+ T04-04（对拍报告须声明 floor 来源）"
+    },
+    {
+      "id": "OI-PS-C",
+      "item": "EC-8 舍入调和（B 组 WARN）在本层只透传 notes，不消解。§7.1.1-5 的时序断言（Gate 0b 通过时间 < 本层首次构建时间）在 T04-01 落地后**已有对象可判**——此前为空真通过（ADR-0019 遗留 1）。",
+      "owner": "T04-06（舍入）/ T04-02C（时序断言落地位置）"
+    },
+    {
+      "id": "OI-PS-D",
+      "item": "本制品**未登记进任何闸门注册表**（Gate 3 注册表尚未建立，与 phase1_exactness_spec 同状态）。是否建立 Gate 3 并纳入本制品属**改动闸门判据集**，须先与用户确认。",
+      "owner": "用户（闸门注册表裁定）"
+    }
+  ],
+  "evidence_pointer": "ADR-0026-phase1-analytic-solver.md（本层四组决策：适用子集守卫、r_eff 排序键、不定价上界分支、candidate 定位 + merged_lower 公开化）"
+}

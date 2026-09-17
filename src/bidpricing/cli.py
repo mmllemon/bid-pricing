@@ -981,6 +981,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_p1.add_argument("--json", action="store_true", help="输出 JSON")
     p_p1.set_defaults(func=cmd_phase1_check)
 
+    # ---- T04-01 Phase 1 解析解 ------------------------------------------
+    p_p1s = sub.add_parser(
+        "phase1-solve",
+        help="T04-01 Phase 1 解析解（排序+二分+贪心定容；输出 λ 与层归属）")
+    p_p1s.add_argument("--instance", default=None,
+                       help="对自定义实例 JSON 求解（结构见 Phase1Instance.from_dict）")
+    p_p1s.add_argument("--probe", default="free-cap", choices=("free-cap", "simple"),
+                       help="无 --instance 时用哪个内置探针：free-cap（含不限价项与"
+                            "平台）或 simple（上界全有限、λ 内点唯一）")
+    p_p1s.add_argument("--floor-json", default=None,
+                       help="显式 floor_i 表 JSON：{item_id: 值}。不给则自动向 "
+                            "T03-02 派生量层索取（与 verify-solution 共用同一处解析）")
+    p_p1s.add_argument("--json", action="store_true", help="输出 JSON")
+    p_p1s.set_defaults(func=cmd_phase1_solve)
+
     p_cc = sub.add_parser(
         "compile-check",
         help="T04-02B 约束编译判定（Formulation → CompiledModel 的保真性）")
@@ -1316,6 +1331,139 @@ def cmd_phase1_check(args) -> int:
     return 0 if not bad else 1
 
 
+def cmd_phase1_solve(args) -> int:
+    """T04-01 Phase 1 解析解 —— 排序 + 二分 + 贪心定容。
+
+    与 ``phase1-check`` 的分工：那个判**求解论域**（阈值分割解在这实例上是不是
+    最优，T04-00 的 EC 判据）；本命令在**该论域之内**把解算出来，输出
+    阈值 λ 与层归属（顶格 / 内点 / 触底）。二者的顺序是固定的：
+    **论域不过关 ⇒ 本命令拒绝给解**（越界给解比不给更危险，见
+    ``phase1_solver_spec.applicability_guard``）。
+
+    定位：输出是 **candidate / 上界**，不承担最终解职责（T04-05 才验收）；
+    与 Phase 2（LP/MILP）构成 T04-04 对拍的两方。
+
+    目标值一律由 ``check_solution``（独立裁判）给出——本层**不自报 Z**。
+    """
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.instance import Phase1Instance
+    from .solver.phase1 import (
+        STATUS_PASS,
+        load_phase1_spec,
+        phase1_probe_instance,
+        phase1_report,
+        phase1_simple_probe_instance,
+    )
+    from .solver.verifier import load_verifier_spec, resolve_tolerances
+
+    cfg = config_dir()
+    prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
+    eps_abs = float(prof["eps_abs"]["value"])
+    eps_price = float(prof["eps_price"]["value"])
+    resolution = float(prof["rounding"]["resolution"])
+    resolved = resolve_parameters(load_pricing_card(cfg))
+    spec = load_phase1_spec(cfg)
+    vspec = load_verifier_spec(cfg)
+
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        instance = Phase1Instance.from_dict(
+            json.loads(path.read_text(encoding="utf-8")), source=str(path)
+        )
+        title = str(path)
+    else:
+        instance = (
+            phase1_simple_probe_instance()
+            if args.probe == "simple" else phase1_probe_instance()
+        )
+        title = f"内置探针（{args.probe}）"
+
+    floor_by_id, floor_source = _resolve_floor_by_id(
+        cfg, instance, resolved, getattr(args, "floor_json", None)
+    )
+    # ★ 这些是**旁注**，不是机器可读输出的一部分：--json 时必须走 stderr，
+    #   否则 stdout 前面多一行人话，整份 JSON 无法解析。
+    _note = sys.stderr if args.json else sys.stdout
+    print(f"■ floor_i 来源：{floor_source}", file=_note)
+
+    tolerances, tol_problems = resolve_tolerances(
+        prof, vspec, P_ref=instance.P_star
+    )
+    if "eps_price" in tol_problems:
+        print(f"■ 盒式容差不可比：{tol_problems['eps_price']}", file=_note)
+
+    report = phase1_report(
+        instance, resolved,
+        eps_abs=eps_abs, eps_price=eps_price, resolution=resolution,
+        floor_by_id=floor_by_id, tolerances=tolerances, spec=spec,
+    )
+
+    if args.json:
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if report.verdict() == STATUS_PASS else 1
+
+    _print_phase1(report, title)
+    return 0 if report.verdict() == STATUS_PASS else 1
+
+
+def _print_phase1(report, title: str) -> None:
+    sol = report.solution
+    print("=" * 78)
+    print(f"T04-01 Phase 1 解析解（排序 + 二分 + 贪心定容）｜ {title}")
+    print("=" * 78)
+    print(f"  求解状态：{sol.status}　适用性：{sol.applicability or '—'}")
+    print(f"  定位：role={sol.role}、is_final={sol.is_final}——"
+          "**不承担最终解职责**（T04-05 验收最终解）")
+    print(f"        {sol.relates_to_full_problem}")
+    print(f"  {sol.reason}")
+    if sol.assignments:
+        lam = sol.lam
+        print()
+        print(f"  λ = {lam.value}　（{lam.kind}，临界项 {lam.critical_item}）")
+        if lam.interval and lam.interval[0] != lam.interval[1]:
+            print(f"        合法 λ 区间：{list(lam.interval)}")
+        print(f"        {lam.reason}")
+        print()
+        print("  位次  项目          p            下界        上界        r_eff   层归属")
+        for a in sol.assignments:
+            ub = "不限价" if a.upper is None else f"{a.upper:>10.4f}"
+            print(f"  {a.rank:>3}   {a.item_id:<12}  {a.p:>11.4f}  "
+                  f"{a.lower:>10.4f}  {ub:>10}  {a.r_eff:>7.4f}  {a.layer}")
+    if report.referee is not None:
+        r = report.referee
+        print()
+        print(f"  独立裁判（check_solution，非本层自算）：Z = {r.Z:,.2f} 元、"
+              f"C1 残差 = {r.c1_residual}, 可行 = {r.feasible}")
+        if r.violations:
+            for v in r.violations[:8]:
+                print(f"    ✗ {v}")
+    if sol.notes:
+        print()
+        print("  实施性义务（B 组，不改变结论但不做会出错）：")
+        for n in sol.notes:
+            print(f"    · {n}")
+    print()
+    print("-" * 78)
+    for c in report.checks:
+        print(f"[{c.status:>7}] {c.item}　{c.reason}")
+    print("-" * 78)
+    tally: dict[str, int] = {}
+    for c in report.checks:
+        tally[c.status] = tally.get(c.status, 0) + 1
+    summary = "  ".join(f"{k}×{tally[k]}" for k in
+                        ("FAIL", "BLOCKED", "WARN", "SKIP", "PASS") if tally.get(k))
+    print(f"  {summary}　⇒ 聚合结论 {report.verdict()}")
+    if report.verdict() != "PASS":
+        print("  说明：本命令在 verdict≠PASS 时返回 1。若原因是适用范围守卫"
+              "（INAPPLICABLE/BLOCKED），那是**如实反映**，不是实现缺陷——"
+              "两条路径不一致在此处是正确行为（impl_plan_v321 §4.1）。")
+
+
 def cmd_backend_check(args) -> int:
     """T04-02C 求解后端适配判定 —— 「换后端只改配置」是不是真的。
 
@@ -1549,7 +1697,7 @@ def _print_derived(report, title: str) -> None:
 def cmd_derive_check(args) -> int:
     """T03-02：算出 ``L_i / U_i / floor_i / r_eff_i`` 并逐条给出判据。
 
-    ★ 本命令是 ``floor_i`` 的**唯一生产者**：``formulation._merged_lower`` 的
+    ★ 本命令是 ``floor_i`` 的**唯一生产者**：``formulation.merged_lower`` 的
     ``floor_by_id`` 入参由此而来。此前该入参只能由调用方手工提供（占位），
     于是「地板」在编译侧与判定侧各有一个真相来源——两侧会各自自洽地错着。
 
@@ -1618,6 +1766,52 @@ def cmd_derive_check(args) -> int:
     return 0 if report.verdict() == "PASS" else 1
 
 
+def _resolve_floor_by_id(cfg, instance, resolved, explicit_json=None):
+    """``floor_i`` 的来源解析 —— **唯一实现**（verify-solution 与 phase1-solve 共用）。
+
+    三条优先级，且**必须自述来源**（②与③后果相同但来源不同）：
+
+    ① 显式 ``--floor-json`` ⇒ 人工实验，最高优先（便于独立复核某一张地板表）；
+    ② 否则由 T03-02 派生量层现场产出——真实项目上 μ 未落值时为空表，
+       于是下游如实判 BLOCKED，而不是拿 ``c_i`` 或 ``L_i`` 冒充地板；
+    ③ 派生量层不可用 ⇒ ``None``。
+
+    返回 ``(floor_by_id 或 None, 来源描述)``。
+    """
+    from pathlib import Path as _P
+
+    if explicit_json:
+        fpath = _P(explicit_json)
+        if not fpath.exists():
+            return None, f"显式文件不存在：{fpath}"
+        table = {
+            str(k): float(v)
+            for k, v in json.loads(fpath.read_text(encoding="utf-8")).items()
+        }
+        return (table or None), f"显式文件 {explicit_json}（{len(table)} 项）"
+    try:
+        from .derived import (
+            compute_derived as _compute_derived,
+            inputs_from_project as _inputs_from_project,
+            load_derived_spec as _load_derived_spec,
+        )
+
+        _pin = _inputs_from_project(cfg)
+        _drep = _compute_derived(
+            instance, resolved,
+            mu=_pin["mu"], loss_acceptance=_pin["loss_acceptance"],
+            unbalanced=_pin["unbalanced"], spec=_load_derived_spec(cfg),
+        )
+        _floor = _drep.floor_by_id()
+        return (_floor or None), (
+            f"T03-02 派生量层（verdict={_drep.verdict()}，{len(_floor)} 项）"
+            if _floor else
+            f"T03-02 派生量层未产出 floor（verdict={_drep.verdict()}）"
+        )
+    except Exception as exc:  # pragma: no cover - 派生层不可用不应中断命令
+        return None, f"派生量层不可用（{type(exc).__name__}）"
+
+
 def cmd_verify_solution(args) -> int:
     """T04-02D：**独立复核**一个解（可行性 / 目标值 / 上下界 / 层归属）。
 
@@ -1678,46 +1872,11 @@ def cmd_verify_solution(args) -> int:
     solver_inputs: dict[str, object] = dict(PROBE_SOLVER_INPUTS)
 
     # ---- floor_i 的来源：唯一生产者是 T03-02 派生量层 -------------------
-    # ① 显式 --floor-json ⇒ 人工实验，最高优先（便于独立复核某一张地板表）；
-    # ② 否则由 compute_derived 现场产出 —— 真实项目上 μ 未落值时为空表，
-    #    于是 SV-07 判 BLOCKED，如实反映「地板不可知」；
-    # ③ 两者都没有 ⇒ None。②与③后果相同但**来源不同**，必须自述。
-    floor_by_id: dict[str, float] | None = None
-    floor_source = "未提供"
-    if getattr(args, "floor_json", None):
-        fpath = _P(args.floor_json)
-        if not fpath.exists():
-            print(f"■ floor 文件不存在：{fpath}")
-            return 1
-        floor_by_id = {
-            str(k): float(v)
-            for k, v in json.loads(fpath.read_text(encoding="utf-8")).items()
-        }
-        floor_source = f"显式文件 {args.floor_json}（{len(floor_by_id)} 项）"
-    else:
-        try:
-            from .derived import (
-                compute_derived as _compute_derived,
-                inputs_from_project as _inputs_from_project,
-                load_derived_spec as _load_derived_spec,
-            )
-
-            _pin = _inputs_from_project(cfg)
-            _drep = _compute_derived(
-                variants[0][1], resolved,
-                mu=_pin["mu"], loss_acceptance=_pin["loss_acceptance"],
-                unbalanced=_pin["unbalanced"], spec=_load_derived_spec(cfg),
-            )
-            _floor = _drep.floor_by_id()
-            floor_by_id = _floor or None
-            floor_source = (
-                f"T03-02 派生量层（verdict={_drep.verdict()}，{len(_floor)} 项）"
-                if _floor else
-                f"T03-02 派生量层未产出 floor（verdict={_drep.verdict()}）"
-            )
-        except Exception as exc:  # pragma: no cover - 派生层不可用不应中断复核
-            floor_by_id = None
-            floor_source = f"派生量层不可用（{type(exc).__name__}）"
+    # 解析逻辑抽到 _resolve_floor_by_id（与 phase1-solve 共用**同一处**口径——
+    # 两条命令各写一遍就又是一处「同一约束两处实现」）。
+    floor_by_id, floor_source = _resolve_floor_by_id(
+        cfg, variants[0][1], resolved, getattr(args, "floor_json", None)
+    )
     print(f"■ floor_i 来源：{floor_source}")
 
     verifier_source = (_P(__file__).resolve().parents[0]

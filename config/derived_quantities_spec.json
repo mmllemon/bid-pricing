@@ -6,7 +6,7 @@
   "gate": "Gate 3",
   "source_of_truth": "model_v0.3_R2.md §5.2/§5.3/§5.4/§5.5/§8.2 + impl_plan_v321.md §3 WP3/T03-02、§4.1 + config/constraint_schema.json（C2/C3/C4/C5 的原始式）+ config/lp_formulation_spec.json.parameters（DERIVED 段，owner_task=T03-02）+ config/field_schema.json（cap/mu/c_i/floor 的 missing_policy）+ ADR-0009（loss_acceptance）",
   "role": "把「配置与声明层的原始字段」确定性地折算为「求解层与判定层共用的派生量」。本层**不做优化、不做判定、不做诊断**，只做取大/取小/委派，并把「算不出」表达为**具名理由**。",
-  "why_a_separate_layer": "T04-02A 落地时 floor_i 缺席，只能以 floor_by_id 入参占位（formulation._merged_lower 原注释：「缺省表示尚未接入，此时不得用 c_i 或 L_i 冒充地板」）。占位的问题是双向的：编译侧看起来「已经接上」，判定侧（T03-04）又会各自硬编码 C3/C4 的阈值 ⇒ 同一个地板出现**两个真相来源**，两侧各自自洽地错着、永远撞不上（规则⑨ 同根因）。本层把派生量的**唯一实现**收拢到一处，两侧只引用不重算。",
+  "why_a_separate_layer": "T04-02A 落地时 floor_i 缺席，只能以 floor_by_id 入参占位（formulation.merged_lower 原注释：「缺省表示尚未接入，此时不得用 c_i 或 L_i 冒充地板」）。占位的问题是双向的：编译侧看起来「已经接上」，判定侧（T03-04）又会各自硬编码 C3/C4 的阈值 ⇒ 同一个地板出现**两个真相来源**，两侧各自自洽地错着、永远撞不上（规则⑨ 同根因）。本层把派生量的**唯一实现**收拢到一处，两侧只引用不重算。",
   "deliverable": "config/derived_quantities_spec.json + src/bidpricing/derived.py + tests/test_derived.py",
   "inputs": [
     {

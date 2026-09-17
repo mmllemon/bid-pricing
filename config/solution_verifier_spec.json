@@ -256,7 +256,7 @@
       "id": "SV-07",
       "name": "上下界：逐项四路复算并指出起作用者",
       "statement": "对每个可优化项，分别从业务侧复算 L_i、floor_i、U_i(=== cap)、lb_C5，逐条给出 p_i 是否满足，并给出声明层级的**起作用下界**（= max 的取到者）。",
-      "check": "对四路各自算 slack；binding = argmax over 已解析的下界候选。floor 由 T03-02 派生量层提供（config/derived_quantities_spec.json；CLI verify-solution 默认已接线，--floor-json 可覆盖）；**仍**缺席时（例如 μ 未落值）⇒ floor 这一路判 BLOCKED，**不得**用 L_i 或 c_i 冒充（formulation._merged_lower 的同一条纪律）。2026-09-17：T03-02 交付后该路已可判——实测给 floor 时 SV-07 由 BLOCKED 转 PASS。",
+      "check": "对四路各自算 slack；binding = argmax over 已解析的下界候选。floor 由 T03-02 派生量层提供（config/derived_quantities_spec.json；CLI verify-solution 默认已接线，--floor-json 可覆盖）；**仍**缺席时（例如 μ 未落值）⇒ floor 这一路判 BLOCKED，**不得**用 L_i 或 c_i 冒充（formulation.merged_lower 的同一条纪律）。2026-09-17：T03-02 交付后该路已可判——实测给 floor 时 SV-07 由 BLOCKED 转 PASS。",
       "on_violation": "FAIL",
       "per_bound_on_violation": {
         "L": "FAIL",

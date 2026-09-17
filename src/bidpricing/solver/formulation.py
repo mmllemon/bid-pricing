@@ -410,7 +410,7 @@ def build_formulation(
                 "q0": _f(item.q0),
                 "q1": _f(item.q1_point),
                 "c_i": _f(item.c_i),
-                "lb": _merged_lower(item, lb_c5, floor_by_id),
+                "lb": merged_lower(item, lb_c5, floor_by_id),
                 "ub": _f(item.U),            # None = 不限价（合法语义）
                 "r_eff": instance.r_eff(item, resolved),
             }
@@ -720,10 +720,14 @@ def build_formulation(
     )
 
 
-def _merged_lower(
+def merged_lower(
     item: Any, lb_c5: float, floor_by_id: Mapping[str, float] | None = None
 ) -> float | None:
     """合并下界 ``lb_i = max(L_i, floor_i, lb_C5)``。
+
+    2026-09-17 由 ``_merged_lower`` 更名为公开名：**合并口径有且只有这一处**，
+    T04-01 解析解（``solver/phase1.py``）必须复用本函数，不得自行取一遍 max——
+    否则解析解与 LP 会用两套箱型，箱型差一点点就会让「对拍不一致」无法归因。
 
     ``floor_i`` 是 T03-02 的派生量（``max(L_i, c_i·(1−mu_i))``），**不在**
     :class:`Phase1Item` 上。**2026-09-17 起它的唯一生产者已落地**：

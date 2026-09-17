@@ -10,6 +10,35 @@
 
 ## [未发布]
 
+### T04-01 完成：Phase 1 解析解（排序+二分+贪心定容，ADR-0026）
+
+**新增**
+- `config/phase1_solver_spec.json`：算法步骤、λ 定义与种类、层域
+  （BOUNDARY_LOW/INTERIOR/BOUNDARY_HIGH/FIXED/INFEASIBLE）、tie-break 支持集、
+  PS-01..PS-11 判据（含区分度双向验证）。
+- `src/bidpricing/solver/phase1.py`：`solve_phase1`（**只在 T04-00 已证明的
+  适用子集内求解**；空 cap 临界项分支；平台 tie-break）+ `judge_phase1`
+  （只吃实例与 p 向量，不读求解中间量）+ `phase1_report`（判据聚合，外层
+  `check_solution` 做可行性裁判）+ 两个内置探针（free-cap / simple）。
+- `tests/test_phase1_solver.py`：48 项，每条判据双向验证（注入错解必 FAIL、
+  正确解必 PASS）。
+- CLI `phase1-solve`（`--probe` / `--instance` / `--json`）。
+- `docs/adr/ADR-0026-phase1-analytic-solver.md`。
+
+**变更**
+- `formulation._merged_lower` 提升为公开名 `merged_lower`（唯一实现不变，
+  phase1 复用，不重实现下界与 R_i）。
+- `solver/__init__.py` 导出 phase1 命名族；`verify-solution` 的 floor 来源
+  解析抽为 `_resolve_floor_by_id` 共用实现。
+- `docs/tasks.json`：T04-01 → `done`；`EVIDENCE` 同步（漂移集合保持 9 项）。
+
+**修正**
+- ★ **PS-06 首版只做单向交换探针**——只试「i↓j↑」，漏掉「先增后减」那一半；
+  注入「把顶格项增价、临界项减价」的次优解逃过了检测。补齐双向后抓到。
+- ★ **判据先于实现纠错的一次实证**：PS-11 在冒烟阶段抓到制品把
+  eps_abs/eps_price/resolution 三个入参写成一条（实现读的是三个）——修制品，
+  不是放宽判据。
+
 ### T03-02 完成：派生量计算（L/U/floor/r_eff 的唯一实现，闭合 SV-07 挂账）
 
 **新增**

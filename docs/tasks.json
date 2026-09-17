@@ -891,9 +891,26 @@
       ],
       "summary": "$O(n\\log n)$ 仅适用于 T04-00 已证明的适用子集；输出 $\\lambda$ 与层归属；定位为 candidate / 上界，不承担最终解职责",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/phase1_solver_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/phase1.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_phase1_solver.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0026-phase1-analytic-solver.md"
+        }
+      ],
+      "status": "done",
+      "note": "2026-09-17：排序+二分+贪心定容解析解落地。spec=config/phase1_solver_spec.json（PS-01..PS-11）；实现 src/bidpricing/solver/phase1.py（solve_phase1/judge_phase1/phase1_report/两个内置探针）；Z 一律由 instance.check_solution 复算（不重实现 R_i）；lb_i 复用 formulation.merged_lower（_merged_lower 提升为公开名，唯一实现不变）。两个探针（free-cap/simple）verdict=PASS。测试 48 项全绿（全量 838），含 PS-06 双向交换探针、r vs r_eff 逆序实例、空 cap 临界项、平台 tie-break、不支持政策 BLOCKED、INFEASIBLE≠BLOCKED。CLI 新增 phase1-solve（--probe/--instance/--json）。遗留：PS-11 曾抓到制品把三容差入参写成一条，已拆分制品（判据先于实现纠错）；PS-06 首版只做单向交换，补齐「先增后减」方向。"
     },
     {
       "id": "T04-02A",

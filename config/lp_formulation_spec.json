@@ -118,7 +118,8 @@
    "used_by": [
     "C2"
    ],
-   "owner_task": "T03-02"
+   "owner_task": "T03-02",
+   "implemented_by": "src/bidpricing/derived.py::compute_derived（T03-02 已交付 2026-09-17）。本制品是**规格**，实现收拢在派生量层；编译侧与判定侧只引用不重算。"
   },
   {
    "name": "L_i",
@@ -129,7 +130,8 @@
     "C4"
    ],
    "owner_task": "T03-02",
-   "note": "多来源取大（OI-04）；δ⁻ 只在招标明示幅度时参与，不得编造。"
+   "note": "多来源取大（OI-04）；δ⁻ 只在招标明示幅度时参与，不得编造。",
+   "implemented_by": "src/bidpricing/derived.py::compute_derived（T03-02 已交付 2026-09-17）。本制品是**规格**，实现收拢在派生量层；编译侧与判定侧只引用不重算。"
   },
   {
    "name": "floor_i",
@@ -138,7 +140,8 @@
    "used_by": [
     "C4"
    ],
-   "owner_task": "T03-02"
+   "owner_task": "T03-02",
+   "implemented_by": "src/bidpricing/derived.py::compute_derived（T03-02 已交付 2026-09-17）。本制品是**规格**，实现收拢在派生量层；编译侧与判定侧只引用不重算。"
   },
   {
    "name": "r_eff_i",
@@ -149,7 +152,8 @@
     "sort_key"
    ],
    "owner_task": "T03-02",
-   "note": "**排序键**。唯一实现 = contracts/pricing_card.compute_r_eff。与 r_i 的区别见 T04-00 EC-2。"
+   "note": "**排序键**。唯一实现 = contracts/pricing_card.compute_r_eff。与 r_i 的区别见 T04-00 EC-2。",
+   "implemented_by": "src/bidpricing/derived.py::compute_derived（T03-02 已交付 2026-09-17）。本制品是**规格**，实现收拢在派生量层；编译侧与判定侧只引用不重算。"
   },
   {
    "name": "alpha_i",
@@ -766,6 +770,10 @@
   }
  ],
  "consumers": [
+  {
+   "task": "T03-02",
+   "uses": "parameters 中 kind=DERIVED 的四项（U_i / L_i / floor_i / r_eff_i）⇒ 派生量的唯一实现；其中 r_eff 只**委派** contracts.pricing_card.compute_r_eff（不得重实现）。box_preprocessing.merge_rule 里的 floor_i 由该层供数，编译侧不再依赖手工入参。"
+  },
   {
    "task": "T04-02B",
    "uses": "constraint_map + box_preprocessing + variables ⇒ 机械翻译为 PuLP 对象，无手写约束"

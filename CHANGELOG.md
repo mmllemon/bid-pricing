@@ -10,6 +10,43 @@
 
 ## [未发布]
 
+### T03-02 完成：派生量计算（L/U/floor/r_eff 的唯一实现，闭合 SV-07 挂账）
+
+**新增**
+- `config/derived_quantities_spec.json`：四个派生量的唯一实现口径 + DQ-01..DQ-11
+  判据 + 就绪性分层 + 三档治理落地 + 与 T03-03/03-04/04-01/04-02A/B/D/04-04 的交接表。
+- `src/bidpricing/derived.py`：`compute_derived`（取大/取小/委派）+ `judge_derived`
+  （**只吃 DerivedItem**，故判据可注入验证）+ `audit_derived_source`（AST 审计）
+  + `inputs_from_project`（只读已落值位置，绝不代填）。
+- `tests/test_derived.py`：55 项，每条判据**双向**验证。
+- CLI `derive-check`（`--mu` / `--loss-acceptance` / `--unbalanced-json` /
+  `--no-unbalanced-clause` / `--json`）。
+- `docs/adr/ADR-0025-derived-quantities.md`。
+
+**变更**
+- `formulation.build_formulation` 的 `floor_by_id` 有了**唯一生产者**；
+  `verify-solution` 默认由派生量层现场产出 floor（`--floor-json` 仍可覆盖）。
+- `docs/tasks.json`：T03-02 → `done`；`tools/extract_tasks.py` 的 `EVIDENCE` 同步
+  （漂移集合保持原样 9 项，均属待裁定的历史遗留）。
+
+**修正**
+- ★ **空 cap 的钳制**：`loss_acceptance=ACCEPT` 时 `floor_i := min(floor_i, cap_i)`
+  **只在 cap 非空时生效**。空 cap 的合法语义是「不限价」而非 0——把它当 0 参与
+  `min` 会把地板**静默压到 0**（地板失效且不报错）。
+- ★ **L_i 多来源取大**：`max(实例下界, L_i^tender, 0)`，不是覆盖。条款启用但
+  `tol_lo` 缺失 ⇒ BLOCKED（不编造阈值）；条款以 CAP 为基准而该项 cap 为空 ⇒
+  **WARN**（可解释性档，不 BLOCKED、也不取 0 冒充）。
+- **判据过紧的一处自纠**：DQ-10（声明—实现对账）原在「上游全 BLOCKED、无样本」
+  时判 FAIL——把「没走到」当成了「已违反」。改为 SKIP，并保留另一条 DQ-09 守住
+  真正的默认值泄漏。
+
+**结果**
+- `verify-solution` 的 **SV-07 由恒 BLOCKED 转为可判**：不给 floor ⇒ BLOCKED
+  （4 条）；给 floor ⇒ **PASS**（BLOCKED 降至 2，余下即 SV-13 `Z_ref`，owner T04-08）。
+- 测试 735 → **790**。`derive-check` 在真实项目上返回 1 是**设计**
+  （μ 与 `unbalanced_clause` 尚无落值位置），故与 `verify-solution` 同列，
+  **不进常驻验证环**。
+
 ### T04-02D 完成：解校验器（落地时实测出两处真缺陷 DV-01 / DV-02）
 
 - `config/solution_verifier_spec.json`（新）：两层容差定义（内层 `eps_solver` /

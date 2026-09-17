@@ -726,9 +726,15 @@ def _merged_lower(
     """合并下界 ``lb_i = max(L_i, floor_i, lb_C5)``。
 
     ``floor_i`` 是 T03-02 的派生量（``max(L_i, c_i·(1−mu_i))``），**不在**
-    :class:`Phase1Item` 上——T04-02A 先于 T03-02 落地时它缺席。故由调用方
-    通过 ``floor_by_id`` 传入；缺省表示「尚未接入」，此时**不得**用
-    ``c_i`` 或 ``L_i`` 冒充地板（那会把一条还没实现的约束算成已实现）。
+    :class:`Phase1Item` 上。**2026-09-17 起它的唯一生产者已落地**：
+    ``derived.compute_derived``（制品 ``config/derived_quantities_spec.json``），
+    经 ``DerivedReport.floor_by_id()`` 传入本参数。
+
+    缺省 ``None`` 的含义随之改变：不再是「T03-02 还没做」，而是
+    **「本轮的派生量层没能产出 floor」**（典型原因：μ 未落值 ⇒ 如实 BLOCKED）。
+    两种情形下都**不得**用 ``c_i`` 或 ``L_i`` 冒充地板——那会把一条算不出的
+    约束当成已满足。调用方若走 CLI，可由 ``verify-solution`` 打印的
+    「floor_i 来源」一行确认本参数究竟来自哪里。
     """
     floor = None if floor_by_id is None else _f(floor_by_id.get(item.item_id))
     cands = [v for v in (_f(item.L), floor, lb_c5) if v is not None]

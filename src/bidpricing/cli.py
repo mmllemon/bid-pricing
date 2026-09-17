@@ -1036,10 +1036,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_vs.add_argument("--reference", type=float, default=None,
                       help="独立参考实现给出的 Z_ref（owner = T04-08）；不给则 SV-13 判 BLOCKED")
     p_vs.add_argument("--floor-json", default=None,
-                      help="floor_i 表 JSON：{item_id: 值}（T03-02 的派生量）；"
-                           "不给则该路判 BLOCKED，不得用 L_i 或 c_i 冒充")
+                      help="显式指定 floor_i 表 JSON：{item_id: 值}。"
+                           "**不给**时本命令自动向 T03-02 派生量层索取"
+                           "（唯一生产者）；两者都拿不到才判 BLOCKED，"
+                           "且不得用 L_i 或 c_i 冒充")
     p_vs.add_argument("--json", action="store_true", help="输出 JSON")
     p_vs.set_defaults(func=cmd_verify_solution)
+
+    # --------------------------------------------------------- derive-check
+    p_dq = sub.add_parser(
+        "derive-check",
+        help="T03-02 派生量计算（DQ-01..DQ-10：L/U/floor/r_eff 与地板口径）")
+    p_dq.add_argument("--instance", default=None,
+                      help="对自定义实例 JSON 跑判定；省略则用内置探针实例")
+    p_dq.add_argument("--mu", type=float, default=None,
+                      help="允许亏损深度 μ。**不给 = 未声明** ⇒ floor 判 BLOCKED"
+                           "（μ=0 是合法取值，与「未声明」不是一回事）")
+    p_dq.add_argument("--loss-acceptance", default=None,
+                      choices=("ACCEPT", "DECLINE"),
+                      help="覆盖项目落值；不给则读 project_selection.json")
+    p_dq.add_argument("--unbalanced-json", default=None,
+                      help="不平衡报价条款块 JSON：{enabled, reference, tol_lo}")
+    p_dq.add_argument("--no-unbalanced-clause", action="store_true",
+                      help='等价于 --unbalanced-json \'{"enabled": false}\''
+                           "（已核查：本项目无该条款）")
+    p_dq.add_argument("--json", action="store_true", help="输出 JSON")
+    p_dq.set_defaults(func=cmd_derive_check)
 
     return parser
 
@@ -1490,6 +1512,112 @@ def _print_backend(model, result, checks, cc_rows, title: str) -> None:
     print("-" * 78)
 
 
+def _print_derived(report, title: str) -> None:
+    from .derived import STATUS_PASS
+
+    print("=" * 78)
+    print(f"派生量计算（T03-02）｜ {title}")
+    print("=" * 78)
+    print(f"  结论：{report.verdict()}")
+    print(f"  μ = {report.mu!r}（已声明={report.mu_declared}）"
+          f"　loss_acceptance = {report.loss_acceptance}"
+          f"（已落值={report.loss_acceptance_declared}）")
+    print()
+    print("  逐项派生量：")
+    print(f"    {'项':<14}{'L':>12}{'U':>12}{'floor':>12}{'r_eff':>10}")
+    for it in report.items:
+        def _f(v):
+            return "—" if v is None else f"{v:g}"
+        print(f"    {it.item_id:<14}{_f(it.L):>12}{_f(it.U):>12}"
+              f"{_f(it.floor):>12}{_f(it.r_eff):>10}")
+    print()
+    non_pass = [c for c in report.checks if c.status != STATUS_PASS]
+    if non_pass:
+        print("  判据（非 PASS）：")
+        for c in non_pass:
+            print(f"    [{c.status}] {c.item}")
+            print(f"        {c.reason}")
+    else:
+        print("  判据：全部 PASS（见 --json 的 checks 全表）")
+    blocking = report.blocking()
+    if blocking:
+        print()
+        print(f"  ⚠ 阻塞项 {len(blocking)} 条 —— 派生量未全部闭合成正确性前置。")
+    print()
+
+
+def cmd_derive_check(args) -> int:
+    """T03-02：算出 ``L_i / U_i / floor_i / r_eff_i`` 并逐条给出判据。
+
+    ★ 本命令是 ``floor_i`` 的**唯一生产者**：``formulation._merged_lower`` 的
+    ``floor_by_id`` 入参由此而来。此前该入参只能由调用方手工提供（占位），
+    于是「地板」在编译侧与判定侧各有一个真相来源——两侧会各自自洽地错着。
+
+    退出码：存在 FAIL/BLOCKED ⇒ 1。**在当前项目上默认就会返回 1**（μ 与
+    ``unbalanced_clause`` 尚未落值）——这是**如实反映数据未定**，不是实现缺陷，
+    因此本命令与 ``verify-solution`` 一样**不进常驻验证环**。
+    """
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .derived import (
+        DerivedError,
+        compute_derived,
+        inputs_from_project,
+        load_derived_spec,
+    )
+    from .solver.formulation import probe_instance
+    from .solver.instance import Phase1Instance
+
+    cfg = config_dir()
+    try:
+        spec = load_derived_spec(cfg)
+    except DerivedError as exc:
+        print(f"■ {exc}")
+        return 1
+    card = load_pricing_card(cfg)
+    resolved = resolve_parameters(card)
+
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        inst = Phase1Instance.from_dict(
+            json.loads(path.read_text(encoding="utf-8")), source=str(path)
+        )
+        title = args.instance
+    else:
+        inst = probe_instance()
+        title = "内置探针实例"
+
+    pin = inputs_from_project(cfg)
+    mu = args.mu if args.mu is not None else pin["mu"]
+    loss = args.loss_acceptance or pin["loss_acceptance"]
+
+    unbalanced = None
+    if getattr(args, "unbalanced_json", None):
+        p = _P(args.unbalanced_json)
+        if not p.exists():
+            print(f"■ 条款文件不存在：{p}")
+            return 1
+        unbalanced = json.loads(p.read_text(encoding="utf-8"))
+    elif getattr(args, "no_unbalanced_clause", False):
+        unbalanced = {"enabled": False}
+
+    report = compute_derived(
+        inst, resolved, mu=mu, loss_acceptance=loss,
+        unbalanced=unbalanced, spec=spec,
+    )
+
+    if args.json:
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        _print_derived(report, title)
+
+    return 0 if report.verdict() == "PASS" else 1
+
+
 def cmd_verify_solution(args) -> int:
     """T04-02D：**独立复核**一个解（可行性 / 目标值 / 上下界 / 层归属）。
 
@@ -1530,17 +1658,6 @@ def cmd_verify_solution(args) -> int:
     eps_price = float(prof["eps_price"]["value"])
     resolution = float(prof["rounding"]["resolution"])
 
-    floor_by_id: dict[str, float] | None = None
-    if getattr(args, "floor_json", None):
-        fpath = _P(args.floor_json)
-        if not fpath.exists():
-            print(f"■ floor 文件不存在：{fpath}")
-            return 1
-        floor_by_id = {
-            str(k): float(v)
-            for k, v in json.loads(fpath.read_text(encoding="utf-8")).items()
-        }
-
     if args.instance:
         path = _P(args.instance)
         if not path.exists():
@@ -1559,6 +1676,49 @@ def cmd_verify_solution(args) -> int:
             ("MILP", probe_instance(active=("C7",))),
         ]
     solver_inputs: dict[str, object] = dict(PROBE_SOLVER_INPUTS)
+
+    # ---- floor_i 的来源：唯一生产者是 T03-02 派生量层 -------------------
+    # ① 显式 --floor-json ⇒ 人工实验，最高优先（便于独立复核某一张地板表）；
+    # ② 否则由 compute_derived 现场产出 —— 真实项目上 μ 未落值时为空表，
+    #    于是 SV-07 判 BLOCKED，如实反映「地板不可知」；
+    # ③ 两者都没有 ⇒ None。②与③后果相同但**来源不同**，必须自述。
+    floor_by_id: dict[str, float] | None = None
+    floor_source = "未提供"
+    if getattr(args, "floor_json", None):
+        fpath = _P(args.floor_json)
+        if not fpath.exists():
+            print(f"■ floor 文件不存在：{fpath}")
+            return 1
+        floor_by_id = {
+            str(k): float(v)
+            for k, v in json.loads(fpath.read_text(encoding="utf-8")).items()
+        }
+        floor_source = f"显式文件 {args.floor_json}（{len(floor_by_id)} 项）"
+    else:
+        try:
+            from .derived import (
+                compute_derived as _compute_derived,
+                inputs_from_project as _inputs_from_project,
+                load_derived_spec as _load_derived_spec,
+            )
+
+            _pin = _inputs_from_project(cfg)
+            _drep = _compute_derived(
+                variants[0][1], resolved,
+                mu=_pin["mu"], loss_acceptance=_pin["loss_acceptance"],
+                unbalanced=_pin["unbalanced"], spec=_load_derived_spec(cfg),
+            )
+            _floor = _drep.floor_by_id()
+            floor_by_id = _floor or None
+            floor_source = (
+                f"T03-02 派生量层（verdict={_drep.verdict()}，{len(_floor)} 项）"
+                if _floor else
+                f"T03-02 派生量层未产出 floor（verdict={_drep.verdict()}）"
+            )
+        except Exception as exc:  # pragma: no cover - 派生层不可用不应中断复核
+            floor_by_id = None
+            floor_source = f"派生量层不可用（{type(exc).__name__}）"
+    print(f"■ floor_i 来源：{floor_source}")
 
     verifier_source = (_P(__file__).resolve().parents[0]
                        / "solver" / "verifier.py")
@@ -1579,6 +1739,7 @@ def cmd_verify_solution(args) -> int:
             r_min=solver_inputs.get("r_min"),
             z_min=solver_inputs.get("z_min"),
             pi_target=solver_inputs.get("pi_target"),
+            floor_by_id=floor_by_id,
         )
         model = compile_model(
             fm,

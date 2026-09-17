@@ -473,7 +473,7 @@ def bound_verdicts(
         if floor_by_id is not None and floor_by_id.get(item.item_id) is not None:
             cands.append((BOUND_FLOOR, float(floor_by_id[item.item_id])))
         elif floor_by_id is None:
-            notes.append("floor 未接入（T03-02 未落地）")
+            notes.append("floor 未由派生量层产出（T03-02 已落地；本轮缺席通常因 μ 等上游未定）")
         if lb_c5 is not None:
             cands.append((BOUND_LB_C5, float(lb_c5)))
 
@@ -482,7 +482,8 @@ def bound_verdicts(
                 parts.append((name, {
                     "status": STATUS_BLOCKED,
                     "value": None,
-                    "reason": "floor_i 未接入（floor_by_id 缺席）——不得用 L_i 或 c_i 冒充",
+                    "reason": ("floor_i 未经派生量层产出（floor_by_id 缺席）——不得用 L_i 或 c_i 冒充。"
+                               "owner = T03-02 / derived.compute_derived，已落地"),
                 }))
                 continue
             value = next((v for n, v in cands if n == name), None)
@@ -579,7 +580,7 @@ def tier_verdicts(
                                    "落在 [low, high] 之外（§4.2：理论上不可行）"))
             continue
         if abs(p - low) <= tol:
-            note = "" if floor_resolved else "下界候选不完整（floor 未接入）⇒ 归属含歧义"
+            note = "" if floor_resolved else "下界候选不完整（floor 未经派生量层产出）⇒ 归属含歧义"
             out.append(TierVerdict(
                 bv.item_id, TIER_AMBIGUOUS if not floor_resolved else TIER_BOUNDARY_LOW,
                 p, low, high, note))

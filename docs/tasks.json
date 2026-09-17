@@ -721,9 +721,26 @@
       ],
       "summary": "$L_i/U_i/\\text{floor}_i/r_i^{\\text{eff}}/w_i/\\delta_i^{\\text{eff}}$ 按规格实现",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/derived_quantities_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/derived.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_derived.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0025-derived-quantities.md"
+        }
+      ],
+      "status": "done",
+      "note": "落地 L_i/U_i/floor_i/r_eff_i 的**唯一实现**（config/derived_quantities_spec.json + src/bidpricing/derived.py），判据 DQ-01..DQ-11 全双向可测（tests/test_derived.py，55 项）。★ 闭合 T04-02D 的 SV-07 挂账：floor_by_id 从此有唯一生产者；实测给 floor 后 SV-07 由 BLOCKED 转 PASS。★ 关键口径：ACCEPT 的钳制 min(floor,cap) **只在 cap 非空时生效**（空 cap = 不限价，折成 0 会把地板静默压到 0）；L_i 为多来源**取大**（实例下界 ∪ 条款 CAP·(1−tol_lo)）；r_eff 只委派 compute_r_eff（DQ-08 用 AST 审计禁调 settlement_revenue）。计算与判定分离（judge_derived 只吃 DerivedItem）使判据可注入验证。遗留：μ 与 unbalanced_clause 尚无落值位置（OI-DQ-A/B），故真实项目上 floor 一路如实 BLOCKED。"
     },
     {
       "id": "T03-03",

@@ -1,0 +1,286 @@
+{
+  "spec_id": "derived_quantities_spec_v1",
+  "task": "T03-02",
+  "title": "派生量计算（L_i / U_i / floor_i / r_eff_i）",
+  "wp": "WP3",
+  "gate": "Gate 3",
+  "source_of_truth": "model_v0.3_R2.md §5.2/§5.3/§5.4/§5.5/§8.2 + impl_plan_v321.md §3 WP3/T03-02、§4.1 + config/constraint_schema.json（C2/C3/C4/C5 的原始式）+ config/lp_formulation_spec.json.parameters（DERIVED 段，owner_task=T03-02）+ config/field_schema.json（cap/mu/c_i/floor 的 missing_policy）+ ADR-0009（loss_acceptance）",
+  "role": "把「配置与声明层的原始字段」确定性地折算为「求解层与判定层共用的派生量」。本层**不做优化、不做判定、不做诊断**，只做取大/取小/委派，并把「算不出」表达为**具名理由**。",
+  "why_a_separate_layer": "T04-02A 落地时 floor_i 缺席，只能以 floor_by_id 入参占位（formulation._merged_lower 原注释：「缺省表示尚未接入，此时不得用 c_i 或 L_i 冒充地板」）。占位的问题是双向的：编译侧看起来「已经接上」，判定侧（T03-04）又会各自硬编码 C3/C4 的阈值 ⇒ 同一个地板出现**两个真相来源**，两侧各自自洽地错着、永远撞不上（规则⑨ 同根因）。本层把派生量的**唯一实现**收拢到一处，两侧只引用不重算。",
+  "deliverable": "config/derived_quantities_spec.json + src/bidpricing/derived.py + tests/test_derived.py",
+  "inputs": [
+    {
+      "field": "cap",
+      "source": "招标限价清单综合单价（T01-04 master 表的 cap 列）",
+      "missing_policy": "ALLOW_EMPTY_NO_CAP",
+      "semantics": "空 = 招标不限制该项单价（合法语义，**不是**数据缺口）；**禁止**按 cap=0 处理（会把可行解变不可行）",
+      "readiness": "列表字段，key 存在即可；单项取值为空是合法结论（ADR-0006）"
+    },
+    {
+      "field": "c_i",
+      "source": "成本清单综合单价（T00-11 声明书：SUPPLIER_QUOTE）",
+      "missing_policy": "BLOCK",
+      "semantics": "自身个别成本；c_i=0 仅当 pricing_role ∈ {PASS_THROUGH} 合法；role=OPTIMIZABLE 而 c_i=0 ⇒ BLOCKED",
+      "readiness": "数值取值为空 ⇒ BLOCKED（值缺失与数值 0 必须机器可区分，ADR-0004）"
+    },
+    {
+      "field": "mu",
+      "source": "项目级商务声明（允许亏损深度）",
+      "missing_policy": "BLOCK",
+      "semantics": "C4 的 c_i(1−μ_i)；C8 的 d_max 建议与之绑定",
+      "readiness": "**标量 key 必须存在**（key 缺失 = 根本没声明 ⇒ BLOCKED）；μ=0 是合法取值（不允许任何亏损），不得与「未声明」混同"
+    },
+    {
+      "field": "loss_acceptance",
+      "source": "config/project_selection.json（已落值 ACCEPT）",
+      "missing_policy": "BLOCK",
+      "semantics": "ACCEPT ⇒ floor_i := min(floor_i, cap_i)；DECLINE ⇒ 保持严格地板",
+      "readiness": "选择项，未落值 ⇒ 本层按 DECLINE（严格）口径算并判 WARN，不得静默按 ACCEPT"
+    },
+    {
+      "field": "unbalanced_clause",
+      "source": "Phase 0 声明（input_protocol_schema OI-04/OI-05）",
+      "missing_policy": "BLOCK",
+      "semantics": "enabled=false 是合法结论（L_i^tender 不参与取大）；enabled key 缺失 = 没声明 ⇒ BLOCKED",
+      "readiness": "本块是**声明式就绪**（ADR-0006）：判 enabled 这个标量 key 在不在，不判行数"
+    },
+    {
+      "field": "q0 / q1_point / resolved(rho±, adjustment_scope)",
+      "source": "限价清单工程量 / 成本清单工程量 / 规则卡解析",
+      "missing_policy": "BLOCK",
+      "semantics": "r = q1_point/q0 与 r_eff 的输入",
+      "readiness": "缺 ⇒ r_eff 返回 None（**不得降级为 0**），该值缺失影响排序键，属正确性档"
+    }
+  ],
+  "derived_quantities": [
+    {
+      "symbol": "U_i",
+      "expr": "U_i = cap_i",
+      "nullable": true,
+      "null_means": "不限价（ALLOW_EMPTY_NO_CAP）",
+      "used_by": [
+        "C2"
+      ],
+      "owner_task": "T03-02",
+      "must_not": [
+        "不得把 None 折成 0",
+        "不得凭空造一个 cap（ADR-0007）"
+      ]
+    },
+    {
+      "symbol": "L_i",
+      "expr": "L_i = max(L_i^tender, 0)",
+      "used_by": [
+        "C3",
+        "C4"
+      ],
+      "owner_task": "T03-02",
+      "l_tender_rule": "L_i^tender 仅在 unbalanced_clause.enabled=true **且** reference=CAP **且** cap 非空时取值 cap_i·(1−tol_lo)；否则不参与取大（缺项 ⇒ L_i=0）",
+      "must_not": [
+        "不得用编造的 δ⁻ 伪造下界（C3 已重定义，2026-09-16）",
+        "不得把「enabled 未声明」当成「enabled=false」（ADR-0007：沉默不是断言）"
+      ]
+    },
+    {
+      "symbol": "floor_i",
+      "expr": "floor_i = max(L_i, c_i·(1 − mu_i))",
+      "used_by": [
+        "C4"
+      ],
+      "owner_task": "T03-02",
+      "clamp_rule": "loss_acceptance=ACCEPT ⇒ floor_i := min(floor_i, cap_i)；**cap 为空时不得钳制**（无 cap 可钳，保持原 floor；ADR-0009 的 min 只在 cap 存在时有定义）",
+      "must_not": [
+        "不得在编译层或判定层各自重算 floor（本层是唯一来源）",
+        "不得把 cap 空当作 cap=0 来钳制（会把 floor 静默压到 0，地板失效）"
+      ]
+    },
+    {
+      "symbol": "r_eff_i",
+      "expr": "r_eff_i := (dR_i/dp_i) / q0_i",
+      "used_by": [
+        "objective",
+        "sort_key"
+      ],
+      "owner_task": "T03-02",
+      "unique_implementation": "contracts/pricing_card.compute_r_eff（经 Phase1Instance.r_eff 委派）",
+      "must_not": [
+        "不得在本层重新推导 R_i 或 r_eff（settlement_revenue 的差分）",
+        "不得写成 r_i 或 (1+alpha_i)（T04-00 EC-2；历史 bug ∂Z/∂p = q1·r_eff 同族）"
+      ]
+    }
+  ],
+  "not_owned_here": [
+    {
+      "symbol": "lb_C5",
+      "expr": "lb_C5 = max(eps_rel_price·P*, rounding.resolution)",
+      "why": "C5 的下界由公式 compute_lb_c5 产出，消费方是编译层；本层只保证 floor_i 与 L_i 的口径正确。**注意入参是无量纲相对量**（DV-02：绝对/相对两个名字，混用会把 P* 乘两遍）。"
+    },
+    {
+      "symbol": "lb_i / ub_i（合并箱型）",
+      "expr": "lb_i = max(L_i, floor_i, lb_C5)；ub_i = U_i",
+      "why": "合并**只用于建模**。逐条诊断必须用 C3/C4/C5 各自的原始阈值（box_preprocessing.diagnostic_preservation）——本层因此输出**逐条**原始值，不做合并。"
+    }
+  ],
+  "status_domain": [
+    "PASS",
+    "WARN",
+    "FAIL",
+    "BLOCKED"
+  ],
+  "skip_domain_note": "SKIP = 本轮没查该判据（如无实例）。**SKIP 不是 PASS**：环境缺测得到的是缺口，不是结论。",
+  "verdict_aggregation": {
+    "order": [
+      "FAIL",
+      "BLOCKED",
+      "WARN",
+      "SKIP",
+      "PASS"
+    ],
+    "rule": "取最严；空判据集 ⇒ BLOCKED（「没判过」不得记成 PASS）",
+    "rationale": "FAIL（算出且违反）＞ BLOCKED（算不出）＞ WARN（算得出但须注明）＞ SKIP（本轮没查）＞ PASS。BLOCKED 高于 WARN，因为「算不出」会让下游所有结论失去依据，而 WARN 至少有一个成立的值。"
+  },
+  "judges": [
+    {
+      "id": "DQ-01",
+      "group": "READINESS",
+      "claim": "μ 以**声明式**判就绪：标量 key 存在即就绪（μ=0 合法）；key 缺失 ⇒ BLOCKED。cap/unbalanced_clause/c_i 同理由各自 missing_policy 判。",
+      "on_violation": "BLOCKED",
+      "source": "ADR-0004 / ADR-0006 / field_schema.missing_policy",
+      "distinction": "注入 μ key 缺失 ⇒ 必须 BLOCKED；注入 μ=0 ⇒ 必须 PASS（**不得**把 0 当缺失）——两个方向都进测试。"
+    },
+    {
+      "id": "DQ-02",
+      "group": "READINESS",
+      "claim": "role=OPTIMIZABLE 且 c_i 取值缺失或为 0 ⇒ BLOCKED；role=PASS_THROUGH 且 c_i=0/None ⇒ 不阻塞（该角色不经 C4）。",
+      "on_violation": "BLOCKED",
+      "source": "field_schema.c_i.note（T00-02 要求明确表态）",
+      "distinction": "OPTIMIZABLE+c_i=0 ⇒ BLOCKED；PASS_THROUGH+c_i=0 ⇒ 无 BLOCKED。"
+    },
+    {
+      "id": "DQ-03",
+      "group": "NULL_CAP",
+      "claim": "cap 空 ⇒ U_i = None（不限价），且**不得**折成 0。",
+      "on_violation": "FAIL",
+      "source": "constraint_schema.C2.null_cap_semantics",
+      "distinction": "注入「cap 空 ⇒ U=0」的实现 ⇒ 必须 FAIL；正确实现（U=None）⇒ PASS。"
+    },
+    {
+      "id": "DQ-04",
+      "group": "LOWER_BOUND",
+      "claim": "L_i 为多来源取大：仅在 unbalanced_clause.enabled=true ∧ reference=CAP ∧ cap 非空时纳入 cap_i·(1−tol_lo)，否则 L_i=0。enabled 未声明 ⇒ BLOCKED（沉默不是断言）。",
+      "on_violation": "BLOCKED",
+      "source": "constraint_schema.C3（2026-09-16 重定义）/ ADR-0007",
+      "distinction": "enabled=false ⇒ L=0 且 PASS（合法结论）；enabled 缺失 ⇒ BLOCKED；enabled=true 且 reference=CAP 且 cap=500/tol_lo=0.5 ⇒ L=250。"
+    },
+    {
+      "id": "DQ-05",
+      "group": "FLOOR",
+      "claim": "ACCEPT 分支的钳制**只在 cap 非空时**生效：cap 非空 ⇒ floor_i = min(max(L_i, c_i(1−μ)), cap_i)；cap 空 ⇒ floor_i = max(L_i, c_i(1−μ)) 不钳。",
+      "on_violation": "FAIL",
+      "source": "ADR-0009 + constraint_schema.C4.null_cap_semantics 的推论",
+      "distinction": "★ 注入「cap 空时按 0 钳制」的实现（floor 静默变 0）⇒ 必须 FAIL。这是本层最容易静默出错的一处。"
+    },
+    {
+      "id": "DQ-06",
+      "group": "FLOOR",
+      "claim": "结构性不变量 floor_i ≥ L_i（因 floor = max(L, ·)）。钳制后仍须满足 floor_i ≥ min(L_i, cap_i)——若 L_i > cap_i 则 ACCEPT 下地板落在 cap。",
+      "on_violation": "FAIL",
+      "source": "C4 表达式本身 + ADR-0009",
+      "distinction": "构造 L=300、c(1−μ)=100 ⇒ floor 必须为 300 而非 100。"
+    },
+    {
+      "id": "DQ-07",
+      "group": "FEASIBILITY",
+      "claim": "逐条以**原始阈值**判箱型可行性：L_i > U_i ⇒ FAIL（C3 与 C2 冲突）；floor_i > U_i 且 loss_acceptance=DECLINE ⇒ FAIL（可行域为空，对应 D07 FAIL）；ACCEPT 下 floor_i > U_i 说明钳制失效 ⇒ FAIL。",
+      "on_violation": "FAIL",
+      "source": "box_preprocessing.feasibility_guard + selection_options.LOSS_ACCEPTANCE.impact",
+      "distinction": "DECLINE + c=600/cap=500 ⇒ FAIL 且理由须点名该项与两条界；ACCEPT 同输入 ⇒ 不 FAIL（钳到 500）。"
+    },
+    {
+      "id": "DQ-08",
+      "group": "DELEGATION",
+      "claim": "r_eff 只允许委派 compute_r_eff（经 Phase1Instance.r_eff）；本层源码不得调用 settlement_revenue，也不得出现 (dR/dp) 的自造算式。",
+      "on_violation": "FAIL",
+      "source": "T04-00 EC-2 / pricing_card 的复用声明 / ADR-0015（目标必须具名）",
+      "distinction": "AST 静态审计：把 settlement_revenue 的调用注入本模块 ⇒ 必须被判出（审计函数本身也要被测）。"
+    },
+    {
+      "id": "DQ-09",
+      "group": "UNDEFINED",
+      "claim": "任何算不出的派生量，其输出必须是 None + 具名理由，**不得**替换成 0 或任何默认值。",
+      "on_violation": "FAIL",
+      "source": "ADR-0004（未定态不得降级为默认值）",
+      "distinction": "构造 q0=0 的项 ⇒ r_eff 必须为 None（而非 0.0），且理由含项名。"
+    },
+    {
+      "id": "DQ-10",
+      "group": "RECONCILIATION",
+      "claim": "跨来源同源对账（ADR-0015/0016）：本层输出的 floor_i 必须能被 C4 的原始式在**另一处**独立复算得到同一数值；L_i 必须能被 C3 的原始式独立复算。",
+      "on_violation": "FAIL",
+      "source": "ADR-0015 规则⑥（判据不得自证：同源相减恒为 0）",
+      "distinction": "复算走 spec 里声明的表达式文本，而非调用本层函数——否则是自证。测试中把本层 floor 改一个值 ⇒ 对账必须判出不一致。"
+    },
+    {
+      "id": "DQ-11",
+      "group": "AGGREGATION",
+      "claim": "判定聚合取最严（FAIL>BLOCKED>WARN>SKIP>PASS）；空判据集 ⇒ BLOCKED。",
+      "on_violation": "BLOCKED",
+      "source": "三档治理 ADR-0013 + T04-02D 的聚合口径",
+      "distinction": "空列表 ⇒ BLOCKED；混合 FAIL+BLOCKED ⇒ FAIL。"
+    }
+  ],
+  "consumers": [
+    {
+      "task": "T03-03",
+      "uses": "L_i/U_i/floor_i 的逐项原始值 ⇒ 预检引擎算 P_min=ΣL_i q0_i、P_max=ΣU_i q0_i 并校验 P*_variable ∈ [P_min, P_max]"
+    },
+    {
+      "task": "T03-04",
+      "uses": "用 C3/C4/C5 各自的原始阈值独立复算逐条约束（**不得**复用合并后的 lb_i）"
+    },
+    {
+      "task": "T04-01",
+      "uses": "floor_i 与 L_i 作为解析解的箱型输入；排序键 r_eff_i"
+    },
+    {
+      "task": "T04-02A",
+      "uses": "floor_by_id 的**唯一生产者**（本层）——此前为占位入参"
+    },
+    {
+      "task": "T04-02B",
+      "uses": "编译侧的 lb_i 合并取本层输出；逐条诊断仍走原始阈值"
+    },
+    {
+      "task": "T04-02D",
+      "uses": "★ **已闭合** SV-07 挂账：本层交付前该判据恒 BLOCKED（floor 无生产者）。实测对照：不给 floor ⇒ SV-07 BLOCKED（全表 BLOCKED 4 / PASS 16 / WARN 6）；给 floor（μ=0.1、无条款）⇒ SV-07 **PASS**（BLOCKED 降至 2，余下即 SV-13 Z_ref，owner T04-08）。CLI verify-solution 默认向本层索取 floor，--floor-json 可覆盖。"
+    },
+    {
+      "task": "T04-04",
+      "uses": "对拍双方共用同一份派生量，避免「左半与右半各用一套地板」"
+    }
+  ],
+  "open_items": [
+    {
+      "id": "OI-DQ-A",
+      "item": "μ（允许亏损深度）**全仓尚未落值**——只在 field_schema 定义、无任何取值文件。后果：真实项目上 floor_i 恒 BLOCKED。",
+      "owner": "用户（商务声明）",
+      "not_silently_defaulted": "本层不得代填 μ=0（ADR-0004）；探针实例可显式给出 μ 以验证实现。"
+    },
+    {
+      "id": "OI-DQ-B",
+      "item": "unbalanced_clause.enabled 尚未落值（Phase 0 输入门）。本项目「单项报价不得为 0」已由用户明确（→ C5），但不平衡报价条款是否存在须由用户声明。",
+      "owner": "用户（Phase 0 输入）"
+    },
+    {
+      "id": "OI-DQ-C",
+      "item": "δ⁺ 因 base_i := cap_i 而失效（U_i = min(cap_i, cap_i(1+δ⁺)) ≡ cap_i）。须在配置中**显式标注「对本项目无作用」**，不得让它静默存在。",
+      "owner": "T03-02（本层在输出中标注）"
+    },
+    {
+      "id": "OI-DQ-D",
+      "item": "cap 空 + unbalanced_clause(REFERENCE=CAP) 的组合下，该条款对不限价项的适用性无声明依据 ⇒ 本层判 **WARN**（具名：条款无基准可算），**不判 BLOCKED 也不静默取 0**。",
+      "owner": "本层（已实现）；若用户后续澄清，改判据而非改判据集"
+    }
+  ],
+  "evidence_pointer": "ADR-0025-derived-quantities.md（本层四组决策：唯一来源、钳制条件、委派边界、逐条原始阈值对账）"
+}

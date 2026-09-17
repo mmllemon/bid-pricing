@@ -10,6 +10,51 @@
 
 ## [未发布]
 
+### T04-02B 完成：约束编译器 + 三处口径修正（含推翻 ADR-0021 一条公式）
+
+- `config/lp_compiler_spec.json`（新）：目标形式（与建模器/求解器无关的
+  `CompiledModel`——零第三方依赖环境下的硬约束）+ 展开规则（C9 从目标系数复制、
+  C10 从 T_front 三元组）+ 化简规则（DEGENERATE_DOMINATED / DEGENERATE_FIXED /
+  NOT_COMPILED）+ 后端（PuLP 缺失 ⇒ CC-09 SKIP）+ 字面量白名单 + **CC-01..CC-12**。
+- `src/bidpricing/solver/compiler.py`（新）：`Formulation` → `CompiledModel` 的机械
+  翻译（系数逐项复制、不改写）；零依赖求值器 `evaluate`（CC-07 的编译侧独立实现）；
+  惰性 PuLP 导出 `to_pulp` + `extract_pulp_structure`；12 条 CC 判据。
+- CLI `compile-check`：LP/MILP 两变体各 12 条判据（**21 PASS / 3 SKIP / 0 待处理**）；
+  `--json` 输出完整模型供 T04-02C 消费；新增 `--n-max/--theta/--d-max/--z-min/
+  --pi-target/--tf-terms`（占位行展开所需的求解层入参，缺省即 BLOCKED 而非静默）。
+- `tests/test_lp_compiler.py`（新，32 项）：含**区分度层**——把 12 条判据各自的错误
+  实现注入回去逐条确认会 FAIL/BLOCKED；另加 `evaluate`、惰性导出、字面量审计三组。
+- **修正 1（真 bug）**：C7 双向指示式原两式共用 `M = c_i − lb_i`，而两式恒真条件
+  不同（下式覆盖下界、上式覆盖上界）⇒ 第三式在 `z=0` 处切掉 `[c_i, ub_eff]` 的大部分
+  区间（实测 c=50/lb=45/ub=120/eps=0.01：共用 M=5 把合法区间从 `[50,120]` 压到
+  `[50,54.99]`）⇒ 业务侧判可行、编译侧判违反，误报 infeasible 且不报错。已拆
+  `M_lo`/`M_hi` + 有效上界 `ub_i^eff` + 退化固定（z 固定界而非删除、C7 汇总 RHS
+  扣减 `n_fixed_one`）。CC-08 锁死。
+- **修正 2（真 bug）**：目标系数原写 `q1_i·r_eff_i`，正确为 `q0_i·r_eff_i`
+  （`= ∂R_i/∂p_i`，因 `c_i·q1_i` 与 p 无关）——写成 q1 等于把 LP 排序键
+  `(目标系数)/(C1 系数)` 又乘一遍 `r_i` ⇒ 解满足全部约束但**次优**且不触发任何
+  可行性检查（T04-00 EC-2 的失效模式）。由 CC-07 跨来源代回实测抓到（编译侧
+  676000 vs 业务侧 420000）。已修 + 数值差分回归测试。
+- **修正 3（口径，推翻 ADR-0021 决策一）**：ADR-0021 写「`∂Z/∂p_i = q1_i·r_eff_i`」
+  是错的，由 ADR-0022 决策三推翻。旧表述已全仓 grep 并同步修正
+  （`lp_formulation_spec.relation_to_objective`、`formulation.objective_expr`、
+  `lp_compiler_spec.coefficient_rule`、compiler 文档串）；ADR-0021 不可变，保留原文
+  由 ADR-0022 记录推翻关系。
+- **裁定**：C11 移出 LP 改 `DISCRETE_CHECK`（σ 是二阶锥、HiGHS 无 SOCP；MAD 替代由
+  Cauchy-Schwarz 是放松，最坏 √n＝本项目 10.72 倍；原式 `(1/n)Σ|p−p̄|` 不含 `base_i`
+  未归一化）。两份制品同落 `DISCRETE_CHECK`，由 CC-10 锁死。
+- **判据自身两处误报**：CC-12 首版按**值**白名单，把模块自身容差（1e-6/1e-9）与
+  切片下标（`term[2]`）报成「手写系数」——**判据把正常实现报成违规**。改判
+  「**数值必须具名**」：`SLACK_ATOL = 1e-9` 通过、`0.85*cap` 被抓。
+- **CLI 契约漂移**：误读 `literal_allowlist.allowed`（正确键 `allowed_in_expressions`），
+  读错会静默退回模块默认值 ⇒ 「制品是白名单的真相来源」不成立。已修。
+- `formulation.PROBE_SOLVER_INPUTS`（新）：探针的求解层入参（合成值）。否则
+  C6/C7/C9/C10 占位行 rhs 恒为 None ⇒ 恒 `NOT_COMPILED` ⇒ 探针覆盖不到编译路径
+  （首跑 MILP 变体 CC-05 恒 BLOCKED 的根因）。
+- ADR-0022（新）。测试 555 → **587**。contract-check 17/17；Gate 0a/0b/Phase 0
+  输入门全 PASS；WP4 构建 ALLOWED；phase1-check 10/10；ruleset-selftest PASS；
+  freeze 14 项。
+
 ### T00-04 / T00-03 / T00-06 结清 + T04-02A 完成：LP 模型形式化
 
 - `config/precision_profile.json`：`equality_tolerance_mode.current = "A"`
@@ -23,7 +68,9 @@
 - `config/lp_formulation_spec.json`：变量/非变量/参数/索引集/目标/C1–C13 逐条
   映射/箱型预处理/求解器形态/F 判据 11 条/消费者/挂账。**核心结论**：目标对 `p`
   严格线性（`r_eff` 全外生 ⇒ P1 分支建模期已知）⇒ LP 成立，MILP 唯一来源是 C7
-  的二元变量；`∂R/∂p = q0·r_eff` 与 `∂Z/∂p = q1·r_eff` 是两个不同的量。
+  的二元变量；`∂R/∂p = q0·r_eff`（目标系数**同此**——2026-09-17 修正：本行原文写
+  「`∂Z/∂p = q1·r_eff` 是两个不同的量」是**错的**，正确为 `∂Z/∂p = ∂R/∂p = q0·r_eff`，
+  见 ADR-0022 决策三）。
 - `src/bidpricing/solver/formulation.py`：把实例编译为求解器无关的 LP 词汇
   （**只形式化、不建模**——建模是 T04-02B，后端是 T04-02C）。新增本地状态域
   **SKIP**：缺实例时「没检查」必须与「检查过且通过」可区分。

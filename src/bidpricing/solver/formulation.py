@@ -71,6 +71,7 @@ NON_LP_FORMS: tuple[str, ...] = (
     "CONSTANT_CHECK",
     "NONLINEAR_DEFERRED",
     "NOT_A_BID_CONSTRAINT",
+    "DISCRETE_CHECK",
 )
 
 #: 非 LP 形式对应的理由字段名。
@@ -78,12 +79,15 @@ NON_LP_REASON_FIELD: dict[str, str] = {
     "CONSTANT_CHECK": "why_not_lp",
     "NONLINEAR_DEFERRED": "why_deferred",
     "NOT_A_BID_CONSTRAINT": "why_not_modeled",
+    "DISCRETE_CHECK": "why_not_lp",
 }
 
 #: F-06 的探针：必须覆盖 ``eps_price·P* < resolution`` 的区间，否则判据退化。
 P_STAR_PROBES: tuple[float, ...] = (1.0e3, 1.0e6, 1.0e9)
 
-#: C7 Big-M 的退化阈值——低于它视为「成本已在地板下」，z_i 可固定 0。
+#: C7 Big-M 的退化阈值。两侧的退化语义**不同**，不可合并：
+#:   ``M_lo = c_i − lb_i ≤ 0`` ⇒ 恒不亏损（z_i 固定 0，不占 N_max 名额）；
+#:   ``M_hi = ub_i − c_i + eps ≤ 0`` ⇒ 恒亏损（z_i 固定 1，**占**一个名额）。
 BIG_M_FLOOR_EPS = 1e-12
 
 
@@ -162,7 +166,13 @@ class Column:
 
 @dataclass(frozen=True)
 class Row:
-    """一行约束。``rhs is None`` 表示该形式没有单一右端（如汇总行）。"""
+    """一行约束。``rhs is None`` 表示该形式没有单一右端（如汇总行）。
+
+    ``aux`` 承载**该行的推导中间量**（如 C7 的 M_lo / M_hi / ub_i^eff）。
+    它存在的理由是让「取值是否满足该形式的恒真条件」成为可独立复算的事——
+    否则编译器只能把 M 当黑箱复制，而 M 取错恰恰是本层最隐蔽的失效模式
+    （切掉可行解但不违反任何语法约束，见 compiler.check_compiled 的 CC-08）。
+    """
 
     constraint_id: str
     form: str
@@ -173,6 +183,7 @@ class Row:
     sources: tuple[str, ...]
     scope: str = ""
     detail: str = ""
+    aux: tuple[tuple[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -185,7 +196,14 @@ class Row:
             "sources": list(self.sources),
             "scope": self.scope,
             "detail": self.detail,
+            "aux": dict(self.aux),
         }
+
+    def aux_get(self, key: str) -> Any:
+        for k, v in self.aux:
+            if k == key:
+                return v
+        return None
 
 
 @dataclass(frozen=True)
@@ -377,16 +395,68 @@ def build_formulation(
     rows: list[Row] = []
     box_notes: list[str] = []
     c1_coefs: list[tuple[str, float]] = []
+    #: C7 中被 Big-M 退化判定**固定**的 z_i：(item_id, 固定值, 理由)。
+    #: 固定为 0 的项不进 Σz（不占名额）；固定为 1 的项**占一个名额**——
+    #: 后者是「亏损项数上限」的实质扣减，漏掉会把 N_max 放宽（见 z_quota_note）。
+    z_fixed: list[tuple[str, int, str]] = []
 
+    # ---- 第一遍：逐项标量。必须先扫完全体再生成行，因为「不限价项的
+    #      有效上界」由 C1 与**其余各项的下界**共同决定（见 _effective_upper）。
+    prepared: list[dict[str, Any]] = []
     for item in opt_items:
-        q0 = _f(item.q0)
-        q1 = _f(item.q1_point)
-        r_eff = instance.r_eff(item, resolved)
-        lb = _merged_lower(item, lb_c5, floor_by_id)
-        ub = _f(item.U)                      # None = 不限价（合法语义）
+        prepared.append(
+            {
+                "item": item,
+                "q0": _f(item.q0),
+                "q1": _f(item.q1_point),
+                "c_i": _f(item.c_i),
+                "lb": _merged_lower(item, lb_c5, floor_by_id),
+                "ub": _f(item.U),            # None = 不限价（合法语义）
+                "r_eff": instance.r_eff(item, resolved),
+            }
+        )
 
-        # ∂Z/∂p_i = q1_i · r_eff_i（见制品 objective.marginal_coefficient）
-        coeff = 0.0 if (q1 is None or r_eff is None) else float(q1) * float(r_eff)
+    # C1 的载量下界：min Σ p_j q0_j = Σ lb_j q0_j（逐项 p_j ≥ lb_j）
+    lower_load = 0.0
+    for rec in prepared:
+        if rec["lb"] is not None and rec["q0"] is not None and rec["q0"] > 0:
+            lower_load += float(rec["lb"]) * float(rec["q0"])
+
+    def _effective_upper(rec: Mapping[str, Any], own_lb: Any) -> float | None:
+        """C2 给 ``U_i``；不限价项退到 C1 的**隐式**上界。
+
+        ``p_i q0_i ≤ B − Σ_{j≠i} p_j q0_j ≤ B − Σ_{j≠i} lb_j q0_j``，
+        故 ``ub_i^C1 = (B − Σ_{j≠i} lb_j q0_j) / q0_i`` 是有效上界（任何可行解
+        都满足它）。返回 ``None`` 表示推不出有限上界——注意这**不是**「不限价」
+        的意思，而是「第三式的恒真条件无法满足」。
+
+        为什么需要它：C7 第三式在 ``z_i = 0`` 处必须恒真，而恒真要求 M 覆盖
+        **上界**（``ub_i − c_i + eps``）。不限价项没有有限上界时，若只报一个
+        「不限价」而不给替代，第三式要么不可形式化、要么被悄悄写成一个会切掉
+        可行解的 M。
+        """
+        ub = rec["ub"]
+        if ub is not None:
+            return float(ub)
+        q0 = rec["q0"]
+        if q0 is None or q0 <= 0 or own_lb is None:
+            return None
+        others = lower_load - float(own_lb) * float(q0)
+        return (B - others) / float(q0)
+
+    for rec in prepared:
+        item = rec["item"]
+        q0, q1, c_i = rec["q0"], rec["q1"], rec["c_i"]
+        lb, ub, r_eff = rec["lb"], rec["ub"], rec["r_eff"]
+
+        # ∂Z/∂p_i = q0_i · r_eff_i。**不是 q1_i · r_eff_i。**
+        # Z = Σ (R_i − c_i q1_i)，而 c_i q1_i 与 p 无关 ⇒ ∂Z/∂p_i = ∂R_i/∂p_i
+        # = q0_i · r_eff_i（这正是 r_eff 的定义式，F-02 检它）。
+        # 2026-09-17 修正：原实现用 q1·r_eff，等价于把排序键又乘了一遍 r_i
+        # ——因为 LP 的排序键是 (目标系数)/(C1 系数) = (q1·r_eff)/q0 = r_i·r_eff。
+        # 恰是 T04-00 EC-2 警告过的失效模式：解满足全部约束但**次优**，
+        # 不触发任何可行性检查。由 CC-07（编译侧 vs 业务式代回复核）抓到。
+        coeff = 0.0 if (q0 is None or r_eff is None) else float(q0) * float(r_eff)
 
         variables.append(
             Column(
@@ -446,32 +516,97 @@ def build_formulation(
             )
 
         # ---- C7 二元指示与双向 Big-M -----------------------------------
+        # 两式的「恒真」条件**不同**，故 M 必须分开取：
+        #   第二式（z=1 处须恒真）⇒ M_lo ≥ c_i − lb_i          —— 覆盖**下界**
+        #   第三式（z=0 处须恒真）⇒ M_hi ≥ ub_i^eff − c_i + eps —— 覆盖**上界**
+        # 2026-09-17 修正：原实现两式共用 M_lo = c_i − lb_i。当
+        # ub_i > 2c_i − eps − lb_i 时，第三式在 z = 0 处把 p_i 压到
+        # c_i − eps + M_lo，切掉 [c_i, ub_i] 的大部分区间——业务侧判可行的解
+        # 被编译侧判违反，求解器随即误报 infeasible 或返回次优解，**且不报错**。
+        # 定界依据是两式各自的恒真条件，不是「取个大数就行」。
         if milp and c_i is not None:
-            m_i = None if lb is None else c_i - lb
-            degenerate = m_i is not None and m_i <= BIG_M_FLOOR_EPS
-            variables.append(
-                Column(
-                    "z", item.item_id, "BINARY", 0.0, 1.0, 0.0, ("MILP",),
-                    note=("M_i ≤ 0 ⇒ 该项恒不亏损，z_i 可固定 0 并移除"
-                          if degenerate else f"M_i = c_i − lb_i = {m_i!r}"),
-                )
+            m_lo = None if lb is None else float(c_i) - float(lb)
+            ub_eff = _effective_upper(rec, lb)
+            m_hi = (
+                None if ub_eff is None
+                else float(ub_eff) - float(c_i) + float(resolution)
             )
-            if not degenerate:
+            degenerate_lo = m_lo is not None and m_lo <= BIG_M_FLOOR_EPS
+            degenerate_hi = m_hi is not None and m_hi <= BIG_M_FLOOR_EPS
+
+            if degenerate_lo:
+                z_fixed.append(
+                    (item.item_id, 0, f"M_lo = c_i − lb_i = {m_lo!r} ≤ 0 ⇒ 恒不亏损")
+                )
+            elif degenerate_hi:
+                z_fixed.append(
+                    (item.item_id, 1, f"M_hi = ub_i − c_i + eps = {m_hi!r} ≤ 0 ⇒ 恒亏损")
+                )
+
+            z_note = (
+                "z_i 固定 0（恒不亏损，不占名额）"
+                if degenerate_lo else
+                "z_i 固定 1（恒亏损，占一个名额）"
+                if degenerate_hi else
+                f"M_lo = {m_lo!r} / M_hi = {m_hi!r}"
+            )
+            # 退化项的 z **必须固定界**，不能只把它从行里拿掉：留着 [0,1] 的
+            # 自由 z 会让 MILP 出现一个目标系数为 0、不受任何约束的变量
+            # ⇒ 多最优解，「亏损项数」的报告值随求解器心情变化。
+            if degenerate_lo:
+                z_lo, z_up = 0.0, 0.0
+            elif degenerate_hi:
+                z_lo, z_up = 1.0, 1.0
+            else:
+                z_lo, z_up = 0.0, 1.0
+            variables.append(
+                Column("z", item.item_id, "BINARY", z_lo, z_up, 0.0,
+                       ("MILP",), note=z_note)
+            )
+
+            if not (degenerate_lo or degenerate_hi):
                 rows.append(
-                    Row("C7.lower", "MILP_BINARY", ">=", c_i,
-                        ((f"p_{item.item_id}", 1.0), (f"z_{item.item_id}", float(m_i))),
+                    Row("C7.lower", "MILP_BINARY", ">=", float(c_i),
+                        ((f"p_{item.item_id}", 1.0),
+                         (f"z_{item.item_id}", float(m_lo))),
                         "0（整数）",
                         ("c_i", "N_max", "U", "rounding.resolution"),
-                        detail="p_i + M_i·z_i >= c_i  （z=0 ⇒ 不亏损）")
+                        detail=f"p_i + M_lo·z_i >= c_i（M_lo = c_i − lb_i = {m_lo!r}）"
+                               "  z=0 ⇒ 不亏损",
+                        aux=(("M_lo", float(m_lo)), ("lb_i", float(lb)))
+                            if lb is not None else (("M_lo", float(m_lo)),))
                 )
-                rhs_hi = c_i - float(resolution) + float(m_i)
-                rows.append(
-                    Row("C7.upper", "MILP_BINARY", "<=", rhs_hi,
-                        ((f"p_{item.item_id}", 1.0), (f"z_{item.item_id}", float(m_i))),
-                        "0（整数）",
-                        ("c_i", "N_max", "U", "rounding.resolution"),
-                        detail="p_i + M_i·z_i <= c_i − eps_res + M_i  （z=1 ⇒ p_i < c_i）")
-                )
+                if m_hi is None:
+                    box_notes.append(
+                        f"{item.item_id}: 第三式的恒真条件不可满足——"
+                        "不限价且 C1 推不出有限上界，M_hi 不存在 ⇒ 须判 BLOCKED，"
+                        "**不得**退回 M_lo（那会切掉可行解）"
+                    )
+                else:
+                    ub_src = (
+                        "C2:U" if _f(item.U) is not None
+                        else "C1:implicit"
+                    )
+                    rows.append(
+                        Row("C7.upper", "MILP_BINARY", "<=",
+                            float(c_i) - float(resolution) + float(m_hi),
+                            ((f"p_{item.item_id}", 1.0),
+                             (f"z_{item.item_id}", float(m_hi))),
+                            "0（整数）",
+                            ("c_i", "N_max", "U", "rounding.resolution"),
+                            detail=f"p_i + M_hi·z_i <= c_i − eps + M_hi"
+                                   f"（M_hi = ub_i^eff − c_i + eps = {m_hi!r}，"
+                                   f"ub_i^eff 来源 = {ub_src}）"
+                                   "  z=1 ⇒ p_i < c_i",
+                            aux=(
+                                ("M_hi", float(m_hi)),
+                                ("ub_eff", float(ub_eff)),
+                                ("ub_eff_source", ub_src),
+                                ("eps_res", float(resolution)),
+                                ("c_i", float(c_i)),
+                            )
+                        )
+                    )
 
         # ---- C8 逐项地板（c_i = 0 项退化，须显式处理）------------------
         if "C8" in active and d_max is not None and c_i is not None:
@@ -502,14 +637,29 @@ def build_formulation(
         )
 
     # ---- C7 汇总行 --------------------------------------------------------
+    # 固定为 1 的项**已经消耗名额**，故 RHS 必须扣减；固定为 0 的项不进 Σ。
+    # 漏掉扣减会把「亏损项数上限」放宽 n_fixed_one 个，且不触发任何检查。
     if milp:
+        fixed_zero = {i for i, v, _w in z_fixed if v == 0}
+        n_fixed_one = sum(1 for _i, v, _w in z_fixed if v == 1)
+        free_z = tuple(
+            (f"z_{i.item_id}", 1.0)
+            for i in opt_items
+            if _f(i.c_i) is not None and i.item_id not in fixed_zero
+            and not any(i.item_id == fid and v == 1 for fid, v, _w in z_fixed)
+        )
+        rhs_nmax = None if n_max is None else float(n_max) - n_fixed_one
+        if rhs_nmax is not None and rhs_nmax < -BIG_M_FLOOR_EPS:
+            box_notes.append(
+                f"C7 局部不可行：已固定 z_i = 1 的项有 {n_fixed_one} 项，"
+                f"超过 N_max = {n_max!r} ⇒ 须在建模前判 BLOCKED，"
+                "不得交给求解器报泛化 infeasible"
+            )
         rows.append(
-            Row("C7", "MILP_BINARY", "<=",
-                None if n_max is None else float(n_max),
-                tuple((f"z_{i.item_id}", 1.0)
-                      for i in opt_items if _f(i.c_i) is not None),
+            Row("C7", "MILP_BINARY", "<=", rhs_nmax, free_z,
                 "0（整数）", ("c_i", "N_max", "U", "rounding.resolution"),
-                detail="Σ z_i <= N_max；配双向 Big-M 两式")
+                detail=f"Σ_{{z 未固定}} z_i <= N_max − {n_fixed_one} = {rhs_nmax!r}；"
+                       "配双 M 指示式（M_lo 覆盖下界、M_hi 覆盖上界）")
         )
 
     # ---- C9 / C10 --------------------------------------------------------
@@ -536,9 +686,14 @@ def build_formulation(
 
     # ---- 挂账项 -----------------------------------------------------------
     deferred: list[DeferredConstraint] = [
-        DeferredConstraint("C11", "NONLINEAR_DEFERRED", "T04-02B",
-                           "σ 需二次/二阶锥；MAD 的中心依赖 p ⇒ 两种替换方向相反，"
-                           "不得静默选定"),
+        DeferredConstraint(
+            "C11", "DISCRETE_CHECK", "T03-04",
+            "2026-09-17 裁定移出 LP：σ(d) 是凸二次/二阶锥约束，HiGHS 支持面"
+            "（LP/MILP/QP）不含二阶锥；schema 原建议的 MAD 替代由 "
+            "MAD_c ≤ σ_c 可知是**放松**（最坏 √n 倍，本项目 10.72 倍），"
+            "且原式 (1/n)Σ|p_i − p̄| 既不含 base_i 又未归一化 ⇒ 非同一度量。"
+            "改由判定层在求解后对 p 向量求值。见 ADR-0022。",
+        ),
         DeferredConstraint(
             "C7", "MILP_BINARY", "T04-07",
             "已激活（问题升 MILP）" if milp else
@@ -556,7 +711,7 @@ def build_formulation(
         deferred=tuple(deferred),
         objective_sense="MAXIMIZE",
         objective_constant=obj_constant,
-        objective_expr="Z = Σ_{i∈X_opt} q1_i · ( r_eff_i · p_i − c_i )",
+        objective_expr="Z = Σ_{i∈X_opt} ( q0_i·r_eff_i·p_i − c_i·q1_i )",
         solver_form="MILP" if milp else "LP",
         lb_c5=lb_c5,
         active=active,
@@ -1034,6 +1189,24 @@ def check_c12_surface_constancy(instance: Phase1Instance) -> tuple[bool | None, 
 # ---------------------------------------------------------------------------
 # 内置探针实例——让 F 判据的每个分叉都被走到
 # ---------------------------------------------------------------------------
+
+
+#: 探针实例的**求解层入参**——它们不是 ``Phase1Instance`` 的字段（C6/C7/C8/C9
+#: 的参数由调用方直接传给 ``build_formulation``），故探针必须单独声明，否则
+#: C6/C7/C9 的占位行必然 ``NOT_COMPILED``（rhs 为 None），探针就**覆盖不到**
+#: 这些行的编译路径。2026-09-17 首跑 ``compile-check`` 时 MILP 变体的 CC-05
+#: 恒为 BLOCKED，根因就是 CLI 没给 ``n_max`` ⇒ C7 汇总行不编译。
+#:
+#: 取值均为**合成值**，只保证「让各占位行能编译出来并落在合理区间」，
+#: 不代表任何真实项目，也不得被读成项目落值。
+PROBE_SOLVER_INPUTS: dict[str, float] = {
+    "theta": 0.05,      # C6：亏损缺口上限 θ·P*
+    "n_max": 3.0,       # C7：亏损项数上限 N_max
+    "d_max": 0.15,      # C8：地板下浮上限 d_max
+    "r_min": 1.0,       # C12：总价成本比体检阈值 R_min
+    "z_min": 0.0,       # C9a：盈利门槛 Z_min
+    "pi_target": 0.0,   # C9b：目标利润率 π
+}
 
 
 def probe_instance(

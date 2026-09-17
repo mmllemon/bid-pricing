@@ -41,6 +41,12 @@ CONDITION_IDS: tuple[str, ...] = (
 EXACTNESS_IDS: tuple[str, ...] = CONDITION_IDS[:7]
 IMPLEMENTABILITY_IDS: tuple[str, ...] = CONDITION_IDS[7:]
 
+#: 会改变 LP 结构（因而使问题越出 A 组 P_A）的软约束。EC-6 的**触发集合**。
+#: 其余软约束（C11 二阶锥→判定层、C12 可行域上恒定、C13 非投标约束）不进 LP，
+#: 故它们出现在 active 中不构成 EC-6 的违反——判据的触发集合必须与判据的语义
+#: 一致，否则会产出「因外挂合规项而误报解析解不适用」的假 FAIL。
+LP_STRUCTURE_CHANGING: tuple[str, ...] = ("C6", "C9", "C10")
+
 #: 判定结论取值——与 spec 的 verdict_domain 同域。
 VERDICT_EXACT = "EXACT"
 VERDICT_INAPPLICABLE = "INAPPLICABLE"
@@ -293,27 +299,50 @@ def _ec5(instance: Phase1Instance, resolved: ResolvedParameters) -> ConditionRes
 
 
 def _ec6(instance: Phase1Instance) -> ConditionResult:
-    """软约束不激活——C6/C9/C10/C11/C12/C13 均不激活。"""
+    """软约束不激活——只针对**会改变 LP 结构**的那几条。
+
+    EC-6 的语义是「问题是否退化为 A 组 P_A」。据此，只有真正进入 LP 的软约束
+    才相关：C6（q1 权重与 C1 的 q0 权重不成比例 ⇒ 多阈值分层）与 C9/C10
+    （额外线性约束改变可行域形状）。
+
+    C11 / C12 / C13 即使被"激活"也**不改变 P_A 的阈值结构**——它们本就不在 LP
+    里：C11 是二阶锥（后端不支持，2026-09-17 裁定为判定层 DISCRETE_CHECK，
+    ADR-0022）、C12 在可行域上是常量、C13 根本不是投标约束。据这三条判 FAIL
+    会把「外挂的合规复核」误报成「解析解不适用」，正是本仓反复出现的同类失效
+    （判据的触发集合与判据的语义不一致）。
+    """
     active = tuple(instance.active_soft_constraints)
-    if "C7" in active or any(str(a).upper() == "C7" for a in active):
+    norm = {str(a).upper() for a in active}
+    if "C7" in norm:
         return ConditionResult(
             "EC-6", "EXACTNESS", "软约束不激活", STATUS_FAIL,
             "C7 已激活：问题升为 MILP，KKT 与阈值分割均不适用，"
             "须走 T04-07 独立验收协议",
             ("C7",),
         )
-    if active:
+    structural = tuple(
+        a for a in active if str(a).upper() in LP_STRUCTURE_CHANGING
+    )
+    if structural:
         return ConditionResult(
             "EC-6", "EXACTNESS", "软约束不激活", STATUS_FAIL,
-            "已激活软约束：" + "、".join(active)
+            "已激活会改变 LP 结构的软约束：" + "、".join(structural)
             + "——C6 引入 q1 权重（与 C1 的 q0 权重不成比例）使结构变为"
-            "多阈值分层；C11 的 MAD 线性化引入全项耦合（含均值 p̄）使阈值结构"
-            "整体失效。该实例越出 Phase 1 论域（见 CE-06）",
-            active,
+            "多阈值分层；C9/C10 的额外线性约束改变可行域形状。"
+            "该实例越出 Phase 1 论域（见 CE-06）",
+            structural,
         )
+    ignored = tuple(
+        a for a in active if str(a).upper() not in LP_STRUCTURE_CHANGING
+    )
     return ConditionResult(
         "EC-6", "EXACTNESS", "软约束不激活", STATUS_PASS,
-        "C6/C9/C10/C11/C12/C13 均未激活——问题退化为 A 组 P_A",
+        "无会改变 LP 结构的软约束激活——问题退化为 A 组 P_A"
+        + (
+            f"（{ '、'.join(ignored) } 虽在 active 中，但不进 LP："
+            "C11 为二阶锥→判定层、C12 在可行域上是常量、C13 非投标约束）"
+            if ignored else ""
+        ),
     )
 
 

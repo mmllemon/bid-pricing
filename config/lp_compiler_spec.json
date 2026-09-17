@@ -1,0 +1,229 @@
+{
+  "spec_id": "lp_compiler_v1",
+  "task": "T04-02B",
+  "title": "约束编译器：Formulation → CompiledModel（求解器无关规范形式）",
+  "source_of_truth": "实施路线 v3.2.1 T04-02B（「约束字典 → 求解器约束的机械转换，无手写约束」）；consumers 条目「constraint_map + box_preprocessing + variables ⇒ 机械翻译为 PuLP 对象，无手写约束」；config/lp_formulation_spec.json（T04-02A 的形式化声明）",
+  "task_summary": "把 T04-02A 的受控声明（Formulation）编译为建模器/求解器可消费的规范形式（CompiledModel），并把『无手写约束』做成可机械判定的性质（CC 判据 12 条）。",
+  "scope_boundary": {
+    "in_scope": [
+      "Formulation → CompiledModel 的机械翻译（系数逐项复制，不改写）",
+      "占位行的展开：C9（从目标系数）与 C10（从 T_front 三元组）",
+      "编译期的化简登记（被支配的行、被固定的变量、无法编译的行）",
+      "『无手写约束』的可执行证据：CC-01..CC-12",
+      "零依赖的模型求值器（evaluate），作为编译结果与业务式之间的独立裁判",
+      "PuLP 的惰性导出与结构对账（缺失 ⇒ SKIP，不 FAIL）"
+    ],
+    "not_in_scope": [
+      "调用求解器 / 后端适配 = T04-02C（HiGHS adapter）。本制品只产出模型，不产出解。",
+      "解校验器 = T04-02D。本制品的 evaluate 只服务 CC 判据，不替代独立复核。",
+      "不可行诊断 = T04-02E。",
+      "C7 的 MILP 最优性验收 = T04-07。",
+      "Phase 1 解析解 = T04-01；Phase 1/2 对拍 = T04-04。"
+    ],
+    "boundary_note": "本制品与 T04-02A 的分工是『声明 vs 实现』：T04-02A 说模型长什么样，T04-02B 说怎么把它建出来。两者分开的唯一目的是让『实现与声明一致』成为可机械判定的事——CC-01/CC-02 就是那句判定的执行体。若把编译并回形式化，这个判定就没有两侧可比。"
+  },
+  "target_form": {
+    "name": "CompiledModel",
+    "why_not_build_pulp_directly": "环境实测无 PuLP / numpy / HiGHS（零第三方依赖是本仓的硬约束）。若把编译目标直接定成 PuLP 对象，则核心路径在本机**一行都跑不到**，判据全部退化为 SKIP。故编译目标定为求解器与建模器都无关的规范形式（变量表 + 稀疏行 + 目标 + 化简台账），PuLP 导出是它之上的**可选层**。",
+    "components": {
+      "variables": "CompiledVar：symbol / family / kind / lower / upper / objective_coeff",
+      "rows": "CompiledRow：constraint_id / origin / form / sense / rhs / coefficients / aux",
+      "objective": "objective_sense + objective_constant（+ 逐列 objective_coeff）",
+      "simplifications": "Simplification 台账：化简掉的约束/变量及其可复算理由",
+      "notes": "由 Formulation 的 box_notes 与编译期附加说明组成"
+    },
+    "origin_field": "每行必须带 origin = `{constraint_id}:{form}`，指向 Formulation 的来源行。**没有 origin 的行即无法溯源，编译器不得产出这样的行**——这是 CC-01/CC-02 的抓手。",
+    "aux_field": "行可携带推导中间量（C7 的 M_lo / M_hi / ub_i^eff / eps_res、C9 的 obj_const 等）。它存在的唯一目的是让『取值是否满足该形式的恒真条件』可被独立复算（CC-08），而不是把 M 当黑箱复制。"
+  },
+  "expansion_rules": {
+    "why_a_separate_concept": "Formulation 里有两类行是**占位**（C9 的系数为空、C10 的系数与 rhs 都待定），因为它们的形式依赖展开规则而非逐项数据。展开规则必须写在制品里，否则编译器只能自己发明公式——那就是手写约束。",
+    "C9": {
+      "statement": "Z ≥ Z_min 与 Z ≥ pi_target · Σ c_i q1_i。Z = Σ (q1·r_eff)_i · p_i + obj_const。",
+      "coefficient_rule": "系数 := 各 p 列的 objective_coeff（即 ∂Z/∂p）。**从 Column.objective_coeff 复制**，不重写 `q0_i · r_eff_i`——重写会引入第二个真相来源，两处一旦分叉，C9 就变成一条与目标不一致的约束且不触发任何检查。",
+      "rhs_rule": {
+        "C9a": "rhs := z_min − objective_constant",
+        "C9b": "rhs := −(1 + pi_target) · objective_constant（因为 Σ c_i q1_i = −objective_constant，移项后无需分式约束）"
+      },
+      "missing_input": "缺 z_min / pi_target ⇒ 该子式**不生成**并登记 NOT_COMPILED。不生成 ≠ 满足；调用方须据此判 BLOCKED（激活了却算不出 = 算式算不出）。",
+      "cross_check": "CC-06 比对目标系数；CC-07 用同一报价向量比对编译侧与业务式的目标值——两侧都独立于本展开式。"
+    },
+    "C10": {
+      "statement": "Σ_{i∈T_front} (rho_i·p_i − c_i)·q0_i ≥ 0。移项后系数 = rho_i·q0_i，rhs = Σ c_i q0_i。",
+      "input_form": "tf_terms = { item_id: (rho_i, q0_i, c_i) }。三者都要——rho_i 来自付款条款，q0_i 与 c_i 来自清单；本函数**不猜任何一项**。",
+      "missing_input": "未提供 ⇒ NOT_COMPILED。**不得**退回「T_front 为空 ⇒ 约束恒成立」（那是把「未声明」读成「已声明为空」，ADR-0007 同类失效），也不得用全部项代替（那是另一条约束）。",
+      "partial_input": "T_front 含项但缺 q0/c_i ⇒ **整行**不生成。跳过少数几项会得到一条比原约束更弱的约束（少了几项的正贡献），且不报错。",
+      "activation": "T_front 未声明则 C10 不激活（见 formulation.C10）；本条只覆盖『激活后怎么展开』。"
+    }
+  },
+  "simplification_rules": {
+    "principle": "化简是编译器的自由裁量动作。不登记就无法区分『少了三行』与『被正确化简了三行』，故三类动作全部进台账，且每条**必须带可复算的理由**。",
+    "DEGENERATE_DOMINATED": {
+      "when": "行的 rhs 严格小于该变量的下界（仅对单系数 BOX_LOWER 行，即 C8）。",
+      "example": "c_i = 0 ⇒ C8 的 rhs = c_i·(1 − d_max) = 0，而 lb_C5 = 0.01 ⇒ 0 < 0.01 ⇒ 该行被界支配。",
+      "why_remove": "该行在 LP 上冗余（任何满足变量界的解都满足它）。保留下来的话，诊断层会把一个恒真的行报成「C8 通过」，掩盖「该项没有有效成本地板」这一事实。",
+      "why_safe": "支配性判定是逻辑蕴含（lb ≥ rhs ⇒ 行恒真），不是近似。移除前后可行域完全相同。",
+      "must_state": "理由中必须写出被支配的量（lb_i）与 rhs 的数值，使判定可复算（CC-11 检此）。"
+    },
+    "DEGENERATE_FIXED": {
+      "when": "变量的 lower == upper（由 C7 的 Big-M 退化判定固定）。",
+      "two_cases": "M_lo ≤ 0 ⇒ 恒不亏损 ⇒ z_i 固定 0（**不占** N_max 名额）；M_hi ≤ 0 ⇒ 恒亏损 ⇒ z_i 固定 1（**占**一个名额，故 C7 汇总行的 RHS 须扣减）。",
+      "why_keep_in_variable_table": "**不删除该变量**。删掉会让解向量不完整，解校验器无从复核该位；保留而其界固定，则求解器 presolve 会自行消去，且解里仍有这一位。",
+      "why_not_leave_free": "把退化项的 z 留成 [0,1] 的自由变量是错的：它目标系数为 0、又不受任何约束 ⇒ MILP 出现多最优解，『亏损项数』的报告值随求解器选择变化。"
+    },
+    "NOT_COMPILED": {
+      "when": "源行 rhs 为 None；或展开所需输入缺失（z_min / pi_target / tf_terms）；或目标系数全为 0。",
+      "verdict": "调用方据此判 **BLOCKED**（该约束被激活却算不出）。**不得**静默跳过（跳过等于把它当恒真）。",
+      "contrast_with_skip": "判据层的 SKIP 表示『本轮没检查』；本台账的 NOT_COMPILED 表示『这一块没能进模型』。前者是流程状态，后者是模型缺口，不可混用。"
+    }
+  },
+  "backend": {
+    "modeler": "PuLP",
+    "modeler_role": "仅建模器，不是求解器",
+    "solver": "HiGHS",
+    "owner_task": "T04-02C",
+    "availability_this_machine": "NOT_INSTALLED（实测 pulp / numpy / scipy / highspy 均不可导入，highs 亦不在 PATH）",
+    "consequence": "CC-09（PuLP 结构等价）在本机判 **SKIP**，不是 PASS。它在装有 PuLP 的环境或 T04-02C 中复跑才算验证过。",
+    "fallback": "evaluate()：纯 Python 求值器，不需要任何第三方库。它承担 CC-07 的编译侧计算，使编译正确性在零依赖环境下仍可判定。",
+    "forbidden": "编译器不得调用 solve()：本文只负责『模型是什么』。求解属 T04-02C；解校验属 T04-02D。混入求解会让 CC-07 的独立性丧失（同一路径既造模型又出解）。"
+  },
+  "literal_allowlist": {
+    "rule": "**数值必须具名。** 表达式内允许出现的数值字面量只有结构系数；其余数值必须先赋给具名常量。",
+    "why_named_not_valued": "按值白名单会偏离本判据要拦的东西。首版把 0.01/1e-6/1e-9/60/5 这类**判据自身的参数**全部报成『手写系数』，于是白名单被越加越长，判据慢慢失去意义——判据把正常实现报成违规，是判据的问题，不是实现的问题。改判『是否具名』后：比较容差写成 ``SLACK_ATOL = 1e-9`` （有名字、可 grep、可审计）即通过；而手写系数长成 ``rhs = 0.85 * cap`` 或 ``M = 1e9``，必然出现在表达式里。",
+    "allowed_in_expressions": [
+      0,
+      1,
+      -1,
+      0.0,
+      1.0,
+      -1.0
+    ],
+    "rationale_of_each": {
+      "0 / 1 / -1 / 0.0 / 1.0 / -1.0": "结构系数（单位系数、符号、切片下标、偏移）"
+    },
+    "exemption": "赋给 ``Assign`` / ``AnnAssign`` 的字面量被豁免——它们已具名。",
+    "if_a_new_literal_is_needed": "两种情况：① 属业务参数 ⇒ 不得写在编译器里，应当来自制品或 Row（这正是本判据要拦的）；② 属判据/实现参数（容差、截断、位数）⇒ 提成模块常量并在此登记用途。",
+    "check": "CC-12（AST 解析源码，豁免具名常量后取数值 Constant）"
+  },
+  "checks": [
+    {
+      "id": "CC-01",
+      "name": "行集溯源双向一致",
+      "statement": "编译出的每一行都必须能溯源到 Formulation 的某一行；Formulation 中应进 LP 的每一行都必须出现在编译结果里或被登记在化简台账。",
+      "check": "正向：{row.origin} ⊆ {f'{cid}:{form}'}。逆向：对每条源行，或 origin 命中、或其在台账中登记（C9/C10 的展开型除外，由 CC-05/CC-11 管）。",
+      "on_violation": "FAIL",
+      "why": "单向检查抓不到『编译器吞掉一条约束』。而少一条约束的模型看起来完全正常，求解器会给出一个满足剩余约束的解。"
+    },
+    {
+      "id": "CC-02",
+      "name": "系数/右端与源行逐项一致",
+      "statement": "编译器必须原样复制源行的系数与 rhs，不得改写。",
+      "check": "按 origin 分组做**多重集配对**（同一 origin 有多行，如 C2 每项一行），配不上的两侧都记为失败。指纹按值取整比较，**不得做名称归一化**。",
+      "on_violation": "FAIL",
+      "why": "这是『无手写约束』的直接判据：凭空多出的行 = 手写；丢掉的行 = 漏编译。展开型（C9/C10）用 expanded_from_objective / origin 标记后跳过本判据，由各自规则覆盖。"
+    },
+    {
+      "id": "CC-03",
+      "name": "行的符号闭包",
+      "statement": "行里出现的每个符号都必须在变量表里声明。",
+      "check": "all_symbols() ⊆ {v.symbol}。",
+      "on_violation": "FAIL",
+      "why": "手写一列变量最典型的症状就是它没进变量表。"
+    },
+    {
+      "id": "CC-04",
+      "name": "变量表（界/类型/目标系数）一致",
+      "statement": "编译后的变量表必须与 Formulation.variables 逐字段相同。",
+      "check": "symbol 集合相等；对每个 symbol 比 family / kind / lower / upper / objective_coeff。",
+      "on_violation": "FAIL",
+      "why": "界的任何改动都等价于改约束（且 F-05 明令不限价项不得被赋替代上界）。"
+    },
+    {
+      "id": "CC-05",
+      "name": "每行可执行（非空系数、有限右端）",
+      "statement": "编译后的每一行都必须有非空系数与有限 rhs。",
+      "check": "逐行检 coefficients 非空、rhs 有限（非 NaN/±inf）。",
+      "on_violation": "BLOCKED",
+      "why": "空系数行是 `0 ≤ rhs`，求解器读作恒真或恒假；rhs = inf 会让约束失效。两种情形都不会报错，只会给出错误的解。这一条把『算不出』挡在建模之前（算式算不出 ⇒ BLOCKED，ADR-0013）。"
+    },
+    {
+      "id": "CC-06",
+      "name": "目标方向/系数/常量一致",
+      "statement": "目标的方向、逐列系数与常量项必须与 Formulation 一致。",
+      "check": "逐列比 objective_coeff；比 objective_constant 与 objective_sense。",
+      "on_violation": "FAIL",
+      "why": "目标是最容易被『顺手优化』的地方（如把常量项并进系数），而它一旦偏离，解就不再是原问题的最优解。"
+    },
+    {
+      "id": "CC-07",
+      "name": "代回复核（编译侧 vs 业务式，跨来源）",
+      "statement": "同一个报价向量，代入编译后的模型与代入业务公式（check_solution），C1 左端与目标值必须一致。",
+      "check": "一侧用 evaluate(model, x) 按行求和；另一侧用 check_solution(instance, p) 按业务式重算。两侧**独立实现**。",
+      "on_violation": "FAIL",
+      "why": "这是全批判据里唯一『编译产物 vs 业务语义』的对账。两侧若同源，本判据零区分度；正因如此它们必须分别实现。",
+      "skip_rule": "未提供实例 ⇒ SKIP，并显式说明 SKIP ≠ PASS。"
+    },
+    {
+      "id": "CC-08",
+      "name": "C7 双 M 的恒真条件",
+      "statement": "C7 的两式各自的恒真条件必须被满足：下式的 M 覆盖变量下界（z=1 不额外收紧 p），上式的 M 覆盖变量上界（z=0 不额外收紧 p）。",
+      "check": "下式：c_i − M_lo ≤ lb_i。上式：M_hi ≥ ub_i^eff − c_i + eps，且 z=0 时的 p 上限（= rhs）≥ ub_i^eff。全部从 aux 复算。",
+      "on_violation": "FAIL",
+      "why": "两式的恒真条件**不同**：下式覆盖下界、上式覆盖上界。共用一个 M 会在 ub_i > 2c_i − eps − lb_i 时切掉 [c_i, ub_i] 的大部分区间，使业务侧判可行的解被编译侧判违反 ⇒ 误报 infeasible 或返回次优解，**且不报任何错误**。2026-09-17 实测确认（两端 c=50, lb=45, ub=120, eps=0.01：共用 M = 5 把 z=0 的合法区间从 [50,120] 压到 [50,54.99]）。"
+    },
+    {
+      "id": "CC-09",
+      "name": "PuLP 后端结构等价",
+      "statement": "导出的 PuLP 对象还原后的结构必须与 CompiledModel 一致（变量集、行数、sense、rhs、目标系数）。",
+      "check": "to_pulp → extract_pulp_structure → 逐项对账。**不调用 solve**：等价性是模型的，不是解的。",
+      "on_violation": "FAIL；PuLP 未安装 ⇒ SKIP（不是 PASS）",
+      "why": "导出层是唯一可能『翻译走样』的地方（sense 反向、常量项符号、目标常数）。本机无 PuLP ⇒ 本判据在本机恒为 SKIP，须在 T04-02C 复跑。"
+    },
+    {
+      "id": "CC-10",
+      "name": "C11 裁定落值一致（跨制品）",
+      "statement": "constraint_schema.C11.selected_form 与 lp_formulation_spec.C11.model_form 必须存在且一致；expression 用 σ 时不得选定 MAD 形式。",
+      "check": "读两份制品取字段比对；selected_form 缺失即 FAIL。",
+      "on_violation": "FAIL",
+      "why": "C11 是唯一『形式必须由裁定决定而非由实现顺手决定』的约束。判据把『静默选定』变成可机械抓到的事：只要两份制品不一致、或形式缺失、或用 L1 替代 L2，即 FAIL。"
+    },
+    {
+      "id": "CC-11",
+      "name": "化简台账完备（不得静默丢弃）",
+      "statement": "每一处化简/未编译都必须登记，且理由可复算。",
+      "check": "逐条查 Simplification.reason 非空；DEGENERATE_DOMINATED 的理由须含被支配量（lb_i）。",
+      "on_violation": "FAIL",
+      "why": "化简是自由裁量动作。不登记则『少了几行』与『正确化简了几行』在制品上不可区分。"
+    },
+    {
+      "id": "CC-12",
+      "name": "编译器字面量审计",
+      "statement": "编译器源码中的数值字面量必须全部在制品声明的白名单内。",
+      "check": "AST 解析源码，取全部数值 Constant，与 literal_allowlist 比对。",
+      "on_violation": "FAIL",
+      "why": "这是『无手写约束』的静态证据。一个凭空出现的 0.85、1e9（大 M）或 0.15（阈值）都只可能来自手写。白名单本身是制品内容——新增魔数必须先改制品。"
+    }
+  ],
+  "consumers": [
+    {
+      "task": "T04-02C",
+      "uses": "CompiledModel + backend ⇒ HiGHS adapter；并把 CC-09（PuLP 结构等价）在其环境内复跑（本机为 SKIP）"
+    },
+    {
+      "task": "T04-02D",
+      "uses": "CompiledModel.rows + 各行的 tolerance ⇒ 解校验器（独立于编译与求解路径）"
+    },
+    {
+      "task": "T04-07",
+      "uses": "C7 的 aux（M_lo / M_hi / ub_eff）+ CC-08 ⇒ MILP 独立验收协议"
+    },
+    {
+      "task": "T04-04",
+      "uses": "evaluate + Formulation ⇒ 与 Phase 1 解析解对拍时的『编译侧裁判』"
+    }
+  ],
+  "open_items": [
+    "CC-09（PuLP 结构等价）在本机恒为 SKIP（无 PuLP）。须在 T04-02C 装好后复跑——在那之前，『导出层没走样』这件事尚未被验证过。",
+    "双 M 对分支定界松弛界的影响：M_hi 由 ub_i^eff − c_i + eps 给出，理论上比 M_lo 大（上界越远越大）。本项目 ub = cap 且下浮报价下 c_i < cap ⇒ M_hi 通常显著大于 M_lo。T04-07 须量化其对收敛的影响，必要时改用指示约束等价的紧形式。",
+    "『不限价 + C1 推不出有限上界』的情形（如 q0 缺失或全项下界为 0）下 M_hi 不存在，编译器登记 NOT_COMPILED、须判 BLOCKED。该分支目前只有单位测试覆盖，尚无真实项目触发。"
+  ]
+}

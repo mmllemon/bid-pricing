@@ -981,6 +981,30 @@ def build_parser() -> argparse.ArgumentParser:
     p_p1.add_argument("--json", action="store_true", help="输出 JSON")
     p_p1.set_defaults(func=cmd_phase1_check)
 
+    p_cc = sub.add_parser(
+        "compile-check",
+        help="T04-02B 约束编译判定（Formulation → CompiledModel 的保真性）")
+    p_cc.add_argument("--instance", default=None,
+                      help="对自定义实例 JSON 跑判定")
+    p_cc.add_argument("--json", action="store_true",
+                      help="输出完整模型（含稀疏行与化简台账），供 T04-02C 消费")
+    # 求解层入参（不属实例结构，须单独给）。探针分支用合成值；--instance 分支
+    # 缺省为 None ⇒ 对应占位行 NOT_COMPILED ⇒ CC-05 BLOCKED（ADR-0013）。
+    p_cc.add_argument("--n-max", type=float, default=None,
+                      help="C7 亏损项数上限 N_max（缺 ⇒ C7 汇总行不编译）")
+    p_cc.add_argument("--theta", type=float, default=None,
+                      help="C6 亏损缺口上限 θ（×P*）")
+    p_cc.add_argument("--d-max", type=float, default=None,
+                      help="C8 地板下浮上限 d_max")
+    p_cc.add_argument("--z-min", type=float, default=None,
+                      help="C9a 盈利门槛 Z_min")
+    p_cc.add_argument("--pi-target", type=float, default=None,
+                      help="C9b 目标利润率 π")
+    p_cc.add_argument("--tf-terms", default=None,
+                      help="C10 的 T_front 三元组 JSON 文件：{item_id: [rho, q0, c]}")
+    p_cc.set_defaults(func=cmd_compile_check)
+
+
     # ------------------------------------------------------- formulate-check
     p_fm = sub.add_parser(
         "formulate-check",
@@ -1241,6 +1265,181 @@ def cmd_phase1_check(args) -> int:
           else " 结论：制品与实现不一致——先查判据是否写成了恒真式，"
                "再查实现是否漏改。")
     return 0 if not bad else 1
+
+
+def cmd_compile_check(args) -> int:
+    """T04-02B 约束编译判定 —— 「编译出的模型，确实是那份声明吗」。
+
+    与前两条命令的分工：``phase1-check`` 判**求解论域**（阈值分割解在这实例上
+    是否最优）；``formulate-check`` 判**模型表述**（C1–C13 是否各有明确形式、
+    变量集合是否闭合）；本命令判**翻译保真**——把 Formulation 编译成可消费的
+    规范形式时，有没有被悄悄改写、漏掉或凭空添加。
+
+    ``--json`` 输出完整模型（变量表 / 稀疏行 / 化简台账），供 T04-02C 消费。
+    """
+    import dataclasses
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.compiler import (
+        check_compiled,
+        compile_model,
+        load_compiler_spec,
+        to_pulp,
+    )
+    from .solver.formulation import (
+        PROBE_SOLVER_INPUTS,
+        build_formulation,
+        load_formulation_spec,
+        probe_instance,
+    )
+    from .solver.instance import Phase1Instance
+
+    cfg = config_dir()
+    compiler_spec = load_compiler_spec(cfg)
+    fspec = load_formulation_spec(cfg)
+    schema = json.loads((cfg / "constraint_schema.json").read_text(encoding="utf-8"))
+    prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
+    card = load_pricing_card(cfg)
+    resolved = resolve_parameters(card)
+    eps_abs = float(prof["eps_abs"]["value"])
+    eps_price = float(prof["eps_price"]["value"])
+    resolution = float(prof["rounding"]["resolution"])
+
+    # 制品里白名单字段名是 allowed_in_expressions；读错键会静默退回模块默认值，
+    # 于是「制品是白名单的真相来源」这句话就不成立了。
+    allow = (compiler_spec.get("literal_allowlist") or {}).get("allowed_in_expressions")
+    # 本文件即 src/bidpricing/cli.py ⇒ parents[0] = src/bidpricing
+    compiler_path = _P(__file__).resolve().parents[0] / "solver" / "compiler.py"
+    if not compiler_path.exists():
+        print(f"■ 编译器源码不在预期位置：{compiler_path}")
+        return 1
+    compiler_source = compiler_path.read_text(encoding="utf-8")
+
+    tf_terms = None
+    if args.tf_terms:
+        tf_path = _P(args.tf_terms)
+        if not tf_path.exists():
+            print(f"■ T_front 三元组文件不存在：{tf_path}")
+            return 1
+        tf_terms = json.loads(tf_path.read_text(encoding="utf-8"))
+
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        base = Phase1Instance.from_dict(
+            json.loads(path.read_text(encoding="utf-8")), source=str(path)
+        )
+        variants: list[tuple[str, object]] = [
+            (tag, dataclasses.replace(base, active_soft_constraints=tuple(act)))
+            for tag, act in (("LP", ()), ("MILP", ("C7",)))
+        ]
+        # 入参由命令行给；缺省即 None ⇒ 对应占位行 NOT_COMPILED ⇒ CC-05 BLOCKED。
+        solver_inputs: dict[str, object] = {
+            "theta": args.theta, "n_max": args.n_max, "d_max": args.d_max,
+            "r_min": None, "z_min": args.z_min, "pi_target": args.pi_target,
+        }
+    else:
+        variants = [
+            ("LP", probe_instance()),
+            ("MILP", probe_instance(active=("C7",))),
+        ]
+        solver_inputs = dict(PROBE_SOLVER_INPUTS)
+
+    payload: list[dict] = []
+    worst = 0
+    for tag, instance in variants:
+        fm = build_formulation(
+            instance, resolved,
+            eps_abs=eps_abs, eps_price=eps_price, resolution=resolution,
+            theta=solver_inputs.get("theta"),
+            n_max=solver_inputs.get("n_max"),
+            d_max=solver_inputs.get("d_max"),
+            r_min=solver_inputs.get("r_min"),
+            z_min=solver_inputs.get("z_min"),
+            pi_target=solver_inputs.get("pi_target"),
+        )
+        model = compile_model(
+            fm,
+            z_min=solver_inputs.get("z_min"),
+            pi_target=solver_inputs.get("pi_target"),
+            tf_terms=tf_terms,
+            source=tag,
+        )
+        rows = check_compiled(
+            model, fm,
+            instance=instance, resolved=resolved,
+            constraint_schema=schema, formulation_spec=fspec,
+            compiler_source=compiler_source,
+            literal_allowlist=allow,
+            eps_total=eps_abs,
+        )
+        payload.append({
+            "variant": tag,
+            "model": model.to_dict(),
+            "checks": [r.to_dict() for r in rows],
+            "pulp_available": to_pulp(model) is not None,
+        })
+        for r in rows:
+            if r.blocks_progress:
+                worst = 1
+        if not args.json:
+            _print_compiled(
+                model, rows,
+                f"{'探针实例' if not args.instance else args.instance} · {tag}",
+            )
+
+    if args.json:
+        print(json.dumps(
+            {"spec_id": compiler_spec.get("spec_id"), "variants": payload},
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return worst
+
+    total = sum(len(v["checks"]) for v in payload)
+    npass = sum(1 for v in payload for c in v["checks"] if c["status"] == "PASS")
+    nskip = sum(1 for v in payload for c in v["checks"] if c["status"] == "SKIP")
+    print(f"  汇总：{npass} PASS / {nskip} SKIP / {total - npass - nskip} 待处理"
+          f"（共 {total} 条，跨 {len(payload)} 个变体）")
+    if nskip:
+        print(f"  ⚠ {nskip} 条 SKIP 表示**本轮没检查**，不等于通过"
+              "（本机无 PuLP ⇒ CC-09 恒为 SKIP，须在 T04-02C 复跑）")
+    return worst
+
+
+def _print_compiled(model, checks, title: str) -> None:
+    print("=" * 78)
+    print(f"约束编译（T04-02B）｜ {title}")
+    print("=" * 78)
+    print(f"  目标：{model.objective_sense}  obj_const = {model.objective_constant!r}"
+          f"　形态 = {model.solver_form}")
+    fams: dict[str, int] = {}
+    for v in model.variables:
+        fams[v.family] = fams.get(v.family, 0) + 1
+    print(f"  变量：{model.n_vars}（" + "、".join(f"{k}×{n}" for k, n in sorted(fams.items())) + "）")
+    print(f"  行  ：{model.n_rows}")
+    by_cid: dict[str, int] = {}
+    for r in model.rows:
+        by_cid[r.constraint_id] = by_cid.get(r.constraint_id, 0) + 1
+    print("        " + "、".join(f"{k}×{n}" for k, n in sorted(by_cid.items())))
+    if model.simplifications:
+        print(f"  化简台账（{len(model.simplifications)} 条）：")
+        for s in model.simplifications:
+            print(f"    · [{s.kind}] {s.subject}")
+            print(f"        {s.reason[:110]}")
+    if model.notes:
+        print("  说明：")
+        for n in model.notes:
+            print(f"    · {n[:110]}")
+    print()
+    tags = {"PASS": "  PASS", "WARN": "  WARN", "SKIP": "  SKIP",
+            "FAIL": "  FAIL", "BLOCKED": "BLOCKED", "INFO": "  INFO"}
+    for c in checks:
+        print(f"  {tags.get(c.status, c.status)}  {c.item}")
+        print(f"        {c.reason[:150]}")
+    print()
 
 
 def cmd_contract_check(args) -> int:

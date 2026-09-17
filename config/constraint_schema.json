@@ -217,10 +217,28 @@
     "sigma_max",
     "kappa_max"
    ],
-   "metric": "MAD 或 sigma(d)",
+   "metric": "sigma(d)",
    "tolerance": "eps_price",
-   "implementation": "原始 sigma 为二阶锥约束，标准 LP 不支持；推荐 MAD 线性化 (1/n) sum |p_i - p_bar| <= kappa_max，引入 u_i >= p_i - p_bar、u_i >= p_bar - p_i 两条线性约束即可，问题仍为 LP",
-   "note": null
+   "implementation": "DISCRETE_CHECK —— **本约束不进 LP/MILP**，由判定层在求解后对报价向量逐项求值。原因见 arbitration.why_not_lp。",
+   "note": "原 note（「形式未定不阻塞 P0 主干」）已被裁定取代：形式现已落定，为 DISCRETE_CHECK。schema 的 metric/implementation 字段于 2026-09-17 被 T04-02B 反向修正。",
+   "selected_form": "DISCRETE_CHECK",
+   "arbitration": {
+    "decided_at": "2026-09-17",
+    "decided_by": "T04-02B（其 task_summary 指定的本约束 decision_owner）",
+    "why_not_lp": "σ(d) ≤ sigma_max 等价于 (1/n)Σ(d_i − d̄)² ≤ sigma_max²，是**凸二次约束**（可写成二阶锥）。后端 HiGHS 的支持面是 LP / MILP / QP，**二阶锥不在其内** ⇒ 该约束不得进入本项目的求解模型。",
+    "why_not_mad": "schema 原 implementation 建议「MAD 线性化」。但由 Cauchy-Schwarz，(Σ|a_i|)² ≤ n·Σa_i² ⇒ MAD_c ≤ σ_c（同中心，population 定义）⇒ {d : MAD ≤ κ} ⊇ {d : σ ≤ κ}。即 MAD 形式**放松**了原约束，最坏放松 √n 倍（单点偏差的极值构造可达；本项目 n = 115 ⇒ 10.72 倍）。放松不是保守近似：它会把违反 sigma_max 的报价判为合规。故不得作为 σ 约束的替代实现（唯二例外：招标文件本身就写 MAD，或用户明示接受该放松幅度——两者本项目中均不成立）。",
+    "why_original_recommendation_was_wrong": "原 implementation 另建议 (1/n)Σ|p_i − p̄| ≤ kappa_max。该式有两处与本条自身的 expression 冲突：① **不含 base_i** ⇒ 它不是 d 的函数，度量的不是「相对招标基准的偏离」，与 expression 定义的不是同一个量；② **未按 base 归一化** ⇒ 值完全由最大单价项支配（本项目单价跨 4 个量级：0.01 元级端子 ~ 万元级高压柜），一致下浮这类对不平衡报价零影响的调整也会改变读数。两处都是**度量替换**而非界替换，故整条被替换。",
+    "center_basis": "d 的中心由 OI-05 的基准定义给定：base_i := cap_i ⇒ 中心即 d = 0，**不是可选自由度**。若改用自由中心 d̄（均值），会在度量替换之上叠加第二重不一致——把「相对招标限价的偏离」偷换成「相对本报价自身均值的偏离」，且该替换方向同样是放松（均值使绝对偏差和最小）。",
+    "effect_on_artifact": "本条的 implementation 字段已被整条替换。lp_formulation_spec.C11 的 model_form 相应由 NONLINEAR_DEFERRED 改为 DISCRETE_CHECK。"
+   },
+   "activation": {
+    "required_inputs": [
+     "sigma_max / kappa_max"
+    ],
+    "current": "NOT_ACTIVE —— sigma_max 与 kappa_max 既未在招标文件中以离散度表述给出，也未由用户声明。P1 且可开关 ⇒ 未激活时不阻塞 P0 主干（C1–C5 与 C6–C10）。",
+    "if_activated": "唯一合法形式是 SOCP 或判定层 DISCRETE_CHECK；任何 L1 替代都不成立。此时若后端不支持二阶锥（本项目即是）⇒ 判 BLOCKED 并说明，**不得静默降级为线性形式**（降级会给出合规的假象）。",
+    "timing": "判定层在求解**之后**对 p 向量求值——它不是求解约束，而是解的合规复核项，故不参与可行性判定，只出 PASS/FAIL 结论。"
+   }
   },
   {
    "id": "C12",

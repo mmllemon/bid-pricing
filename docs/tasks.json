@@ -913,7 +913,7 @@
         }
       ],
       "status": "done",
-      "note": "2026-09-17 完成。交付 `config/lp_formulation_spec.json`（变量/非变量/参数/索引集/目标/C1–C13 逐条映射/箱型预处理/求解器形态/F 判据 11 条/消费者/挂账）+ `src/bidpricing/solver/formulation.py`（只形式化不建模）+ CLI `formulate-check`（LP 与 MILP 两变体各 11 条判据，22/22 PASS）。**核心结论一：目标对 p 严格线性** —— r_eff 由 (r_i, 规则集参数, alpha_i) 全外生决定，P1 分支在建模期已知 ⇒ R_i 对 p 线性 ⇒ LP 成立，MILP 的**唯一**来源是 C7 的二元变量 z_i（F-09 即以此判据：「MILP 切换条件唯一」）。区分两个边际：∂R/∂p = q0·r_eff（r_eff 的定义式，F-02 检它）与 ∂Z/∂p = q1·r_eff（目标系数，乘 r 倍）。**结论二：C1 按可竞争部分实现** —— Σ_{i∈C1_scope} p_i q0_i == P*_competitive，右端由 compute_P_competitive(P*, FIXED_PRETAX, 税率) 提供（入参是锁定总价而非报价向量，否则 C1 变成恒真式）；固定项不进左端。**结论三：三条约束须改变位置** —— ① C5 的 LP 下界必须抬到报价分辨率 lb_C5 = max(eps_price·P*, rounding.resolution)：P*=1e6 时裸 eps_price·P* 仅 1e-3 元，舍入后为 0.00 ⇒ 提交的报价违反 C5（内层约束与外层舍入的耦合点，ADR-0020 模式 A 的显式处理对象）；② C12 在可行域上是**常量**（两种作用域读法同结论）⇒ 应作 P* 的前置可接受性判据，写成 LP 约束会得到恒真/恒假的平凡约束并掩盖真实问题；③ C11 的 MAD/σ 替换方向相反（σ→MAD 收紧、MAD-with-free-center 放松）⇒ 挂账给 T04-02B，不静默选定。**本轮抓到两个 bug**：① 实现侧 settlement_revenue 的区间内分支漏了作用域判断（SEGMENT ∧ alpha≠0 时与 compute_r_eff 差 (1+α) 倍，alpha=0 时完全不可见）——已修，并加数值差分回归测试；② 判据自身首版借道 instance.r_eff，被实例 Phase1Params 覆盖了传入 scope，**自己制造假 FAIL** —— 修为先按 (scope, alpha) 构造 scoped 参数、解析式直用 compute_r_eff。据此确立原则：**判据的覆盖面不得取决于被测数据**（F-02 自扫 FULL/SEGMENT，不沿用实例 scope）。另修 status.check_evidence 第三处缺口：phase_0 项目级输入（project_classification_table）本就不做版本冻结，按「hash 已冻结」判会永远不成立 ⇒ 改用「文件存在」，与输入门的「声明式就绪」同向。本层状态域新增 SKIP（字符串，非全局 Status 四态枚举）：缺实例时「没检查」必须与「检查过且通过」可区分。测试 527 → 555（新增 tests/test_lp_formulation.py 28 项，含两个区分度测试：注入旧分叉必须FAIL、两组 p 向量必须真的不同）。contract-check 17/17，闸门全 PASS。"
+      "note": "2026-09-17 完成。交付 `config/lp_formulation_spec.json`（变量/非变量/参数/索引集/目标/C1–C13 逐条映射/箱型预处理/求解器形态/F 判据 11 条/消费者/挂账）+ `src/bidpricing/solver/formulation.py`（只形式化不建模）+ CLI `formulate-check`（LP 与 MILP 两变体各 11 条判据，22/22 PASS）。**核心结论一：目标对 p 严格线性** —— r_eff 由 (r_i, 规则集参数, alpha_i) 全外生决定，P1 分支在建模期已知 ⇒ R_i 对 p 线性 ⇒ LP 成立，MILP 的**唯一**来源是 C7 的二元变量 z_i（F-09 即以此判据：「MILP 切换条件唯一」）。区分两个边际：∂R/∂p = q0·r_eff（r_eff 的定义式，F-02 检它）与 ∂Z/∂p = q1·r_eff（目标系数，乘 r 倍）。**2026-09-17 修正（ADR-0022 决策三）**：此句后半**误**——∂Z/∂p = ∂R/∂p = q0·r_eff，写成 q1·r_eff 等于把 LP 排序键又乘一遍 r_i（次优且不报错），由 T04-02B 的 CC-07 跨来源代回抓到（676000 vs 420000）。**结论二：C1 按可竞争部分实现** —— Σ_{i∈C1_scope} p_i q0_i == P*_competitive，右端由 compute_P_competitive(P*, FIXED_PRETAX, 税率) 提供（入参是锁定总价而非报价向量，否则 C1 变成恒真式）；固定项不进左端。**结论三：三条约束须改变位置** —— ① C5 的 LP 下界必须抬到报价分辨率 lb_C5 = max(eps_price·P*, rounding.resolution)：P*=1e6 时裸 eps_price·P* 仅 1e-3 元，舍入后为 0.00 ⇒ 提交的报价违反 C5（内层约束与外层舍入的耦合点，ADR-0020 模式 A 的显式处理对象）；② C12 在可行域上是**常量**（两种作用域读法同结论）⇒ 应作 P* 的前置可接受性判据，写成 LP 约束会得到恒真/恒假的平凡约束并掩盖真实问题；③ C11 的 MAD/σ 替换方向相反（σ→MAD 收紧、MAD-with-free-center 放松）⇒ 挂账给 T04-02B，不静默选定。**本轮抓到两个 bug**：① 实现侧 settlement_revenue 的区间内分支漏了作用域判断（SEGMENT ∧ alpha≠0 时与 compute_r_eff 差 (1+α) 倍，alpha=0 时完全不可见）——已修，并加数值差分回归测试；② 判据自身首版借道 instance.r_eff，被实例 Phase1Params 覆盖了传入 scope，**自己制造假 FAIL** —— 修为先按 (scope, alpha) 构造 scoped 参数、解析式直用 compute_r_eff。据此确立原则：**判据的覆盖面不得取决于被测数据**（F-02 自扫 FULL/SEGMENT，不沿用实例 scope）。另修 status.check_evidence 第三处缺口：phase_0 项目级输入（project_classification_table）本就不做版本冻结，按「hash 已冻结」判会永远不成立 ⇒ 改用「文件存在」，与输入门的「声明式就绪」同向。本层状态域新增 SKIP（字符串，非全局 Status 四态枚举）：缺实例时「没检查」必须与「检查过且通过」可区分。测试 527 → 555（新增 tests/test_lp_formulation.py 28 项，含两个区分度测试：注入旧分叉必须FAIL、两组 p 向量必须真的不同）。contract-check 17/17，闸门全 PASS。"
     },
     {
       "id": "T04-02B",
@@ -929,9 +929,26 @@
       ],
       "summary": "约束字典 → 求解器约束的机械转换，无手写约束",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/lp_compiler_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/compiler.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_lp_compiler.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0022-lp-compiler-positions.md"
+        }
+      ],
+      "status": "done",
+      "note": "2026-09-17 完成。交付 `config/lp_compiler_spec.json`（目标形式/展开规则/化简规则/后端/字面量白名单/CC-01..CC-12/消费者）+ `src/bidpricing/solver/compiler.py`（Formulation → CompiledModel 的机械翻译 + 零依赖求值器 evaluate + 惰性 PuLP 导出 + 12 条 CC 判据）+ CLI `compile-check`（LP/MILP 两变体各 12 条，24 条中 21 PASS / 3 SKIP / 0 待处理）。**核心：把「无手写约束」做成可机械判定的性质** —— 编译目标定为建模器/求解器无关的规范形式（零第三方依赖环境的硬约束），CC-01..CC-12 全部跨来源对账（一侧 Formulation、一侧 CompiledModel，CC-07 再加业务式 check_solution）。**修 T04-02A 遗留两处真 bug**：① C7 双向指示式原两式共用 M = c_i − lb_i，而两式恒真条件不同（下式覆盖下界、上式覆盖上界）⇒ 第三式在 z=0 处切掉 [c_i, ub_eff] 大部分区间（实测 c=50/lb=45/ub=120/eps=0.01 时共用 M=5 把合法区间从 [50,120] 压到 [50,54.99]）⇒ 业务侧判可行、编译侧判违反，误报 infeasible 且不报错 —— 已拆 M_lo/M_hi + 有效上界 ub_i^eff + 退化固定（z 固定界而非删除、C7 汇总 RHS 扣减 n_fixed_one），CC-08 锁死；② 目标系数原写 q1·r_eff，正确为 q0·r_eff（= ∂R/∂p，因 c_i·q1_i 与 p 无关）——写成 q1 等于把 LP 排序键又乘一遍 r_i（次优且不触发任何可行性检查，T04-00 EC-2 失效模式），由 CC-07 跨来源代回实测抓到（676000 vs 420000），已修并加数值差分回归测试。**裁定 C11 移出 LP**：σ(d) 是二阶锥约束而 HiGHS 不含 SOCP，MAD 替代由 Cauchy-Schwarz 是放松（最坏 √n，本项目 10.72 倍）且原式 (1/n)Σ|p−p̄| 不含 base_i 未归一化 ⇒ 两份制品同落 DISCRETE_CHECK，由 CC-10 锁死。**CC-12 规则定为「数值必须具名」而非按值白名单**：首版把模块自身容差与切片下标误报为手写系数（判据把正常实现报成违规），改判是否具名后 SLACK_ATOL=1e-9 通过、0.85*cap 被抓。**修 CLI 契约漂移**：误读 literal_allowlist.allowed（正确键 allowed_in_expressions），读错会静默退回模块默认值使制品不再是白名单真相来源；并把探针的求解层入参（formulation.PROBE_SOLVER_INPUTS）接入 build_formulation/compile_model，否则 C6/C7/C9/C10 占位行恒 NOT_COMPILED ⇒ MILP 变体 CC-05 恒 BLOCKED。口径修正已全仓 grep 旧表述并同步（lp_formulation_spec.relation_to_objective、formulation.objective_expr、lp_compiler_spec.coefficient_rule、compiler 文档串、CHANGELOG、T04-02A note）；ADR-0021 不可变，由 ADR-0022 决策三推翻其 ∂Z/∂p=q1·r_eff 一句。测试 555 → 587（tests/test_lp_compiler.py 32 项，含 12 条判据各自的错误注入区分度层 + evaluate + 惰性导出 + 字面量审计）。遗留：CC-09（PuLP 结构等价）本机恒 SKIP，须 T04-02C 复跑；M_hi 对分支定界收敛的影响待 T04-07 量化。"
     },
     {
       "id": "T04-02C",

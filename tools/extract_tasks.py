@@ -68,6 +68,18 @@ EVIDENCE: dict[str, list[dict]] = {
         {"kind": "module", "path": "tests/test_phase1_exactness.py"},
         {"kind": "adr", "path": "ADR-0019-phase1-exactness-by-exchange-argument.md"},
     ],
+    "T04-02A": [
+        {"kind": "file", "path": "config/lp_formulation_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/solver/formulation.py"},
+        {"kind": "module", "path": "tests/test_lp_formulation.py"},
+        {"kind": "adr", "path": "ADR-0021-lp-formulation-positions.md"},
+    ],
+    "T04-02B": [
+        {"kind": "file", "path": "config/lp_compiler_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/solver/compiler.py"},
+        {"kind": "module", "path": "tests/test_lp_compiler.py"},
+        {"kind": "adr", "path": "ADR-0022-lp-compiler-positions.md"},
+    ],
 }
 
 #: 初次提取时的状态种子。仅当 JSON 中不存在该任务时才写入；

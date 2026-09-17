@@ -171,23 +171,59 @@ class TestMarginalClosure(unittest.TestCase):
         finally:
             fm.settlement_revenue = original
 
-    def test_marginal_scales_with_q1_in_objective(self):
-        """目标侧 ∂Z/∂p = q1·r_eff，与 R 侧 ∂R/∂p = q0·r_eff 相差 r 倍。"""
+    def test_objective_marginal_equals_revenue_marginal(self):
+        """目标侧 ∂Z/∂p 必须等于收入侧 ∂R/∂p = q0·r_eff，**不是** q1·r_eff。
+
+        2026-09-17 修正。原断言写的是 q1·r_eff，并把两者的差异解释成
+        「含结算量因子 q1」——但 Z = Σ(R_i − c_i·q1_i)，成本项与 p 无关
+        ⇒ ∂Z/∂p ≡ ∂R/∂p。断言 q1·r_eff 在 LP 上等价于把排序键又乘一遍 r_i：
+
+            LP 排序键 = (目标系数)/(C1 系数) = (q1·r_eff)/q0 = r_i·r_eff ≠ r_eff
+
+        这恰是 T04-00 EC-2 警告过的失效模式（解满足全部约束但次优，
+        不触发任何可行性检查）。该断言当年写反了，于是**测试在保护 bug**。
+        """
         inst = probe_instance()
         res = _resolved()
         built = build_formulation(inst, res)
         by_id = {c.item_id: c for c in built.price_columns}
+        n_r_nonunit = 0
         for item in inst.items:
             if item.role != "OPTIMIZABLE":
                 continue
             r_eff = compute_r_eff(item.r(), res, item.alpha)
+            got = by_id[item.item_id].objective_coeff
             self.assertAlmostEqual(
-                by_id[item.item_id].objective_coeff,
-                item.q1_point * r_eff, places=9,
-                msg=f"{item.item_id}: ∂Z/∂p 应为 q1·r_eff")
+                got, item.q0 * r_eff, places=9,
+                msg=f"{item.item_id}: ∂Z/∂p 应为 q0·r_eff")
+            # 跨来源：与结算收入的实际边际（中心差分）对账
+            #
+            # 步长取相对量：p_ref=600、h=1e-6 时，R(p±h)≈1.2e6 的 1 ULP（≈2.3e-10）
+            # 被 2h=2e-6 放大成 ~1e-4 的**伪**导数误差，足以把正确实现报成 FAIL
+            # ——「判据把正常实现报成违规 = 判据的问题」。R 在每个分支内对 p 严格
+            # 线性（branch 只由 r=q1/q0 决定，与 p 无关），故中心差分对任意 h 都
+            # 精确到舍入；放大 h 只压低抵消误差，不改变结论。
+            p_ref = item.p0
+            h = max(1e-3, abs(p_ref) * 1e-9)
+            numeric = (
+                settlement_revenue(item.q0, item.q1_point, p_ref + h, res, item.alpha)
+                - settlement_revenue(item.q0, item.q1_point, p_ref - h, res, item.alpha)
+            ) / (2 * h)
+            # 跨来源对账用**相对**容差：本条要证的是「解析边际 = 业务公式边际」，
+            # 不是浮点末位。rel 1e-6 足以容纳 ULP 抵消，又远小于本项的真实分歧
+            # （q0 vs q1：r≠1 项差 (r−1)·q0·r_eff 倍，量级 ≥1e-2）。
             self.assertAlmostEqual(
-                item.q0 * r_eff, item.q1_point * r_eff / item.r(), places=6,
-                msg="∂R/∂p = q1·r_eff / r 才是 q0·r_eff 的等价形式")
+                got, numeric, delta=max(abs(got), 1.0) * 1e-6 + 1e-9,
+                msg=f"{item.item_id}: 目标系数应等于数值 ∂R/∂p")
+            if abs(item.r() - 1.0) > 1e-9:
+                n_r_nonunit += 1
+                self.assertNotAlmostEqual(
+                    got, item.q1_point * r_eff, places=6,
+                    msg=f"{item.item_id}: 不得退化为 q1·r_eff")
+        self.assertGreater(
+            n_r_nonunit, 0,
+            "探针实例必须含 r≠1 的项，否则本例测不出 q0/q1 的分歧")
+
 
 
 class TestBuildFormulation(unittest.TestCase):
@@ -320,7 +356,9 @@ class TestFormulationChecks(unittest.TestCase):
                           .read_text(encoding="utf-8"))
         for c in spec["constraint_map"]:
             if c["constraint_id"] == "C11":
-                c.pop("why_deferred", None)
+                # C11 的形式 2026-09-17 由 NONLINEAR_DEFERRED 改为
+                # DISCRETE_CHECK，理由字段随之由 why_deferred 变为 why_not_lp。
+                c.pop("why_not_lp", None)
         rows = self._run(spec=spec)
         f07b = next(r for r in rows if r.item.startswith("F-07b"))
         self.assertEqual(f07b.status, "FAIL")

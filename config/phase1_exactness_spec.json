@@ -38,7 +38,15 @@
   "theorem": {
     "id": "T1",
     "title": "阈值分割定理",
-    "assumptions": ["EC-1", "EC-2", "EC-3", "EC-4", "EC-5", "EC-6", "EC-7"],
+    "assumptions": [
+      "EC-1",
+      "EC-2",
+      "EC-3",
+      "EC-4",
+      "EC-5",
+      "EC-6",
+      "EC-7"
+    ],
     "statement": "若 P_A 满足 EC-1..EC-7，则存在阈值 lam 使任一最优解 p* 满足：r_eff_i > lam => p*_i = U_i；r_eff_i < lam => p*_i = L_i；r_eff_i = lam => p*_i in [L_i, U_i]。且 lam 在非退化（EC-5）时唯一，等于 C1 的影子价格。",
     "proof_method": "交换论证（exchange argument）",
     "proof": [
@@ -56,7 +64,12 @@
       "不覆盖 C6/C9/C10/C11/C12/C13 激活的实例（EC-6）。"
     ]
   },
-  "status_domain": ["PASS", "WARN", "FAIL", "BLOCKED"],
+  "status_domain": [
+    "PASS",
+    "WARN",
+    "FAIL",
+    "BLOCKED"
+  ],
   "verdict_domain": {
     "EXACT": "EC-1..EC-7 均无 FAIL / BLOCKED——Phase 1 阈值分割解与 P_A 最优解一致",
     "INAPPLICABLE": "EC-1..EC-7 中任一条判 FAIL——阈值分割**不是** P_A 的最优解，必须交 Phase 2",
@@ -127,10 +140,10 @@
       "id": "EC-6",
       "group": "EXACTNESS",
       "name": "软约束不激活",
-      "statement": "C6（亏损风险总量）、C9（盈利门槛）、C10（现金流前载）、C11（离散度）、C12（总价成本比）、C13（不平衡报价条件修正）均不激活。",
-      "check": "读实例的 active_soft_constraints 字段：非空 => FAIL（该实例越出 Phase 1 论域）。C7 因升为 MILP 一律视为激活。",
+      "statement": "C6（亏损风险总量）、C9（盈利门槛）、C10（现金流前载）均不激活——只列**会改变 LP 结构**的软约束。C11 / C12 / C13 不在其内：它们本就不进 LP（C11 二阶锥→判定层 DISCRETE_CHECK；C12 在可行域上是常量 CONSTANT_CHECK；C13 非投标约束），激活与否都不改变 P_A 的阈值结构。",
+      "check": "读实例 active_soft_constraints，取与 {C6, C9, C10} 的交集：非空 => FAIL（该实例越出 Phase 1 论域）。C7 因升为 MILP 一律视为激活。**交集之外的项不触发**——触发集合必须等于判据语义所指的集合，把 C11/C12/C13 一并算入会把「外挂的合规复核」误报成「解析解不适用」（2026-09-17 修正；原判据写作「非空 => FAIL」，与 C11 移出 LP 的裁定冲突）。",
       "on_violation": "FAIL",
-      "consequence": "C6 引入第二组权重（q1_point_i），与 C1 的权重（q0_i）不成比例 => 排序键被 (1+eta) 修正为**多阈值分层**结构；C11 的 MAD 线性化引入全项耦合（含均值 p_bar）=> 阈值结构整体失效。",
+      "consequence": "C6 引入第二组权重（q1_point_i），与 C1 的权重（q0_i）不成比例 => 排序键被 (1+eta) 修正为**多阈值分层**结构；C9/C10 追加线性约束 => 可行域形状改变。两者都使「按 r_eff 单键排序定容」不再是最优解。",
       "counterexample": "CE-06",
       "source": "model_v0.3_R2.md §7.2「成立条件：C6、C9、C10 均不激活」；§7.4"
     },
@@ -174,22 +187,78 @@
       "violates": "EC-1",
       "title": "C1 未剔除不可竞争项 —— 数学最优、投标非法",
       "source": "model_v0.3_R2.md §5.4 C1 note / §5.5 R7 修订理由",
-      "expected": {"EC-1": "FAIL", "verdict": "INAPPLICABLE"},
+      "expected": {
+        "EC-1": "FAIL",
+        "verdict": "INAPPLICABLE"
+      },
       "instance": {
         "items": [
-          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 150, "c_i": 30, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0},
-          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 80, "c_i": 80, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0},
-          {"item_id": "F", "role": "NON_COMPETITIVE", "in_c1_scope": true, "q0": 100, "q1_point": 100, "c_i": 0, "p0": 50, "cap": 100, "L": 0, "U": 100, "alpha": 0.0}
+          {
+            "item_id": "A",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 150,
+            "c_i": 30,
+            "p0": 100,
+            "cap": 200,
+            "L": 50,
+            "U": 200,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "B",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 80,
+            "c_i": 80,
+            "p0": 100,
+            "cap": 200,
+            "L": 50,
+            "U": 200,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "F",
+            "role": "NON_COMPETITIVE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 100,
+            "c_i": 0,
+            "p0": 50,
+            "cap": 100,
+            "L": 0,
+            "U": 100,
+            "alpha": 0.0
+          }
         ],
         "B": 20000,
         "P_star": 25000,
-        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 0.0,
+          "rho_minus": 0.0,
+          "adjustment_scope": "FULL"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true
       },
       "witness": {
-        "wrong_solution": {"p": [199.99, 50.0, 0.01]},
-        "right_solution": {"p": [150.0, 50.0, 50.0]},
+        "wrong_solution": {
+          "p": [
+            199.99,
+            50.0,
+            0.01
+          ]
+        },
+        "right_solution": {
+          "p": [
+            150.0,
+            50.0,
+            50.0
+          ]
+        },
         "assertions": {
           "wrong_solution_feasible": false,
           "right_solution_feasible": true,
@@ -204,25 +273,76 @@
       "violates": "EC-2",
       "title": "排序键误用 r_i（漏乘逐项 (1+alpha_i)）",
       "source": "model_v0.3_R2.md §7.2.1 反例集第 3 项",
-      "expected": {"EC-2": "WARN", "verdict": "EXACT"},
+      "expected": {
+        "EC-2": "WARN",
+        "verdict": "EXACT"
+      },
       "expected_note": "本实例的 A 组无 FAIL——用对键（r_eff）就是精确的。EC-2 判 WARN 是因为**键的选择在本实例上有后果**：误用 r 会得到满足全部约束但目标低 1000 元的解。判定器把这一风险写进 implementation_notes，而不是否决精确性——否则「实例对键敏感」会被误读成「Phase 1 不可用」。",
       "instance": {
         "items": [
-          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 100, "c_i": 50, "p0": 100, "cap": 150, "L": 50, "U": 150, "alpha": 0.5},
-          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 140, "c_i": 50, "p0": 100, "cap": 150, "L": 50, "U": 150, "alpha": 0.0}
+          {
+            "item_id": "A",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 100,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 150,
+            "L": 50,
+            "U": 150,
+            "alpha": 0.5
+          },
+          {
+            "item_id": "B",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 140,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 150,
+            "L": 50,
+            "U": 150,
+            "alpha": 0.0
+          }
         ],
         "B": 20000,
         "P_star": 20000,
-        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 0.0,
+          "rho_minus": 0.0,
+          "adjustment_scope": "FULL"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true
       },
       "witness": {
-        "wrong_solution": {"p": [50.0, 150.0]},
-        "right_solution": {"p": [150.0, 50.0]},
-        "key_r_eff": [1.5, 1.4],
-        "key_r": [1.0, 1.4],
-        "key_1_plus_alpha": [1.5, 1.0],
+        "wrong_solution": {
+          "p": [
+            50.0,
+            150.0
+          ]
+        },
+        "right_solution": {
+          "p": [
+            150.0,
+            50.0
+          ]
+        },
+        "key_r_eff": [
+          1.5,
+          1.4
+        ],
+        "key_r": [
+          1.0,
+          1.4
+        ],
+        "key_1_plus_alpha": [
+          1.5,
+          1.0
+        ],
         "assertions": {
           "wrong_solution_feasible": true,
           "right_solution_feasible": true,
@@ -236,21 +356,63 @@
       "violates": "EC-3",
       "title": "q0 = 0 而 q1 > 0：变量失去 C1 约束（目标无界方向）",
       "source": "model_v0.3_R2.md §3.7 预处理 1；§7.5「q_i^0 -> 0 但 q_i^1 > 0」",
-      "expected": {"EC-3": "FAIL", "verdict": "INAPPLICABLE"},
+      "expected": {
+        "EC-3": "FAIL",
+        "verdict": "INAPPLICABLE"
+      },
       "instance": {
         "items": [
-          {"item_id": "Z", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 0, "q1_point": 100, "c_i": 50, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0},
-          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 100, "c_i": 50, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0}
+          {
+            "item_id": "Z",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 0,
+            "q1_point": 100,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 200,
+            "L": 50,
+            "U": 200,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "B",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 100,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 200,
+            "L": 50,
+            "U": 200,
+            "alpha": 0.0
+          }
         ],
         "B": 20000,
         "P_star": 20000,
-        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 0.0,
+          "rho_minus": 0.0,
+          "adjustment_scope": "FULL"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true
       },
       "witness": {
-        "wrong_solution": {"p": [200.0, 100.0]},
-        "right_solution": {"p": [100.0, 100.0]},
+        "wrong_solution": {
+          "p": [
+            200.0,
+            100.0
+          ]
+        },
+        "right_solution": {
+          "p": [
+            100.0,
+            100.0
+          ]
+        },
         "assertions": {
           "wrong_solution_feasible": false,
           "right_solution_feasible": false
@@ -263,14 +425,34 @@
       "violates": "EC-4",
       "title": "rho_plus > 1：结算收入为负（非物理）",
       "source": "model_v0.3_R2.md §5.3.2 收敛性",
-      "expected": {"EC-4": "FAIL", "verdict": "INAPPLICABLE"},
+      "expected": {
+        "EC-4": "FAIL",
+        "verdict": "INAPPLICABLE"
+      },
       "instance": {
         "items": [
-          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 160, "c_i": 50, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0}
+          {
+            "item_id": "A",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 160,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 200,
+            "L": 50,
+            "U": 200,
+            "alpha": 0.0
+          }
         ],
         "B": 10000,
         "P_star": 10000,
-        "params": {"theta_dev": 0.15, "rho_plus": 1.2, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 1.2,
+          "rho_minus": 0.0,
+          "adjustment_scope": "FULL"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true
       },
@@ -286,21 +468,56 @@
       "violates": "EC-5",
       "title": "rho_plus = 1 使 r_eff 成平台 —— 无穷多最优解",
       "source": "model_v0.3_R2.md §5.3.2 收敛性；§7.5 第 1 行；impl_plan_v321 §4.1 三级判定",
-      "expected": {"EC-5": "FAIL", "verdict": "INAPPLICABLE"},
+      "expected": {
+        "EC-5": "FAIL",
+        "verdict": "INAPPLICABLE"
+      },
       "instance": {
         "items": [
-          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 160, "c_i": 50, "p0": 100, "cap": 120, "L": 50, "U": 120, "alpha": 0.0},
-          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 160, "c_i": 50, "p0": 100, "cap": 120, "L": 50, "U": 120, "alpha": 0.0}
+          {
+            "item_id": "A",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 160,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 50,
+            "U": 120,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "B",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 160,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 50,
+            "U": 120,
+            "alpha": 0.0
+          }
         ],
         "B": 17000,
         "P_star": 17000,
-        "params": {"theta_dev": 0.15, "rho_plus": 1.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 1.0,
+          "rho_minus": 0.0,
+          "adjustment_scope": "FULL"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true,
         "tie_break_policy": null
       },
       "witness": {
-        "r_eff": [0.0, 0.0],
+        "r_eff": [
+          0.0,
+          0.0
+        ],
         "all_optimal_solutions": "p_A ∈ [50, 120]，p_B = 170 - p_A ∈ [50, 120]，即 [p_A, p_B] ∈ {[50,120], [85,85], [120,50], ...} 全部取得相同 Z（两项对目标的系数均为 r_eff · q0 = 0）",
         "conclusion": "rho_plus = 1 时越界增项的单价对结算收入**完全无贡献**（§5.3.2：模型将把预算全部调离该项）。两项 r_eff 相同 => lam 落在平台 => 变量的最优取值不唯一。此时 §4.1 的三级变量一致性判定不可执行，必须先设 canonical tie-break（T04-06B）。"
       }
@@ -310,21 +527,66 @@
       "violates": "EC-6",
       "title": "C6 激活 —— 单阈值结构被破坏（v0.2 反例复现）",
       "source": "model_v0.3_R2.md 附录 B 例 1",
-      "expected": {"EC-6": "FAIL", "verdict": "INAPPLICABLE"},
+      "expected": {
+        "EC-6": "FAIL",
+        "verdict": "INAPPLICABLE"
+      },
       "instance": {
         "items": [
-          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 150, "c_i": 30, "p0": 100, "cap": 120, "L": 50, "U": 120, "alpha": 0.0},
-          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 80, "c_i": 80, "p0": 100, "cap": 120, "L": 50, "U": 120, "alpha": 0.0}
+          {
+            "item_id": "A",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 150,
+            "c_i": 30,
+            "p0": 100,
+            "cap": 120,
+            "L": 50,
+            "U": 120,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "B",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 80,
+            "c_i": 80,
+            "p0": 100,
+            "cap": 120,
+            "L": 50,
+            "U": 120,
+            "alpha": 0.0
+          }
         ],
         "B": 17000,
         "P_star": 17000,
-        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL", "theta": 0.02},
-        "active_soft_constraints": ["C6"],
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 0.0,
+          "rho_minus": 0.0,
+          "adjustment_scope": "FULL",
+          "theta": 0.02
+        },
+        "active_soft_constraints": [
+          "C6"
+        ],
         "rounding_reconciliation_present": true
       },
       "witness": {
-        "wrong_solution": {"p": [120.0, 50.0]},
-        "right_solution": {"p": [94.25, 75.75]},
+        "wrong_solution": {
+          "p": [
+            120.0,
+            50.0
+          ]
+        },
+        "right_solution": {
+          "p": [
+            94.25,
+            75.75
+          ]
+        },
         "assertions": {
           "wrong_solution_feasible": true,
           "right_solution_feasible": true,
@@ -338,15 +600,53 @@
       "violates": "EC-7",
       "title": "B 越出边界证书 —— 不可行，不得「硬找解」",
       "source": "model_v0.3_R2.md §6.1/§6.2/§6.3",
-      "expected": {"EC-1": "PASS", "EC-2": "PASS", "EC-3": "PASS", "EC-4": "PASS", "EC-5": "PASS", "EC-6": "PASS", "EC-7": "FAIL", "verdict": "INAPPLICABLE"},
+      "expected": {
+        "EC-1": "PASS",
+        "EC-2": "PASS",
+        "EC-3": "PASS",
+        "EC-4": "PASS",
+        "EC-5": "PASS",
+        "EC-6": "PASS",
+        "EC-7": "FAIL",
+        "verdict": "INAPPLICABLE"
+      },
       "instance": {
         "items": [
-          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 110, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
-          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 90, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0}
+          {
+            "item_id": "A",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 110,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 80,
+            "U": 120,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "B",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 90,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 80,
+            "U": 120,
+            "alpha": 0.0
+          }
         ],
         "B": 15000,
         "P_star": 15000,
-        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 0.0,
+          "rho_minus": 0.0,
+          "adjustment_scope": "FULL"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true
       },
@@ -362,16 +662,60 @@
       "violates": "EC-8",
       "title": "舍入残差按工程量加权累计 —— n·eps_abs 与 sum q0 不同量级",
       "source": "model_v0.3_R2.md §8.2；impl_plan_v321 §8.2、§5.3 S2；precision_profile.rounding",
-      "expected": {"EC-8": "WARN", "verdict": "EXACT"},
+      "expected": {
+        "EC-8": "WARN",
+        "verdict": "EXACT"
+      },
       "instance": {
         "items": [
-          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 30000, "q1_point": 33000, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
-          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 30000, "q1_point": 30000, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
-          {"item_id": "C", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 40000, "q1_point": 36000, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0}
+          {
+            "item_id": "A",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 30000,
+            "q1_point": 33000,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 80,
+            "U": 120,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "B",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 30000,
+            "q1_point": 30000,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 80,
+            "U": 120,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "C",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 40000,
+            "q1_point": 36000,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 80,
+            "U": 120,
+            "alpha": 0.0
+          }
         ],
         "B": 10000000,
         "P_star": 10000000,
-        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "SEGMENT"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 0.0,
+          "rho_minus": 0.0,
+          "adjustment_scope": "SEGMENT"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true,
         "synthetic_note": "本反例只需 sum q0 = 100000 与 B 的量级；工程量取真实项目量级（万米级），故 bound = 0.005 × 1e5 = 500 元。判据本身不依赖具体项目，CLI 的 --from-master 用法可在真实实例上复算。",
@@ -391,15 +735,47 @@
       "violates": "EC-9",
       "title": "cap 为空 —— 定理仍成立，但前缀和算法退化（本项目真实存在）",
       "source": "constraint_schema.C2.null_cap_semantics；真实样本 西永L分区公立学校配电工程·电气设备安装工程",
-      "expected": {"EC-9": "WARN", "verdict": "EXACT"},
+      "expected": {
+        "EC-9": "WARN",
+        "verdict": "EXACT"
+      },
       "instance": {
         "items": [
-          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 1000, "q1_point": 1050, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
-          {"item_id": "031301017001", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 200, "q1_point": 200, "c_i": 30, "p0": 100, "cap": null, "L": 0.01, "U": null, "alpha": 0.0}
+          {
+            "item_id": "A",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 1000,
+            "q1_point": 1050,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 80,
+            "U": 120,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "031301017001",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 200,
+            "q1_point": 200,
+            "c_i": 30,
+            "p0": 100,
+            "cap": null,
+            "L": 0.01,
+            "U": null,
+            "alpha": 0.0
+          }
         ],
         "B": 120000,
         "P_star": 120000,
-        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "SEGMENT"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 0.0,
+          "rho_minus": 0.0,
+          "adjustment_scope": "SEGMENT"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true,
         "synthetic_note": "本反例的判据只关于 EC-9 的判定语义：cap = null 是**合法语义**（ALLOW_EMPTY_NO_CAP，招标不限制该项单价），不是数据缺口。为让 EC-9 有作用对象，此处把该项标为 OPTIMIZABLE——真实项目中该子目的分类以 project_classification_table 为准（脚手架搭拆按 T00-06 规则书本应落 NON_COMPETITIVE）；分类一旦裁定为可优化，本项即适用。",
@@ -407,9 +783,18 @@
       },
       "witness": {
         "misinterpretations": [
-          {"treatment": "当作数据缺口拒收", "outcome": "违反 2026-09-16 裁定（ALLOW_EMPTY_NO_CAP）"},
-          {"treatment": "当作 cap = 0", "outcome": "U_i = 0 < L_i = 0.01 => 直接不可行（数值实现最危险的静默错误）"},
-          {"treatment": "当作 cap = +inf 后直接跑前缀和二分", "outcome": "S(k) 含 inf，二分比较退化，k 的搜索失去意义"}
+          {
+            "treatment": "当作数据缺口拒收",
+            "outcome": "违反 2026-09-16 裁定（ALLOW_EMPTY_NO_CAP）"
+          },
+          {
+            "treatment": "当作 cap = 0",
+            "outcome": "U_i = 0 < L_i = 0.01 => 直接不可行（数值实现最危险的静默错误）"
+          },
+          {
+            "treatment": "当作 cap = +inf 后直接跑前缀和二分",
+            "outcome": "S(k) 含 inf，二分比较退化，k 的搜索失去意义"
+          }
         ],
         "correct_treatment": "阈值分割定理的交换论证**不要求 U_i 有限**（只用内点邻域与箱型区间），故 Phase 1 对含空 cap 项的实例仍然精确。受损的只是「前缀和 + 二分」算法：须把空 cap 项固定为临界项（部分填充项）显式求解，其余项按 r_eff 排序定容。",
         "conclusion": "因此 EC-9 归 B 组（可实现性），判 WARN 而非 FAIL。本项目真实样本已存在 cap 为空项（031301017001 脚手架搭拆），故 Phase 1 算法实现必须内建该分支，不得依赖「所有项都有 cap」这一假前提。"
@@ -421,28 +806,81 @@
       "id": "PE-01",
       "title": "附录 B 例 2R —— SEGMENT 分支（本项目已落 adjustment_scope = SEGMENT）",
       "source": "model_v0.3_R2.md 附录 B 例 2R",
-      "expected": {"EC-1": "PASS", "EC-2": "PASS", "EC-3": "PASS", "EC-4": "PASS", "EC-5": "PASS", "EC-6": "PASS", "EC-7": "PASS", "EC-8": "WARN", "EC-9": "PASS", "verdict": "EXACT"},
+      "expected": {
+        "EC-1": "PASS",
+        "EC-2": "PASS",
+        "EC-3": "PASS",
+        "EC-4": "PASS",
+        "EC-5": "PASS",
+        "EC-6": "PASS",
+        "EC-7": "PASS",
+        "EC-8": "WARN",
+        "EC-9": "PASS",
+        "verdict": "EXACT"
+      },
       "expected_note": "EC-8 判 WARN 是**正确行为**而非缺陷：即使 n = 2、sum q0 = 200 的微型实例，舍入残差上界 0.005 × 200 = 1 元也已超过 eps_total = 0.01 元。这说明「舍入调和环节」不是大规模项目才需要的补丁，而是**任何实例都必需**的输出环节。verdict 仍为 EXACT，因为 EC-8 属 B 组。",
       "instance": {
         "items": [
-          {"item_id": "1", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 110, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
-          {"item_id": "2", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 160, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0}
+          {
+            "item_id": "1",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 110,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 80,
+            "U": 120,
+            "alpha": 0.0
+          },
+          {
+            "item_id": "2",
+            "role": "OPTIMIZABLE",
+            "in_c1_scope": true,
+            "q0": 100,
+            "q1_point": 160,
+            "c_i": 50,
+            "p0": 100,
+            "cap": 120,
+            "L": 80,
+            "U": 120,
+            "alpha": 0.0
+          }
         ],
         "B": 20000,
         "P_star": 20000,
-        "params": {"theta_dev": 0.15, "rho_plus": 0.8, "rho_minus": 0.0, "adjustment_scope": "SEGMENT"},
+        "params": {
+          "theta_dev": 0.15,
+          "rho_plus": 0.8,
+          "rho_minus": 0.0,
+          "adjustment_scope": "SEGMENT"
+        },
         "active_soft_constraints": [],
         "rounding_reconciliation_present": true
       },
       "witness": {
-        "wrong_solution": {"p": [120.0, 80.0]},
-        "right_solution": {"p": [80.0, 120.0]},
+        "wrong_solution": {
+          "p": [
+            120.0,
+            80.0
+          ]
+        },
+        "right_solution": {
+          "p": [
+            80.0,
+            120.0
+          ]
+        },
         "assertions": {
           "wrong_solution_feasible": true,
           "right_solution_feasible": true,
           "wrong_Z_gt_right_Z": false
         },
-        "r_eff": [1.10, 1.24],
+        "r_eff": [
+          1.1,
+          1.24
+        ],
         "proof_of_optimality": "n = 2 且两项各自落在单一线性段内 => 目标在可行区间 p_1 ∈ [80, 120]、p_2 = 200 - p_1 上为线性函数 => 最大值必在端点取得。故比较两个顶点即构成**完整**的最优性验证，无需 KKT 或对偶。",
         "conclusion": "EC 的 A 组全 PASS，verdict = EXACT，阈值分割解 p = [80, 120]（SEGMENT 下把预算给越界项——与 FULL 分支结论相反）经独立端点比较确认最优。本实例可作为 T04-01 解析算法与 T04-04 对拍的正例锚点。"
       }

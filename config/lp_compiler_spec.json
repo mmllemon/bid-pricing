@@ -11,6 +11,7 @@
       "编译期的化简登记（被支配的行、被固定的变量、无法编译的行）",
       "『无手写约束』的可执行证据：CC-01..CC-12",
       "零依赖的模型求值器（evaluate），作为编译结果与业务式之间的独立裁判",
+      "模型符号 → 建模器安全名的可逆编码（导出层自己拥有，见 symbol_encoding 段）",
       "PuLP 的惰性导出与结构对账（缺失 ⇒ SKIP，不 FAIL）"
     ],
     "not_in_scope": [
@@ -84,7 +85,24 @@
     "availability_this_machine": "NOT_INSTALLED（实测 pulp / numpy / scipy / highspy 均不可导入，highs 亦不在 PATH）",
     "consequence": "CC-09（PuLP 结构等价）在本机判 **SKIP**，不是 PASS。它在装有 PuLP 的环境或 T04-02C 中复跑才算验证过。",
     "fallback": "evaluate()：纯 Python 求值器，不需要任何第三方库。它承担 CC-07 的编译侧计算，使编译正确性在零依赖环境下仍可判定。",
-    "forbidden": "编译器不得调用 solve()：本文只负责『模型是什么』。求解属 T04-02C；解校验属 T04-02D。混入求解会让 CC-07 的独立性丧失（同一路径既造模型又出解）。"
+    "forbidden": "编译器不得调用 solve()：本文只负责『模型是什么』。求解属 T04-02C；解校验属 T04-02D。混入求解会让 CC-07 的独立性丧失（同一路径既造模型又出解）。",
+    "recheck_2026-09-17": {
+      "task": "T04-02C",
+      "environment": "仓外隔离 venv（PuLP 3.3.2 + HiGHS 1.15.1），不污染仓库、不进依赖清单",
+      "result": "PASS（挂账闭合）",
+      "what_the_recheck_caught": "首跑即 FAIL 两处，都是本机从未跑过这条判据所掩盖的真问题：① **导出层把变量名交给建模器净化**——PuLP 把 `+ - / > [ ]` 与空格一律换成 `_`，于是 `p_A-B` 与 `p_A_B` 在导出模型里是**同一个变量**（静默合并两个决策变量），且回读时符号对不上 ⇒ 解被判「全部变量缺失」；② **优化方向反向映射错**（把 LpMinimize 读成 MAXIMIZE），会把最大化读成最小化。详见 ADR-0023 决策四与决策七。",
+      "interface_surface": "CC-09 依赖的 PuLP 接口面：prob.constraints / LpConstraint.sense / .items() / .constant / prob.objective / prob.sense / prob.variables()。刻意压到最小——面越小，替身对象单测越有意义，上游换版时受影响的行也越少。",
+      "upstream_drift_warning": "PuLP 3.3.2 已对下列用法发出 DeprecationWarning（PuLP 4.0 将移除）：① `LpVariable(name, ...)` 直接构造 ⇒ 改用 `prob.add_variable(...)`；② `prob.constraints` 作字典映射 ⇒ 4.0 起 `prob.constraints()` 返回列表。两者都落在本编译器的导出层与 `extract_pulp_structure` 上。**本制品不因此改写代码**（当前锁定的就是 3.x），但把它记成显式挂账：升级 PuLP 时必须连同 CC-09 的接口面一起改，并重跑 CC-09。",
+      "recorded_in": "docs/adr/ADR-0023-solver-backend-adapter.md"
+    }
+  },
+  "symbol_encoding": {
+    "why": "建模器对变量名有自己的规矩，且规矩是**净化**而不是报错。导出层若直接把模型符号当名字用，会出现两种都不报错的后果：① 两个不同符号被净化成同一个名字 ⇒ 两个决策变量合并成一个；② 回读时符号对不上 ⇒ 解被判「全部变量缺失」。",
+    "policy": "由**导出层自己拥有**一套可逆编码，把符号映到建模器一定不会改动的字符集（白名单 `[A-Za-z0-9_~]`），而不是在适配层做字符串修补（那是把建模器的规矩抄进业务侧）。",
+    "scheme": "白名单字符（`[A-Za-z0-9_]`）原样保留；其余字符编码为 `~` + 四位十六进制码（`~%04x`）。转义引导符 `~` 属白名单的额外成员且**已实测被建模器放行**，故它以裸字符出现时只可能是引导符本身，解码无歧义。",
+    "verified": "2026-09-17 穷举全部可打印字符实测（PuLP 3.3.2）：建模器**只**改动七个字符——`+ - / > [ ]` 与空格。该清单记在 `compiler.MODELER_MANGLED_CHARS`，并有单测断言编码结果与之不相交。",
+    "check": "CC-09 的两条新增断言：① 编码在**真实符号集**上单射（合并是唯一灾难性失败）；② `decode(encode(s)) == s`（往返一致）。",
+    "not_a_second_source": "编码/解码只有一份实现（`compiler.encode_symbol` / `decode_symbol`），适配层通过 `compiler.pulp_name_map` 取映射，不自行拼名字。"
   },
   "literal_allowlist": {
     "rule": "**数值必须具名。** 表达式内允许出现的数值字面量只有结构系数；其余数值必须先赋给具名常量。",
@@ -173,10 +191,18 @@
     {
       "id": "CC-09",
       "name": "PuLP 后端结构等价",
-      "statement": "导出的 PuLP 对象还原后的结构必须与 CompiledModel 一致（变量集、行数、sense、rhs、目标系数）。",
-      "check": "to_pulp → extract_pulp_structure → 逐项对账。**不调用 solve**：等价性是模型的，不是解的。",
-      "on_violation": "FAIL；PuLP 未安装 ⇒ SKIP（不是 PASS）",
-      "why": "导出层是唯一可能『翻译走样』的地方（sense 反向、常量项符号、目标常数）。本机无 PuLP ⇒ 本判据在本机恒为 SKIP，须在 T04-02C 复跑。"
+      "statement": "导出的 PuLP 对象还原后的结构必须与 CompiledModel 一致：变量集（经符号解码还原）、行系数多重集、逐行 sense、逐行 rhs、目标方向、目标常量、目标系数；且符号编码在真实符号集上必须单射、可逆。",
+      "check": "to_pulp → extract_pulp_structure → 逐项对账。**不调用 solve**：等价性是模型的，不是解的。行比对按**指纹多重集配对**（与 CC-02 同构），不按下标——按下标隐含假设了「模型行序 == 建模器约束插入序」，该假设从未被声明，一旦建模器改字典行为就会以「rhs 不同」的名义报假 FAIL，把真问题淹没。",
+      "on_violation": "FAIL；导出层构造失败（符号闭包缺口）⇒ BLOCKED；PuLP 未安装 ⇒ SKIP（不是 PASS）",
+      "why": "导出层是唯一可能『翻译走样』的地方（sense 反向、系数错位、常量项符号、目标方向、变量名被净化后合并）。本机无 PuLP ⇒ 本判据在本机恒为 SKIP，已由 T04-02C 在装有 PuLP 的环境复跑并判 PASS。",
+      "coverage_fix_2026-09-17": {
+        "problem": "首版只比了变量集、行数、逐行 sense、逐行 rhs 与目标系数，**没有比逐行系数**，也没比目标常量与目标方向。",
+        "consequence": "导出层最常见的三种走样恰好落在未被覆盖的区间：① 系数漏乘/错位；② 目标常量丢符号；③ 最大化↔最小化反向。三者都满足『变量集相同、行数相同、sense 相同、rhs 相同、目标系数相同』。",
+        "nature": "属**覆盖面不足**而非容差不对 ⇒ 按本仓既有原则补全覆盖面，而不是收紧容差。",
+        "owner": "T04-02C",
+        "distinction_layer": "tests/test_solver_backend.py::TestCC09Coverage 用猴补导出器分别注入五种走样（系数交换/常量反号/方向反向/多一行/目标系数改动）与一种编码不单射，逐条确认判 FAIL。"
+      },
+      "robustness_note": "to_pulp 在构造前自查符号闭包，缺口时抛 CompilerError（不是 KeyError）⇒ CC-09 归一到 BLOCKED 并带出缺口清单。**判据不得在它该拦的输入上崩**：否则一份 CC-03 该判 FAIL 的模型会让整条校验以异常形态炸掉，而不是报出一条 FAIL。"
     },
     {
       "id": "CC-10",
@@ -206,7 +232,7 @@
   "consumers": [
     {
       "task": "T04-02C",
-      "uses": "CompiledModel + backend ⇒ HiGHS adapter；并把 CC-09（PuLP 结构等价）在其环境内复跑（本机为 SKIP）"
+      "uses": "CompiledModel + backend ⇒ HiGHS adapter；并把 CC-09（PuLP 结构等价）在其环境内复跑（本机为 SKIP）。**已完成**：复跑判 PASS，并据首跑 FAIL 修出两处真问题（变量名净化导致符号合并、优化方向反向映射），CC-09 覆盖面同时补齐到逐行系数/目标常量/目标方向。"
     },
     {
       "task": "T04-02D",
@@ -222,8 +248,8 @@
     }
   ],
   "open_items": [
-    "CC-09（PuLP 结构等价）在本机恒为 SKIP（无 PuLP）。须在 T04-02C 装好后复跑——在那之前，『导出层没走样』这件事尚未被验证过。",
-    "双 M 对分支定界松弛界的影响：M_hi 由 ub_i^eff − c_i + eps 给出，理论上比 M_lo 大（上界越远越大）。本项目 ub = cap 且下浮报价下 c_i < cap ⇒ M_hi 通常显著大于 M_lo。T04-07 须量化其对收敛的影响，必要时改用指示约束等价的紧形式。",
-    "『不限价 + C1 推不出有限上界』的情形（如 q0 缺失或全项下界为 0）下 M_hi 不存在，编译器登记 NOT_COMPILED、须判 BLOCKED。该分支目前只有单位测试覆盖，尚无真实项目触发。"
+    "双 M 对分支定界松弛界的影响：M_hi 由 ub_i^eff − c_i + eps 给出，理论上比 M_lo 大（上界越远越大）。本项目 ub = cap 且下浮报价下 c_i < cap ⇒ M_hi 通常显著大于 M_lo。T04-07 须量化其对收敛的影响，必要时改用指示约束等价的紧形式。（T04-02C 实测：探针 MILP 变体在 HiGHS 与 CBC 上均即时求解，未见收敛问题，但探针规模不构成证据。）",
+    "『不限价 + C1 推不出有限上界』的情形（如 q0 缺失或全项下界为 0）下 M_hi 不存在，编译器登记 NOT_COMPILED、须判 BLOCKED。该分支目前只有单位测试覆盖，尚无真实项目触发。",
+    "**PuLP 4.0 接口迁移**（T04-02C 实测到的上游漂移）：3.3.2 已对 `LpVariable(name, ...)` 直接构造与 `prob.constraints` 的字典用法发出 DeprecationWarning，4.0 将改为 `prob.add_variable(...)` 与 `prob.constraints()` 返回列表。两者都落在导出层与 extract_pulp_structure 上。当前锁定的就是 3.x，故**不预先改写**；升级时必须连同 CC-09 的接口面一起改并重跑 CC-09。"
   ]
 }

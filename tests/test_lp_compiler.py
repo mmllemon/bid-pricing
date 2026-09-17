@@ -3,8 +3,9 @@
 分三层（与 ``test_lp_formulation`` 同构）：
 
 1. **构造层**：``compile_model`` 的形状与展开（C9 从目标系数、C10 从 T_front）。
-2. **判据层**：CC-01..CC-12 在正确实现上不得出现 FAIL/BLOCKED（本机 CC-09 SKIP；
-   LP 变体 CC-08 SKIP）。
+2. **判据层**：CC-01..CC-12 在正确实现上不得出现 FAIL/BLOCKED（CC-09 视环境能力：
+   无 PuLP ⇒ SKIP、有 PuLP ⇒ PASS，测试按 ``import pulp`` 探测取值；LP 变体 CC-08
+   恒 SKIP）。
 3. **区分度层**（本文件最重要的一层）：把已知的错误编译注入回去，确认对应判据
    真的 FAIL/BLOCKED。**判据「全 PASS」本身不说明任何事——能被错误的值否定
    才是判据的全部价值。**
@@ -34,6 +35,7 @@ from bidpricing.solver.compiler import (
     compile_model,
     evaluate,
     extract_pulp_structure,
+    pulp_available,
     to_pulp,
 )
 from bidpricing.solver.formulation import PROBE_SOLVER_INPUTS, build_formulation, probe_instance
@@ -203,9 +205,22 @@ class TestCheckLayerGreen(unittest.TestCase):
                              fspec=self.fspec, compiler_source=self.src)
         bad = [c.item for c in checks if c.blocks_progress]
         self.assertEqual(bad, [], f"LP 探针不应有 FAIL/BLOCKED：{bad}")
-        # CC-08（无 C7 行）与 CC-09（无 PuLP）必须 SKIP，而不是 PASS
+        # CC-08（LP 变体无 C7 行）必须 SKIP —— 结构性事实，与环境无关。
         self.assertEqual(_cc(checks, "CC-08").status, "SKIP")
-        self.assertEqual(_cc(checks, "CC-09").status, "SKIP")
+        # CC-09 的期望值取决于**环境能力**，测试不得假定本机没装 PuLP。探测
+        # 方式与 ``to_pulp`` 完全一致（``import pulp`` 失败 ⇒ 导出层返回 None）：
+        #   - 无 PuLP ⇒ SKIP（「没检查」不得伪装成「检查过且通过」）；
+        #   - 有 PuLP ⇒ PASS（真比较过；此态若仍 SKIP 说明导出层假缺失）。
+        # 两个方向都是回归：缺能力时假 PASS，与有能力时假 SKIP，同罪。
+        try:
+            import pulp  # noqa: F401
+            expected_cc09 = "PASS"
+        except ImportError:
+            expected_cc09 = "SKIP"
+        self.assertEqual(
+            _cc(checks, "CC-09").status, expected_cc09,
+            "CC-09 期望值须与本机 PuLP 能力一致（有⇒PASS，无⇒SKIP）",
+        )
 
     def test_milp_probe_cc08_actually_checks(self):
         inst, f = _formulation(("C7",))
@@ -392,6 +407,14 @@ class TestPulpLazyExport(unittest.TestCase):
             available = False
         if not available:
             self.assertIsNone(to_pulp(model))
+
+    def test_pulp_available_agrees_with_to_pulp(self):
+        # 探针与导出层必须**同源**：两者对「本机有没有 PuLP」若给出不同答案，
+        # CLI 的「N 条 SKIP」提示就会说反话（装上 PuLP 后仍印「本机无 PuLP」）。
+        # 这是单一来源约束的运行时体现——两个答案来源必须恒等。
+        inst, f = _formulation()
+        model = compile_model(f)
+        self.assertEqual(pulp_available(), to_pulp(model) is not None)
 
     def test_extract_pulp_structure_with_stub(self):
         class _Cons:

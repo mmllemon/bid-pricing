@@ -964,9 +964,26 @@
       ],
       "summary": "业务逻辑不写死求解器；换后端只改配置",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/solver_backend_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/backend.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_solver_backend.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0023-solver-backend-adapter.md"
+        }
+      ],
+      "status": "done",
+      "note": "2026-09-17 完成。交付 `config/solver_backend_spec.json`（分层/能力域/注册表/选择策略/状态域与两张映射表/序列化/BB-01..BB-09/静态审计基准/环境与证据指针）+ `src/bidpricing/solver/backend.py`（唯一允许接触求解器包的模块：选后端 → 复用 T04-02B 导出层 → 求解 → 状态归一 → 解回读 + 9 条 BB 判据）+ CLI `backend-check`（LP/MILP 两变体各 9 条）+ ADR-0023。**核心：把「业务逻辑不写死求解器」做成可机械判定的性质** —— 全仓只有 backend.py 可以 import 求解器包、可以调用 solve()（BB-03 静态 AST 判据）；后端的选择、能力矩阵、状态映射、审计基准全部住制品；加一个后端 = 制品注册一条目 + ADAPTERS 放一个实现体，业务侧零改动。**状态分域**：定义九值归一状态域并把 native→normalized 与 normalized→judge 两条映射分开（求解器的答案是业务结论，判据的答案是「这一环走样没有」，塞进同一枚举正是本仓反复出现的根因）。四条关键裁定：① AMBIGUOUS 独立存在（HiGHS kUnboundedOrInfeasible 与 PuLP Undefined 都自带歧义，折进 INFEASIBLE 是无据断言、折进 ERROR 是无据归因）；② 超时不含结论（kTimeLimit 等按有无 incumbent 分叉：有 ⇒ FEASIBLE 未证最优，无 ⇒ UNSOLVED）；③ UNAVAILABLE（环境缺失⇒SKIP+复跑条件）与 UNSUPPORTED（机制缺失⇒BLOCKED）分属不同档，合并会让一个把 MILP 交给 LP-only 后端的配置以「没跑」的样子长期留档；④ 原生别名表整张住制品，适配层源码不得出现任何别名串（BB-05 静态子判据）。**BB-05 首版按纯文本 grep 把模块自己 docstring 里的说明文字报成违规 —— 判据把正常实现报成违规，改为 AST 取字面量且排除 docstring**（要拦的是代码路径上的硬拷贝，不是文档提到这个词；与 CC-12 同一条教训）。**CC-09 复跑（T04-02B 挂账闭合）**：复跑前先把覆盖面补齐到逐行系数多重集 + 目标方向 + 目标常量，行比对由「按下标」改为「指纹多重集配对」（与 CC-02 同构，原按下标隐含假设了模型行序==约束插入序，该假设从未声明）。**首跑即 FAIL 两处真问题**：① 导出层把变量名交给建模器净化 —— PuLP 构造 LpVariable 时把 `+ - / > [ ]` 与空格一律换成 `_`，于是 p_P-DEC 导出后变 p_P_DEC、适配层按符号回读一个都取不到（解被判「全部变量缺失」），更糟的是两个不同符号净化后同名 ⇒ **两个决策变量静默合并成一个**（实测 a-b 与 a_b 的 .name 都是 a_b）；修法是导出层自持可逆编码（白名单 [A-Za-z0-9_] 原样、其余编码为 ~%04x），并由 CC-09 增判「编码在真实符号集上单射」与「往返一致」——单射那条是导出层唯一灾难性的失败；穷举实测 2026-09-17 PuLP 3.3.2 只改动七个字符（+ - / > [ ] 与空格）。② extract_pulp_structure 的优化方向反向映射对反了（写成 LpMinimize=1 的直觉版，实测 PuLP 是 LpMinimize=1/LpMaximize=-1，我写反）—— 方向若不比对，就永远发现不了有人把 to_pulp 写成 LpMinimize。**修 CC-09 三条出口不分家的缺陷**：to_pulp 原先在符号闭包缺口时让 lpSum 抛 KeyError，把整条校验以异常形态炸掉（而不是报一条 FAIL）—— 改为构造前自查并抛 CompilerError ⇒ CC-09 归一 BLOCKED，且「导出层拒绝」与「本机没装 PuLP」不再被读成同一件事。**能力不足即 BLOCKED 不得降级**：把含二元变量的模型交给 LP-only 后端会静默放松整数性（与 C7 共用 M 同族失效）；声明未实现的条目同样判 UNSUPPORTED 且不回退。**替换性实证**：active 由 pulp_highs 改为 pulp_cbc（或 --prefer），源码零改动，HiGHS 与 CBC 给出同一最优值 460000.0、C1 残差 0（0.004s vs 0.057s）；BB-06 在只有一个候选时判 FAIL 而非 PASS（无第二候选即无证据，不得把「无从验证」记成「已验证」）。**仓外验证**：为闭合 CC-09 在仓外建隔离 venv（PuLP 3.3.2 + HiGHS 1.15.1），仓内维持零依赖（无 PuLP 时 BB-07/BB-08/BB-09 与 CC-09 判 SKIP，BB-01..BB-06 仍全可判）。**CC-12 在适配层新写的代码上当场生效**：int(...,16) 的裸进制被自己抓出，提成 SYMBOL_ESCAPE_RADIX。测试 587 → 659（tests/test_solver_backend.py 62 项，每条 BB 判据配错误注入的区分度层 + CC-09 六种走样注入 + 符号编码回归）；零依赖环境 659 OK / 9 SKIP，装 PuLP 环境 659 OK / 0 SKIP。**输出文案的环境断言纠偏**：compile-check/backend-check 的「N 条 SKIP」提示原写死「本机无 PuLP」，在装 PuLP 的机器上成为假话（CC-09 已实跑，余下的 SKIP 是 LP 变体 CC-08 的结构性豁免）—— 改为读具名探针 pulp_available()（与 to_pulp 同源）决定文案，并加单测断言探针与导出层答案恒等；测试侧 TestCheckLayerGreen 原先断言 CC-09==SKIP（只在零依赖机成立），改为按 import pulp 探测取值（缺能力时假 PASS 与有能力时假 SKIP 同属回归）。**上游漂移实测并挂账**：PULP_CBC_CMD 已弃用（4.0 移除，pulp_cbc 因此是随版本失效的第二候选，升级须同步改制品否则 BB-06 会真 FAIL）；LpVariable(name,...) 直接构造与 prob.constraints 字典用法 4.0 将变（影响面在 T04-02B 导出层）。"
     },
     {
       "id": "T04-02D",

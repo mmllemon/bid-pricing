@@ -1,0 +1,358 @@
+{
+  "spec_id": "solver_backend_v1",
+  "task": "T04-02C",
+  "title": "求解后端适配层：业务逻辑不写死求解器",
+  "source_of_truth": "实施路线 v3.2.1 T04-02C（HiGHS backend adapter／「业务逻辑不写死求解器；换后端只改配置」）；config/lp_compiler_spec.json 的 backend 段（T04-02B 已声明 modeler=PuLP、solver=HiGHS、本机 NOT_INSTALLED、CC-09 恒 SKIP、须 T04-02C 复跑）；config/lp_compiler_spec.json 的 consumers[T04-02C]",
+  "task_summary": "把「业务逻辑不写死求解器」做成可机械判定的性质：业务侧只认识一个入口 solve_compiled(CompiledModel) 与一套**归一状态域**；后端由本制品的 registry 注册与选择，代码零改动即可替换（BB-06 的证据是替换后整链路跑通、且源码中不存在指向某一后端的分支）。同时在本制品负责的环境内复跑 CC-09（PuLP 结构等价，T04-02B 本机恒 SKIP），并把 CC-09 的覆盖面补齐到逐行系数。",
+  "scope_boundary": {
+    "in_scope": [
+      "CompiledModel → 后端对象 → 解 的适配层（唯一允许接触求解器包的模块）",
+      "后端的注册与选择全部来自本制品（代码内不得出现指向某一后端的分支）",
+      "后端原生状态 → 归一状态域的映射，以及归一状态 → 判据状态的映射",
+      "能力矩阵与能力要求：模型形态（LP/MILP）决定所需能力，不足则 BLOCKED 而非降级",
+      "解的回读与两条独立对账（求解器自报目标值 vs 独立复算；解 vs 编译侧 + 业务侧可行性）",
+      "T04-02B 挂账项 CC-09 的复跑与覆盖面补齐（逐行系数、目标常量、目标方向）"
+    ],
+    "not_in_scope": [
+      "解校验器 = T04-02D。本制品的 BB-07/BB-08 只回答「后端这条链路有没有走样」，不产出解校验报告。",
+      "不可行诊断 = T04-02E。后端报 INFEASIBLE 时本制品只归一到状态，不解释为什么。",
+      "C7 的 MILP 最优性验收 = T04-07（禁用 KKT 证 MILP 最优性）。本制品只出解，不出最优性证明。",
+      "Phase 1 解析解 = T04-01；Phase 1/2 对拍 = T04-04。",
+      "M_hi 对分支定界收敛的影响量化 = T04-07（T04-02B 挂账项）。"
+    ],
+    "boundary_note": "与 T04-02B 的分工是「模型是什么 vs 谁来解」：T04-02B 产出求解器无关的 CompiledModel 并且**禁止调用 solve()**（混入求解会让 CC-07 的独立性丧失——同一路径既造模型又出解）。本制品接手之后唯一做的事就是：「把已冻结的模型交给一个由配置选中的后端」。因此本制品**不得**修改任何系数或行——它只搬运。BB-07 的对账正是这一点的证据：若适配层偷偷调过模型，求解器自报的目标值就会与独立复算值分叉。"
+  },
+  "layering": {
+    "business_layer": "formulation / compiler / contracts / io / cli —— 只依赖 CompiledModel 与 SolveResult（纯 Python 数据类），不得 import 任何求解器包、不得调用 solve()",
+    "adapter_layer": "src/bidpricing/solver/backend.py —— 唯一允许接触求解器包的模块；负责选后端、建后端对象（复用 T04-02B 的导出层）、求解、回读、状态归一",
+    "why_single_module": "「换后端只改配置」的可判定形式就是「代码里不存在『指向某一后端』的分支」。若允许第二个模块 import pulp，那么『换后端』就必须改两个地方，判据也就无从机械表达。BB-03 把这条纪律做成静态判据。",
+    "naming_rule": "后端名（pulp / highspy / cbc / highs）只允许出现在：① 本制品的 registry；② adapter_layer 的 import 语句；③ 诊断文本。**不得出现在任何 if/elif 分支条件里**——那是「按名字写死」的另一副面孔，BB-06 检此项。"
+  },
+  "capabilities": {
+    "domain": ["LP", "MILP", "QP", "SOCP"],
+    "note": "能力域是**数值形态**的分类，不是后端名。SOCP 单列的理由是 T04-02B 已裁定的事实：C11 的 σ(d) 是二阶锥而 HiGHS 不含 SOCP，故 C11 移出 LP 判 DISCRETE_CHECK。把 SOCP 放进能力矩阵的意义是——将来若真有人把 C11 写回模型，能力匹配会当场判 BLOCKED，而不是让后端静默忽略该约束。",
+    "requirement": {
+      "LP": ["LP"],
+      "MILP": ["MILP"],
+      "UNKNOWN": ["LP", "MILP"],
+      "DISCRETE_CHECK": [],
+      "_why_unknown": "Formulation.solver_form 若为无法识别的取值，要求取并集（LP∪MILP）——宁可判 BLOCKED 也不得按「低要求」放行。反之若把 UNKNOWN 当成 LP 处理，一个含二元变量的模型会交给只支持 LP 的后端，后者会**静默放松**整数性。",
+      "_why_discrete_check_empty": "DISCRETE_CHECK 是**解出来之后**的合规检查（C11），它不进入模型，故不要求任何求解能力。要求为空集不是「放过」，而是「没有可放的」——它由 CC-10 与 T04-02D 负责，不是本层的事。"
+    }
+  },
+  "registry": {
+    "_why_config": "注册表在制品里而不是代码里，是「换后端只改配置」的字面含义。代码只认识『名字 → 条目』的查表，不认识任何具体后端。",
+    "entries": [
+      {
+        "name": "pulp_highs",
+        "kind": "MODELER_AND_SOLVER",
+        "implemented": true,
+        "modeler": "PuLP",
+        "solver": "HiGHS",
+        "package": "pulp",
+        "adapter": "PULP",
+        "solver_factory": "HiGHS",
+        "status_family": "PULP",
+        "default_options": {"msg": false},
+        "_why_default_options": "求解器日志的开关是**后端参数**，不是业务参数 ⇒ 住制品。写成代码里的 `msg=False` 会让『换后端』又多一个代码落点。",
+        "provides": ["LP", "MILP", "QP"],
+        "persistent": true,
+        "roles": ["选中的默认后端", "复用 T04-02B 的 to_pulp 导出层"],
+        "notes": "HiGHS 由 PuLP 3.x 经 highspy 调用。QP 能力来自 HiGHS 本身（PuLP 侧不建模二次目标）。本条目对应实施路线里写死的 `modeler=PuLP / solver=HiGHS`——但那份写死只存在于**制品**中。"
+      },
+      {
+        "name": "pulp_cbc",
+        "kind": "MODELER_AND_SOLVER",
+        "implemented": true,
+        "modeler": "PuLP",
+        "solver": "CBC",
+        "package": "pulp",
+        "adapter": "PULP",
+        "solver_factory": "PULP_CBC_CMD",
+        "status_family": "PULP",
+        "default_options": {"msg": false},
+        "provides": ["LP", "MILP"],
+        "persistent": false,
+        "roles": ["备用后端", "「换后端只改配置」的实证手段"],
+        "notes": "CBC 随 PuLP 一同安装。它与 pulp_highs 走**同一条代码路径、同一个导出层**，差别只在制品里的 solver_factory ⇒ 把 active 从 pulp_highs 改成 pulp_cbc，代码零改动即换求解器。这是本制品能给出的最直接的替换性证据。"
+      },
+      {
+        "name": "highspy_direct",
+        "kind": "SOLVER_ONLY",
+        "implemented": false,
+        "modeler": null,
+        "solver": "HiGHS",
+        "package": "highspy",
+        "adapter": "HIGHS_DIRECT",
+        "solver_factory": null,
+        "status_family": "HIGHS",
+        "provides": ["LP", "MILP", "QP"],
+        "persistent": true,
+        "roles": ["声明的能力来源（能力矩阵完整性的参照）"],
+        "notes": "**已声明但未实现**：本条目存在的意义不是「马上能用」，而是让能力矩阵不因『没实现所以不在表里』而失真。选择到未实现条目 ⇒ 归一为 UNSUPPORTED（⇒ judge BLOCKED）且**不得**回退到同能力的其它后端——静默回退会让「配置说了什么」与「实际跑了什么」分叉。实现它属后续任务。",
+        "unimplemented_policy": "UNSUPPORTED（不回退、不报 ERROR）。"
+      },
+      {
+        "name": "none",
+        "kind": "NONE",
+        "implemented": true,
+        "modeler": null,
+        "solver": null,
+        "package": null,
+        "adapter": "NONE",
+        "solver_factory": null,
+        "status_family": null,
+        "provides": [],
+        "persistent": true,
+        "roles": ["零第三方依赖环境下的占位后端"],
+        "notes": "本仓的硬约束是零第三方依赖（实测无 pulp / numpy / scipy / highspy）。没有这条占位项时，一个没装任何求解器的环境里 registry 会空——而「注册表为空」与「后端都没装」是两种不同的状态，前一种是机制缺失（BLOCKED），后一种是环境缺失（SKIP）。占位项让这两者可区分。",
+        "unavailable_policy": "始终 available=true（它确实可用：可用性就是「什么都不做」），但**不提供任何能力** ⇒ 任何真实模型的选择都会落在能力不足上判 UNSUPPORTED。这是刻意的：它把「环境没装求解器」翻译成「机制上做不到」，避免它伪装成 SKIP。"
+      }
+    ]
+  },
+  "selection": {
+    "active": "pulp_highs",
+    "fallback_chain": ["pulp_cbc"],
+    "on_missing_active": "按 fallback_chain 顺序取第一个『已实现 + 已安装 + 能力满足』的条目",
+    "on_unavailable": "SKIP_WITH_RERUN_CONDITION",
+    "on_unavailable_note": "后端包未安装**不等于模型错**。判 SKIP（本轮没跑），并附复跑条件；**不得**判 FAIL。反过来也不得把它当成 PASS——T04-02B 的 CC-09 就是这个坑的原文照抄版（本机恒 SKIP，而它被读成过『已通过』的风险）。",
+    "on_capability_short": "BLOCKED",
+    "on_capability_short_note": "所需能力不在所选后端的能力集内 ⇒ 归一 UNSUPPORTED ⇒ **BLOCKED**（算式算不出，ADR-0013 正确性档）。**不得**降级到弱后端、**不得**放松模型（例如把 MILP 的二元变量当连续处理）。这类降级不会报错，只会给出一个看起来合理的错解——与 T04-02B 里 C7 共用 M 的失效模式同族。",
+    "never_downgrade_capability": true,
+    "unimplemented_policy": "UNSUPPORTED（不回退，⇒ BLOCKED）",
+    "_why_no_silent_fallback_on_unimplemented": "若「声明为未实现」也能靠回退拿到解，那么『能力矩阵声明了什么』就与『实际算了什么』脱钩。制品是真相来源的前提是它的取值有后果——这里的后果就是 UNSUPPORTED。"
+  },
+  "status": {
+    "_problem": "后端各自有一套原生状态词表（HiGHS 是 kOptimal/kInfeasible/kUnboundedOrInfeasible/...，PuLP 是 Optimal/Not Solved/Infeasible/Unbounded/Undefined）。若把这套词表直接当结果用，下面三组状态会被混成一种：① 「已证无可行解」与「后端分不清无解/无界」；② 「求解器算完了但没算出结论」与「模型非法」；③ 「没跑」（后端未安装／能力不支持）与「跑了且判定无解」。混用后果：把「没检查」报成「检查过且不通过」，或把「不确定」报成「确定」。",
+    "_why_own_domain": "求解结果**不是**判据结论。求解器的答案是业务结论（这个模型有没有解、最优值多少），判据的答案是「这一环有没有走样」。把两者塞进同一个枚举，正是本仓反复出现的根因（把两种机器上应可区分的状态混成一种）。故本制品定义**两个**映射：native → normalized（求解语义），normalized → judge（判据语义）。",
+    "normalized": [
+      {"id": "OPTIMAL", "class": "CONCLUSION", "means": "已证最优", "judge": "PASS", "carries_solution": true},
+      {"id": "FEASIBLE", "class": "CONCLUSION", "means": "找到可行解，最优性未证（时限/迭代上限中断、或后端不报最优性证明）", "judge": "WARN", "carries_solution": true, "obligation": "记下未证最优这一事实；不得据它宣称最优解"},
+      {"id": "INFEASIBLE", "class": "CONCLUSION", "means": "已证无可行解", "judge": "FAIL", "carries_solution": false},
+      {"id": "UNBOUNDED", "class": "CONCLUSION", "means": "已证无界", "judge": "FAIL", "carries_solution": false},
+      {"id": "AMBIGUOUS", "class": "CONCLUSION", "means": "后端**自身**无法区分无可行解与无界（HiGHS 的 kUnboundedOrInfeasible、PuLP 的 Undefined）", "judge": "WARN", "carries_solution": false, "obligation": "须换后端复跑消歧；**不得**折进 INFEASIBLE 或 UNBOUNDED，也**不得**折进 ERROR（没有证据表明求解器出错）"},
+      {"id": "UNSOLVED", "class": "NO_CONCLUSION", "means": "求解器正常退出但既无解也无证明（时限内无 incumbent）", "judge": "BLOCKED", "carries_solution": false},
+      {"id": "ERROR", "class": "NO_CONCLUSION", "means": "模型非法 / 求解器内部错 / 后端接口不可用", "judge": "BLOCKED", "carries_solution": false},
+      {"id": "UNAVAILABLE", "class": "NOT_RUN", "means": "后端包未安装（**探针产出，非求解器产出**）", "judge": "SKIP", "carries_solution": false, "obligation": "附复跑条件"},
+      {"id": "UNSUPPORTED", "class": "NOT_RUN", "means": "后端不提供所需能力、或该条目声明为未实现（**选择层产出，非求解器产出**）", "judge": "BLOCKED", "carries_solution": false, "obligation": "附能力缺口说明"}
+    ],
+    "_why_unsupported_is_blocked_not_skip": "UNAVAILABLE 与 UNSUPPORTED 都不是求解器产出，但它们的**成因档位不同**：前者是环境缺失（包没装——换台机器就好），后者是机制缺失（配置指了一个做不到的组合——换机器也一样）。按 ADR-0013 的三档：环境缺失只是『本轮没跑』⇒ SKIP（附复跑条件）；机制/能力不匹配是『算式算不出』⇒ BLOCKED。若把两者都判 SKIP，一个把 MILP 交给 LP-only 后端的配置会以『没跑』的样子长期留在台账里，永远等不到复跑条件被满足。",
+    "_class_rule": "NOT_RUN 类的取值**不可能**由任何求解器原生状态产生——它们由探针/选择层产出。BB-05 把这条做成判据：若某个原生状态映射到 NOT_RUN 类，说明有人在用「没跑」冒充求解结论。",
+    "_judge_rule": "normalized → judge 的映射只分四类语义：得到可用结论 PASS／结论不完整 WARN／结论为『无解』 FAIL／没算出 BLOCKED／没跑 SKIP。**不得**让 NOT_RUN 类映到 PASS 或 FAIL（那会把流程状态冒充成业务结论）。",
+    "_single_source": "原生别名表整张表都住在本制品里，**适配层源码里不得出现任何一个别名串**（BB-05 的静态子判据：别名只在运行时从后端对象读回，代码里写死即出现第二个真相来源）。",
+    "_why_family_keyed": "别名必须**按后端族**查，不得扁平化成一张全局表。不同族可能给出同一个字符串而语义不同（一旦扁平化，后加入的那一族会静默改写先加入者的语义）。扁平化冲突是 FAIL 而非取其一。",
+    "resolution_rules": {
+      "_why": "有些原生状态单独一个字符串并不含结论（例如「超时」——它只说求解器为什么停，不说手上有没有解）。这类状态不能直接映到一个归一值，而要按**副产品**（有没有 incumbent）分叉。分叉规则也住在本制品里，代码只实现规则、不含规则取值。",
+      "INCUMBENT_DEPENDENT": {
+        "inputs": ["has_incumbent"],
+        "means": "按『求解器是否已持有可行解』在有/无两支上各取一个归一值",
+        "why": "「超时」这一格里同时装着两种完全不同的处境：已经拿到可行解（最优性未证）与什么都没拿到。合并它们，就会把『有解但未证最优』报成『没算出来』，或反向把『没算出』报成『有解』。",
+        "with_incumbent": "FEASIBLE",
+        "without_incumbent": "UNSOLVED",
+        "implemented_by": "solver/backend.py 的 normalize_status（按 rule 取 token，取值由本表给）"
+      }
+    },
+    "native_map": [
+      {
+        "backend_family": "HIGHS",
+        "package": "highspy",
+        "source": "highspy.HighsModelStatus 枚举（经 PuLP 的 LpStatus 或 highspy 直连回传）",
+        "requires_incumbent": ["kTimeLimit", "kIterationLimit", "kSolutionLimit", "kInterrupt"],
+        "_requires_incumbent_why": "这四格都只说「求解器为什么停」，不含结论。有 incumbent 时它们至少兑现了一个可行解 ⇒ FEASIBLE；没有 ⇒ UNSOLVED。把它们统一读成「没算出来」，会让一次『已拿到可用解但未证最优』的求解看起来完全失败。",
+        "aliases": [
+          {"native": "kOptimal", "normalized": "OPTIMAL"},
+          {"native": "kInfeasible", "normalized": "INFEASIBLE"},
+          {"native": "kUnbounded", "normalized": "UNBOUNDED"},
+          {"native": "kUnboundedOrInfeasible", "normalized": "AMBIGUOUS", "_why": "HiGHS **自己说**它分不清。折进 INFEASIBLE 是无据断言；折进 ERROR 是无据归因。"},
+          {"native": "kTimeLimit", "conditional": "INCUMBENT_DEPENDENT"},
+          {"native": "kIterationLimit", "conditional": "INCUMBENT_DEPENDENT"},
+          {"native": "kSolutionLimit", "conditional": "INCUMBENT_DEPENDENT"},
+          {"native": "kInterrupt", "conditional": "INCUMBENT_DEPENDENT"},
+          {"native": "kModelInvalid", "normalized": "ERROR"},
+          {"native": "kSolveError", "normalized": "ERROR"},
+          {"native": "kLoadError", "normalized": "ERROR"},
+          {"native": "kPresolveError", "normalized": "ERROR"},
+          {"native": "kPostsolveError", "normalized": "ERROR"},
+          {"native": "kNotSet", "normalized": "UNSOLVED"},
+          {"native": "kUnknown", "normalized": "AMBIGUOUS", "_why": "未知取值 ⇒ 不可默认成任何确定的结论。"}
+        ]
+      },
+      {
+        "backend_family": "PULP",
+        "package": "pulp",
+        "source": "pulp.LpStatus[prob.status] 的字符串取值",
+        "requires_incumbent": [],
+        "aliases": [
+          {"native": "Optimal", "normalized": "OPTIMAL"},
+          {"native": "Infeasible", "normalized": "INFEASIBLE"},
+          {"native": "Unbounded", "normalized": "UNBOUNDED"},
+          {"native": "Not Solved", "normalized": "UNSOLVED", "_why": "PuLP 的 Not Solved = 尚未求解/求解器未返回状态。它既不是无解也不是出错 ⇒ UNSOLVED。"},
+          {"native": "Undefined", "normalized": "AMBIGUOUS", "_why": "PuLP 把『求解器没给出解』与『无界/不可行未定』都塞在这一格里。既然它自己不含可分的信息，就不得由适配层替它选一个确定结论——**这里是全表最容易出错的一格**。"}
+        ],
+        "verified_by": "tests/test_solver_backend.py 的实测：对 Optimal / Infeasible / Unbounded 三个探针各跑一次，记录 PuLP 实际回传的 LpStatus 字符串并与本表回归比对（避免按文档臆测词表）",
+        "unknown_native_policy": "映射表未命中的原生状态 ⇒ AMBIGUOUS 并**把原值留在诊断里**。不得抛错（会让一个新的后端状态把整条链路打挂），也不得默认成 OPTIMAL/INFEASIBLE（那是替后端下结论）。"
+      }
+    ]
+  },
+  "serialization": {
+    "on_full_solution": "回读每个**模型变量**的取值；用编译后的模型逐位回抄，不得只抄 p 列（C7 的 z、C9 的 Z 也须回读，否则 BB-08 的可行域复核无从进行）。",
+    "on_missing_value": "某变量取值为 None ⇒ 记入 missing 并**整体判不可用**；不得当 0 累加（evaluate 的既有约定）。",
+    "binary_rounding": "二元变量按 0.5 阈值取整**之前**先检查其偏离量；偏离超过 tolerance 即记入诊断（后端可能返回 1e-9 级的近似整数）。取整本身不做——回传求解器给出的值，让 BB-08 按容差判。",
+    "objective": "同时记录 solver_reported_objective（后端自报）与 recomputed_objective（独立复算）——BB-07 就是这两者的对账。只记一个会让该判据失去一侧。"
+  },
+  "checks": [
+    {
+      "id": "BB-01",
+      "name": "注册表声明完备（后端来源单一）",
+      "statement": "active 键必须命中 registry 的某一条目；每条目必须声明 name / kind / implemented / adapter / provides / package；implemented=true 的条目必须能被代码识别（adapter 取值在已实现集合内）。",
+      "check": "读制品逐字段校验；active 未命中即 BLOCKED。",
+      "on_violation": "BLOCKED",
+      "why": "「未定不得静默处理」在适配层的形态就是：选中的后端没被声明。这属于机制缺失（算式算不出），不是环境缺失——两者在状态域里分别是 UNAVAILABLE 与 BLOCKED，不可互相顶替。"
+    },
+    {
+      "id": "BB-02",
+      "name": "能力匹配（不得静默降级）",
+      "statement": "模型形态所需能力必须是所选后端能力集的子集；不足则 BLOCKED，且**不得**在 fallback 链中挑一个能力更弱但可用的后端顶上。",
+      "check": "capabilities.requirement[model.solver_form] ⊆ entry.provides；并对每条 fallback 候选逐项复算，凡能力不足者不得出现在选中理由里。",
+      "on_violation": "BLOCKED",
+      "why": "把含二元变量的模型交给只支持 LP 的后端，后端会**静默放松整数性**并返回一个『可行』的错解。这与 T04-02B 的 C7 共用 M 是同族失效：不报错、结果看着合理、结论是错的。"
+    },
+    {
+      "id": "BB-03",
+      "name": "业务层零直接依赖求解器（静态）",
+      "statement": "① 全仓 src/bidpricing/** 中，求解器包（pulp / highspy / highs / scipy / mip / ortools / cvxpy / gurobipy / cplex）只允许在 adapter_layer 声明的模块内被 import，且必须是**函数体内的惰性 import**（模块级 import 会让『换后端只改配置』在 import 期就断掉）；② 调用求解的动作（名为 solve 的属性调用、求解器工厂的实例化）只允许出现在 adapter_layer 内。",
+      "check": "AST 遍历全部模块，取 Import/ImportFrom 的模块名与 Call 的目标属性名，与制品声明的 allow_module / allow_call 比对，逐个报出越界位置（文件:行）。",
+      "on_violation": "FAIL",
+      "why": "这是「业务逻辑不写死求解器」唯一的静态证据。动态证据（换后端后能跑）只能证明**当前**没写死；静态判据才能拦住下一次有人顺手在 contracts 里 import pulp。"
+    },
+    {
+      "id": "BB-04",
+      "name": "后端缺失 ≠ 模型错",
+      "statement": "后端未安装时，归一状态必须落在 NOT_RUN 类（UNAVAILABLE / UNSUPPORTED），判 SKIP 并附复跑条件；**不得**产出 INFEASIBLE / FAIL。",
+      "check": "以『包不存在』的后端跑一遍选择与求解路径，断言 status.class == NOT_RUN 且 judge == SKIP；同时断言配置的 on_unavailable 策略与实际动作一致。",
+      "on_violation": "FAIL",
+      "why": "把『没跑』报成『跑了且无解』是治理三档里最贵的错——它会让一个从没被验证过的环节看起来像验证过了（T04-02B 的 CC-09 本机恒 SKIP 就是这个坑的现成样本）。"
+    },
+    {
+      "id": "BB-05",
+      "name": "状态域不合并",
+      "statement": "① native_map 覆盖制品声明的**全部**原生别名；② 任何原生别名的归一结果不得落在 NOT_RUN 类；③ 声明的归一状态必须两两不同语义：AMBIGUOUS 不得与 INFEASIBLE / UNBOUNDED 重合，UNAVAILABLE 不得与 UNSUPPORTED 重合（两者成因不同：环境缺失 vs 机制缺失）；④ normalized → judge 的映射不得把 NOT_RUN 类映到 PASS 或 FAIL。",
+      "check": "把 native_map 的每一条别名注入归一函数逐条求值（**全表遍历，不抽样**），比对四组断言。",
+      "on_violation": "FAIL",
+      "why": "本仓的根因一直在同一条线上：把两种机器上应可区分的状态混成一种。适配层是这条线上的新落点——『不可行』『分不清』『没跑』『能力不足』在朴素实现里都会塌缩成一个 'failed'。判据必须逐条走完全表，否则新增一个别名就能绕过。"
+    },
+    {
+      "id": "BB-06",
+      "name": "换后端只改配置（可替换性）",
+      "statement": "① 后端的选择结果完全由制品决定：对同一模型，改制品的 active 即改变选中的后端，**源码零改动**；② 源码中不得出现在 if/elif 条件里比较后端名字的分支（名字只允许出现在 import、诊断文本与制品里）；③ 注入一个制品外声明的替身后端，整链路（选后端 → 求解 → 状态归一 → 解回读）必须跑通。",
+      "check": "以两份仅 active 不同的制品调 select_backend，断言选中后端随之改变；AST 扫 adapter 源码的字符串常量，与 registry 的后端名求交，凡出现在比较表达式中的即报出；对替身后端跑一次完整 solve_compiled。",
+      "on_violation": "FAIL",
+      "why": "「换后端只改配置」是一句可被证伪的话。它有三种常见的假成立：靠回退链蒙对、名字在分支里写死、替身后端跑不通。三条分别对应上面三个子判据。"
+    },
+    {
+      "id": "BB-07",
+      "name": "求解器自报目标值 vs 独立复算（跨来源）",
+      "statement": "后端自报的目标值与用编译后模型独立复算的目标值必须一致（含目标常量）。",
+      "check": "一侧取后端回传的目标值（求解器内部累加路径）；另一侧用 evaluate(model, x).objective（本仓纯 Python 求和）。两侧实现完全独立。",
+      "on_violation": "FAIL",
+      "why": "这是适配层唯一「数值语义」的对账。CC-09 只比**结构**（sense/rhs/系数），抓不到目标常量丢符号、导出时把常量并进系数、或后端把最大化当最小化。而这一类错误在结构上完全正常。两侧必须跨来源：若都走 evaluate，本判据恒真。",
+      "skip_rule": "未获得解（NOT_RUN / NO_CONCLUSION）⇒ SKIP，并显式说明 SKIP ≠ PASS。"
+    },
+    {
+      "id": "BB-08",
+      "name": "解的双侧可行性",
+      "statement": "求解器给出的解必须同时通过：编译侧 evaluate(model, x).feasible 与业务侧 check_solution(instance, p).feasible。",
+      "check": "两侧独立实现：一侧按编译后的稀疏行求和，一侧按业务式 R_i/C1/C2/C3/C5 重算。任一侧不可行即 FAIL，并报出违反项。",
+      "on_violation": "FAIL",
+      "why": "求解器说 Optimal 只保证「在**它拿到的模型**上最优」。若导出层走样，它会在一个错误的模型上给出正确的最优解。本判据把「解」与「口述的模型」重新对上——与 CC-07 同构，但对象从『人工给的报价向量』变成『求解器产出的报价向量』，因而覆盖的是求解链路而不是编译链路。",
+      "skip_rule": "无解 ⇒ SKIP（不是 PASS）。"
+    },
+    {
+      "id": "BB-09",
+      "name": "T04-02B 挂账项 CC-09 的闭合",
+      "statement": "在能导入 PuLP 的环境里，CC-09（PuLP 后端结构等价）必须判 PASS；仍判 SKIP 即视为未闭合。",
+      "check": "调用 check_compiled 取 CC-09 的 status；若 PuLP 可导入而 status != PASS ⇒ FAIL，并原样带出 CC-09 的诊断。",
+      "on_violation": "FAIL",
+      "why": "T04-02B 明确留下这条挂账（『本机恒 SKIP，须 T04-02C 复跑』）。把它做成判据而不是文档段落，是为了防它二次挂账——这种缺口一旦靠文字记账，下一轮就没人再记得它没被验证过。",
+      "skip_rule": "PuLP 不可导入 ⇒ SKIP，且必须带上复跑条件原文。"
+    }
+  ],
+  "cc09_coverage_fix": {
+    "problem": "T04-02B 的 CC-09 只比对了变量集、行数、逐行 sense、逐行 rhs 与**目标系数**，**没有比对逐行系数**，也没比目标常量与目标方向。",
+    "consequence": "导出层最常见的三种走样恰好落在未被覆盖的区间里：① 系数漏乘/错位（如 lpSum 里把两个符号弄反）；② 目标常量丢符号（`+ constant` 与 `- constant`）；③ 最大化/最小化方向反了。三者都满足『变量集相同、行数相同、sense 相同、rhs 相同、目标系数相同』。",
+    "fix": "CC-09 改为**按行指纹的多重集配对**（与 CC-02 同构：sense + 取整后的 rhs + 取整后的系数多重集），并补上目标方向与目标常量的对账。顺序无关，因为 PuLP 的约束字典顺序不是契约。",
+    "why_multiset_not_index": "原实现按 index 逐行比对，隐含假设了『CompiledModel.rows 的顺序 == PuLP constraints 的插入顺序』。这个假设当前成立但从未被声明，一旦 PuLP 版本改变字典行为或导出层调整插入顺序，判据会以『rhs 不同』的名义报出一堆假 FAIL，而真问题（某行的系数错了）反被淹没。",
+    "cardinality": "本修正属『覆盖面不足』而非『容差不对』——按本仓既有原则（拆分/补全判据，而非收紧容差），此处应补全覆盖面。",
+    "owner": "T04-02C（本制品）",
+    "recorded_in": "docs/adr/ADR-0023-solver-backend-adapter.md 决策四"
+  },
+  "audit": {
+    "_why": "BB-03/BB-06 是静态判据，它们的比对基准（哪些包算求解器包、哪些模块可以豁免、拿谁的名字去查分支）必须住在本制品里。写在代码里就等于让被测对象自带答案。",
+    "solver_packages": ["pulp", "highspy", "highs", "scipy", "mip", "ortools", "cvxpy", "gurobipy", "cplex"],
+    "allow_lazy_import_in": [
+      "solver/backend.py",
+      "solver/compiler.py"
+    ],
+    "allow_solve_call_in": [
+      "solver/backend.py"
+    ],
+    "why_compiler_is_exempt_from_import": "T04-02B 的 to_pulp / extract_pulp_structure 是**导出层**（模型 → 后端对象），属「模型长什么样」的延伸，且其 import 已经在函数体内部（惰性）。它豁免的只是『import 白名单』，**不豁免**『solve 调用白名单』——编译器调用 solve() 会让 CC-07 的独立性丧失（同一路径既造模型又出解），这与 T04-02B 制品里 forbidden 段的规定一致。",
+    "why_lazy_not_module_level": "模块级 import 会让『换后端只改配置』在 import 期就断掉：没装 pulp 的机器连 import 业务模块都失败，于是判据全部退化为 ImportError，而不是干净的 SKIP。惰性 import 让『没装』成为可归一的运行时状态。",
+    "calls_must_not_be_module_level": false,
+    "comparison_branch_rule": "registry 的后端名（含 package 名与条目 name）不得出现在 if / elif / while 的条件表达式里；也不得出现在 `.get(` 的键以外的比较运算中。名字允许出现在：import 语句、诊断文本、制品。",
+    "why_comparison_branch_rule": "判据要拦的是『按名字写死』这个动作，而它的语法形态是**比较**，不是字符串本身——名字必须出现在 import 里，所以禁字符串是禁不掉的。把判据的落点从『有没有这个词』移到『这个词有没有参与分支』，既拦得住又不误杀。"
+  },
+  "forbidden": {
+    "adapter_must_not": [
+      "修改模型的任何系数、右端、上下界或目标（适配层只搬运；BB-07 是这条的证据）",
+      "在能力不足时放松模型（把二元变量当连续、丢掉不支持的约束类型）",
+      "把 NOT_RUN 类的状态混入求解结论",
+      "自带默认后端名——未声明则 BLOCKED，不猜一个"
+    ],
+    "business_must_not": [
+      "import 任何求解器包",
+      "调用 solve()",
+      "依赖 SolveResult 之外的任何后端细节"
+    ]
+  },
+  "environment": {
+    "observation_2026-09-17": "本机（系统 Python 与托管 Python 均）pulp / numpy / scipy / highspy 全部不可导入；highs 亦不在 PATH。与 T04-02B 的 lp_compiler_spec.backend.availability_this_machine 同一次观测。",
+    "repo_constraint": "零第三方依赖是本仓硬约束（配置用 JSON、测试用 stdlib unittest）。因此本制品**不得**把 PuLP 变成运行前提：无 PuLP 时 BB-07/BB-08/BB-09 与 CC-09 判 SKIP，BB-01..BB-06 仍全部可判。",
+    "verification_environment": "为闭合 CC-09，本轮在**仓外**建了隔离 venv（不污染仓库、不进依赖清单）用于跑一次真实求解并留证。环境与结果见 docs/adr/ADR-0023-solver-backend-adapter.md 与 CHANGELOG。",
+    "why_out_of_repo": "把 PuLP 写进仓库依赖会让『零依赖』这条硬约束失效，也会让判据的可复现性依赖网络。仓外验证保住了两者：判据在零依赖环境仍可判定（SKIP 是真话），而验证本身有据可查。",
+    "consequence_for_judges": "★ 在零依赖环境里跑 backend-check，BB-07/BB-08/BB-09 与 CC-09 都会是 SKIP。**SKIP 不等于通过**——在那台机器上，『后端链路没走样』这件事仍未验证。这与 T04-02B 的 CC-09 是同一个坑，故 BB-09 把『装上 PuLP 后必须真的 PASS』做成判据，防止它二次挂账。"
+  },
+  "evidence_pointer": {
+    "_why_no_runtime_write": "本制品是已冻结的受控声明，运行时回写会让它的 hash 每次都变、冻结失去意义。验证证据落在 ADR-0023（不可变追加）与 CHANGELOG，本制品只留指针。",
+    "environment": "ADR-0023 决策五（仓外隔离 venv 的实测环境与版本）",
+    "cc09_recheck": "ADR-0023 决策四（CC-09 补齐覆盖面后的复跑结果）",
+    "replaceability": "ADR-0023 决策六（active 由 pulp_highs 改为 pulp_cbc 的替换实证）"
+  },
+  "open_items": [
+    "highspy_direct 条目**已声明未实现**：选择到它判 UNSUPPORTED 且不回退。实现它属后续任务——在那之前，『能力矩阵完整』与『后端已就绪』不是一回事，不得互相顶替。",
+    "PuLP 的 Undefined 归一为 AMBIGUOUS 是按『它自身不含可分信息』推的，未经实测枚举。BB-05 的实测探针只覆盖 Optimal / Infeasible / Unbounded 三格；若将来遇到 PuLP 真的回传 Undefined，须补一条实测记录再定档。",
+    "PuLP 的阈值舍入：BB-07 的重合容差取 OBJECTIVE_ATOL=1e-6 + OBJECTIVE_RTOL=1e-6×|Z|。对成交价格量级（1e5~1e7）这相当于 0.1~10 元。若将来某个后端返回的目标值带更大的表示误差（例如先把大系数缩放再累加），容差需按后端分别声明，而不是全局放宽——**放宽到能容忍错值就不再是判据**。",
+    "M_hi 对分支定界收敛的影响仍待 T04-07 量化（T04-02B 挂账项），本制品只保证 MILP 能被求解器接受并出解。T04-02C 实测：探针 MILP 在 HiGHS 与 CBC 上均即时求解，但探针规模不构成证据。",
+    "BB-03 的求解器包名单是制品里的白名单，不是从环境推导的。新增依赖须先改制品——这正是该判据要的效果，但也意味着它拦不住『用一个没列进名单的求解包』这种情形。缓解：名单覆盖了 PyPI 上主流的 Python 求解器接口。",
+    "**上游漂移（T04-02C 实测）**：PuLP 3.3.2 已弃用 `PULP_CBC_CMD`（4.0 移除，改为 `COIN_CMD`）。pulp_cbc 条目因此是一个**会随版本失效**的候选——它恰好是 BB-06 替换性实证的第二个候选，故升级 PuLP 时必须同步改本制品的 solver_factory，否则 BB-06 会退化为『只有一个候选』而判 FAIL（这个 FAIL 是真的：那时确实没有可替换的第二个后端了）。",
+    "**上游漂移（T04-02C 实测）**：PuLP 4.0 将要求 `prob.add_variable(...)` 与 `prob.constraints()`（返回列表）。受影响的代码在 T04-02B 的导出层（to_pulp / extract_pulp_structure），不在本制品的适配层。CC-09 的接口面已刻意压到最小，就是为了让这次迁移的影响面可枚举。"
+  ],
+  "consumers": [
+    {
+      "task": "T04-02D",
+      "uses": "SolveResult.x + CompiledModel.rows + 各行的 tolerance ⇒ 解校验器（独立于编译与求解路径）。BB-07/BB-08 只判『链路走样没有』，不替代解校验报告的逐行判定。"
+    },
+    {
+      "task": "T04-02E",
+      "uses": "归一状态 + AMBIGUOUS/INFEASIBLE/UNBOUNDED 的分类 ⇒ 不可行诊断的入口。诊断不得从原生状态字符串直接分支——那会把后端的词表提升为业务语义。"
+    },
+    {
+      "task": "T04-04",
+      "uses": "solve_compiled 作为 Phase 2 侧；与 T04-01 的 Phase 1 解析解对拍时的『求解侧裁判』"
+    },
+    {
+      "task": "T04-07",
+      "uses": "MILP 的 SolveResult（状态 + gap 相关口径）⇒ C7 的独立验收协议；M_hi 收敛影响量化"
+    }
+  ]
+}

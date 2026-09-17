@@ -625,6 +625,98 @@ def load_compiler_spec(config_dir: Path) -> dict[str, Any]:
     )
 
 
+# ---------------------------------------------------------------------------
+# 符号 ↔ 建模器名：可逆编码
+#
+# **为什么必须自己做编码。** 建模器对变量名有自己的规矩，且规矩是「净化」而不是
+# 「报错」：PuLP 把 ``-`` / ``/`` / 空格 / ``[`` / ``]`` / ``+`` 一律替换成 ``_``
+# 之后才存名字。后果有两条，都不报错：
+#
+# ① **两个不同符号可能合并成同一个变量。** 实测 ``p_A-B`` 与 ``p_A_B`` 在 PuLP
+#    里都变成 ``a_b`` 风格的名字，导出的模型里只有一个变量——原模型的两个决策
+#    变量被静默焊成了一个。
+# ② **回读时符号对不上。** ``prob.variables()`` 给的是净化后的名字，适配层按
+#    ``CompiledModel`` 的符号去取值会一个也取不到 ⇒ 解被判「全部缺失」。
+#
+# 修法不是在适配层做字符串修补（那是把建模器的规矩抄进业务侧），而是：**导出层
+# 自己拥有一套可逆编码**，把符号映到建模器一定不会改动的字符集 ``[A-Za-z0-9_]``，
+# 并在 CC-09 里验证这套编码在真实符号集上**单射**（合并是这里唯一灾难性的失败）。
+# ---------------------------------------------------------------------------
+
+#: 转义引导符。它本身不在安全字符集内，故永远不会以裸字符出现在编码结果里。
+SYMBOL_ESCAPE = "~"
+#: 转义后的定长十六进制码位数（``~%04x``），保证解码无歧义。
+SYMBOL_ESCAPE_HEX = 4
+#: 转义码的进制。**必须具名**——CC-12 要求表达式里不得出现裸数值，连 ``int(x, 16)``
+#: 的进制也不例外（首跑就被本判据抓出来，见 ADR-0023 决策七）。
+SYMBOL_ESCAPE_RADIX = 16
+#: 建模器放行的额外字符。``~`` 是转义引导符——**必须先验证它自己不会被净化**，
+#: 否则编码出来的名字照样走样。2026-09-17 实测 PuLP 3.3.2 放行 ``~``。
+SYMBOL_SAFE_EXTRA = "_~"
+#: 实测（2026-09-17，PuLP 3.3.2，穷举全部可打印字符）：建模器**只**把这七个字符
+#: 换成 ``_``——``+ - / > [ ]`` 与空格。这份清单不参与判定（判定用上面的白名单，
+#: 白名单比黑名单稳），它的用途只有一个：让「编码结果不含这些字符」成为可断言的
+#: 事（tests/test_solver_backend.py 直接断言与之不相交）。
+MODELER_MANGLED_CHARS = "+-/ >[]"
+
+
+def _symbol_char_is_safe(ch: str) -> bool:
+    return ch.isascii() and (ch.isalnum() or ch in SYMBOL_SAFE_EXTRA)
+
+
+def encode_symbol(symbol: str) -> str:
+    """模型符号 → 建模器安全名。**可逆且单射**（安全字符集外一律转义）。"""
+    out: list[str] = []
+    for ch in symbol:
+        if _symbol_char_is_safe(ch):
+            out.append(ch)
+        else:
+            out.append(
+                SYMBOL_ESCAPE + format(ord(ch), "0{}x".format(SYMBOL_ESCAPE_HEX))
+            )
+    return "".join(out)
+
+
+def decode_symbol(name: str) -> str:
+    """建模器安全名 → 模型符号。``encode_symbol`` 的逆。"""
+    out: list[str] = []
+    i = 0
+    step = 1 + SYMBOL_ESCAPE_HEX
+    while i < len(name):
+        if name[i] == SYMBOL_ESCAPE and i + step <= len(name):
+            out.append(chr(int(name[i + 1: i + step], SYMBOL_ESCAPE_RADIX)))
+            i += step
+        else:
+            out.append(name[i])
+            i += 1
+    return "".join(out)
+
+
+def pulp_name_map(model: "CompiledModel") -> dict[str, str]:
+    """``{建模器安全名: 模型符号}``。适配层回读解时用它，不再靠名字猜。"""
+    return {encode_symbol(v.symbol): v.symbol for v in model.variables}
+
+
+def pulp_available() -> bool:
+    """本机能否导入 PuLP——探测方式与 ``to_pulp`` **逐字相同**（``import pulp``）。
+
+    为什么这个探针住在本模块而不是 CLI：求解器包只允许在 ``solver/backend.py``
+    与 ``solver/compiler.py`` 的函数体内导入（``solver_backend_spec.audit``
+    的 BB-03）。若 CLI 自己 ``import pulp`` 去写输出文案，BB-03 会（正确地）
+    判违规。探针放在这里，叙事与 CC-09 的 SKIP 判据同源：**「本机有没有后端」
+    这件事只有一个答案来源**，CLI 只是读它，不另造一个。
+
+    用途：让 CLI 的「N 条 SKIP」提示**别再把环境说反**。SKIP ≠ PASS 这句话
+    永远成立；但「本机无 PuLP」只是一个**猜测**——装上 PuLP 后它就成了假话，
+    而剩下的 SKIP（如 LP 变体的 CC-08）是结构性豁免，与 PuLP 无关。
+    """
+    try:
+        import pulp  # noqa: F401                        # type: ignore
+    except ImportError:
+        return False
+    return True
+
+
 def to_pulp(model: CompiledModel) -> Any:
     """惰性导出为 PuLP 对象。**未安装 PuLP 时返回 ``None``**（调用方判 SKIP）。
 
@@ -641,15 +733,26 @@ def to_pulp(model: CompiledModel) -> Any:
     prob = pulp.LpProblem("bid_pricing", sense)
     xv: dict[str, Any] = {}
     for v in model.variables:
+        safe = encode_symbol(v.symbol)
         if v.kind == "BINARY":
-            var = pulp.LpVariable(v.symbol, cat="Binary")
+            var = pulp.LpVariable(safe, cat="Binary")
         else:
             var = pulp.LpVariable(
-                v.symbol,
+                safe,
                 lowBound=v.lower if v.lower is not None else None,
                 upBound=v.upper if v.upper is not None else None,
             )
         xv[v.symbol] = var
+    # 符号闭包在**构造前**自查。理由不是洁癖：CC-09 会调用本函数，若这里抛
+    # KeyError，那条本来该报「符号闭包破了」的判据会以异常形态炸掉整条校验，
+    # 而不是报出一条 FAIL——判据不能在它该拦的输入上崩。故转成 CompilerError，
+    # 由 CC-09 归一到 BLOCKED 并带出缺口清单。
+    undeclared = sorted(model.all_symbols() - set(xv))
+    if undeclared:
+        raise CompilerError(
+            f"行里引用了变量表未声明的符号 {undeclared} ⇒ 无法构造后端对象。"
+            "这属符号闭包缺口（CC-03 的职责），导出层只如实拒绝，不代它补声明。"
+        )
     prob += pulp.lpSum(
         v.objective_coeff * xv[v.symbol] for v in model.variables
     ) + model.objective_constant
@@ -669,15 +772,24 @@ def to_pulp(model: CompiledModel) -> Any:
 #: 用替身对象单测——否则这段代码在本仓永远不会被执行到（PuLP 确实未安装）。
 PULP_SENSE = {-1: "<=", 0: "==", 1: ">="}
 
+#: PuLP 的优化方向取值。**先核实后写死**：PuLP 的常量是 ``LpMinimize = 1``、
+#: ``LpMaximize = -1``（与直觉相反）。2026-09-17 实测确认（``pulp.LpMinimize = 1``）。
+#: 写成表以免为了取方向而在本模块顶层 import pulp。
+PULP_OBJECTIVE_SENSE = {-1: "MAXIMIZE", 1: "MINIMIZE"}
+
 
 def extract_pulp_structure(prob: Any) -> dict[str, Any]:
     """把 PuLP 对象还原成可比较的稀疏结构（供 CC-09 后端等价性对账）。
 
     刻意**不调用 solve**：等价性是对模型的，不是对解的。
 
+    **名字一律经 ``decode_symbol`` 还原成模型符号**：建模器存的是净化过的名字，
+    直接拿它去和 ``CompiledModel`` 比会把名字差异报成结构差异，也会让真正的
+    结构差异（系数错位）淹没在噪声里。
+
     依赖的 PuLP 接口面压到最小——``prob.constraints`` /
     ``LpConstraint.sense`` / ``.items()`` / ``.constant`` / ``prob.objective`` /
-    ``prob.variables()``。接口面越小，替身对象单测越有意义。
+    ``prob.sense`` / ``prob.variables()``。接口面越小，替身对象单测越有意义。
     """
     rows: list[dict[str, Any]] = []
     for name, cons in prob.constraints.items():
@@ -694,15 +806,22 @@ def extract_pulp_structure(prob: Any) -> dict[str, Any]:
                 "name": str(name),
                 "sense": sense,
                 "rhs": -float(getattr(cons, "constant", 0.0) or 0.0),
-                "coefficients": {v.name: float(c) for v, c in cons.items()},
+                "coefficients": {
+                    decode_symbol(v.name): float(c) for v, c in cons.items()
+                },
             }
         )
     obj = prob.objective
+    raw_sense = getattr(prob, "sense", None)
+    obj_sense = PULP_OBJECTIVE_SENSE.get(raw_sense, f"UNKNOWN({raw_sense!r})")
     return {
         "rows": rows,
-        "objective_coefficients": {v.name: float(c) for v, c in obj.items()},
+        "objective_sense": obj_sense,
+        "objective_coefficients": {
+            decode_symbol(v.name): float(c) for v, c in obj.items()
+        },
         "objective_constant": float(getattr(obj, "constant", 0.0) or 0.0),
-        "variables": sorted(v.name for v in prob.variables()),
+        "variables": sorted(decode_symbol(v.name) for v in prob.variables()),
     }
 
 
@@ -1028,12 +1147,27 @@ def check_compiled(
         ))
 
     # ---------------- CC-09 PuLP 后端等价（缺失 ⇒ SKIP）-----------------
-    prob = to_pulp(model)
-    if prob is None:
+    #
+    # 三条出口必须分开，否则「导出层拒绝了这份模型」会被读成「本机没装 PuLP」：
+    #   ① 构造失败（符号闭包缺口等）⇒ BLOCKED，带出缺口；
+    #   ② PuLP 未安装（to_pulp 返回 None）⇒ SKIP，带复跑条件；
+    #   ③ 构造成功 ⇒ 逐项对账。
+    prob = None
+    export_error: str | None = None
+    try:
+        prob = to_pulp(model)
+    except CompilerError as exc:
+        export_error = str(exc)
+    if export_error is not None:
+        items.append(CompilerCheck(
+            S, "CC-09 PuLP 后端结构等价", STATUS_BLOCKED,
+            f"导出层无法构造后端对象：{export_error}",
+        ))
+    elif prob is None:
         items.append(CompilerCheck(
             S, "CC-09 PuLP 后端结构等价", STATUS_SKIP,
             "环境未安装 PuLP ⇒ 本轮未验证导出等价性。**SKIP 不等于 PASS**："
-            "本判据须在装有 PuLP 的环境（或 T04-02C）复跑。",
+            "本判据须在装有 PuLP 的环境（T04-02C）复跑。",
         ))
     else:
         try:
@@ -1042,32 +1176,85 @@ def check_compiled(
             items.append(CompilerCheck(
                 S, "CC-09 PuLP 后端结构等价", STATUS_BLOCKED, str(exc)))
         else:
-            eng_vars = set(struct["variables"])
+            # 覆盖面（2026-09-17 T04-02C 补齐）：变量集、行数、**逐行系数多重集**、
+            # 逐行 sense、逐行 rhs、目标方向、目标常量、目标系数。
+            #
+            # 原实现只比 sense/rhs/目标系数，漏掉逐行系数、目标常量与目标方向——
+            # 而导出层最常见的三种走样恰好落在漏掉的区间里：① 系数漏乘/错位；
+            # ② 目标常量丢符号；③ 最大化↔最小化反向。三者都满足「变量集相同、
+            # 行数相同、sense 相同、rhs 相同、目标系数相同」。
+            #
+            # 行比对改为**多重集配对**（与 CC-02 同构），不按下标：原实现隐含假设
+            # 「CompiledModel.rows 的顺序 == PuLP constraints 的插入顺序」，该假设
+            # 从未被声明，一旦 PuLP 改字典行为就会以「rhs 不同」的名义报一堆假 FAIL，
+            # 把真问题（某行系数错了）淹没。
             bad: list[str] = []
+            eng_vars = set(struct["variables"])
             if eng_vars != declared:
                 bad.append(f"变量集不同：{sorted(eng_vars ^ declared)}")
+            # 符号编码必须**单射**：两个符号映到同一安全名 ⇒ 导出后它们会被
+            # 建模器当成同一个变量（实测 PuLP 把 `-` `/` 空格 `[` `]` `+` 一律
+            # 换成 `_`），两个决策变量静默焊成一个，不报任何错。这是导出层唯一
+            # 灾难性的失败，单独判。
+            safe_seen: dict[str, list[str]] = {}
+            for s in declared:
+                safe_seen.setdefault(encode_symbol(s), []).append(s)
+            collisions = {
+                safe: syms for safe, syms in safe_seen.items() if len(syms) > 1
+            }
+            if collisions:
+                bad.append(
+                    "符号编码不单射（导出后会被静默合并成一个变量）："
+                    f"{list(collisions.items())[:SAMPLE_LIMIT]}"
+                )
+            # 往返一致：编码后必须落在建模器不会改动的字符集里，否则回读的
+            # 名字与模型符号对不上 ⇒ 解会被判「全部变量缺失」。
+            not_roundtrip = [
+                s for s in declared if decode_symbol(encode_symbol(s)) != s
+            ]
+            if not_roundtrip:
+                bad.append(
+                    f"编码不可逆：{not_roundtrip[:SAMPLE_LIMIT]}"
+                )
+            if struct["objective_sense"] != model.objective_sense:
+                bad.append(
+                    f"目标方向 {struct['objective_sense']!r} != "
+                    f"{model.objective_sense!r}（方向反向会让最优解变成最劣解）"
+                )
+            if abs(struct["objective_constant"] - model.objective_constant) > (
+                COEFF_ATOL + COEFF_RTOL * abs(model.objective_constant)
+            ):
+                bad.append(
+                    f"目标常量 {struct['objective_constant']!r} != "
+                    f"{model.objective_constant!r}（丢符号是最常见的形态）"
+                )
             if len(struct["rows"]) != model.n_rows:
                 bad.append(f"行数 {len(struct['rows'])} != {model.n_rows}")
-            for i, row in enumerate(struct["rows"]):
-                if i >= model.n_rows:
-                    break
-                mr = model.rows[i]
-                if row["sense"] != mr.sense:
-                    bad.append(
-                        f"{mr.constraint_id}: sense {row['sense']} != {mr.sense}")
-                if abs(row["rhs"] - mr.rhs) > SLACK_ATOL * max(1.0, abs(mr.rhs)):
-                    bad.append(f"{mr.constraint_id}: rhs {row['rhs']} != {mr.rhs}")
+            src_fp = [
+                _fingerprint(r.rhs, r.coefficients) for r in model.rows
+            ]
+            eng_fp = [
+                _fingerprint(r["rhs"], list(r["coefficients"].items()))
+                for r in struct["rows"]
+            ]
+            only_src, only_eng = _match(src_fp, eng_fp)
+            for fp in only_src[:SAMPLE_LIMIT]:
+                bad.append(f"模型里有而导出后没有的行：{fp}")
+            for fp in only_eng[:SAMPLE_LIMIT]:
+                bad.append(f"导出后有而模型里没有的行：{fp}")
             for v in model.variables:
                 got = struct["objective_coefficients"].get(v.symbol, 0.0)
                 if abs(got - v.objective_coeff) > (
                     COEFF_ATOL + COEFF_RTOL * abs(v.objective_coeff)
                 ):
                     bad.append(f"{v.symbol}: 目标系数 {got} != {v.objective_coeff}")
+            bad = [str(b) for b in bad[:SAMPLE_LIMIT]]
             items.append(CompilerCheck(
                 S, "CC-09 PuLP 后端结构等价",
                 STATUS_PASS if not bad else STATUS_FAIL,
                 ("导出的 PuLP 对象与 CompiledModel 结构一致"
-                 if not bad else f"{len(bad)} 处不一致：{bad[:SAMPLE_LIMIT]}"),
+                 "（变量集/行系数多重集/sense/rhs/目标方向/目标常量/目标系数）"
+                 if not bad else f"{len(bad)} 处不一致：{bad}"),
                 actual=bad, expected=[],
             ))
 

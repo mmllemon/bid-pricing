@@ -1014,6 +1014,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_fm.add_argument("--json", action="store_true", help="输出 JSON")
     p_fm.set_defaults(func=cmd_formulate_check)
 
+    # ------------------------------------------------------- backend-check
+    p_bk = sub.add_parser(
+        "backend-check",
+        help="T04-02C 求解后端适配（BB-01..BB-09 + CC-09 复跑）")
+    p_bk.add_argument("--instance", default=None,
+                      help="对自定义实例 JSON 跑判定")
+    p_bk.add_argument("--prefer", default=None,
+                      help="临时指定后端条目（不写制品，用于替换性检验）")
+    p_bk.add_argument("--json", action="store_true", help="输出 JSON")
+    p_bk.set_defaults(func=cmd_backend_check)
+
     return parser
 
 
@@ -1267,6 +1278,197 @@ def cmd_phase1_check(args) -> int:
     return 0 if not bad else 1
 
 
+def cmd_backend_check(args) -> int:
+    """T04-02C 求解后端适配判定 —— 「换后端只改配置」是不是真的。
+
+    与前三条命令的分工：``phase1-check`` 判**求解论域**；``formulate-check`` 判
+    **模型表述**；``compile-check`` 判**翻译保真**；本命令判**执行链路**——
+    模型交给谁解、解完的状态有没有被混域、求解器报的最优值与独立复算对不对得上。
+
+    零依赖环境下 BB-07/BB-08/BB-09 与 CC-09 都会判 SKIP（= 本轮没检查），
+    这是真话而不是失败：本机确实没有后端可跑。
+    """
+    import dataclasses
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.backend import (
+        check_backend,
+        load_backend_spec,
+        solve_compiled,
+    )
+    from .solver.compiler import (
+        check_compiled,
+        compile_model,
+        load_compiler_spec,
+        pulp_available,
+    )
+    from .solver.formulation import (
+        PROBE_SOLVER_INPUTS,
+        build_formulation,
+        load_formulation_spec,
+        probe_instance,
+    )
+    from .solver.instance import Phase1Instance
+    from .solver.instance import Phase1Instance
+
+    cfg = config_dir()
+    spec = load_backend_spec(cfg)
+    compiler_spec = load_compiler_spec(cfg)
+    fspec = load_formulation_spec(cfg)
+    schema = json.loads((cfg / "constraint_schema.json").read_text(encoding="utf-8"))
+    prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
+    card = load_pricing_card(cfg)
+    resolved = resolve_parameters(card)
+    eps_abs = float(prof["eps_abs"]["value"])
+    eps_price = float(prof["eps_price"]["value"])
+    resolution = float(prof["rounding"]["resolution"])
+
+    allow = (compiler_spec.get("literal_allowlist") or {}).get("allowed_in_expressions")
+    # 本文件即 src/bidpricing/cli.py ⇒ parents[0] 既是包根也含 solver/compiler.py
+    pkg_root = _P(__file__).resolve().parents[0]
+    compiler_path = pkg_root / "solver" / "compiler.py"
+    if not compiler_path.exists():
+        print(f"■ 编译器源码不在预期位置：{compiler_path}")
+        return 1
+    compiler_source = compiler_path.read_text(encoding="utf-8")
+
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        base = Phase1Instance.from_dict(
+            json.loads(path.read_text(encoding="utf-8")), source=str(path)
+        )
+        variants: list[tuple[str, object]] = [
+            (tag, dataclasses.replace(base, active_soft_constraints=tuple(act)))
+            for tag, act in (("LP", ()), ("MILP", ("C7",)))
+        ]
+        solver_inputs: dict[str, object] = dict(PROBE_SOLVER_INPUTS)
+    else:
+        variants = [
+            ("LP", probe_instance()),
+            ("MILP", probe_instance(active=("C7",))),
+        ]
+        solver_inputs = dict(PROBE_SOLVER_INPUTS)
+
+    payload: list[dict] = []
+    worst = 0
+    for tag, instance in variants:
+        fm = build_formulation(
+            instance, resolved,
+            eps_abs=eps_abs, eps_price=eps_price, resolution=resolution,
+            theta=solver_inputs.get("theta"),
+            n_max=solver_inputs.get("n_max"),
+            d_max=solver_inputs.get("d_max"),
+            r_min=solver_inputs.get("r_min"),
+            z_min=solver_inputs.get("z_min"),
+            pi_target=solver_inputs.get("pi_target"),
+        )
+        model = compile_model(
+            fm,
+            z_min=solver_inputs.get("z_min"),
+            pi_target=solver_inputs.get("pi_target"),
+            source=tag,
+        )
+        cc_rows = check_compiled(
+            model, fm,
+            instance=instance, resolved=resolved,
+            constraint_schema=schema, formulation_spec=fspec,
+            compiler_source=compiler_source,
+            literal_allowlist=allow,
+            eps_total=eps_abs,
+        )
+        result = solve_compiled(
+            model, spec=spec,
+            instance=instance, resolved=resolved,
+            prefer=args.prefer,
+            eps_total=eps_abs,
+        )
+        rows = check_backend(
+            model, result,
+            spec=spec, config_dir=cfg, src_root=pkg_root,
+            instance=instance, resolved=resolved,
+            formulation=fm, constraint_schema=schema,
+            formulation_spec=fspec, cc09=cc_rows, prefer=args.prefer,
+        )
+        payload.append({
+            "variant": tag,
+            "solver_form": model.solver_form,
+            "solve": result.to_dict(),
+            "checks": [r.to_dict() for r in rows],
+            "cc09": [r.to_dict() for r in cc_rows if "CC-09" in r.item],
+        })
+        for r in rows:
+            if r.blocks_progress:
+                worst = 1
+        if not args.json:
+            _print_backend(
+                model, result, rows, cc_rows,
+                f"{'探针实例' if not args.instance else args.instance} · {tag}",
+            )
+
+    if args.json:
+        print(json.dumps(
+            {"spec_id": spec.get("spec_id"), "variants": payload},
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return worst
+
+    total = sum(len(v["checks"]) for v in payload)
+    npass = sum(1 for v in payload for c in v["checks"] if c["status"] == "PASS")
+    nskip = sum(1 for v in payload for c in v["checks"] if c["status"] == "SKIP")
+    print(f"  汇总：{npass} PASS / {nskip} SKIP / {total - npass - nskip} 待处理"
+          f"（共 {total} 条，跨 {len(payload)} 个变体）")
+    if nskip:
+        print(f"  ⚠ {nskip} 条 SKIP 表示**本轮没检查**，不等于通过")
+        if pulp_available():
+            print("     （本机有 PuLP：涉后端的判据已实跑；其余 SKIP 属结构性"
+                  "豁免，逐条理由见上）")
+        else:
+            print("     （本机无 PuLP ⇒ 求解链路与 CC-09 未验证；须在装有 PuLP 的"
+                  "环境复跑，见 solver_backend_spec.environment）")
+    return worst
+
+
+def _print_backend(model, result, checks, cc_rows, title: str) -> None:
+    print("=" * 78)
+    print(f"求解后端适配（T04-02C）｜ {title}")
+    print("=" * 78)
+    st = result.status
+    print(f"  模型：{model.solver_form}　变量 {model.n_vars}　行 {model.n_rows}")
+    print(f"  所需能力：{list(result.selection.required)}")
+    print(f"  选中后端：{result.selection.name!r}"
+          f"（active={result.selection.active!r}）")
+    for c in result.selection.candidates:
+        mark = "✓" if c.verdict == "SELECTED" else "✗"
+        print(f"      {mark} {c.name}: {c.verdict} — {c.reason}")
+    print(f"  归一状态：{st.normalized}（class={st.status_class}）"
+          f"⇒ 判据 {st.judge}")
+    if st.native is not None:
+        print(f"      原生状态 {st.native!r}　归一路径 {st.via}")
+    print(f"      理由：{st.reason}")
+    if result.solved:
+        print(f"  目标值：自报 {result.reported_objective!r}"
+              f"　复算 {result.recomputed_objective!r}"
+              f"　Δ {result.objective_delta!r}")
+        print(f"  解：{len(result.variables)} 个变量"
+              f"{'，缺 ' + str(list(result.missing)) if result.missing else ''}")
+        if result.solution_check is not None:
+            sc = result.solution_check
+            print(f"  业务侧：feasible={sc.feasible}　Z={sc.Z!r}"
+                  f"　C1 残差={sc.c1_residual!r}")
+    print(f"  耗时：{result.seconds * 1000:.1f} ms")
+    print()
+    for r in checks:
+        mark = {"PASS": "✓", "FAIL": "✗", "BLOCKED": "■", "SKIP": "○"}.get(
+            r.status, "?")
+        print(f" {mark} [{r.item}] {r.status}")
+        print(f"      {r.reason}")
+    print("-" * 78)
+
+
 def cmd_compile_check(args) -> int:
     """T04-02B 约束编译判定 —— 「编译出的模型，确实是那份声明吗」。
 
@@ -1285,6 +1487,7 @@ def cmd_compile_check(args) -> int:
         check_compiled,
         compile_model,
         load_compiler_spec,
+        pulp_available,
         to_pulp,
     )
     from .solver.formulation import (
@@ -1404,8 +1607,12 @@ def cmd_compile_check(args) -> int:
     print(f"  汇总：{npass} PASS / {nskip} SKIP / {total - npass - nskip} 待处理"
           f"（共 {total} 条，跨 {len(payload)} 个变体）")
     if nskip:
-        print(f"  ⚠ {nskip} 条 SKIP 表示**本轮没检查**，不等于通过"
-              "（本机无 PuLP ⇒ CC-09 恒为 SKIP，须在 T04-02C 复跑）")
+        print(f"  ⚠ {nskip} 条 SKIP 表示**本轮没检查**，不等于通过")
+        if pulp_available():
+            print("     （本机有 PuLP ⇒ CC-09 已实跑；其余 SKIP 属结构性豁免，"
+                  "逐条理由见上）")
+        else:
+            print("     （本机无 PuLP ⇒ CC-09 未执行；须在装有 PuLP 的环境复跑）")
     return worst
 
 

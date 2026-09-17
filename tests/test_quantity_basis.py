@@ -43,7 +43,19 @@ class SyntheticCase(unittest.TestCase):
             if src.exists():
                 (self.cdir / fname).write_text(
                     src.read_text(encoding="utf-8"), encoding="utf-8")
+        # **基线归零**：真实制品里 sensitivity_requirement 已由用户裁定（RATIO_SCAN），
+        # 若直接沿用，QB-05/QB-06 的「未定态」断言会随用户裁定而翻转——测试必须
+        # 与项目的实时取值解耦，故合成目录一律从「未声明」起测。
+        self._reset_undeclared()
         self.addCleanup(self.tmp.cleanup)
+
+    def _reset_undeclared(self) -> None:
+        p = self.cdir / "q1_assumption_spec.json"
+        s = json.loads(p.read_text(encoding="utf-8"))
+        s["sensitivity_requirement"]["value"] = None
+        s["sensitivity_requirement"].setdefault("scan_config", {})["grid"] = None
+        s["frozen_at"] = None
+        p.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _patch(self, mutate) -> None:
         p = self.cdir / "q1_assumption_spec.json"
@@ -162,13 +174,38 @@ class SyntheticCase(unittest.TestCase):
         rep = check_quantity_basis(self.cdir)
         self.assertEqual(rep.by_rule("QB-05").status, STATUS_FAIL)
 
-    # ---------------- QB-06 冻结 ----------------
+    # ---------------- QB-06 扫描网格 ----------------
+    def test_ratio_scan_without_grid_is_warn(self):
+        """网格未定 = 敏感性分析无法执行；且须提示真实偏差范围而非 ±5%。"""
+        def mut(s):
+            s["sensitivity_requirement"]["value"] = "RATIO_SCAN"
+        self._patch(mut)
+        rep = check_quantity_basis(self.cdir)
+        self.assertEqual(rep.by_rule("QB-06").status, STATUS_WARN)
+        self.assertIn("0.4286", rep.by_rule("QB-06").detail)
+
+    def test_declared_grid_passes(self):
+        def mut(s):
+            s["sensitivity_requirement"]["value"] = "RATIO_SCAN"
+            s["sensitivity_requirement"]["scan_config"]["grid"] = [0.43, 0.6, 0.8, 1.0]
+        self._patch(mut)
+        rep = check_quantity_basis(self.cdir)
+        self.assertEqual(rep.by_rule("QB-06").status, STATUS_PASS)
+
+    def test_non_ratio_scan_needs_no_grid(self):
+        def mut(s):
+            s["sensitivity_requirement"]["value"] = "SCENARIO_SWEEP"
+        self._patch(mut)
+        rep = check_quantity_basis(self.cdir)
+        self.assertEqual(rep.by_rule("QB-06").status, STATUS_PASS)
+
+    # ---------------- QB-07 冻结 ----------------
     def test_unfrozen_is_warn_and_frozen_passes(self):
-        self.assertEqual(check_quantity_basis(self.cdir).by_rule("QB-06").status,
+        self.assertEqual(check_quantity_basis(self.cdir).by_rule("QB-07").status,
                          STATUS_WARN)
         self._patch(lambda s: s.__setitem__("frozen_at", "2026-09-17"))
         rep = check_quantity_basis(self.cdir)
-        self.assertEqual(rep.by_rule("QB-06").status, STATUS_PASS)
+        self.assertEqual(rep.by_rule("QB-07").status, STATUS_PASS)
 
     def test_missing_artifact_is_skipped_not_vacuous(self):
         (self.cdir / "q1_assumption_spec.json").unlink()
@@ -190,7 +227,7 @@ class RealRepoTest(unittest.TestCase):
     def test_all_rules_reported(self):
         ids = {r.rule_id for r in self.rep.results}
         self.assertEqual(ids, {"QB-01", "QB-02", "QB-03", "QB-04",
-                               "QB-05", "QB-06"})
+                               "QB-05", "QB-06", "QB-07"})
 
     def test_basis_is_declared_by_user_not_agent(self):
         """ADR-0007 回归锁：q1 取值依据属商务声明，不得由 Agent 代为落值。"""
@@ -222,7 +259,7 @@ class RealRepoTest(unittest.TestCase):
         spec = json.loads(
             (CONFIG / "q1_assumption_spec.json").read_text(encoding="utf-8"))
         base = spec["three_elements"]["basis"]
-        known = {"QB-01", "QB-02", "QB-03", "QB-04", "QB-05", "QB-06"}
+        known = {"QB-01", "QB-02", "QB-03", "QB-04", "QB-05", "QB-06", "QB-07"}
         for k, rule_id in (base.get("cross_satisfied_by") or {}).items():
             if k.startswith("_"):
                 continue

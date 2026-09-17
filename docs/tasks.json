@@ -240,7 +240,7 @@
       "evidence": [],
       "status": "partial",
       "note": "需人工：q^1 格式与冻结时点声明",
-      "status_note": "2026-09-17：制品 q1_assumption_spec.json 建立（QB-01~QB-06 判据，CLI qty-check）。取值依据=COST_LISTING_QUANTITY、归因=DRAWING_DIFF、格式=POINT 均已定；**QB-05 敏感性义务未定（商务偏好，须用户裁定）**，QB-03 缺算量依据（图纸版本）。",
+      "status_note": "2026-09-17：制品 q1_assumption_spec.json 建立，QB-01~QB-07。已定：取值依据=COST_LISTING_QUANTITY、归因=DRAWING_DIFF、格式=POINT、敏感性义务=RATIO_SCAN（用户裁定）。未定：QB-03 算量依据（图纸版本）、QB-06 扫描网格、QB-07 未冻结。",
       "updated_at": "2026-09-17T08:50:00+08:00"
     },
     {
@@ -261,7 +261,7 @@
       "evidence": [],
       "status": "partial",
       "note": "依赖 T01-00B 合同解析产出",
-      "status_note": "2026-09-17：制品 q1_assumption_spec.json 建立（QB-01~QB-06 判据，CLI qty-check）。取值依据=COST_LISTING_QUANTITY、归因=DRAWING_DIFF、格式=POINT 均已定；**QB-05 敏感性义务未定（商务偏好，须用户裁定）**，QB-03 缺算量依据（图纸版本）。",
+      "status_note": "2026-09-17：制品 q1_assumption_spec.json 建立，QB-01~QB-07。已定：取值依据=COST_LISTING_QUANTITY、归因=DRAWING_DIFF、格式=POINT、敏感性义务=RATIO_SCAN（用户裁定）。未定：QB-03 算量依据（图纸版本）、QB-06 扫描网格、QB-07 未冻结。",
       "updated_at": "2026-09-17T08:50:00+08:00"
     },
     {

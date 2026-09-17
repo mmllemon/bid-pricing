@@ -79,7 +79,7 @@
     }
   },
   "sensitivity_requirement": {
-    "value": null,
+    "value": "RATIO_SCAN",
     "trigger": "format = POINT 时**强制**：点值 q1 会把 P* 算成确定值，掩盖工程量风险。",
     "vocabulary": [
       "RATIO_SCAN",
@@ -87,12 +87,31 @@
       "NOT_REQUIRED_JUSTIFIED"
     ],
     "vocabulary_definition": {
-      "RATIO_SCAN": "对 r = q1/q0 做区间扫描（如 ±5% / ±10%），输出 P* 对 r 的敏感性",
+      "RATIO_SCAN": "对 r = q1/q0 做区间扫描，输出 P* 与最优单价结构随 r 变化的曲线；**扫描网格须覆盖已观测的 r 范围**，不得用未经论证的固定 ±5%",
       "SCENARIO_SWEEP": "对 q1 做离散场景集（乐观/基准/悲观）分别求解",
       "NOT_REQUIRED_JUSTIFIED": "显式论证本项目无需敏感性分析（须写明理由，如 q1 已由合同锁定）"
     },
-    "status": "UNDETERMINED",
-    "status_note": "**待用户裁定**：本项目 q1_point 取成本清单量，与限价清单量 q0 存在差异（真实样本 82 键中 6 项减量越界），r 的偏差会直接改变最优报价结构。选 RATIO_SCAN 还是 SCENARIO_SWEEP，取决于你希望模型输出曲线还是几个离散方案——**这是商务偏好，不是技术问题**，模型不得代为选择。"
+    "status": "RESOLVED",
+    "status_note": "**用户裁定（2026-09-17）**：RATIO_SCAN——输出 P* 与最优单价结构随 r 变化的曲线，与既有 Z(P*) 曲线可组合成二维敏感性。",
+    "declared_by": "user(亲述 2026-09-17)",
+    "declared_at": "2026-09-17T01:04:30.040897+00:00",
+    "scan_config": {
+      "grid": null,
+      "grid_status": "UNDETERMINED",
+      "observed_r_range": {
+        "min": 0.4286,
+        "max": 1.0,
+        "n": 81,
+        "n_equal_1": 75,
+        "n_below_1": 6,
+        "n_above_1": 0,
+        "weighted_mean": 0.9311,
+        "as_of": "2026-09-17",
+        "source": "docs/matched/xiyong_l_district/match_report.json"
+      },
+      "grid_rule": "扫描网格须覆盖已观测的 r 范围（当前 [0.4286, 1.0]）——用拍脑袋的 ±5% 会漏掉全部真实偏差（实际单项最大减量达 -57%）。",
+      "asymmetry_note": "r 无一项 > 1：成本清单工程量全部 ≤ 招标清单量，金额加权 r = 0.9311（按成本清单量计，结算规模比按招标量计低约 6.9%）。单向性须由「算量依据」附证解释——若这 6 项减量源于算量口径差异而非真实预期，则 r 本身取错，不平衡报价的方向会整体反向。"
+    }
   },
   "attribution_ref": {
     "file": "config/basis_declarations.json",

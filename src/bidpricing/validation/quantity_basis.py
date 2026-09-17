@@ -163,16 +163,31 @@ def check_quantity_basis(config_dir: Path) -> CostBasisReport:
     else:
         rep.results.append(_ok("QB-05", f"敏感性义务已声明：{sv}"))
 
-    # ---------------- QB-06 冻结时点 ----------------
-    timing = three.get("freeze_timing") or {}
-    if not (timing.get("value") or "").strip():
-        rep.results.append(_bad("QB-06", STATUS_BLOCKED, "冻结时点未声明"))
-    elif spec.get("frozen_at") in (None, ""):
+    # ---------------- QB-06 扫描网格（RATIO_SCAN 的执行前提） ----------------
+    scan = (spec.get("sensitivity_requirement") or {}).get("scan_config") or {}
+    if sv != "RATIO_SCAN":
+        rep.results.append(_ok("QB-06", f"敏感性义务为 {sv}，无扫描网格要求"))
+    elif scan.get("grid") in (None, [], ""):
+        obs = scan.get("observed_r_range") or {}
+        rng = (f"已观测 r ∈ [{obs.get('min')}, {obs.get('max')}]"
+               if obs else "未登记观测范围")
         rep.results.append(_bad(
             "QB-06", STATUS_WARN,
+            "RATIO_SCAN 已声明但扫描网格未定——敏感性分析无法执行；"
+            f"网格须覆盖真实偏差（{rng}），不得用未经论证的固定 ±5%"))
+    else:
+        rep.results.append(_ok("QB-06", f"扫描网格已定：{scan['grid']}"))
+
+    # ---------------- QB-07 冻结时点 ----------------
+    timing = three.get("freeze_timing") or {}
+    if not (timing.get("value") or "").strip():
+        rep.results.append(_bad("QB-07", STATUS_BLOCKED, "冻结时点未声明"))
+    elif spec.get("frozen_at") in (None, ""):
+        rep.results.append(_bad(
+            "QB-07", STATUS_WARN,
             "尚未冻结（冻结时点：Gate 0b 之前）——当前为未定态，"
             "冻结前 q1 不得进入目标函数"))
     else:
-        rep.results.append(_ok("QB-06", f"已冻结于 {spec['frozen_at']}"))
+        rep.results.append(_ok("QB-07", f"已冻结于 {spec['frozen_at']}"))
 
     return rep

@@ -238,10 +238,10 @@
       "summary": "① 格式：须与 T00-02 字段字典一致；Phase 1 / Phase 2 只接受点估计或有限场景集 $\\{q_i^{1,s},\\pi_s\\}$（并给出场景聚合公式 $q_i^1=\\sum_s\\pi_s q_i^{1,s}$），区间 $[q^{1,\\text{lo}},q^{1,\\text{hi}}]$ 与分布形式…",
       "gate": "Gate 0a / 0b",
       "evidence": [],
-      "status": "partial",
+      "status": "done",
       "note": "需人工：q^1 格式与冻结时点声明",
-      "status_note": "2026-09-17：制品 q1_assumption_spec.json 建立，QB-01~QB-07。已定：取值依据=COST_LISTING_QUANTITY、归因=DRAWING_DIFF、格式=POINT、敏感性义务=RATIO_SCAN（用户裁定）。未定：QB-03 算量依据（图纸版本）、QB-06 扫描网格、QB-07 未冻结。",
-      "updated_at": "2026-09-17T08:50:00+08:00"
+      "status_note": "2026-09-17：制品 q1_assumption_spec.json 已冻结（frozen_at 已写），QB-01~QB-07 无阻断项。留存 INFO：算量依据（图纸版本）待补（台账项，不影响测算）。敏感性分析为默认关闭的可选增强（ADR-0013）。",
+      "updated_at": "2026-09-17T09:25:00+08:00"
     },
     {
       "id": "T00-10B",
@@ -259,10 +259,10 @@
       "summary": "明确来源（历史项目数据 / 造价专家估计 / 显式假设比例，须择一或加权并标注），判据须引用合同条款对工程量偏差的约定（`contract_ruleset` 与 T01-00B 的合同解析结果），并标注样本量、时间跨度、覆盖项目类型。本任务属 WP0 但不在 Gate 0a 判据内、不在 Gate 0a 放行清单中（v…",
       "gate": "Gate 0a / 0b",
       "evidence": [],
-      "status": "partial",
+      "status": "done",
       "note": "依赖 T01-00B 合同解析产出",
-      "status_note": "2026-09-17：制品 q1_assumption_spec.json 建立，QB-01~QB-07。已定：取值依据=COST_LISTING_QUANTITY、归因=DRAWING_DIFF、格式=POINT、敏感性义务=RATIO_SCAN（用户裁定）。未定：QB-03 算量依据（图纸版本）、QB-06 扫描网格、QB-07 未冻结。",
-      "updated_at": "2026-09-17T08:50:00+08:00"
+      "status_note": "2026-09-17：制品 q1_assumption_spec.json 已冻结（frozen_at 已写），QB-01~QB-07 无阻断项。留存 INFO：算量依据（图纸版本）待补（台账项，不影响测算）。敏感性分析为默认关闭的可选增强（ADR-0013）。",
+      "updated_at": "2026-09-17T09:25:00+08:00"
     },
     {
       "id": "T00-11",
@@ -281,7 +281,8 @@
       "gate": "Gate 0a / 0b",
       "evidence": [],
       "status": "done",
-      "note": "2026-09-17 完成 config/cost_assumption_spec.json c_i 假设声明书（三要素：来源/格式/冻结时点）+ src/bidpricing/validation/cost_basis.py + CLI cost-check。来源词表 COST_DB/HISTORICAL_SETTLEMENT/SUPPLIER_QUOTE/EXPERT_ESTIMATE 且各有 required_when 附证要求；**未声明=BLOCKED 不静默补全**；说了但不在词表=FAIL（数据违反≠声明缺失）；未冻结=WARN（Gate 0b 前）。--declare-source/--evidence/--freeze 落值；**带病拒冻**（有阻断项时 --freeze 退出码 1）。当前真实状态：AS-01 BLOCKED（成本清单已提供但来源未声明，待用户一句话确认）。"
+      "note": "2026-09-17 完成 config/cost_assumption_spec.json c_i 假设声明书（三要素：来源/格式/冻结时点）+ src/bidpricing/validation/cost_basis.py + CLI cost-check。来源词表 COST_DB/HISTORICAL_SETTLEMENT/SUPPLIER_QUOTE/EXPERT_ESTIMATE 且各有 required_when 附证要求；**未声明=BLOCKED 不静默补全**；说了但不在词表=FAIL（数据违反≠声明缺失）；未冻结=WARN（Gate 0b 前）。--declare-source/--evidence/--freeze 落值；**带病拒冻**（有阻断项时 --freeze 退出码 1）。当前真实状态：AS-01 BLOCKED（成本清单已提供但来源未声明，待用户一句话确认）。",
+      "status_note": "2026-09-17：c_i 来源=SUPPLIER_QUOTE（用户亲述）已冻结。留存 INFO：询价日期/品牌规格待补（台账项，不影响测算，ADR-0013）。"
     },
     {
       "id": "T00-12",

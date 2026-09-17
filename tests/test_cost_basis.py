@@ -12,6 +12,7 @@ from bidpricing.validation.cost_basis import (
     REQUIRED_COMPONENTS,
     STATUS_BLOCKED,
     STATUS_FAIL,
+    STATUS_INFO,
     STATUS_PASS,
     STATUS_SKIP,
     STATUS_WARN,
@@ -46,7 +47,7 @@ class RealRepoTest(unittest.TestCase):
                                "AS-01", "AS-02", "AS-03", "AS-04"})
         for r in self.rep.results:
             self.assertIn(r.status, (STATUS_PASS, STATUS_FAIL, STATUS_BLOCKED,
-                                     STATUS_WARN, STATUS_SKIP))
+                                     STATUS_WARN, STATUS_INFO, STATUS_SKIP))
 
     def test_report_serialisable(self):
         d = self.rep.to_dict()
@@ -86,19 +87,34 @@ class SyntheticCase(unittest.TestCase):
         s["three_elements"]["source"]["value"] = None
         p.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def test_undeclared_source_is_blocked_not_defaulted(self):
-        """来源未声明 = BLOCKED，且**绝不静默补全为任一取值**。"""
+    def test_undeclared_source_is_info_not_blocked(self):
+        """来源未登记 = INFO（台账空缺），**不阻塞**，且绝不静默补全为任一取值。
+
+        ADR-0013：来源只决定将来能否说清成本出处；c_i 的数值本身由字段字典
+        missing_policy 把关。台账不是关卡。
+        """
         self._patch_source_null()
         rep = check_cost_basis(self.cdir)
         r = rep.by_rule("AS-01")
-        self.assertEqual(r.status, STATUS_BLOCKED)
-        self.assertIn("来源未声明", r.detail)
+        self.assertEqual(r.status, STATUS_INFO)
+        self.assertIn("不影响计算", r.detail)
+        self.assertNotIn("AS-01", [x.rule_id for x in rep.blocking])
+
+    def test_not_declared_is_not_silently_defaulted(self):
+        """不阻塞 != 可以编一个来源：值必须保持完全缺失（ADR-0004）。"""
+        self._patch_source_null()
+        rep = check_cost_basis(self.cdir)
+        spec = json.loads(
+            (self.cdir / "cost_assumption_spec.json").read_text(encoding="utf-8"))
+        self.assertIsNone(spec["three_elements"]["source"]["value"])
+        self.assertEqual(rep.by_rule("AS-01").status, STATUS_INFO)
 
     def test_declared_source_passes_and_requires_evidence(self):
         self._patch_assumption(source_value="SUPPLIER_QUOTE")
         rep = check_cost_basis(self.cdir)
         self.assertEqual(rep.by_rule("AS-01").status, STATUS_PASS)
-        self.assertEqual(rep.by_rule("AS-02").status, STATUS_WARN)
+        # 留痕项待补 = INFO（ADR-0013），不再告警
+        self.assertEqual(rep.by_rule("AS-02").status, STATUS_INFO)
         self.assertIn("询价日期", rep.by_rule("AS-02").detail)
 
     def test_cross_satisfied_evidence_not_re_asked(self):

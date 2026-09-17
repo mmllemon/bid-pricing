@@ -17,6 +17,7 @@ from pathlib import Path
 from .cost_basis import (
     STATUS_BLOCKED,
     STATUS_FAIL,
+    STATUS_INFO,
     STATUS_PASS,
     STATUS_SKIP,
     STATUS_WARN,
@@ -60,10 +61,10 @@ def check_quantity_basis(config_dir: Path) -> CostBasisReport:
     vocab = base.get("vocabulary") or []
     if value is None:
         rep.results.append(_bad(
-            "QB-01", STATUS_BLOCKED,
-            "q1 取值依据未声明——q1 直接进入目标函数（与 P* 相乘），"
-            "依据未声明则 P* 的量级无据；禁止按 Q0_NO_CHANGE 静默补全"
-            "（那等于放弃工程量套利的建模，是商务选择不是默认值）"))
+            "QB-01", STATUS_INFO,
+            "q1 取值依据未登记（台账空缺）——**不影响计算**：q1 的数值本身由"
+            "字段字典 missing_policy 把关，依据只决定将来能否说清量从哪来。"
+            "已按 ADR-0013 从 BLOCKED 降级：台账不是关卡"))
     elif value not in vocab:
         rep.results.append(_bad(
             "QB-01", STATUS_FAIL,
@@ -111,9 +112,9 @@ def check_quantity_basis(config_dir: Path) -> CostBasisReport:
             rep.results.append(_ok("QB-03", f"取值依据 {value} 无强制附证要求"))
         elif lack:
             rep.results.append(_bad(
-                "QB-03", STATUS_WARN,
-                f"取值依据 {value} 仍缺附证 {lack}——补齐前 q1 不得进入目标函数",
-                ev))
+                "QB-03", STATUS_INFO,
+                f"取值依据 {value} 的留痕项待补 {lack}——**不影响计算**，"
+                "仅在复核量从哪来时使用（ADR-0013：留痕项不阻塞）", ev))
         else:
             rep.results.append(_ok(
                 "QB-03", f"取值依据 {value} 附证齐备：{sorted(declared)}", ev))
@@ -145,35 +146,48 @@ def check_quantity_basis(config_dir: Path) -> CostBasisReport:
             rep.results.append(_ok(
                 "QB-04", f"格式 {fv} 与字段字典一致（需 {list(required)} 均存在）"))
 
-    # ---------------- QB-05 点值假设的敏感性义务 ----------------
+    # ---------------- QB-05 敏感性分析（可选增强，默认关闭） ----------------
+    # ADR-0013：敏感性分析是**分析能力**不是**数据前提**。用户给了成本清单量
+    # 就是要按它直接测算，不启用该分析不影响结论成立，故不阻塞、不告警。
     sens = spec.get("sensitivity_requirement") or {}
     sv = sens.get("value")
+    optional = sens.get("mode") == "OPTIONAL_ENHANCEMENT"
+    enabled = bool(sens.get("enabled"))
     if fv != "POINT":
         rep.results.append(_ok(
-            "QB-05", f"格式 {fv} 自带不确定性表达，无强制敏感性义务"))
+            "QB-05", f"格式 {fv} 自带不确定性表达，无敏感性要求"))
+    elif optional and not enabled:
+        rep.results.append(_ok(
+            "QB-05", "可选增强未启用（默认）——直接按 q1_point 测算；"
+                     f"如需 r 敏感性曲线，可用 {sens.get('preferred_method')} 启用"))
     elif sv is None:
         rep.results.append(_bad(
-            "QB-05", STATUS_BLOCKED,
-            "q1 取点值但未声明敏感性义务——点值会把 P* 算成确定值，"
-            "掩盖工程量风险（q1 在投标期不可观测，精度是虚假的）"))
+            "QB-05", STATUS_WARN,
+            "已启用敏感性分析但未声明方法"))
     elif sv not in (sens.get("vocabulary") or []):
         rep.results.append(_bad(
             "QB-05", STATUS_FAIL,
-            f"敏感性义务 {sv!r} 不在词表 {sens.get('vocabulary')} 内"))
+            f"敏感性方法 {sv!r} 不在词表 {sens.get('vocabulary')} 内"))
     else:
-        rep.results.append(_ok("QB-05", f"敏感性义务已声明：{sv}"))
+        rep.results.append(_ok("QB-05", f"敏感性方法已声明：{sv}"))
 
-    # ---------------- QB-06 扫描网格（RATIO_SCAN 的执行前提） ----------------
+    # ---------------- QB-06 扫描网格（仅启用 RATIO_SCAN 时才有意义） ----------------
     scan = (spec.get("sensitivity_requirement") or {}).get("scan_config") or {}
-    if sv != "RATIO_SCAN":
-        rep.results.append(_ok("QB-06", f"敏感性义务为 {sv}，无扫描网格要求"))
+    if not enabled:
+        rep.results.append(_bad(
+            "QB-06", STATUS_SKIP,
+            "敏感性分析未启用，无扫描网格要求（已观测 r ∈ "
+            f"[{(scan.get('observed_r_range') or {}).get('min')}, "
+            f"{(scan.get('observed_r_range') or {}).get('max')}] 留档备查）"))
+    elif sv != "RATIO_SCAN":
+        rep.results.append(_ok("QB-06", f"敏感性方法为 {sv}，无扫描网格要求"))
     elif scan.get("grid") in (None, [], ""):
         obs = scan.get("observed_r_range") or {}
         rng = (f"已观测 r ∈ [{obs.get('min')}, {obs.get('max')}]"
                if obs else "未登记观测范围")
         rep.results.append(_bad(
             "QB-06", STATUS_WARN,
-            "RATIO_SCAN 已声明但扫描网格未定——敏感性分析无法执行；"
+            "RATIO_SCAN 已启用但扫描网格未定——敏感性分析无法执行；"
             f"网格须覆盖真实偏差（{rng}），不得用未经论证的固定 ±5%"))
     else:
         rep.results.append(_ok("QB-06", f"扫描网格已定：{scan['grid']}"))

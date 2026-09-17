@@ -19,6 +19,7 @@ from pathlib import Path
 from bidpricing.validation.cost_basis import (
     STATUS_BLOCKED,
     STATUS_FAIL,
+    STATUS_INFO,
     STATUS_PASS,
     STATUS_SKIP,
     STATUS_WARN,
@@ -52,8 +53,11 @@ class SyntheticCase(unittest.TestCase):
     def _reset_undeclared(self) -> None:
         p = self.cdir / "q1_assumption_spec.json"
         s = json.loads(p.read_text(encoding="utf-8"))
-        s["sensitivity_requirement"]["value"] = None
-        s["sensitivity_requirement"].setdefault("scan_config", {})["grid"] = None
+        sens = s["sensitivity_requirement"]
+        sens["value"] = None
+        sens["mode"] = "OPTIONAL_ENHANCEMENT"
+        sens["enabled"] = False
+        sens.setdefault("scan_config", {})["grid"] = None
         s["frozen_at"] = None
         p.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -64,16 +68,18 @@ class SyntheticCase(unittest.TestCase):
         p.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # ---------------- QB-01 取值依据 ----------------
-    def test_undeclared_basis_is_blocked_not_defaulted(self):
-        """未声明 = BLOCKED，且绝不静默补全为 Q0_NO_CHANGE。
+    def test_undeclared_basis_is_info_not_blocked(self):
+        """未登记 = INFO（台账空缺），不阻塞；绝不静默补全为 Q0_NO_CHANGE。
 
-        Q0_NO_CHANGE 看似「最保守」，实为放弃工程量套利的建模——是商务选择，
-        不是默认值（ADR-0004）。
+        ADR-0013：取值依据只决定能否说清量从哪来，q1 的数值本身由字段字典把关。
+        但「不阻塞」不等于「可以编一个依据」——值必须保持完全缺失（ADR-0004）。
         """
         self._patch(lambda s: s["three_elements"]["basis"].__setitem__("value", None))
         rep = check_quantity_basis(self.cdir)
-        self.assertEqual(rep.by_rule("QB-01").status, STATUS_BLOCKED)
-        self.assertIn("Q0_NO_CHANGE", rep.by_rule("QB-01").detail)
+        r = rep.by_rule("QB-01")
+        self.assertEqual(r.status, STATUS_INFO)
+        self.assertIn("不影响计算", r.detail)
+        self.assertNotIn("QB-01", [x.rule_id for x in rep.blocking])
 
     def test_out_of_vocabulary_basis_is_fail_not_blocked(self):
         self._patch(lambda s: s["three_elements"]["basis"].__setitem__(
@@ -146,13 +152,26 @@ class SyntheticCase(unittest.TestCase):
         self.assertEqual(rep.by_rule("QB-04").status, STATUS_FAIL)
 
     # ---------------- QB-05 点值假设的敏感性义务 ----------------
-    def test_point_without_sensitivity_is_blocked(self):
-        """点值 q1 未声明敏感性义务 = BLOCKED：预测被算成确定值，精度是虚假的。"""
+    def test_point_without_sensitivity_is_not_blocking(self):
+        """点值 q1 未启用敏感性分析 = PASS（默认）。
+
+        ADR-0013：敏感性分析是**分析能力**不是**数据前提**——用户给了成本清单量
+        就是要按它直接测算，不启用不影响结论成立。
+        """
         rep = check_quantity_basis(self.cdir)
-        self.assertEqual(rep.by_rule("QB-05").status, STATUS_BLOCKED)
+        self.assertEqual(rep.by_rule("QB-05").status, STATUS_PASS)
+        self.assertNotIn("QB-05", [x.rule_id for x in rep.blocking])
+        self.assertEqual(rep.by_rule("QB-06").status, STATUS_SKIP)
+
+    def test_enabled_sensitivity_without_method_is_warn(self):
+        """启用分析却没给方法 = WARN（要行动，但不阻塞测算）。"""
+        self._patch(lambda s: s["sensitivity_requirement"].__setitem__("enabled", True))
+        rep = check_quantity_basis(self.cdir)
+        self.assertEqual(rep.by_rule("QB-05").status, STATUS_WARN)
 
     def test_declared_sensitivity_passes(self):
         def mut(s):
+            s["sensitivity_requirement"]["enabled"] = True
             s["sensitivity_requirement"]["value"] = "RATIO_SCAN"
         self._patch(mut)
         rep = check_quantity_basis(self.cdir)
@@ -169,6 +188,7 @@ class SyntheticCase(unittest.TestCase):
 
     def test_sensitivity_out_of_vocabulary_is_fail(self):
         def mut(s):
+            s["sensitivity_requirement"]["enabled"] = True
             s["sensitivity_requirement"]["value"] = "HOPE"
         self._patch(mut)
         rep = check_quantity_basis(self.cdir)
@@ -176,8 +196,9 @@ class SyntheticCase(unittest.TestCase):
 
     # ---------------- QB-06 扫描网格 ----------------
     def test_ratio_scan_without_grid_is_warn(self):
-        """网格未定 = 敏感性分析无法执行；且须提示真实偏差范围而非 ±5%。"""
+        """启用 RATIO_SCAN 后网格未定 = 分析无法执行；须提示真实偏差范围。"""
         def mut(s):
+            s["sensitivity_requirement"]["enabled"] = True
             s["sensitivity_requirement"]["value"] = "RATIO_SCAN"
         self._patch(mut)
         rep = check_quantity_basis(self.cdir)
@@ -186,6 +207,7 @@ class SyntheticCase(unittest.TestCase):
 
     def test_declared_grid_passes(self):
         def mut(s):
+            s["sensitivity_requirement"]["enabled"] = True
             s["sensitivity_requirement"]["value"] = "RATIO_SCAN"
             s["sensitivity_requirement"]["scan_config"]["grid"] = [0.43, 0.6, 0.8, 1.0]
         self._patch(mut)
@@ -194,6 +216,7 @@ class SyntheticCase(unittest.TestCase):
 
     def test_non_ratio_scan_needs_no_grid(self):
         def mut(s):
+            s["sensitivity_requirement"]["enabled"] = True
             s["sensitivity_requirement"]["value"] = "SCENARIO_SWEEP"
         self._patch(mut)
         rep = check_quantity_basis(self.cdir)

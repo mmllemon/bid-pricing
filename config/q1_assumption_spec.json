@@ -3,7 +3,7 @@
   "task": "T00-10A + T00-10B",
   "title": "结算工程量 q1 假设声明书",
   "role": "与 T00-11（c_i 假设声明书）同构，但**声明的核心不同**：c_i 是已发生事实，核心是「谁说的」（来源可信度）；q1 是未发生的预测——投标期结算量不可观测，核心是「不确定性怎么表达」（格式）。照搬 c_i 的来源词表会得到假答案：q1 的来源永远是「造价员估的」，真正影响 P* 可靠性的是它取点值还是区间。",
-  "frozen_at": null,
+  "frozen_at": "2026-09-17T01:20:55.614885+00:00",
   "frozen_at_note": "**冻结时点：Gate 0b 之前**。当前为 null = 尚未冻结。",
   "field_binding_ref": "config/field_schema.json：q0 / q1_point / q1_lo / q1_hi（missing_policy 均为 BLOCK）",
   "observability": {
@@ -55,10 +55,11 @@
         "_rule": "该项已由 config/basis_declarations.json 的 default_attribution 声明（DRAWING_DIFF），由 QB-02 判据跨文件读取校验；判据非 PASS 时退回要求显式附证。"
       },
       "status": "RESOLVED",
-      "status_note": "**用户亲述落值（2026-09-16）**：原话「q1_point:=成本清单量」。",
+      "status_note": "用户 2026-09-16 亲述「q1_point:=成本清单量」。取值依据为台账属性，不阻塞测算（q1 的数值本身由字段字典 missing_policy 把关）。",
       "declared_evidence": {},
       "declared_by": "user(亲述 2026-09-16)",
-      "declared_at": "2026-09-16T23:35:00+08:00"
+      "declared_at": "2026-09-16T23:35:00+08:00",
+      "traceability_note": "以下为**留痕项**（ADR-0013）：缺失不影响测算，仅在复核量从哪来时使用。"
     },
     "format": {
       "value": "POINT",
@@ -91,8 +92,8 @@
       "SCENARIO_SWEEP": "对 q1 做离散场景集（乐观/基准/悲观）分别求解",
       "NOT_REQUIRED_JUSTIFIED": "显式论证本项目无需敏感性分析（须写明理由，如 q1 已由合同锁定）"
     },
-    "status": "RESOLVED",
-    "status_note": "**用户裁定（2026-09-17）**：RATIO_SCAN——输出 P* 与最优单价结构随 r 变化的曲线，与既有 Z(P*) 曲线可组合成二维敏感性。",
+    "status": "NOT_ENABLED",
+    "status_note": "**用户 2026-09-17 明确**：不需要额外的敏感性分析——「我既然给了你成本清单，你只需要按照我的成本清单数据来测算就行」。故本项为**默认关闭的可选增强**，不是测算前提。用户此前选的 RATIO_SCAN 保留为 preferred_method，将来要看r 敏感性曲线时一句话即可启用（模型已有该能力，不启用不扣分）。",
     "declared_by": "user(亲述 2026-09-17)",
     "declared_at": "2026-09-17T01:04:30.040897+00:00",
     "scan_config": {
@@ -111,7 +112,10 @@
       },
       "grid_rule": "扫描网格须覆盖已观测的 r 范围（当前 [0.4286, 1.0]）——用拍脑袋的 ±5% 会漏掉全部真实偏差（实际单项最大减量达 -57%）。",
       "asymmetry_note": "r 无一项 > 1：成本清单工程量全部 ≤ 招标清单量，金额加权 r = 0.9311（按成本清单量计，结算规模比按招标量计低约 6.9%）。单向性须由「算量依据」附证解释——若这 6 项减量源于算量口径差异而非真实预期，则 r 本身取错，不平衡报价的方向会整体反向。"
-    }
+    },
+    "mode": "OPTIONAL_ENHANCEMENT",
+    "enabled": false,
+    "preferred_method": "RATIO_SCAN"
   },
   "attribution_ref": {
     "file": "config/basis_declarations.json",

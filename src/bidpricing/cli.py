@@ -1071,7 +1071,7 @@ def cmd_validate_boq(args) -> int:
     print(" " + vrep.summary_line())
     print("-" * 78)
     for r in vrep.results:
-        mark = {"PASS": "✓", "FAIL": "■", "BLOCKED": "▲", "WARN": "⚠", "SKIP": "–"}[
+        mark = {"PASS": "✓", "FAIL": "■", "BLOCKED": "▲", "WARN": "⚠", "INFO": "ℹ", "SKIP": "–"}[
             r.status]
         print(f" {mark} [{r.rule_id:^4}] {r.status:<8} {r.detail}")
         for ev in r.evidence[:8]:
@@ -1211,7 +1211,7 @@ def cmd_cost_check(args) -> int:
     rep = check_cost_basis(cdir)
     for r in rep.results:
         mark = {"PASS": "✓", "WARN": "⚠", "BLOCKED": "■",
-                "FAIL": "■", "SKIP": "–"}[r.status]
+                "FAIL": "■", "INFO": "ℹ", "SKIP": "–"}[r.status]
         print(f" {mark} [{r.status:>7}] {r.rule_id}  {r.detail}")
         for e in r.evidence:
             print(f"            · {e}")
@@ -1274,7 +1274,7 @@ def cmd_qty_check(args) -> int:
         rep = check_quantity_basis(cdir)
         for r in rep.results:
             mark = {"PASS": "✓", "WARN": "⚠", "BLOCKED": "■",
-                    "FAIL": "■", "SKIP": "–"}[r.status]
+                    "FAIL": "■", "INFO": "ℹ", "SKIP": "–"}[r.status]
             print(f" {mark} [{r.status:>7}] {r.rule_id}  {r.detail}")
             for e in r.evidence:
                 print(f"            · {e}")

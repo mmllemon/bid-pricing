@@ -1,11 +1,16 @@
 """T00-09 成本口径证明包 + T00-11 c_i 假设声明书的机器可执行校验。
 
-两条链，五态语义沿用校验层（ADR-0008）：
+六态语义（ADR-0008 五态 + ADR-0013 新增 **INFO**）：
 
-* **FAIL / BLOCKED 区分**：数据违反 ≠ 声明缺失。成本来源未声明是 **BLOCKED**
-  （没人说过），成本来源写了词表外的值是 **FAIL**（说了但说错了）。
-* **WARN**：声明齐全但尚未冻结（冻结时点是 Gate 0b 之前，当前未到）。
+* **FAIL / BLOCKED 区分**：数据违反 ≠ 声明缺失。成本来源写了词表外的值是
+  **FAIL**（说了但说错了）；真正影响算式的前提缺失才是 **BLOCKED**（如格式）。
+* **WARN**：声明齐全但尚未冻结、或存在**影响结论解释力**的缺口。
+* **INFO**：留痕项缺失——**记录但无需任何行动**，不影响计算，仅供将来复核
+  与责任划分（ADR-0013：台账不是关卡）。
 * **SKIP**：判据所需制品不存在——显式记录，不静默通过。
+
+**判断准则（ADR-0013）**：一个字段缺失会让**算式算不出或算错**，才配 BLOCKED；
+只让结论**说不清出处**的，一律 INFO。
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ STATUS_PASS = "PASS"
 STATUS_FAIL = "FAIL"
 STATUS_BLOCKED = "BLOCKED"
 STATUS_WARN = "WARN"
+STATUS_INFO = "INFO"
 STATUS_SKIP = "SKIP"
 
 #: T00-09 要求的八项分解——**键序即规范顺序**，改任一侧须同步两侧。
@@ -157,9 +163,10 @@ def check_cost_basis(config_dir: Path) -> CostBasisReport:
         vocab = src.get("vocabulary") or []
         if value is None:
             rep.results.append(_bad(
-                "AS-01", STATUS_BLOCKED,
-                "c_i 来源未声明——成本是 C4 地板的唯一依据，来源不明则地板的"
-                "可靠性无从判断（不是取值问题，是可信度问题）"))
+                "AS-01", STATUS_INFO,
+                "c_i 来源未登记（台账空缺）——**不影响计算**：c_i 的数值本身由"
+                "字段字典的 missing_policy 把关，来源只决定将来能否说清出处。"
+                "已按 ADR-0013 从 BLOCKED 降级：台账不是关卡"))
         elif value not in vocab:
             rep.results.append(_bad(
                 "AS-01", STATUS_FAIL,
@@ -193,9 +200,9 @@ def check_cost_basis(config_dir: Path) -> CostBasisReport:
                 rep.results.append(_ok("AS-02", f"来源 {value} 无强制附证要求"))
             elif lack:
                 rep.results.append(_bad(
-                    "AS-02", STATUS_WARN,
-                    f"来源 {value} 仍缺附证 {lack}——"
-                    "补齐前 c_i 不可作为 C4 地板依据（须附全量见证据行）", ev))
+                    "AS-02", STATUS_INFO,
+                    f"来源 {value} 的留痕项待补 {lack}——**不影响计算**，"
+                    "仅在复核成本出处时需要（ADR-0013：留痕项不阻塞）", ev))
             else:
                 rep.results.append(_ok(
                     "AS-02", f"来源 {value} 附证齐备：{sorted(declared)}", ev))

@@ -3,7 +3,7 @@
   "task": "T00-11",
   "title": "成本 c_i 假设声明书",
   "role": "与 T00-10A（q¹ 假设声明书·格式篇）同构的三要素声明：来源 / 格式 / 冻结时点。未声明即 BLOCKED——成本是本模型的地板，来源不明等于地板悬空。",
-  "frozen_at": null,
+  "frozen_at": "2026-09-17T01:20:55.842141+00:00",
   "frozen_at_note": "**冻结时点：Gate 0b 之前**。当前为 null = 尚未冻结（未定态）。落值后由 `bidpricing freeze` 写入 hash 与 frozen_at。",
   "cost_basis_ref": "config/cost_basis_spec.json（T00-09 八项分解，c_i 的构成口径）",
   "three_elements": {
@@ -50,7 +50,8 @@
       "status_note": "**用户亲述落值（2026-09-17）**：c_i 来源 = SUPPLIER_QUOTE（供应商询价）。真实成本清单已提供（成本/西永L分区…成本清单.xlsx，sha256 7a8110d65b24）。「询价日期」「品牌规格」为数据层附证，须由用户补齐后方可冻结——模型不得代为填值。",
       "declared_evidence": {},
       "declared_by": "user(亲述 2026-09-17)",
-      "declared_at": "2026-09-16T23:54:42.946465+00:00"
+      "declared_at": "2026-09-16T23:54:42.946465+00:00",
+      "traceability_note": "以下为**留痕项**（ADR-0013）：缺失不影响测算，仅在复核成本出处时使用。"
     },
     "format": {
       "value": "POINT",

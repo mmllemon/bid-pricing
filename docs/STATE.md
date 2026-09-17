@@ -5,15 +5,15 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-17 08:56:34** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-17 09:10:27** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`cebcc80` ｜ 累计 34 次提交
-- 最新提交信息：feat(t00-10a,t00-10b): q1 假设声明书 —— 预测不是事实（ADR-0012）
+- 提交：`557ecf2` ｜ 累计 36 次提交
+- 最新提交信息：feat(t00-10a): RATIO_SCAN 落值 + 扫描网格判据 QB-06（r 实测分布）
 - 最近里程碑标签：`cost-basis-v1`
 - 工作区：干净
 
@@ -43,15 +43,15 @@
 
 | 制品 key | 类型 | hash | 冻结时间 |
 |---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-17T00:55:11+00:00 |
-| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-17T00:55:11+00:00 |
-| `constraint_schema_version` | versioned | sha256:771e84c8ec74 | 2026-09-17T00:55:11+00:00 |
-| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-17T00:55:11+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-17T00:55:11+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-17T00:55:11+00:00 |
-| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-17T00:55:11+00:00 |
-| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-17T00:55:11+00:00 |
-| `pricing_rule_card_version` | versioned | sha256:29040209cd8b | 2026-09-17T00:55:11+00:00 |
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-17T01:09:55+00:00 |
+| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-17T01:09:55+00:00 |
+| `constraint_schema_version` | versioned | sha256:771e84c8ec74 | 2026-09-17T01:09:55+00:00 |
+| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-17T01:09:55+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-17T01:09:55+00:00 |
+| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-17T01:09:55+00:00 |
+| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-17T01:09:55+00:00 |
+| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-17T01:09:55+00:00 |
+| `pricing_rule_card_version` | versioned | sha256:29040209cd8b | 2026-09-17T01:09:55+00:00 |
 | `adjustment_scope` | enum | **未冻结** | — |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
@@ -60,7 +60,7 @@
 
 ## 四、质量门
 
-- 单元测试：**389** 项，结果 **通过**（OK）
+- 单元测试：**392** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests

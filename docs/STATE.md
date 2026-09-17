@@ -5,17 +5,17 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-18 00:07:48** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-18 07:15:10** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`378a3bd` ｜ 累计 58 次提交
-- 最新提交信息：fix(tools): 依赖解析两处静默丢失（粗体 deps 被丢弃 / LaTeX 竖线导致列错位）
+- 提交：`87f2e92` ｜ 累计 60 次提交
+- 最新提交信息：chore(state): 重新生成状态快照（前一笔 T04-08）
 - 最近里程碑标签：`cost-basis-v1`
-- 工作区：有 12 处未提交改动
+- 工作区：有 11 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -43,15 +43,15 @@
 
 | 制品 key | 类型 | hash | 冻结时间 |
 |---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-17T16:06:31+00:00 |
-| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-17T16:06:31+00:00 |
-| `constraint_schema_version` | versioned | sha256:bccb081ed800 | 2026-09-17T16:06:31+00:00 |
-| `precision_profile_version` | versioned | sha256:146e8e6ffbc4 | 2026-09-17T16:06:31+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-17T16:06:31+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-17T16:06:31+00:00 |
-| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-17T16:06:31+00:00 |
-| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-17T16:06:31+00:00 |
-| `pricing_rule_card_version` | versioned | sha256:d88298683924 | 2026-09-17T16:06:31+00:00 |
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-17T23:13:52+00:00 |
+| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-17T23:13:52+00:00 |
+| `constraint_schema_version` | versioned | sha256:bccb081ed800 | 2026-09-17T23:13:52+00:00 |
+| `precision_profile_version` | versioned | sha256:146e8e6ffbc4 | 2026-09-17T23:13:52+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-17T23:13:52+00:00 |
+| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-17T23:13:52+00:00 |
+| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-17T23:13:52+00:00 |
+| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-17T23:13:52+00:00 |
+| `pricing_rule_card_version` | versioned | sha256:d88298683924 | 2026-09-17T23:13:52+00:00 |
 | `adjustment_scope` | enum | **未冻结** | — |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
@@ -60,7 +60,7 @@
 
 ## 四、质量门
 
-- 单元测试：**877** 项，结果 **通过**（OK）
+- 单元测试：**915** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -83,7 +83,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP1 | 11 | done 10、not_started 1 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | done 1、not_started 6 |
-| WP4 | 13 | done 7、not_started 6 |
+| WP4 | 13 | done 8、not_started 5 |
 | WP5 | 5 | not_started 5 |
 | WP6 | 8 | not_started 8 |
 | WP7 | 4 | not_started 4 |
@@ -92,7 +92,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ### 已启动 / 已完成任务
 
-> 共 33 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 34 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -128,6 +128,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T04-02B | 约束编译器 | done | ✓ 成立 | 2026-09-17 完成。交付 `config/lp_compiler_spec.json`（目标形式/展开规则/化简规则/后端/字面量白名单/CC-01..CC-12/消费者）+ `src/bidpricing/solver/compiler.py`（Formulation → CompiledModel 的机械翻译 + 零依赖求值器 evaluate + 惰性 PuLP 导出 + 12 条 CC 判据）+ CLI `compile-check`（LP/MILP 两变体各 12 条，24 条中 21 PASS / 3 SKIP / 0 待处理）。**核心：把「无手写约束」做成可机械判定的性质** —— 编译目标定为建模器/求解器无关的规范形式（零第三方依赖环境的硬约束），CC-01..CC-12 全部跨来源对账（一侧 Formulation、一侧 CompiledModel，CC-07 再加业务式 check_solution）。**修 T04-02A 遗留两处真 bug**：① C7 双向指示式原两式共用 M = c_i − lb_i，而两式恒真条件不同（下式覆盖下界、上式覆盖上界）⇒ 第三式在 z=0 处切掉 [c_i, ub_eff] 大部分区间（实测 c=50/lb=45/ub=120/eps=0.01 时共用 M=5 把合法区间从 [50,120] 压到 [50,54.99]）⇒ 业务侧判可行、编译侧判违反，误报 infeasible 且不报错 —— 已拆 M_lo/M_hi + 有效上界 ub_i^eff + 退化固定（z 固定界而非删除、C7 汇总 RHS 扣减 n_fixed_one），CC-08 锁死；② 目标系数原写 q1·r_eff，正确为 q0·r_eff（= ∂R/∂p，因 c_i·q1_i 与 p 无关）——写成 q1 等于把 LP 排序键又乘一遍 r_i（次优且不触发任何可行性检查，T04-00 EC-2 失效模式），由 CC-07 跨来源代回实测抓到（676000 vs 420000），已修并加数值差分回归测试。**裁定 C11 移出 LP**：σ(d) 是二阶锥约束而 HiGHS 不含 SOCP，MAD 替代由 Cauchy-Schwarz 是放松（最坏 √n，本项目 10.72 倍）且原式 (1/n)Σ|p−p̄| 不含 base_i 未归一化 ⇒ 两份制品同落 DISCRETE_CHECK，由 CC-10 锁死。**CC-12 规则定为「数值必须具名」而非按值白名单**：首版把模块自身容差与切片下标误报为手写系数（判据把正常实现报成违规），改判是否具名后 SLACK_ATOL=1e-9 通过、0.85*cap 被抓。**修 CLI 契约漂移**：误读 literal_allowlist.allowed（正确键 allowed_in_expressions），读错会静默退回模块默认值使制品不再是白名单真相来源；并把探针的求解层入参（formulation.PROBE_SOLVER_INPUTS）接入 build_formulation/compile_model，否则 C6/C7/C9/C10 占位行恒 NOT_COMPILED ⇒ MILP 变体 CC-05 恒 BLOCKED。口径修正已全仓 grep 旧表述并同步（lp_formulation_spec.relation_to_objective、formulation.objective_expr、lp_compiler_spec.coefficient_rule、compiler 文档串、CHANGELOG、T04-02A note）；ADR-0021 不可变，由 ADR-0022 决策三推翻其 ∂Z/∂p=q1·r_eff 一句。测试 555 → 587（tests/test_lp_compiler.py 32 项，含 12 条判据各自的错误注入区分度层 + evaluate + 惰性导出 + 字面量审计）。遗留：CC-09（PuLP 结构等价）本机恒 SKIP，须 T04-02C 复跑；M_hi 对分支定界收敛的影响待 T04-07 量化。；config/lp_compiler_spec.json 存在（24898 字节）；src/bidpricing/solver/compiler.py 存在；tests/test_lp_compiler.py 存在；ADR ADR-0022-lp-compiler-positions.md 存在 |
 | T04-02C | HiGHS backend adapter | done | ✓ 成立 | 2026-09-17 完成。交付 `config/solver_backend_spec.json`（分层/能力域/注册表/选择策略/状态域与两张映射表/序列化/BB-01..BB-09/静态审计基准/环境与证据指针）+ `src/bidpricing/solver/backend.py`（唯一允许接触求解器包的模块：选后端 → 复用 T04-02B 导出层 → 求解 → 状态归一 → 解回读 + 9 条 BB 判据）+ CLI `backend-check`（LP/MILP 两变体各 9 条）+ ADR-0023。**核心：把「业务逻辑不写死求解器」做成可机械判定的性质** —— 全仓只有 backend.py 可以 import 求解器包、可以调用 solve()（BB-03 静态 AST 判据）；后端的选择、能力矩阵、状态映射、审计基准全部住制品；加一个后端 = 制品注册一条目 + ADAPTERS 放一个实现体，业务侧零改动。**状态分域**：定义九值归一状态域并把 native→normalized 与 normalized→judge 两条映射分开（求解器的答案是业务结论，判据的答案是「这一环走样没有」，塞进同一枚举正是本仓反复出现的根因）。四条关键裁定：① AMBIGUOUS 独立存在（HiGHS kUnboundedOrInfeasible 与 PuLP Undefined 都自带歧义，折进 INFEASIBLE 是无据断言、折进 ERROR 是无据归因）；② 超时不含结论（kTimeLimit 等按有无 incumbent 分叉：有 ⇒ FEASIBLE 未证最优，无 ⇒ UNSOLVED）；③ UNAVAILABLE（环境缺失⇒SKIP+复跑条件）与 UNSUPPORTED（机制缺失⇒BLOCKED）分属不同档，合并会让一个把 MILP 交给 LP-only 后端的配置以「没跑」的样子长期留档；④ 原生别名表整张住制品，适配层源码不得出现任何别名串（BB-05 静态子判据）。**BB-05 首版按纯文本 grep 把模块自己 docstring 里的说明文字报成违规 —— 判据把正常实现报成违规，改为 AST 取字面量且排除 docstring**（要拦的是代码路径上的硬拷贝，不是文档提到这个词；与 CC-12 同一条教训）。**CC-09 复跑（T04-02B 挂账闭合）**：复跑前先把覆盖面补齐到逐行系数多重集 + 目标方向 + 目标常量，行比对由「按下标」改为「指纹多重集配对」（与 CC-02 同构，原按下标隐含假设了模型行序==约束插入序，该假设从未声明）。**首跑即 FAIL 两处真问题**：① 导出层把变量名交给建模器净化 —— PuLP 构造 LpVariable 时把 `+ - / > [ ]` 与空格一律换成 `_`，于是 p_P-DEC 导出后变 p_P_DEC、适配层按符号回读一个都取不到（解被判「全部变量缺失」），更糟的是两个不同符号净化后同名 ⇒ **两个决策变量静默合并成一个**（实测 a-b 与 a_b 的 .name 都是 a_b）；修法是导出层自持可逆编码（白名单 [A-Za-z0-9_] 原样、其余编码为 ~%04x），并由 CC-09 增判「编码在真实符号集上单射」与「往返一致」——单射那条是导出层唯一灾难性的失败；穷举实测 2026-09-17 PuLP 3.3.2 只改动七个字符（+ - / > [ ] 与空格）。② extract_pulp_structure 的优化方向反向映射对反了（写成 LpMinimize=1 的直觉版，实测 PuLP 是 LpMinimize=1/LpMaximize=-1，我写反）—— 方向若不比对，就永远发现不了有人把 to_pulp 写成 LpMinimize。**修 CC-09 三条出口不分家的缺陷**：to_pulp 原先在符号闭包缺口时让 lpSum 抛 KeyError，把整条校验以异常形态炸掉（而不是报一条 FAIL）—— 改为构造前自查并抛 CompilerError ⇒ CC-09 归一 BLOCKED，且「导出层拒绝」与「本机没装 PuLP」不再被读成同一件事。**能力不足即 BLOCKED 不得降级**：把含二元变量的模型交给 LP-only 后端会静默放松整数性（与 C7 共用 M 同族失效）；声明未实现的条目同样判 UNSUPPORTED 且不回退。**替换性实证**：active 由 pulp_highs 改为 pulp_cbc（或 --prefer），源码零改动，HiGHS 与 CBC 给出同一最优值 460000.0、C1 残差 0（0.004s vs 0.057s）；BB-06 在只有一个候选时判 FAIL 而非 PASS（无第二候选即无证据，不得把「无从验证」记成「已验证」）。**仓外验证**：为闭合 CC-09 在仓外建隔离 venv（PuLP 3.3.2 + HiGHS 1.15.1），仓内维持零依赖（无 PuLP 时 BB-07/BB-08/BB-09 与 CC-09 判 SKIP，BB-01..BB-06 仍全可判）。**CC-12 在适配层新写的代码上当场生效**：int(...,16) 的裸进制被自己抓出，提成 SYMBOL_ESCAPE_RADIX。测试 587 → 659（tests/test_solver_backend.py 62 项，每条 BB 判据配错误注入的区分度层 + CC-09 六种走样注入 + 符号编码回归）；零依赖环境 659 OK / 9 SKIP，装 PuLP 环境 659 OK / 0 SKIP。**输出文案的环境断言纠偏**：compile-check/backend-check 的「N 条 SKIP」提示原写死「本机无 PuLP」，在装 PuLP 的机器上成为假话（CC-09 已实跑，余下的 SKIP 是 LP 变体 CC-08 的结构性豁免）—— 改为读具名探针 pulp_available()（与 to_pulp 同源）决定文案，并加单测断言探针与导出层答案恒等；测试侧 TestCheckLayerGreen 原先断言 CC-09==SKIP（只在零依赖机成立），改为按 import pulp 探测取值（缺能力时假 PASS 与有能力时假 SKIP 同属回归）。**上游漂移实测并挂账**：PULP_CBC_CMD 已弃用（4.0 移除，pulp_cbc 因此是随版本失效的第二候选，升级须同步改制品否则 BB-06 会真 FAIL）；LpVariable(name,...) 直接构造与 prob.constraints 字典用法 4.0 将变（影响面在 T04-02B 导出层）。；config/solver_backend_spec.json 存在（37994 字节）；src/bidpricing/solver/backend.py 存在；tests/test_solver_backend.py 存在；ADR ADR-0023-solver-backend-adapter.md 存在 |
 | T04-02D | 解校验器 | done | ✓ 成立 | 2026-09-17 完成。交付 `config/solution_verifier_spec.json`（两层容差定义 / 容差名→数值解析表（封闭动词集）/ 四族声明 / 五类层归属 / SV-01..SV-13 / 判定聚合 / 独立性（接口级 + 静态级）/ 参考值策略）+ `src/bidpricing/solver/verifier.py`（外层复核层）+ CLI `verify-solution`（LP/MILP 两变体各 13 条）+ ADR-0024。**核心：复核实现在接口级就够不着内层结论** —— verify_solution 的入参只有原始量（x / reported_objective / model / instance / profile / floor_by_id / reference / verifier_source / resolution），**刻意不过载 SolveResult**；再叠一层 AST 静态审计禁止调用 evaluate / check_solution / solve_compiled 与 import 任何求解器包（SV-12）。**两层容差的宽度比必须被具名并检验**（ADR-0020 D1）：R2 = eps_abs/eps_solver = 1e6 ≥ 1e3（SV-06），否则复核层退化成内层判据的复制。**三态分离**：SKIP（本轮没查）/ BLOCKED（这一环没查成，如无 Z_ref、floor 未接入）/ FAIL（查出问题）；空判据集 ⇒ BLOCKED；聚合序 FAIL > BLOCKED > WARN > SKIP > PASS。**★ 落地时实测出两处真缺陷（非推演）**：(DV-01) 行上声明的 tolerance 名字**从未被任何判据解析成数值** —— 内层实际用一个未具名的 1e-12，比声明的 eps_solver=1e-8 严 1e4 倍；把 C1 残差注入 5e-9（在声明容差**之内**）即被判不可行，且 BB-08 给出**错误归因**「导出层走样」（而 CC-09 已 PASS）。探针看不见它（最优值可精确表示，C1 slack 恰为 0）；真实规模项目上这是**必然触发**（HiGHS 原始可行容差 1e-7，PuLP 报告前还就地舍入）。修法分两半：① 编译侧 evaluate 增 tolerances 入参（唯一来源 verifier.resolve_tolerances），RowEval 拆 ok_exact / ok / in_tolerance_band；② 业务侧 check_solution 增 tolerances 入参，盒式约束（L/U）改用**声明名** eps_price 的宽度判（此前对 L/U 是严格比较、只有 C1 用 eps_total ⇒ 同一个 p=U+5e-12 编译侧判可行、业务侧判不可行 —— **只修一半比不修更隐蔽**）；结果新增 tolerance_name/value/resolved 自述口径，传了表却缺该名 ⇒ BB-08 判 BLOCKED（不静默按 0 冒充可比）。(DV-02) eps_price 有两种读法：**绝对**（profile 值 × P*，行级容差宽度）与**相对**（无量纲因子，compute_lb_c5 的入参、ε_Z 的相对项）。混用即「乘重一遍」：把已 ×P* 的 0.003 再喂给 compute_lb_c5 ⇒ lb_C5 由 0.01 元放大成 9000 元，所有项被判越下界 —— 与历史上目标系数误写 q1·r_eff 同族。**故二者在制品里是两个名字**（eps_price / eps_rel_price，同源不同用法）。**判据覆盖面的自省**：目标系数 ∂Z/∂p = q0·r_eff（不是 q1）；SV-03 要求「容差带必须被本实例走到」，探针恰好走不到 ⇒ 判 WARN 而非 PASS（「这一轮没走到」不得读成「已成立」）；SV-13 在 T04-08 落地前恒 BLOCKED（禁止用本层自算的业务式顶替 —— 那与 CC-07 同源，构成恒真式）。**仓外验证**：装 PuLP 环境 backend-check 18 PASS / 0 SKIP（BB-09 的 CC-09 挂账闭合、BB-08 双侧含新口径均 PASS）；verify-solution 在补齐 floor（T03-02）与 Z_ref（T04-08）后升到 WARN，余下唯一 WARN 即 SV-03（探针走不到容差带）。测试 659 → 735（tests/test_solution_verifier.py 60 项 + 两侧容差区分度层 + BB-08 口径三态层），零依赖 735 OK / 9 SKIP，装 PuLP 735 OK / 0 SKIP。**未结**：SV-07 的 floor 一路（owner T03-02）、SV-13 的 Z_ref（owner T04-08），以及 solve_compiled 的 eps_total / tolerances 双入参过渡态（已登记进 solver_backend_spec.open_items）。；config/solution_verifier_spec.json 存在（29246 字节）；src/bidpricing/solver/verifier.py 存在；tests/test_solution_verifier.py 存在；ADR ADR-0024-solution-verifier.md 存在 |
+| T04-07 | MILP 独立验收协议 | done | ✓ 成立 | 2026-09-18：MILP 独立验收协议落地。spec=config/milp_acceptance_spec.json（MA-01..MA-10 + 六字段 + 三容差具名）；实现 src/bidpricing/solver/milp_acceptance.py（build_acceptance 生产 / judge_milp 判定分离，只吃 MilpFacts 原始量）；适配层 backend._pulp_diagnostics 以 hasattr 能力探测取 best_bound/mip_gap/integrality_violation，取不到即留空（不用 Z 顶替）。最优性四项全满足才标 OPTIMAL，否则单向下坡降级 FEASIBLE（never_upgrade）；超时按有无 incumbent 分叉；禁 KKT 证 MILP 最优性。38 项测试（全量 877→915，双环境全绿），含注入『FEASIBLE 状态却给 OPTIMAL』必 FAIL、无 bound 却标 OPTIMAL 必 FAIL、制品漏声明容差必 BLOCKED、超时写成 INFEASIBLE 必 FAIL。CLI milp-check（--form LP|MILP|both / --time-limit / --json）。★ 接线首跑抓到真口径错误：HiGHS 的 mip_dual_bound 不含 objective_constant（探针常量 −2,270,000；只做 min→max 取反得 bound=2,730,000 对 Z=460,000，复算间隙 4.9 而自报 0.0），由 MA-06 跨来源对账抓出，补两步换算后一致。★ 实测能力差异：pulp_highs ⇒ OPTIMAL（已证）；pulp_cbc（命令行后端 solverModel=None）⇒ diagnostics 为空 ⇒ MA-05 WARN + MA-06 BLOCKED ⇒ 降级 FEASIBLE 未证（若硬编码『一定有诊断量』，CBC 上会静默宣称最优）。遗留 OI-MA-A：M_hi 对分支定界收敛的影响仍待量化（T04-02B 挂账项）。；config/milp_acceptance_spec.json 存在（16121 字节）；src/bidpricing/solver/milp_acceptance.py 存在；tests/test_milp_acceptance.py 存在；ADR ADR-0028-milp-acceptance-protocol.md 存在 |
 | T04-08 | 独立 Reference Implementation | done | ✓ 成立 | 2026-09-17：独立参考实现落地。spec=config/reference_impl_spec.json（RI-01..RI-11 + ISO-1/2/3）；实现 src/bidpricing/refimpl/{reference,isolation}.py，**不 import 任何生产模块**（连数据结构也不 import，靠冻结快照取属性），公式由路线 §5.3 S0 + 利润桥接表 + 规则卡推导；Z_total/Z_competitive 两个口径两个名字；ε_Z=eps_abs+eps_rel_price·max（缺项 BLOCKED）。39 项测试（全量 838→877），含手算钉死六分支组合、注入错 Z/篡改逐项必 FAIL、制品少声明分支必 BLOCKED、审计抓 settlement_revenue、ISO-2 运行时复读探针。CLI ref-check；verify-solution 默认向参考层取 Z_ref ⇒ **SV-13 挂账闭合**（LP/MILP 两变体均 PASS，Δ=0）。接线首跑即抓到真 bug：C7 二值 z_i 与 p_i 共用 item_id，映射被 0/1 覆盖（按 family=="p" 过滤修复）。遗留 OI-RI-A：ISO-3 作者分离需第二人签署（docs/reference_review_signoff.json，signed=false）⇒ 未签前 T04-04 对拍结论强制 BLOCKED。；config/reference_impl_spec.json 存在（11123 字节）；src/bidpricing/refimpl/reference.py 存在；tests/test_reference_impl.py 存在；ADR ADR-0027-reference-implementation.md 存在 |
 
 ---

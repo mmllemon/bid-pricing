@@ -36,6 +36,17 @@ STATUS_BLOCKED = "BLOCKED"
 #: 单价舍入分辨率（元）——与 precision_profile.rounding.resolution 同源。
 PRICE_RESOLUTION = 0.01
 
+#: 盒式约束（C2：``L ≤ p ≤ U``）与 C5 在**行上声明的容差名**。
+#: 这是**名**，不是数：名字→数值的解析在本仓只有一个来源
+#: （``solver/verifier.py`` 的 ``resolve_tolerances``，制品
+#: ``solution_verifier_spec.tolerance_name_resolution``）。硬编码一个数
+#: （如 1e-12）就是 DV-01——同一个约束在两侧各用一种口径，且偏窄的那侧
+#: 会给出**错误归因**。
+BOX_TOLERANCE_NAME = "eps_price"
+
+#: C1 在行上声明的容差名（``max(eps_abs, eps_price·P*)``）。
+C1_TOLERANCE_NAME = "eps_total"
+
 
 class Phase1InstanceError(ValueError):
     """实例结构不合法（缺必填键、类型不符）。"""
@@ -239,6 +250,15 @@ class SolutionCheck:
     declared_total: float
     c1_residual: float | None
     violations: tuple[str, ...]
+    #: 判定盒式约束（L/U/C5）所用的**具名**容差——口径必须自述（DV-01）。
+    #: 传了容差表则为 ``BOX_TOLERANCE_NAME``，否则为空（严格口径）。
+    tolerance_name: str = ""
+    #: 该名字解析出的数值；``None`` = 未解析（未传表，或表里没有该名）。
+    tolerance_value: float | None = None
+    #: True = 盒式容差确实按**声明名**解析到了数值（两侧口径可比）。
+    #: False 且 ``tolerance_name`` 非空 ⇒ 传了表却缺该名 ⇒ 上层应判 BLOCKED，
+    #: **不得**按严格口径冒充一个可行性结论（同源规则②：未定态不得降级）。
+    tolerance_resolved: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -248,6 +268,9 @@ class SolutionCheck:
             "declared_total": self.declared_total,
             "c1_residual": self.c1_residual,
             "violations": list(self.violations),
+            "tolerance_name": self.tolerance_name,
+            "tolerance_value": self.tolerance_value,
+            "tolerance_resolved": self.tolerance_resolved,
         }
 
 
@@ -257,6 +280,7 @@ def check_solution(
     resolved: ResolvedParameters,
     *,
     eps_total: float | None = None,
+    tolerances: Mapping[str, float] | None = None,
 ) -> SolutionCheck:
     """把 ``p_by_id`` 代回 ``R_i`` 与 C1/C2/C3/C5 复核。
 
@@ -264,6 +288,18 @@ def check_solution(
     只回答「这个解可行吗、目标值多少」。因此同一函数可用于
     T04-01 解析解的复核、T04-02D 解校验器，以及反例集里
     「误用解 vs 正确解」的对照。
+
+    ``eps_total`` = C1 的绝对容差（元），旧口径，仍是 C1 唯一判据来源之一。
+    ``tolerances`` = **行声明的容差名 → 数值** 的解析表，用于判盒式约束
+    （``L ≤ p ≤ U``）与 C5。**为何必须传**：编译侧（``compiler.evaluate``）
+    按行上声明的 ``eps_price`` 判同一个约束；业务侧若硬编码一个数（如 1e-12），
+    同一个解就会在两侧得到相反结论，且偏窄的那侧给出错误归因（DV-01，
+    2026-09-17：P-DEC 的 ``p=500.000000000005`` 落在 ``eps_price=0.003`` 内，
+    编译侧判可行、旧业务侧判不可行）。
+
+    不传 ``tolerances`` ⇒ 退回严格算术（``eps_box=0``），保持旧行为；
+    传了表却**缺** ``eps_price`` ⇒ **不静默按 0**，而是把
+    ``tolerance_resolved=False`` 记进结果，由上层判 BLOCKED。
 
     缺数值（``q0`` / ``q1_point`` 为空）→ 进 ``violations`` 并整体判不可行，
     不得跳过该项静默累加。
@@ -273,6 +309,16 @@ def check_solution(
     competitive_total = 0.0
     declared_total = 0.0
     c1_residual: float | None = None
+
+    # 盒式约束/C5 的容差按**声明名**解析——名 → 数只有一处来源。
+    eps_box = 0.0
+    tol_name = BOX_TOLERANCE_NAME if tolerances is not None else ""
+    tol_value: float | None = None
+    tol_resolved = False
+    if tolerances is not None and BOX_TOLERANCE_NAME in tolerances:
+        tol_value = float(tolerances[BOX_TOLERANCE_NAME])
+        eps_box = tol_value
+        tol_resolved = True
 
     for item in instance.items:
         p = p_by_id.get(item.item_id)
@@ -301,10 +347,14 @@ def check_solution(
         # 其上下界不是本模型的决策约束。
         if not item.is_optimizable:
             continue
-        if item.L is not None and p < item.L:
-            violations.append(f"{item.item_id}: p={p} < L={item.L}")
-        if item.U is not None and p > item.U:
-            violations.append(f"{item.item_id}: p={p} > U={item.U}")
+        if item.L is not None and p < item.L - eps_box:
+            violations.append(
+                f"{item.item_id}: p={p} < L={item.L}（按 {tol_name or '严格'} 容差 {eps_box:g}）"
+            )
+        if item.U is not None and p > item.U + eps_box:
+            violations.append(
+                f"{item.item_id}: p={p} > U={item.U}（按 {tol_name or '严格'} 容差 {eps_box:g}）"
+            )
         if p <= 0:
             violations.append(f"{item.item_id}: p={p} <= 0（C5 单项报价不得为零）")
 
@@ -325,6 +375,9 @@ def check_solution(
         declared_total=declared_total,
         c1_residual=c1_residual,
         violations=tuple(violations),
+        tolerance_name=tol_name,
+        tolerance_value=tol_value,
+        tolerance_resolved=tol_resolved,
     )
 
 

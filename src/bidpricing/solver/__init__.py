@@ -7,9 +7,11 @@
 * ``exactness`` —— T04-00《Phase 1 精确性条件》的机械判定器；
 * ``formulation`` —— T04-02A 的模型形式化（只形式化，不建模）；
 * ``compiler`` —— T04-02B 的约束编译器（Formulation → 求解器无关的 CompiledModel）；
-* ``backend`` —— T04-02C 的后端适配层（**唯一**允许接触求解器包的模块）。
+* ``backend`` —— T04-02C 的后端适配层（**唯一**允许接触求解器包的模块）；
+* ``verifier`` —— T04-02D 的解校验器（**外层复核**：独立复核可行性 / 目标值 /
+  上下界 / 层归属；入参刻意不含 ``SolveResult``，且与内层判据不同宽）。
 
-三条纪律（与仓内其余模块同源）：
+四条纪律（与仓内其余模块同源）：
 
 1. **不得重实现既有口径**。``R_i`` 与 ``r_eff`` 的唯一实现在
    ``bidpricing.contracts.pricing_card``；本包只调用。
@@ -18,6 +20,9 @@
    （见 ADR 与 config/phase1_exactness_spec.json 的 check 字段）。
 3. **业务层不得认识求解器**。``formulation`` / ``compiler`` 都不得调用
    ``solve()``；换后端只改 ``config/solver_backend_spec.json``。
+4. **复核层不得是内层判据的复制**。``verifier`` 不得消费
+   ``SolveResult.evaluation`` / ``solution_check``，两层判据宽度比须 ≥ 1e3
+   （ADR-0020 D1；SV-06/SV-12 机械判定）。
 """
 
 from .backend import (
@@ -69,11 +74,25 @@ from .instance import (
     SolutionCheck,
     check_solution,
 )
+from .verifier import (
+    BoundVerdict,
+    RowVerdict,
+    TierVerdict,
+    VerificationReport,
+    VerifierCheck,
+    VerifierError,
+    audit_verifier_source,
+    load_verifier_spec,
+    resolve_row_tolerance,
+    resolve_tolerances,
+    verify_solution,
+)
 
 __all__ = [
     "Availability",
     "BackendCheck",
     "BackendError",
+    "BoundVerdict",
     "CONDITION_IDS",
     "CompiledModel",
     "CompiledRow",
@@ -87,11 +106,17 @@ __all__ = [
     "Phase1Instance",
     "Phase1Item",
     "Phase1Params",
+    "RowVerdict",
     "Selection",
     "Simplification",
     "SolutionCheck",
     "SolveResult",
     "StatusDomain",
+    "TierVerdict",
+    "VerificationReport",
+    "VerifierCheck",
+    "VerifierError",
+    "audit_verifier_source",
     "build_formulation",
     "check_backend",
     "check_compiled",
@@ -104,9 +129,13 @@ __all__ = [
     "load_backend_spec",
     "load_compiler_spec",
     "load_formulation_spec",
+    "load_verifier_spec",
     "normalize_status",
     "probe_instance",
     "required_capability",
+    "resolve_row_tolerance",
+    "resolve_tolerances",
     "select_backend",
     "solve_compiled",
+    "verify_solution",
 ]

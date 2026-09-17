@@ -1,0 +1,290 @@
+{
+  "spec_id": "solution_verifier_v1",
+  "task": "T04-02D",
+  "title": "解校验器：独立复核可行性 / 目标值 / 上下界 / 层归属",
+  "source_of_truth": "实施路线 v3.2.1 T04-02D 与 §5.3（S0/S1/S2/S3/S6）、§4.1（三级判定与容差形式）、§8.2（内层/外层两层 ε）；ADR-0020（D1：外层复核宽度比 R2 ≥ 1e3）；ADR-0022（CC-07 跨来源对账）；ADR-0013（三档治理）",
+  "task_summary": "拿一个**解**（决策变量赋值 + 求解器自报目标值），独立复核四件事：① 可行性——逐行残差是否在**该行声明的**容差内；② 目标值——求解器自报值与本层独立复算值是否一致（跨来源 + 具名 ε_Z）；③ 上下界——逐项对 L_i / floor_i / U_i(cap) / lb_C5 **各自**复算，并指出是哪一条在起作用；④ 层归属——每项归入 BOUNDARY_LOW / INTERIOR / BOUNDARY_HIGH / INFEASIBLE，歧义须显式标记。复核层不得消费内层判据的结论，也不得与内层同宽。",
+
+  "role": {
+    "position": "solver 层的**外层复核**（Phase 3 之前的第一道独立否定面）。内层 = T04-02B 的 CC 判据与 T04-02C 的 BB 判据，回答『模型/链路走样没有』；本层回答『这个解本身站得住吗』。",
+    "input_contract": {
+      "x": "决策变量赋值（符号 → 值）。**不接收 SolveResult 对象**——那是类型级的独立性保证：不接收就无从消费它的结论。",
+      "reported_objective": "求解器自报目标值（可为 None ⇒ 该子判据 BLOCKED）。",
+      "model": "CompiledModel（行 + 各行声明的 tolerance 名字 + 变量列）。",
+      "instance": "Phase1Instance（逐项 L / U / cap / q0 / q1 / c_i / role / in_c1_scope）。",
+      "profile": "precision_profile（容差名 → 数值的唯一来源）。",
+      "reference": "可选的**独立参考实现**给出的 Z_ref（owner = T04-08）。缺席 ⇒ SV-13 判 BLOCKED。"
+    },
+    "output": "VerificationReport：逐行、逐项、逐声称的判定 + 汇总 verdict + 可序列化字典。",
+    "upstream_handoff": [
+      "lp_formulation_spec.consumers[T04-02D]：diagnostic_metric + tolerance ⇒ 解校验器（独立于求解路径）",
+      "lp_compiler_spec.consumers[T04-02D]：CompiledModel.rows + 各行的 tolerance ⇒ 解校验器（独立于编译与求解路径）",
+      "solver_backend_spec.consumers[T04-02D]：SolveResult.x + CompiledModel.rows + 各行的 tolerance ⇒ 解校验器；**BB-07/BB-08 只判『链路走样没有』，不替代解校验报告的逐行判定**"
+    ]
+  },
+
+  "why_not_a_copy": {
+    "rule": "复核层不得是内层判据的复制——否则等于没复核（ADR-0020 D1 的回答形式）。本层对每一族声称都必须说清「内层没有做什么」，否则该族不应存在。",
+    "feasibility": "内层 `compiler.evaluate` 用**未具名的** ZERO_EPS = 1e-12 判 ok，**从不解析**行上声明的 tolerance 名字。本层是唯一把「声明的容差」解析成数值并据此判定的地方。二者宽度相差 1e4～1e10，故失败模式可分。",
+    "objective": "内层 CC-07 比的是「编译侧左端 vs 业务侧左端」（同源量对同源量）；BB-07 比的是「求解器自报 vs 编译侧复算」。本层比的是「**求解器自报** vs 本层独立复算」，且 ε_Z 取具名的绝对+相对混合形式（§4.1），而非 BB-07 局部的 ad-hoc 常量。本层**不再**复算业务侧利润——那会与 CC-07 构成同源对账（ADR-0016/同源规则⑥），业务利润的独立来源由 T04-08 提供，本层只用 SV-13 判「有无」与「合不合」。",
+    "bounds": "编译侧把 C3/C4/C5 **合并成一行** `C3/C4/C5`（rhs = max(L, floor, lb_C5)，制品 detail 已写明『逐条诊断须用各自原始阈值复算』）。合并后**是哪一条在起作用**在编译侧不可恢复。本层从业务侧逐条重建四路阈值，这是编译侧拿不到的信息。",
+    "tier": "编译侧完全没有『层归属』这个概念；且层归属只在**层间**（顶到下界 / 中间 / 顶到上界）才可判，与残差是否为零无关。"
+  },
+
+  "tolerance_layers": {
+    "why_two_layers": "§8.2 要求内层（求解）与外层（交付）两套 ε；ADR-0020 取模式 A：内层严格等式 + 外层独立舍入调和。",
+    "inner": {
+      "name": "eps_solver",
+      "declared_by": "precision_profile.eps_solver.value",
+      "measures": "g_j(x) ≤ ε 与 |h_j(x)| ≤ ε（原始可行性残差，判据 S1）",
+      "owner": "T04-02B / T04-02C"
+    },
+    "outer": {
+      "name": "eps_abs",
+      "declared_by": "precision_profile.eps_abs.value",
+      "measures": "总价类残差的绝对下限 = 分项舍入分辨率（元）",
+      "owner": "T06-06（TotalPriceReconciliation）"
+    },
+    "ratio_rule": {
+      "id": "SV-06",
+      "expr": "R2 = outer_tol / inner_tol",
+      "min": 1000.0,
+      "on_violation": "FAIL",
+      "basis": "ADR-0020 D1：两层同宽 ⇒ 复核层退化为内层判据的复制，丧失独立否定能力。",
+      "current": "outer = eps_abs = 0.01 元；inner = eps_solver = 1e-8 ⇒ R2 = 1e6 ⇒ PASS",
+      "not_tradable": "D1 不可交易：即便将来 T04-06 的 benchmark 重开内层表示，外层必须始终是独立判据，禁止把外层一并放宽。"
+    }
+  },
+
+  "tolerance_name_resolution": {
+    "why": "行上携带的是一个**容差名**，不是一个数。名字 → 数值的解析若不落成单一来源，每一层都会各解一遍（内层事实上解成了未具名的 1e-12，见 discovered_defect）。本表是本仓该映射的唯一来源。",
+    "P_ref": "= instance.P_star（缺则退到 B = P*_competitive），与 formulation.compute_lb_c5 的 P_ref 同源同值。",
+    "resolvers": {
+      "why": "解析器取值域是**封闭**的（有限几个动词），制品为每个名字择一。未列名字 ⇒ BLOCKED；未识别的 resolver 动词 ⇒ BLOCKED。两处都不得静默退化成任何默认值。",
+      "allowed": {
+        "PROFILE_VALUE": "取 precision_profile[key].value",
+        "PROFILE_TIMES_P_REF": "取 precision_profile[key].value × P_ref",
+        "PROFILE_TIMES_Q_REF": "取 precision_profile[key].value × Q_ref（Q_ref 缺席 ⇒ BLOCKED）",
+        "MAX_ABS_PRICE_P": "max(profile[keys[0]].value, profile[keys[1]].value × P_ref)",
+        "CONST_ZERO": "常量 0.0"
+      }
+    },
+    "table": {
+      "eps_solver": {"resolver": "PROFILE_VALUE", "key": "eps_solver", "expr": "profile.eps_solver.value", "unit": "绝对残差（无量纲）"},
+      "eps_price": {"resolver": "PROFILE_TIMES_P_REF", "key": "eps_price", "expr": "profile.eps_price.value * P_ref", "unit": "元", "used_by": ["行级容差判定（C2/C3/C4/C5/C8）"], "note": "**绝对量**：行上声明 eps_price 的行按这个宽度判。"},
+      "eps_rel_price": {"resolver": "PROFILE_VALUE", "key": "eps_price", "expr": "profile.eps_price.value", "unit": "无量纲（相对）", "used_by": ["compute_lb_c5 的入参", "SV-05/SV-13 的 ε_Z 相对项"], "note": "**相对量**：与 eps_price 同源同一个 profile 字段，但**用法不同**——凡是要「相对因子」的地方（§4.1 的混合容差形式、compute_lb_c5 的入参）必须用这个。二者混用就是**乘重一遍**：实测把 eps_price（已 ×P*）传给 compute_lb_c5，lb_C5 由 0.01 元被放大成 9000 元，于是所有项被判违反下界——与历史上 ∂Z/∂p 误写 q1·r_eff 同族。"},
+      "eps_abs": {"resolver": "PROFILE_VALUE", "key": "eps_abs", "expr": "profile.eps_abs.value", "unit": "元"},
+      "eps_total": {"resolver": "MAX_ABS_PRICE_P", "keys": ["eps_abs", "eps_price"], "expr": "max(eps_abs, eps_price * P_ref)", "unit": "元", "note": "与 precision_profile.eps_total.formula 同式。"},
+      "eps_quantity": {"resolver": "PROFILE_TIMES_Q_REF", "key": "eps_quantity", "expr": "profile.eps_quantity.value * Q_ref", "unit": "计量单位", "used_by": [], "note": "本层当前无行使用它。登记以防将来出现同名行；在使用前解析它需要 Q_ref，**未被使用的名字解析不出不构成阻塞**（否则一个为将来预留的名字会让整条校验恒 BLOCKED）。"},
+      "0（整数）": {"resolver": "CONST_ZERO", "expr": "0.0", "unit": "无量纲", "note": "C7 的二元指示式与整数性判据——**不得**给容差，给了就等于允许 z_i 取小数。"}
+    },
+    "unknown_name_policy": {
+      "status": "BLOCKED",
+      "why": "未声明的容差名不得静默取 0、也不得静默取全局默认——那会把一个没人定义过的判据宽度当成已定义（同源规则②：未定态不得降级）。"
+    }
+  },
+
+  "claims": [
+    {"id": "feasibility", "judges": ["SV-01", "SV-02", "SV-03", "SV-04"], "scope": "逐行"},
+    {"id": "objective", "judges": ["SV-05"], "scope": "解级"},
+    {"id": "bounds", "judges": ["SV-07", "SV-08"], "scope": "逐项"},
+    {"id": "tier", "judges": ["SV-09", "SV-10", "SV-11"], "scope": "逐项 + 分布"},
+    {"id": "independence", "judges": ["SV-06", "SV-12"], "scope": "层级"},
+    {"id": "reference", "judges": ["SV-13"], "scope": "解级"}
+  ],
+
+  "tier_classes": {
+    "why": "§4.2 明确：LOW/MID/HIGH 覆盖 [L_i,U_i] 是恒真命题，故层归属**只作描述性指标**，不得作为证伪依据；但 INFEASIBLE 的出现是实现错误的直接证据。",
+    "BOUNDARY_LOW": {"def": "p_i == low_i（在层判定容差内）"},
+    "INTERIOR": {"def": "low_i + tol < p_i < high_i − tol；high_i 无限时只要求下侧"},
+    "BOUNDARY_HIGH": {"def": "p_i == high_i（在层判定容差内）；仅在 high_i 有限时可达"},
+    "INFEASIBLE": {"def": "p_i < low_i − tol 或 p_i > high_i + tol", "on_occurrence": "FAIL"},
+    "AMBIGUOUS": {"def": "无法归类：边界未解析（如 floor 未接入）或 p_i 落在容差带内既像边界又像内部", "on_occurrence": "WARN"}
+  },
+
+  "judges": [
+    {
+      "id": "SV-01",
+      "name": "声明容差名全部可解析",
+      "statement": "每个出现过的 CompiledRow.tolerance 必须在本制品的 tolerance_name_resolution.table 中有条目，且解析结果是有限实数（`0（整数）` 显式解析为 0.0）。",
+      "check": "扫 model.rows 的 tolerance 名字集合 ⊆ {table, __unknown__}；有未知名 ⇒ 列出名字。",
+      "on_violation": "BLOCKED",
+      "governance": "正确性（算不出）⇒ BLOCKED"
+    },
+    {
+      "id": "SV-02",
+      "name": "可行性：逐行残差 ≤ 该行声明容差",
+      "statement": "对每行，由 x 独立求和得 lhs，按 sense 得 violation = max(0, 违反量)，要求 violation ≤ 该行**声明的**容差。",
+      "check": "逐行：violation vs resolve_row_tolerance(row)。违反行进入报告并给出残差/容差/超出倍数。",
+      "on_violation": "FAIL",
+      "cross_source": true,
+      "note": "本层用自己的求和实现（不调用 compiler.evaluate）——同一条对账若两侧共用实现即退化为恒真式。"
+    },
+    {
+      "id": "SV-03",
+      "name": "容差带内不得被报成违反（不得把正常实现报成违规）",
+      "statement": "若某行的**严格算术**残差超出 ZERO_EPS 但在**声明容差**内，该行必须判「容差内（ok_declared）」，并在报告中标注它落在带内。凡是把这类行报成违反的判定即违规。",
+      "check": "对每行同时算 strict_violation（对 1e-12 比较）与 declared_violation；统计 strict_violation > 0 且 declared_violation == 0 的行数 n_band；若本层把其中任何一行判 FAIL ⇒ 本判据 FAIL。",
+      "on_violation": "FAIL",
+      "why": "这是 2026-09-17 实测抓到的真实失效：内层把 C1 残差 5e-9（在声明内层容差 eps_solver = 1e-8 **之内**）报成不可行，并给出错误归因『导出层走样』。任何真实求解器回传（HiGHS 默认原始可行容差 1e-7）都落在该带内。",
+      "provenance": "解校验器落地时实测发现，非推演。"
+    },
+    {
+      "id": "SV-04",
+      "name": "缺变量 / 未编译项不得 PASS",
+      "statement": "① x 缺少某变量 ⇒ 该变量涉及的每一行不得判 PASS，整体标注缺失清单；② model.simplifications 中 kind = NOT_COMPILED 的项 ⇒ 其对应约束不得被当作『已满足』。",
+      "check": "missing = model 变量 − x 的键集；NOT_COMPILED = simplifications 里 kind == NOT_COMPILED 的 subject 集合。任一非空 ⇒ 判 BLOCKED 并列出。",
+      "on_violation": "BLOCKED",
+      "governance": "正确性（算不出）⇒ BLOCKED；这是『缺输入 ⇒ 没检查』不得读成『检查过且通过』（ADR-0006）。"
+    },
+    {
+      "id": "SV-05",
+      "name": "目标值：求解器自报 vs 本层独立复算（跨来源）",
+      "statement": "reported_objective 与本层由 x 复算的 objective 之差必须 ≤ ε_Z；ε_Z 取 §4.1 的绝对+相对混合形式。",
+      "check": "eps_Z = eps_abs + eps_rel_price(max(|reported|, |recalc|))；|reported − recalc| ≤ ε_Z ⇒ PASS。reported 为 None ⇒ BLOCKED（不是 PASS）。相对项**必须**用无量纲的 eps_rel_price，不得用已 ×P* 的 eps_price（见 DV-02）。",
+      "on_violation": "FAIL",
+      "cross_source": true,
+      "why_named": "§4.1 明确要求 ε 用相对+绝对混合形式（单价量级可跨 0.01～1e5）。BB-07 的 OBJECTIVE_ATOL/RTOL 是层内局部常量且已挂账『需按后端分别声明』；本层用制品口径重算一遍。"
+    },
+    {
+      "id": "SV-06",
+      "name": "两层容差宽度比 R2 ≥ 1e3（复核层不得是内层判据的复制）",
+      "statement": "R2 = outer_tol(eps_abs) / inner_tol(eps_solver) 必须 ≥ 1e3。",
+      "check": "读 precision_profile 的两个具名值相除；并断言二者不同名、不同源。",
+      "on_violation": "FAIL",
+      "basis": "ADR-0020 D1 的机械化。"
+    },
+    {
+      "id": "SV-07",
+      "name": "上下界：逐项四路复算并指出起作用者",
+      "statement": "对每个可优化项，分别从业务侧复算 L_i、floor_i、U_i(=== cap)、lb_C5，逐条给出 p_i 是否满足，并给出声明层级的**起作用下界**（= max 的取到者）。",
+      "check": "对四路各自算 slack；binding = argmax over 已解析的下界候选。floor 未接入（floor_by_id 缺席）⇒ floor 这一路判 BLOCKED，**不得**用 L_i 或 c_i 冒充（formulation._merged_lower 的同一条纪律）。",
+      "on_violation": "FAIL",
+      "per_bound_on_violation": {"L": "FAIL", "floor": "BLOCKED", "U": "FAIL", "lb_C5": "FAIL"},
+      "why": "编译侧把 C3/C4/C5 合并成一行，失去『是哪一条在起作用』；C2 亦只给出合并后的 ub。逐条阈值的身份只在业务侧可恢复。"
+    },
+    {
+      "id": "SV-08",
+      "name": "上下界违反量按外层容差判",
+      "statement": "逐项上下界违反量超过 eps_abs（元）判 FAIL；带内（≤ eps_abs）判 WARN 并记录。",
+      "check": "violation ≤ eps_abs ⇒ WARN（记录）；> eps_abs ⇒ FAIL。",
+      "on_violation": "FAIL",
+      "note": "与 §5.3 S2 的实现边界同向：外层判据固定为 eps_abs，不得用 eps_total 代替（ADR-0020 §四）。"
+    },
+    {
+      "id": "SV-09",
+      "name": "层归属分类",
+      "statement": "每个可优化项归入 tier_classes 之一，并给出所用下界/上界与容差。",
+      "check": "按 tol = eps_abs 归类；上界未解析（不限价）时只判 BOUNDARY_LOW / INTERIOR。",
+      "on_violation": "WARN",
+      "governance": "可解释性 ⇒ WARN；层归属本身是描述性指标（§4.2）。"
+    },
+    {
+      "id": "SV-10",
+      "name": "层归属歧义须显式标记",
+      "statement": "边界未解析、或 p_i 落在容差带内（|p_i − bound| ≤ tol）时，必须标 AMBIGUOUS，不得静默归入相邻类。",
+      "check": "逐项判 |p_i − bound| ≤ tol ⇒ AMBIGUOUS；下界候选不完整（floor 未接入）⇒ AMBIGUOUS + 理由。",
+      "on_violation": "WARN",
+      "why": "ADR-0002/政策：歧义必须独立存在，折进相邻类是**无据断言**（与 T04-02C 把 AMBIGUOUS 独立同根因）。"
+    },
+    {
+      "id": "SV-11",
+      "name": "层归属分布 + INFEASIBLE 即 FAIL",
+      "statement": "输出 ρ_layer（BOUNDARY_LOW / INTERIOR / BOUNDARY_HIGH / AMBIGUOUS 占比）；出现 INFEASIBLE 直接 FAIL。",
+      "check": "统计各类计数与占比；INFEASIBLE 计数 > 0 ⇒ FAIL（§4.2：理论上不可行，出现即实现错误）。",
+      "on_violation": "FAIL",
+      "note": "ρ_layer 本身**不**作证伪依据（§4.2 明示）——故分布本身只出 INFO。"
+    },
+    {
+      "id": "SV-12",
+      "name": "独立性：不得消费内层判据的结论",
+      "statement": "本层不得读取 SolveResult.evaluation / SolveResult.solution_check / SolveResult.recomputed_objective 作为自己的证据；不得 import 求解器包；不得调用 compiler.evaluate / instance.check_solution。",
+      "check": "① 接口级：verify_solution 的入参是 x + reported_objective 等标量，**不接收 SolveResult**（不接收即无从消费）；② 静态级：AST 扫 verifier.py，禁止出现 solver 包 import 与 evaluate/check_solution/solve_compiled 的调用。",
+      "on_violation": "BLOCKED",
+      "why": "复核层的价值全在独立性；一旦消费内层结论，它就只是内层结论的转发器（ADR-0020 D1）。"
+    },
+    {
+      "id": "SV-13",
+      "name": "参考对照 |Z_solver − Z_ref| ≤ ε_Z",
+      "statement": "若提供独立参考实现给出的 Z_ref，则要求 |Z_solver − Z_ref| ≤ ε_Z；未提供 ⇒ BLOCKED。",
+      "check": "reference 为 None ⇒ BLOCKED 并写明 owner = T04-08 与复跑条件；否则按 SV-05 同一 ε_Z 判。",
+      "on_violation": "BLOCKED",
+      "why": "§5.3 S0：solver objective 正确 ≠ 业务利润正确，Z_ref 必须来自**独立于生产代码**的路径（T04-08 的三层隔离证明）。在 T04-08 落地前，这一族**不得**由本层自造一个『业务式重算』顶替——那会与 CC-07 构成同源对账。"
+    }
+  ],
+
+  "verdict_aggregation": {
+    "rule": "verdict = worst(每条判据的 status)，优先级 FAIL > BLOCKED > WARN > SKIP > PASS。",
+    "why_not_simple_max": "FAIL 与 BLOCKED 必须可分：FAIL 表示『查出问题』，BLOCKED 表示『这一环没检查成』。把 BLOCKED 排到 FAIL 之下会让一个有结论的问题被没结论的环节盖住；反之亦然。二者都不得被忽略。",
+    "empty": "判据集为空 ⇒ BLOCKED（不得判 PASS：无判据即无证据）。"
+  },
+
+  "independence": {
+    "interface_level": "verify_solution 的签名只接受原始量（x: Mapping[str, float]、reported_objective: float | None、model、instance、profile、floor_by_id、reference）。**刻意不提供 SolveResult 重载**——类型上就拿不到内层结论。",
+    "static_level": {
+      "audit_module": "src/bidpricing/solver/verifier.py",
+      "forbidden_calls": ["evaluate", "check_solution", "solve_compiled"],
+      "forbidden_imports": ["pulp", "highspy", "mip", "gurobipy", "cplex", "scipy", "numpy"],
+      "note": "与 T04-02C 的 BB-03 同一手法（AST 取字面量、排除 docstring）。要拦的是**代码路径上的**调用，文档里提到这些名字不算违规。"
+    },
+    "why_forbidden_imports": "本层要能独立否定求解器——若它自己依赖求解器包，环境缺失时复核对会静默缺席。"
+  },
+
+  "reference_policy": {
+    "owner": "T04-08（独立 Reference Implementation，含三层隔离证明）",
+    "current": "NOT_STARTED",
+    "consequence": "SV-13 判 BLOCKED，报告 verdict 不得高于 BLOCKED。",
+    "reopen_condition": "T04-08 输出 Z_ref 且其独立性验收（三层隔离证明）为 PASS 时，传入 reference ⇒ SV-13 转为可按 SV-05 的 ε_Z 判定。",
+    "forbidden_substitute": "禁止用『本层自算一遍业务式利润』顶替 Z_ref —— 那与 CC-07 同源，构成恒真式（同源规则⑥）。"
+  },
+
+  "discovered_defect": {
+    "id": "DV-01",
+    "title": "行上声明的 tolerance 名字从未被任何判据解析成数值；内层用未具名的 1e-12，比声明的内层容差严 1e4 倍",
+    "found_at": "2026-09-17（T04-02D 落地时实测，非推演）",
+    "evidence": {
+      "probe_slack": "LP/MILP 探针上 C1 行 slack = -0.000e+00（最优值可精确表示）⇒ 探针**看不见**该缺陷",
+      "injection": "把 C1 残差注入为 5.0e-09（在声明内层容差 eps_solver = 1e-8 **之内**）：compiler.evaluate（ZERO_EPS = 1e-12）判不可行；instance.check_solution（eps_total = 0.01）判可行；BB-08 ⇒ FAIL，理由写『求解器在另一个模型上求了最优解（导出层走样）』",
+      "why_wrong_diagnosis": "导出层没问题（CC-09 已 PASS）。真因是容差名未解析 ⇒ 两侧宽度差 1e10 ⇒ 内层的严格算术判定被当成业务可行性结论。",
+      "real_world_reach": "HiGHS 默认原始可行容差 1e-7、PuLP 报告前还会就地舍入；任何真实规模项目（q0 非整十、n 大）的 C1 残差都会落在 [1e-12, 1e-8] 带内。故这是**必然触发**而非偶发。"
+    },
+    "fix": {
+   "where": "①编译侧：compiler.evaluate 增加 tolerances 参数（可选）；RowEval 增 tolerance_value/ok_declared，ok 在给定时按声明容差判；solve_compiled 透传；CLI backend-check 传入解析表。②业务侧（同一修复的下半，DV-01 复核时发现两侧仍不一致）：instance.check_solution 增加 tolerances 参数，盒式约束（L/U）改用**声明名** `eps_price` 的宽度判（此前对 L/U 是严格比较、只有 C1 用 eps_total ⇒ 同一个 p=U+5e-12 编译侧判可行、业务侧判不可行）；结果新增 tolerance_name/tolerance_value/tolerance_resolved **自述口径**；传了表却缺该名 ⇒ 不静默按 0，由 BB-08 判 BLOCKED。③BB-08 相应改为按『是否传入声明容差表』自述归因，未传入时不得再说『导出层走样』。",
+   "backward_compatible": "不传 tolerances ⇒ 两侧行为均不变（strict）⇒ CC-07 的数值对账不受影响（它比的是 lhs 值，不是 ok 标志）；Phase 1 反例集的 check_solution 调用（只传 eps_total）亦不变。",
+   "distinction_test": "编译侧：注入 C1 残差 5e-9 ⇒ 必须 PASS（原为 FAIL）；注入 1e-7（超 eps_solver）⇒ 必须 FAIL。业务侧：p 越 U 界 5e-12 ⇒ 不传表判不可行、传 eps_price=0.003 判可行（同一个解两种口径相反）；真越界 0.5 ⇒ 仍判不可行；表在但缺 eps_price 名 ⇒ tolerance_resolved=False 且 BB-08 判 BLOCKED（不是 PASS）。全部进测试。"
+    },
+    "lesson": "判据的宽度必须是**具名**的：一个未具名的 1e-12 与一个具名的 eps_solver = 1e-8 在源码上看起来都只是『一个很小的数』，但它们差 1e4 倍——足以让一个正常实现被报成违规（CC-12『数值必须具名』的第二个受益面）。★ 追加：『具名』还必须是**同一个约束的两侧共用同一个名**。DV-01 的第一版修复只改了编译侧，业务侧仍按严格口径判盒式边界 ⇒ 同一个解在两侧相反——即『修了一半』比没修更隐蔽：此时编译侧看起来已经按声明容差判了，只有把两侧结果摆在一起才看得出来。故凡『同一约束在不同层各判一次』，须有一处**跨层对账**（此处即 BB-08 的双侧可行性）来暴露口径不一致。"
+  },
+
+  "discovered_defect_2": {
+    "id": "DV-02",
+    "title": "同一个 profile 字段的「绝对量」读法与「相对量」读法被混用 ⇒ 乘重一遍",
+    "found_at": "2026-09-17（T04-02D 首次冒烟即现，非推演）",
+    "evidence": "把 tolerance_name_resolution 解析出的 eps_price（= eps_price × P_ref = 0.003 元）直接喂给 formulation.compute_lb_c5(P_ref, eps_price, resolution)，而该函数的入参要求**无量纲**的相对量 ⇒ lb_C5 由 max(0.003, 0.01) = 0.01 元被放大成 max(0.003 × 3e6, 0.01) = 9000 元 ⇒ 四项判『对 lb_C5 违反 7300~8700』。同理 ε_Z 的相对项也误用了已缩放值 ⇒ ε_Z = 0.01 + 0.003 × 460000 = 1380 元（真值 0.0105 元），放大了 1.3e5 倍，判据等于失效。",
+    "fix": "制品为两种读法立**两个名字**：eps_price（PROFILE_TIMES_P_REF，绝对量）与 eps_rel_price（PROFILE_VALUE，无量纲相对量）。凡需要相对因子的地方（compute_lb_c5 入参、§4.1 混合形式的相对项）一律用 eps_rel_price。",
+    "lesson": "『同一个字段，两种量纲读法』是乘重一遍的温床。本仓已因此栽过两次（∂Z/∂p 误写 q1·r_eff；此处 eps_price 混用）。对策同一条：**给两种读法两个名字**，让混用在源码上立刻可见——名字不同，乘法写不下去。"
+  },
+
+  "consumers": [
+    {"task": "T04-04", "uses": "本报告的逐行/逐项判定作为对拍前的一致性底稿"},
+    {"task": "T04-05", "uses": "primal feasibility 与 objective recomputation 的口径（LP/MILP 分开验收）"},
+    {"task": "T04-08", "uses": "SV-13 的接口面：Z_ref 的消费点"},
+    {"task": "T06-06", "uses": "外层容差 eps_abs 与舍入分辨率的同一性（SV-08 的宽度来源）"}
+  ],
+
+  "open_items": [
+    "SV-13（参考对照）在 T04-08 落地前恒为 BLOCKED ⇒ 报告 verdict 不得高于 BLOCKED。这不是缺陷，是**显式未定态**。",
+    "eps_price 解析为『eps_price × P*』（与 compute_lb_c5 同式）。对单价量级很小（0.01 元/单位）的项目，该绝对容差（P* = 1e6 时约 1e-3 元）相当于其单价的 10%。该口径由 precision_profile 明示、且 F-06/compute_lb_c5 已一致采用，本层**不擅自改读法**，只登记：若将来要改成『相对该项单价』，须同时改 precision_profile、compute_lb_c5 与本表（一处改三处同步，否则判据自证）。",
+    "floor_i（T03-02 派生量）未接入 ⇒ SV-07 的 floor 一路恒 BLOCKED、SV-10 的层归属恒含 AMBIGUOUS。接入点 = floor_by_id 参数；T03-02 落地后须复跑并确认 AMBIGUOUS 消失。",
+    "N_cap 之外的『不限价』项（cap 空）在层归属里没有 BOUNDARY_HIGH —— 这是合法语义（ALLOW_EMPTY_NO_CAP），不是数据缺口，故不计入 AMBIGUOUS。",
+    "DECIMAL 与平台效应（r_eff 相等项）导致的**多最优解**属 T04-06B（canonical tie-break）；本层只标记 p_i 落在容差带内的 AMBIGUOUS，不负责选出 canonical 解。",
+    "ρ_layer 的阈值为空——§4.2 已定它『仅作描述性指标，不作为证伪依据』，故本层**刻意不设阈值**（设了就等于把它升格成证伪判据，与 §4.2 相反）。"
+  ],
+
+  "evidence_pointer": {
+    "implementation": "src/bidpricing/solver/verifier.py",
+    "tests": "tests/test_solution_verifier.py",
+    "adr": "docs/adr/ADR-0024-solution-verifier.md",
+    "cli": "bidpricing verify-solution"
+  }
+}

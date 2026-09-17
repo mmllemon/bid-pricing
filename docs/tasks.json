@@ -999,9 +999,26 @@
       ],
       "summary": "独立复核可行性、目标值、上下界、层归属",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/solution_verifier_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/verifier.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_solution_verifier.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0024-solution-verifier.md"
+        }
+      ],
+      "status": "done",
+      "note": "2026-09-17 完成。交付 `config/solution_verifier_spec.json`（两层容差定义 / 容差名→数值解析表（封闭动词集）/ 四族声明 / 五类层归属 / SV-01..SV-13 / 判定聚合 / 独立性（接口级 + 静态级）/ 参考值策略）+ `src/bidpricing/solver/verifier.py`（外层复核层）+ CLI `verify-solution`（LP/MILP 两变体各 13 条）+ ADR-0024。**核心：复核实现在接口级就够不着内层结论** —— verify_solution 的入参只有原始量（x / reported_objective / model / instance / profile / floor_by_id / reference / verifier_source / resolution），**刻意不过载 SolveResult**；再叠一层 AST 静态审计禁止调用 evaluate / check_solution / solve_compiled 与 import 任何求解器包（SV-12）。**两层容差的宽度比必须被具名并检验**（ADR-0020 D1）：R2 = eps_abs/eps_solver = 1e6 ≥ 1e3（SV-06），否则复核层退化成内层判据的复制。**三态分离**：SKIP（本轮没查）/ BLOCKED（这一环没查成，如无 Z_ref、floor 未接入）/ FAIL（查出问题）；空判据集 ⇒ BLOCKED；聚合序 FAIL > BLOCKED > WARN > SKIP > PASS。**★ 落地时实测出两处真缺陷（非推演）**：(DV-01) 行上声明的 tolerance 名字**从未被任何判据解析成数值** —— 内层实际用一个未具名的 1e-12，比声明的 eps_solver=1e-8 严 1e4 倍；把 C1 残差注入 5e-9（在声明容差**之内**）即被判不可行，且 BB-08 给出**错误归因**「导出层走样」（而 CC-09 已 PASS）。探针看不见它（最优值可精确表示，C1 slack 恰为 0）；真实规模项目上这是**必然触发**（HiGHS 原始可行容差 1e-7，PuLP 报告前还就地舍入）。修法分两半：① 编译侧 evaluate 增 tolerances 入参（唯一来源 verifier.resolve_tolerances），RowEval 拆 ok_exact / ok / in_tolerance_band；② 业务侧 check_solution 增 tolerances 入参，盒式约束（L/U）改用**声明名** eps_price 的宽度判（此前对 L/U 是严格比较、只有 C1 用 eps_total ⇒ 同一个 p=U+5e-12 编译侧判可行、业务侧判不可行 —— **只修一半比不修更隐蔽**）；结果新增 tolerance_name/value/resolved 自述口径，传了表却缺该名 ⇒ BB-08 判 BLOCKED（不静默按 0 冒充可比）。(DV-02) eps_price 有两种读法：**绝对**（profile 值 × P*，行级容差宽度）与**相对**（无量纲因子，compute_lb_c5 的入参、ε_Z 的相对项）。混用即「乘重一遍」：把已 ×P* 的 0.003 再喂给 compute_lb_c5 ⇒ lb_C5 由 0.01 元放大成 9000 元，所有项被判越下界 —— 与历史上目标系数误写 q1·r_eff 同族。**故二者在制品里是两个名字**（eps_price / eps_rel_price，同源不同用法）。**判据覆盖面的自省**：目标系数 ∂Z/∂p = q0·r_eff（不是 q1）；SV-03 要求「容差带必须被本实例走到」，探针恰好走不到 ⇒ 判 WARN 而非 PASS（「这一轮没走到」不得读成「已成立」）；SV-13 在 T04-08 落地前恒 BLOCKED（禁止用本层自算的业务式顶替 —— 那与 CC-07 同源，构成恒真式）。**仓外验证**：装 PuLP 环境 backend-check 18 PASS / 0 SKIP（BB-09 的 CC-09 挂账闭合、BB-08 双侧含新口径均 PASS）；verify-solution 在补齐 floor（T03-02）与 Z_ref（T04-08）后升到 WARN，余下唯一 WARN 即 SV-03（探针走不到容差带）。测试 659 → 735（tests/test_solution_verifier.py 60 项 + 两侧容差区分度层 + BB-08 口径三态层），零依赖 735 OK / 9 SKIP，装 PuLP 735 OK / 0 SKIP。**未结**：SV-07 的 floor 一路（owner T03-02）、SV-13 的 Z_ref（owner T04-08），以及 solve_compiled 的 eps_total / tolerances 双入参过渡态（已登记进 solver_backend_spec.open_items）。"
     },
     {
       "id": "T04-02E",

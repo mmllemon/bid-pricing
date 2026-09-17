@@ -230,17 +230,54 @@ class CompiledModel:
 
 @dataclass(frozen=True)
 class RowEval:
-    """单行代回结果。``slack`` 为**符号无关的违反量**：≥ 0 表示满足。"""
+    """单行代回结果。``slack`` 为**符号无关的违反量**：≥ 0 表示满足。
+
+    **两个判定必须分开**（2026-09-17 T04-02D 实测修出的静默走样 DV-01）：
+
+    * ``ok_exact`` —— 严格算术判定，对模块内的 ``ZERO_EPS`` 比较。它回答的是
+      「这串数**按字面**成立吗」，是 CC-07 数值对账用得上的口径。
+    * ``ok`` —— **可行性判定**：给了该行声明的容差就按它判，否则退回严格算术。
+
+    在此之前只有严格算术一种口径，而它用的是**未具名**的 1e-12 —— 比行上声明的
+    内层容差 ``eps_solver = 1e-8`` 严 **1e4 倍**。后果是：一个完全合法的求解器
+    回传（C1 残差 5e-9，在声明内层容差**之内**）被判「不可行」，BB-08 据此给出
+    错误归因「求解器在另一个模型上求了最优解（导出层走样）」。探针看不见它，
+    因为探针的最优值可精确表示（C1 slack 恰为 0）。
+    """
 
     constraint_id: str
     lhs: float
     sense: str
     rhs: float
     slack: float
+    tolerance_name: str = ""
+    tolerance_value: float | None = None
+
+    @property
+    def violation(self) -> float:
+        """符号无关的**违反量**：> 0 表示违反（与 ``slack`` 互为反号）。"""
+        return max(0.0, -self.slack)
+
+    @property
+    def ok_exact(self) -> bool:
+        """严格算术判定（旧口径）。**不是可行性结论**，见类文档串。"""
+        return self.slack >= -ZERO_EPS
 
     @property
     def ok(self) -> bool:
-        return self.slack >= -ZERO_EPS
+        """可行性判定：按该行**声明的**容差判；容差不可解析时退回严格算术。"""
+        if self.tolerance_value is None:
+            return self.ok_exact
+        return self.violation <= self.tolerance_value + ZERO_EPS
+
+    @property
+    def in_tolerance_band(self) -> bool:
+        """是否落在容差带内（严格算术判违反、声明容差判通过）。"""
+        return bool(
+            self.violation > ZERO_EPS
+            and self.tolerance_value is not None
+            and self.violation <= self.tolerance_value
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -249,7 +286,12 @@ class RowEval:
             "sense": self.sense,
             "rhs": self.rhs,
             "slack": self.slack,
+            "violation": self.violation,
+            "tolerance_name": self.tolerance_name,
+            "tolerance_value": self.tolerance_value,
             "ok": self.ok,
+            "ok_exact": self.ok_exact,
+            "in_tolerance_band": self.in_tolerance_band,
         }
 
 
@@ -265,6 +307,14 @@ class Evaluation:
     def violations(self) -> tuple[RowEval, ...]:
         return tuple(r for r in self.rows if not r.ok)
 
+    def tolerance_band_rows(self) -> tuple[RowEval, ...]:
+        """落在容差带内的行（严格算术判违反、声明容差判通过）。
+
+        这些行是本层「声明容差确为载荷」的证据；一个都没有，说明声明容差
+        在本实例上**没有被走到**（不得读成已成立）。
+        """
+        return tuple(r for r in self.rows if r.in_tolerance_band)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "objective": self.objective,
@@ -274,7 +324,12 @@ class Evaluation:
         }
 
 
-def evaluate(model: CompiledModel, x: Mapping[str, float]) -> Evaluation:
+def evaluate(
+    model: CompiledModel,
+    x: Mapping[str, float],
+    *,
+    tolerances: Mapping[str, float] | None = None,
+) -> Evaluation:
     """把赋值 ``x`` 代回 ``model``。
 
     这是**独立于编译路径**的裁判：只做「按行求和、比较」。它同时是 CC-07
@@ -282,6 +337,12 @@ def evaluate(model: CompiledModel, x: Mapping[str, float]) -> Evaluation:
     CC-07 就退化为恒真式；正因如此它们必须分别实现。
 
     缺赋值 ⇒ 进 ``missing`` 并且**不可行**，不得把缺项当 0 静默累加。
+
+    ``tolerances``（可选）把**容差名 → 数值**的表交进来，使每行按其**声明的**
+    容差判 ``ok``；不传则退回严格算术（旧口径），CC-07 的数值对账因此不受影响
+    （它比的是 ``lhs`` 值，不是 ``ok`` 标志）。容差名的解析在本仓只有一个来源：
+    ``solver/verifier.py`` 的 ``resolve_tolerances``（制品
+    ``solution_verifier_spec.tolerance_name_resolution``）。
     """
     missing = tuple(
         v.symbol for v in model.variables if v.symbol not in x
@@ -299,7 +360,13 @@ def evaluate(model: CompiledModel, x: Mapping[str, float]) -> Evaluation:
             slack = lhs - r.rhs
         else:
             raise CompilerError(f"未知 sense：{r.sense!r}")
-        rows.append(RowEval(r.constraint_id, lhs, r.sense, r.rhs, slack))
+        rows.append(RowEval(
+            r.constraint_id, lhs, r.sense, r.rhs, slack,
+            tolerance_name=r.tolerance,
+            tolerance_value=(
+                None if tolerances is None else tolerances.get(r.tolerance)
+            ),
+        ))
 
     objective = model.objective_constant + sum(
         v.objective_coeff * float(x.get(v.symbol, 0.0)) for v in model.variables

@@ -335,12 +335,13 @@
     "M_hi 对分支定界收敛的影响仍待 T04-07 量化（T04-02B 挂账项），本制品只保证 MILP 能被求解器接受并出解。T04-02C 实测：探针 MILP 在 HiGHS 与 CBC 上均即时求解，但探针规模不构成证据。",
     "BB-03 的求解器包名单是制品里的白名单，不是从环境推导的。新增依赖须先改制品——这正是该判据要的效果，但也意味着它拦不住『用一个没列进名单的求解包』这种情形。缓解：名单覆盖了 PyPI 上主流的 Python 求解器接口。",
     "**上游漂移（T04-02C 实测）**：PuLP 3.3.2 已弃用 `PULP_CBC_CMD`（4.0 移除，改为 `COIN_CMD`）。pulp_cbc 条目因此是一个**会随版本失效**的候选——它恰好是 BB-06 替换性实证的第二个候选，故升级 PuLP 时必须同步改本制品的 solver_factory，否则 BB-06 会退化为『只有一个候选』而判 FAIL（这个 FAIL 是真的：那时确实没有可替换的第二个后端了）。",
-    "**上游漂移（T04-02C 实测）**：PuLP 4.0 将要求 `prob.add_variable(...)` 与 `prob.constraints()`（返回列表）。受影响的代码在 T04-02B 的导出层（to_pulp / extract_pulp_structure），不在本制品的适配层。CC-09 的接口面已刻意压到最小，就是为了让这次迁移的影响面可枚举。"
-  ],
+  "**上游漂移（T04-02C 实测）**：PuLP 4.0 将要求 `prob.add_variable(...)` 与 `prob.constraints()`（返回列表）。受影响的代码在 T04-02B 的导出层（to_pulp / extract_pulp_structure），不在本制品的适配层。CC-09 的接口面已刻意压到最小，就是为了让这次迁移的影响面可枚举。",
+  "**双容差入参的过渡态（T04-02D 引入）**：`solve_compiled` 同时有 `eps_total`（旧：一个裸浮点数，只喂 C1）与 `tolerances`（新：声明名→数值表，喂各行 + 业务侧盒式边界）。二者可以不一致——若调用方只传 `eps_total` 而漏传 `tolerances`，C1 按 `eps_total` 判、盒式仍走严格口径，BB-08 就会落回 DV-01 的错配。当前 CLI 两条路径都传表，测试亦覆盖；但这是**过渡态**，应由后续任务收敛为单一入参（`tolerances` 唯一），届时 `eps_total` 从 `solve_compiled` 与 `check_solution` 一并移除。"
+],
   "consumers": [
     {
       "task": "T04-02D",
-      "uses": "SolveResult.x + CompiledModel.rows + 各行的 tolerance ⇒ 解校验器（独立于编译与求解路径）。BB-07/BB-08 只判『链路走样没有』，不替代解校验报告的逐行判定。"
+      "uses": "SolveResult.x + CompiledModel.rows + 各行的 tolerance ⇒ 解校验器（独立于编译与求解路径）。BB-07/BB-08 只判『链路走样没有』，不替代解校验报告的逐行判定。**已完成**：SV-01..SV-13 落 config/solution_verifier_spec.json + verifier.py（ADR-0024）。连带修 DV-01：solve_compiled 新增 tolerances 入参（唯一来源 verifier.resolve_tolerances），BB-08 按『是否传入声明容差表』自述口径——未传时不得把带内残差归因成『导出层走样』；业务侧 check_solution 亦按声明 eps_price 判盒式边界并回报口径（tolerance_name/value/resolved），传了表却缺该名 ⇒ BB-08 判 BLOCKED（不静默按严格口径冒充可比）。"
     },
     {
       "task": "T04-02E",

@@ -236,7 +236,7 @@
     },
     {
       "task": "T04-02D",
-      "uses": "CompiledModel.rows + 各行的 tolerance ⇒ 解校验器（独立于编译与求解路径）"
+      "uses": "CompiledModel.rows + 各行的 tolerance ⇒ 解校验器（独立于编译与求解路径）。**已完成**：SV-01..SV-13 落 config/solution_verifier_spec.json + src/bidpricing/solver/verifier.py（ADR-0024）。行上的**容差名 → 数值**改为单一来源（verifier.resolve_tolerances，制品 solution_verifier_spec.tolerance_name_resolution），evaluate 新增可选 tolerances 入参：按各行**声明的**容差判 ok，不传则退回严格算术（旧口径，RowEval.ok_exact 保留），CC-07 的数值对账不受影响（它比 lhs 值不比 ok 标志）。"
     },
     {
       "task": "T04-07",

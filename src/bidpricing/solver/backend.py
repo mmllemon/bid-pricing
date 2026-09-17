@@ -702,6 +702,10 @@ class SolveResult:
     solution_check: SolutionCheck | None
     seconds: float
     message: str = ""
+    #: 本次求解是否把**行上声明的容差**解析表交给了编译器（见 DV-01）。
+    #: False 时 ``evaluation.feasible`` 退回严格算术口径（1e-12），
+    #: 它**不是**可行性结论——报告必须据此自述口径，不得含糊。
+    tolerances_applied: bool = False
 
     @property
     def solved(self) -> bool:
@@ -734,6 +738,7 @@ class SolveResult:
             ),
             "seconds": self.seconds,
             "message": self.message,
+            "tolerances_applied": self.tolerances_applied,
         }
 
 
@@ -747,11 +752,17 @@ def solve_compiled(
     prefer: str | None = None,
     backend: SolverBackend | None = None,
     eps_total: float | None = None,
+    tolerances: Mapping[str, float] | None = None,
 ) -> SolveResult:
     """**业务侧唯一的求解入口。**
 
     业务层只认识这个函数与 ``SolveResult``；它不认识 PuLP、HiGHS、CBC，也不
     认识任何后端名。换后端 = 改制品的 ``selection.active``。
+
+    ``tolerances`` = **行声明的容差名 → 数值** 的解析表，转交给 ``evaluate``
+    使 ``evaluation`` 是按声明容差判的**可行性**结论。不传则退回严格算术
+    （1e-12）口径——那会让一个合法的求解器回传被判不可行（见 DV-01）。
+    解析表的唯一来源是 ``solver/verifier.py`` 的 ``resolve_tolerances``。
     """
     required = required_capability(model.solver_form, spec)
     selection = (
@@ -819,7 +830,7 @@ def solve_compiled(
         v.symbol for v in model.variables if v.symbol not in raw.x
     )
     evaluation = (
-        evaluate(model, raw.x) if not missing else None
+        evaluate(model, raw.x, tolerances=tolerances) if not missing else None
     )
     recomputed = None if evaluation is None else evaluation.objective
 
@@ -828,7 +839,8 @@ def solve_compiled(
         price_by_id = _price_by_id(model, raw.x)
         if price_by_id is not None:
             solution_check = check_solution(
-                instance, price_by_id, resolved, eps_total=eps_total
+                instance, price_by_id, resolved,
+                eps_total=eps_total, tolerances=tolerances,
             )
 
     return SolveResult(
@@ -842,6 +854,7 @@ def solve_compiled(
         solution_check=solution_check,
         seconds=elapsed,
         message=raw.message,
+        tolerances_applied=tolerances is not None,
     )
 
 
@@ -1303,10 +1316,23 @@ def check_backend(
             b08.append(f"解缺变量 {list(result.missing)[:SAMPLE_LIMIT]}")
         if not result.evaluation.feasible:
             viol = [r.constraint_id for r in result.evaluation.violations()]
-            b08.append(
-                f"编译侧判不可行（违反 {viol[:SAMPLE_LIMIT]}）⇒ 求解器在**另一个"
-                "模型**上求了最优解（导出层走样）"
-            )
+            band = [r.constraint_id for r in result.evaluation.tolerance_band_rows()]
+            # 口径必须自述：未传声明容差表时，「不可行」用的是严格算术口径
+            # （1e-12），不是业务可行性结论——照旧归因「导出层走样」会是错诊断
+            # （2026-09-17 DV-01：C1 残差 5e-9 落在了声明内层容差 eps_solver=1e-8
+            # 之内，却被判不可行）。
+            if not result.tolerances_applied:
+                b08.append(
+                    f"编译侧判不可行（违反 {viol[:SAMPLE_LIMIT]}），但本次**未传入"
+                    "声明容差表** ⇒ 该判定走的是严格算术口径（1e-12），"
+                    "不足以断言不可行——须传 tolerances 后复判（DV-01）"
+                )
+            else:
+                b08.append(
+                    f"编译侧判不可行（违反 {viol[:SAMPLE_LIMIT]}，已按各行声明容差判；"
+                    f"带内行 {band[:SAMPLE_LIMIT]}）⇒ 求解器在**另一个模型**上"
+                    "求了最优解（导出层走样）"
+                )
         if result.solution_check is None:
             b08.append(
                 "未提供实例/参数 ⇒ 业务侧未复核（**不得**只做单侧就判 PASS）"
@@ -1315,9 +1341,26 @@ def check_backend(
             b08.append(
                 f"业务侧判不可行：{list(result.solution_check.violations[:SAMPLE_LIMIT])}"
             )
+        elif (result.solution_check.tolerance_name
+              and not result.solution_check.tolerance_resolved):
+            # 业务侧拿到了「该按具名容差判」的口径（tolerance_name 非空），
+            # 却没解析到数值 ⇒ 它是在**严格口径**下判的可行。这与「两侧口径
+            # 可比」不是一回事：不得据此判 PASS（同源规则②：未定态不得降级）。
+            b08.append(
+                f"业务侧盒式容差名 {result.solution_check.tolerance_name!r} 未解析到"
+                "数值 ⇒ 它按严格口径判，两侧不可比 —— 须判 BLOCKED（DV-01 同族）"
+            )
+        status_b08 = (
+            STATUS_BLOCKED if (b08 and result.solution_check is not None
+                               and result.solution_check.tolerance_name
+                               and not result.solution_check.tolerance_resolved
+                               and result.evaluation.feasible
+                               and not result.missing)
+            else (STATUS_PASS if not b08 else STATUS_FAIL)
+        )
         items.append(BackendCheck(
             _SCOPE, "BB-08 解的双侧可行性",
-            STATUS_PASS if not b08 else STATUS_FAIL,
+            status_b08,
             (f"编译侧 {result.evaluation.feasible} ∧ 业务侧 "
              f"{result.solution_check.feasible}；Z={result.solution_check.Z!r}"
              if not b08 else _trunc("；".join(b08))),

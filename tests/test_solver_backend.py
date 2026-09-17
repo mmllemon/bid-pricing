@@ -169,14 +169,30 @@ class FakeBackend:
         )
 
 
-def _solve_with(model, *, spec=None, instance=None, backend=None, resolved=True):
+def _solve_with(model, *, spec=None, instance=None, backend=None, resolved=True,
+                tolerances=None):
     return solve_compiled(
         model,
         spec=spec if spec is not None else REAL_SPEC,
         instance=instance,
         resolved=_resolved() if (resolved and instance is not None) else None,
         backend=backend,
+        tolerances=tolerances,
     )
+
+
+def _declared_tolerances(instance):
+    """行声明容差名的解析表（唯一来源 = solution_verifier_spec + verifier）。"""
+    from bidpricing.solver.verifier import load_verifier_spec, resolve_tolerances
+
+    prof = json.loads(
+        (config_dir() / "precision_profile.json").read_text(encoding="utf-8")
+    )
+    P_ref = instance.P_star if instance.P_star is not None else instance.B
+    table, _problems = resolve_tolerances(
+        prof, load_verifier_spec(config_dir()), P_ref=P_ref
+    )
+    return table
 
 
 def _row(checks, prefix):
@@ -682,6 +698,121 @@ class TestTwoSidedFeasibility(unittest.TestCase):
             instance=None, resolved=None,
         )
         self.assertEqual(_row(checks, "BB-08").status, "FAIL")
+
+
+class TestBB08ToleranceCaliber(unittest.TestCase):
+    """DV-01 的后端侧回归：**合法的**求解器回传不得被判「导出层走样」。
+
+    注入 C1 残差 5.0e-9 —— 它在行上声明的内层容差 ``eps_solver = 1e-8`` **之内**，
+    即一个合法的求解器回传。旧口径（不传容差表）下它落在 ``[1e-12, 1e-8]`` 带内，
+    被判不可行，BB-08 会给出**错误归因**「求解器在另一个模型上求了最优解」。
+    """
+
+    def _band_x(self, model):
+        q0 = dict(next(r for r in model.rows if r.constraint_id == "C1").coefficients)
+        x = dict(FEASIBLE_X)
+        x["p_P-DEC"] = x["p_P-DEC"] + 5e-9 / q0["p_P-DEC"]
+        return x
+
+    def test_band_residual_no_longer_gets_the_export_layer_diagnosis(self):
+        model, _fm, instance = _probe_model()
+        fake = FakeBackend(x=self._band_x(model), reported=420000.0)
+
+        legacy = _solve_with(model, instance=instance, backend=fake)
+        self.assertFalse(legacy.tolerances_applied)
+        self.assertFalse(legacy.evaluation.feasible)
+        row = _row(check_backend(
+            model, legacy, spec=REAL_SPEC, src_root=PKG_ROOT,
+            instance=instance, resolved=_resolved(),
+        ), "BB-08")
+        self.assertEqual(row.status, "FAIL")
+        # 关键的修正在归因上：不得再说「导出层走样」，而要说口径不足。
+        self.assertNotIn("导出层走样", row.reason)
+        self.assertIn("未传入", row.reason)
+
+    def test_same_solution_passes_once_the_declared_table_is_supplied(self):
+        model, _fm, instance = _probe_model()
+        fake = FakeBackend(x=self._band_x(model), reported=420000.0)
+        fixed = _solve_with(
+            model, instance=instance, backend=fake,
+            tolerances=_declared_tolerances(instance),
+        )
+        self.assertTrue(fixed.tolerances_applied)
+        self.assertTrue(fixed.evaluation.feasible,
+                        "5e-9 在声明的 eps_solver=1e-8 之内 ⇒ 可行性判通过")
+        c1 = next(r for r in fixed.evaluation.rows if r.constraint_id == "C1")
+        self.assertTrue(c1.in_tolerance_band)
+        row = _row(check_backend(
+            model, fixed, spec=REAL_SPEC, src_root=PKG_ROOT,
+            instance=instance, resolved=_resolved(),
+        ), "BB-08")
+        self.assertEqual(row.status, "PASS")
+
+    def test_beyond_the_declared_tolerance_is_still_fail(self):
+        """区分度：真要越过声明容差时，BB-08 必须仍然 FAIL。"""
+        model, _fm, instance = _probe_model()
+        q0 = dict(next(r for r in model.rows if r.constraint_id == "C1").coefficients)
+        x = dict(FEASIBLE_X)
+        x["p_P-DEC"] = x["p_P-DEC"] + 1e-5 / q0["p_P-DEC"]     # 1000× eps_solver
+        fake = FakeBackend(x=x, reported=420000.0)
+        result = _solve_with(
+            model, instance=instance, backend=fake,
+            tolerances=_declared_tolerances(instance),
+        )
+        self.assertFalse(result.evaluation.feasible)
+        row = _row(check_backend(
+            model, result, spec=REAL_SPEC, src_root=PKG_ROOT,
+            instance=instance, resolved=_resolved(),
+        ), "BB-08")
+        self.assertEqual(row.status, "FAIL")
+        self.assertIn("导出层走样", row.reason)      # 口径正确时才允许下这个结论
+
+    def test_solveresult_dict_exposes_the_caliber(self):
+        model, _fm, instance = _probe_model()
+        fake = FakeBackend(x=dict(FEASIBLE_X), reported=420000.0)
+        result = _solve_with(model, instance=instance, backend=fake)
+        self.assertIn("tolerances_applied", result.to_dict())
+
+    def test_partial_table_is_blocked_not_pass(self):
+        """表在、但缺盒式容差名 ⇒ 业务侧按**严格口径**判 ⇒ 两侧不可比。
+
+        这不是 PASS（口径可比）也不是 FAIL（发现了问题），而是 BLOCKED
+        （这一环没查成）。把它误判成 PASS，就等于用一个没定义过的宽度
+        冒充了「两侧一致」——同源规则②：未定态不得降级。
+        """
+        model, _fm, instance = _probe_model()
+        fake = FakeBackend(x=dict(FEASIBLE_X), reported=420000.0)
+        partial = {"eps_solver": 1e-8, "eps_total": 0.01}      # 刻意缺 eps_price
+        result = _solve_with(model, instance=instance, backend=fake,
+                             tolerances=partial)
+        self.assertTrue(result.tolerances_applied)
+        self.assertIsNotNone(result.solution_check)
+        self.assertTrue(result.solution_check.feasible)
+        self.assertEqual(result.solution_check.tolerance_name, "eps_price")
+        self.assertFalse(result.solution_check.tolerance_resolved)
+        row = _row(check_backend(
+            model, result, spec=REAL_SPEC, src_root=PKG_ROOT,
+            instance=instance, resolved=_resolved(),
+        ), "BB-08")
+        self.assertEqual(row.status, "BLOCKED")
+        self.assertIn("未解析", row.reason)
+
+    def test_full_table_resolves_the_box_caliber(self):
+        """区分度：表里**有**该名时，口径自述为「已解析」且判 PASS。"""
+        model, _fm, instance = _probe_model()
+        fake = FakeBackend(x=dict(FEASIBLE_X), reported=420000.0)
+        result = _solve_with(
+            model, instance=instance, backend=fake,
+            tolerances=_declared_tolerances(instance),
+        )
+        self.assertTrue(result.solution_check.tolerance_resolved)
+        self.assertAlmostEqual(result.solution_check.tolerance_value, 0.003,
+                               places=12)
+        row = _row(check_backend(
+            model, result, spec=REAL_SPEC, src_root=PKG_ROOT,
+            instance=instance, resolved=_resolved(),
+        ), "BB-08")
+        self.assertEqual(row.status, "PASS")
 
 
 # ---------------------------------------------------------------------------

@@ -450,5 +450,108 @@ class TestPulpLazyExport(unittest.TestCase):
         self.assertEqual(struct["variables"], ["p_I"])
 
 
+class TestDeclaredTolerance(unittest.TestCase):
+    """``RowEval`` 的两个判定必须分开，且**按行声明的**容差判可行性。
+
+    这一段对应 T04-02D 落地时实测到的 DV-01：行上声明的 ``tolerance`` 名字从未被
+    解析成数值，内层用的是未具名的 ``ZERO_EPS = 1e-12``——比声明的内层容差
+    ``eps_solver = 1e-8`` 严 **1e4 倍**，于是合法的求解器回传被判不可行，并由
+    BB-08 给出错误归因「导出层走样」。探针看不见它，因为探针的最优值可精确表示。
+    """
+
+    #: 探针 LP 的手算可行解（C1：500·1000+700·2000+600·1000+100·500 = 2,550,000 = B）。
+    PRICES = {"P-DEC": 500.0, "P-IN": 700.0, "P-INC": 600.0, "P-FREE": 100.0}
+
+    def _x(self, *, nudge=0.0):
+        _inst, f = _formulation()
+        model = compile_model(f)
+        c_of = {i.item_id: i.c_i for i in probe_instance().items}
+        x = {f"p_{k}": v for k, v in self.PRICES.items()}
+        for v in model.variables:
+            if v.family == "s":
+                x[v.symbol] = max(
+                    float(c_of.get(v.item_id) or 0.0) - x.get(f"p_{v.item_id}", 0.0), 0.0)
+            elif v.family != "p":
+                x[v.symbol] = 0.0
+        c1 = dict(next(r for r in model.rows if r.constraint_id == "C1").coefficients)
+        if nudge:
+            x["p_P-DEC"] = x["p_P-DEC"] + nudge / c1["p_P-DEC"]
+        return model, x
+
+    def _tolerances(self):
+        return {
+            "eps_solver": 1e-8, "eps_price": 1e-3, "eps_abs": 0.01,
+            "eps_total": 0.01, "0（整数）": 0.0,
+        }
+
+    def test_exact_and_declared_verdicts_can_differ(self):
+        model, x = self._x(nudge=5e-9)
+        strict = evaluate(model, x)
+        declared = evaluate(model, x, tolerances=self._tolerances())
+        c1_strict = next(r for r in strict.rows if r.constraint_id == "C1")
+        c1_decl = next(r for r in declared.rows if r.constraint_id == "C1")
+
+        self.assertFalse(c1_strict.ok_exact, "5e-9 超过 1e-12 ⇒ 严格算术判违反")
+        self.assertFalse(c1_strict.ok, "不传容差时 ok 退回严格算术（旧口径不变）")
+        self.assertIsNone(c1_strict.tolerance_value)
+
+        self.assertTrue(c1_decl.ok_exact is False)
+        self.assertTrue(c1_decl.ok, "5e-9 在声明的 eps_solver=1e-8 之内 ⇒ 可行性判通过")
+        self.assertTrue(c1_decl.in_tolerance_band, "必须能被识别为「落在带内」")
+        self.assertAlmostEqual(c1_decl.tolerance_value, 1e-8, places=15)
+        self.assertEqual(c1_decl.tolerance_name, "eps_solver")
+
+        self.assertFalse(strict.feasible)
+        self.assertTrue(declared.feasible, "整模型可行性也必须按声明容差判")
+
+    def test_violation_beyond_declared_tolerance_still_fails(self):
+        """区分度：超过声明容差时，两个判定必须一致地判违反。"""
+        model, x = self._x(nudge=1e-7)
+        declared = evaluate(model, x, tolerances=self._tolerances())
+        c1 = next(r for r in declared.rows if r.constraint_id == "C1")
+        self.assertFalse(c1.ok)
+        self.assertFalse(c1.in_tolerance_band)
+        self.assertFalse(declared.feasible)
+
+    def test_values_are_identical_with_and_without_tolerances(self):
+        """容差只影响 ``ok``，不影响 ``lhs`` 与目标值——CC-07 的数值对账因此不受影响。"""
+        model, x = self._x(nudge=5e-9)
+        a = evaluate(model, x)
+        b = evaluate(model, x, tolerances=self._tolerances())
+        self.assertEqual(a.objective, b.objective)
+        for ra, rb in zip(a.rows, b.rows):
+            self.assertEqual(ra.constraint_id, rb.constraint_id)
+            self.assertEqual(ra.lhs, rb.lhs)
+            self.assertEqual(ra.slack, rb.slack)
+            self.assertEqual(ra.violation, rb.violation)
+
+    def test_unknown_name_falls_back_to_strict_not_to_a_default(self):
+        """未声明的容差名不得取任何默认值：``tolerance_value=None`` ⇒ 退回严格算术。"""
+        model, x = self._x(nudge=5e-9)
+        ev = evaluate(model, x, tolerances={"eps_abs": 0.01})
+        c1 = next(r for r in ev.rows if r.constraint_id == "C1")
+        self.assertIsNone(c1.tolerance_value)
+        self.assertEqual(c1.tolerance_name, "eps_solver")
+        self.assertFalse(c1.ok)
+
+    def test_row_dict_is_auditable(self):
+        model, x = self._x(nudge=5e-9)
+        d = evaluate(model, x, tolerances=self._tolerances()).to_dict()
+        c1 = next(r for r in d["rows"] if r["constraint_id"] == "C1")
+        for key in ("slack", "violation", "tolerance_name", "tolerance_value",
+                    "ok", "ok_exact", "in_tolerance_band"):
+            self.assertIn(key, c1)
+
+    def test_tolerance_band_rows_helper(self):
+        model, x = self._x(nudge=5e-9)
+        ev = evaluate(model, x, tolerances=self._tolerances())
+        ids = [r.constraint_id for r in ev.tolerance_band_rows()]
+        # 扰动 p_P-DEC 同时让 C1（等式）与 C2（上界）落到带内——带是按行判的。
+        self.assertIn("C1", ids)
+        self.assertIn("C2", ids)
+        # 不传容差时没有带可言（严格算术只有「违反/不违反」）。
+        self.assertEqual(evaluate(model, x).tolerance_band_rows(), ())
+
+
 if __name__ == "__main__":
     unittest.main()

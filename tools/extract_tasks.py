@@ -86,6 +86,12 @@ EVIDENCE: dict[str, list[dict]] = {
         {"kind": "module", "path": "tests/test_solver_backend.py"},
         {"kind": "adr", "path": "ADR-0023-solver-backend-adapter.md"},
     ],
+    "T04-02D": [
+        {"kind": "file", "path": "config/solution_verifier_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/solver/verifier.py"},
+        {"kind": "module", "path": "tests/test_solution_verifier.py"},
+        {"kind": "adr", "path": "ADR-0024-solution-verifier.md"},
+    ],
 }
 
 #: 初次提取时的状态种子。仅当 JSON 中不存在该任务时才写入；

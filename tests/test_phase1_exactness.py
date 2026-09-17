@@ -199,6 +199,62 @@ class ExchangeArgumentTest(unittest.TestCase):
         self.assertFalse(bad.feasible)
         self.assertTrue(any("C5" in v for v in bad.violations))
 
+    # ---- DV-01 同族：业务侧盒式容差必须按**声明名**解析 --------------
+    def test_box_bound_uses_the_declared_tolerance_when_supplied(self):
+        """p 越界 5e-12，落在声明 eps_price=0.003 之内 ⇒ 两侧口径一致，判可行。
+
+        旧口径下业务侧对 L/U 用严格比较（0 容差），会把这个解判不可行，
+        而编译侧按声明容差判可行 —— 同一个解在两侧相反（DV-01）。
+        """
+        inst = self._pe01()
+        p = resolved("SEGMENT", rho_plus=0.8)
+        nudged = {"1": 120.0 + 5e-12, "2": 80.0}
+        strict = check_solution(inst, nudged, p, eps_total=0.01)
+        declared = check_solution(
+            inst, nudged, p, eps_total=0.01,
+            tolerances={"eps_price": 0.003, "eps_total": 0.01},
+        )
+        # 区分度：同一个解，两种口径给出相反结论。
+        self.assertFalse(strict.feasible)
+        self.assertTrue(declared.feasible, declared.violations)
+        self.assertTrue(declared.tolerance_resolved)
+        self.assertEqual(declared.tolerance_name, "eps_price")
+        self.assertAlmostEqual(declared.tolerance_value, 0.003, places=12)
+
+    def test_box_bound_beyond_the_declared_tolerance_still_fails(self):
+        """区分度：真越界时，传了容差表也仍判不可行。"""
+        inst = self._pe01()
+        p = resolved("SEGMENT", rho_plus=0.8)
+        far = {"1": 120.0 + 0.5, "2": 80.0}          # 远超 eps_price
+        out = check_solution(
+            inst, far, p, eps_total=0.01, tolerances={"eps_price": 0.003},
+        )
+        self.assertFalse(out.feasible)
+
+    def test_missing_name_is_not_silently_read_as_strict(self):
+        """传了表却缺该名 ⇒ 不得静默按 0；口径自述为「未解析」。"""
+        inst = self._pe01()
+        p = resolved("SEGMENT", rho_plus=0.8)
+        out = check_solution(
+            inst, {"1": 120.0, "2": 80.0}, p, eps_total=0.01,
+            tolerances={"eps_total": 0.01},          # 表在，但缺 eps_price
+        )
+        self.assertEqual(out.tolerance_name, "eps_price")
+        self.assertIsNone(out.tolerance_value)
+        self.assertFalse(out.tolerance_resolved)
+        # 缺名不改变可行与否（不制造假阴性/假阳性），只自述口径。
+        self.assertTrue(out.feasible)
+
+    def test_legacy_call_without_tolerances_is_unchanged(self):
+        """不传表 ⇒ 严格口径，且口径自述为空（向后兼容）。"""
+        inst = self._pe01()
+        p = resolved("SEGMENT", rho_plus=0.8)
+        out = check_solution(inst, {"1": 120.0, "2": 80.0}, p, eps_total=0.01)
+        self.assertTrue(out.feasible)
+        self.assertEqual(out.tolerance_name, "")
+        self.assertIsNone(out.tolerance_value)
+        self.assertFalse(out.tolerance_resolved)
+
 
 # ---------------------------------------------------------------------------
 class ConditionTest(unittest.TestCase):

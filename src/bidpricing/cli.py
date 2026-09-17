@@ -1025,6 +1025,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_bk.add_argument("--json", action="store_true", help="输出 JSON")
     p_bk.set_defaults(func=cmd_backend_check)
 
+    # ------------------------------------------------------- verify-solution
+    p_vs = sub.add_parser(
+        "verify-solution",
+        help="T04-02D 解校验器（SV-01..SV-13：可行性/目标值/上下界/层归属）")
+    p_vs.add_argument("--instance", default=None,
+                      help="对自定义实例 JSON 跑复核；省略则用内置探针实例")
+    p_vs.add_argument("--prefer", default=None,
+                      help="临时指定后端条目（求解步用）")
+    p_vs.add_argument("--reference", type=float, default=None,
+                      help="独立参考实现给出的 Z_ref（owner = T04-08）；不给则 SV-13 判 BLOCKED")
+    p_vs.add_argument("--floor-json", default=None,
+                      help="floor_i 表 JSON：{item_id: 值}（T03-02 的派生量）；"
+                           "不给则该路判 BLOCKED，不得用 L_i 或 c_i 冒充")
+    p_vs.add_argument("--json", action="store_true", help="输出 JSON")
+    p_vs.set_defaults(func=cmd_verify_solution)
+
     return parser
 
 
@@ -1310,12 +1326,13 @@ def cmd_backend_check(args) -> int:
         probe_instance,
     )
     from .solver.instance import Phase1Instance
-    from .solver.instance import Phase1Instance
+    from .solver.verifier import load_verifier_spec, resolve_tolerances
 
     cfg = config_dir()
     spec = load_backend_spec(cfg)
     compiler_spec = load_compiler_spec(cfg)
     fspec = load_formulation_spec(cfg)
+    verifier_spec = load_verifier_spec(cfg)
     schema = json.loads((cfg / "constraint_schema.json").read_text(encoding="utf-8"))
     prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
     card = load_pricing_card(cfg)
@@ -1385,6 +1402,10 @@ def cmd_backend_check(args) -> int:
             instance=instance, resolved=resolved,
             prefer=args.prefer,
             eps_total=eps_abs,
+            tolerances=resolve_tolerances(
+                prof, verifier_spec,
+                P_ref=(instance.P_star if instance.P_star is not None else instance.B),
+            )[0],
         )
         rows = check_backend(
             model, result,
@@ -1466,6 +1487,181 @@ def _print_backend(model, result, checks, cc_rows, title: str) -> None:
             r.status, "?")
         print(f" {mark} [{r.item}] {r.status}")
         print(f"      {r.reason}")
+    print("-" * 78)
+
+
+def cmd_verify_solution(args) -> int:
+    """T04-02D：**独立复核**一个解（可行性 / 目标值 / 上下界 / 层归属）。
+
+    与 ``backend-check`` 的分工：后者判「后端这条链路**走样**没有」（BB 判据），
+    本命令判「这个解**本身**站得住吗」（SV 判据），并产出**逐行 + 逐项**的复核
+    报告。二者不互相替代（见 solver_backend_spec 的 T04-02D 交接条目）。
+
+    本命令**不**消费求解决论：它把 ``SolveResult`` 拆成原始量（变量赋值 +
+    自报目标值）再交给复核层——这是独立性在接口层的落地。
+    """
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.backend import load_backend_spec, solve_compiled
+    from .solver.compiler import compile_model, load_compiler_spec
+    from .solver.formulation import (
+        PROBE_SOLVER_INPUTS,
+        build_formulation,
+        load_formulation_spec,
+        probe_instance,
+    )
+    from .solver.instance import Phase1Instance
+    from .solver.verifier import (
+        load_verifier_spec,
+        resolve_tolerances,
+        verify_solution,
+    )
+
+    cfg = config_dir()
+    vspec = load_verifier_spec(cfg)
+    bspec = load_backend_spec(cfg)
+    fspec = load_formulation_spec(cfg)
+    compiler_spec = load_compiler_spec(cfg)
+    prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
+    card = load_pricing_card(cfg)
+    resolved = resolve_parameters(card)
+    eps_abs = float(prof["eps_abs"]["value"])
+    eps_price = float(prof["eps_price"]["value"])
+    resolution = float(prof["rounding"]["resolution"])
+
+    floor_by_id: dict[str, float] | None = None
+    if getattr(args, "floor_json", None):
+        fpath = _P(args.floor_json)
+        if not fpath.exists():
+            print(f"■ floor 文件不存在：{fpath}")
+            return 1
+        floor_by_id = {
+            str(k): float(v)
+            for k, v in json.loads(fpath.read_text(encoding="utf-8")).items()
+        }
+
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        base = Phase1Instance.from_dict(
+            json.loads(path.read_text(encoding="utf-8")), source=str(path)
+        )
+        variants: list[tuple[str, object]] = [
+            (tag, dataclasses.replace(base, active_soft_constraints=tuple(act)))
+            for tag, act in (("LP", ()), ("MILP", ("C7",)))
+        ]
+    else:
+        variants = [
+            ("LP", probe_instance()),
+            ("MILP", probe_instance(active=("C7",))),
+        ]
+    solver_inputs: dict[str, object] = dict(PROBE_SOLVER_INPUTS)
+
+    verifier_source = (_P(__file__).resolve().parents[0]
+                       / "solver" / "verifier.py")
+    source_text = (
+        verifier_source.read_text(encoding="utf-8")
+        if verifier_source.exists() else None
+    )
+
+    payload: list[dict] = []
+    worst = 0
+    for tag, instance in variants:
+        fm = build_formulation(
+            instance, resolved,
+            eps_abs=eps_abs, eps_price=eps_price, resolution=resolution,
+            theta=solver_inputs.get("theta"),
+            n_max=solver_inputs.get("n_max"),
+            d_max=solver_inputs.get("d_max"),
+            r_min=solver_inputs.get("r_min"),
+            z_min=solver_inputs.get("z_min"),
+            pi_target=solver_inputs.get("pi_target"),
+        )
+        model = compile_model(
+            fm,
+            z_min=solver_inputs.get("z_min"),
+            pi_target=solver_inputs.get("pi_target"),
+            source=tag,
+        )
+        P_ref = instance.P_star if instance.P_star is not None else instance.B
+        tolerances, _tol_problems = resolve_tolerances(prof, vspec, P_ref=P_ref)
+
+        result = solve_compiled(
+            model, spec=bspec, instance=instance, resolved=resolved,
+            prefer=args.prefer, eps_total=eps_abs, tolerances=tolerances,
+        )
+        # 只把**原始量**交给复核层：不传 SolveResult（SV-12 的接口级独立性）。
+        report = verify_solution(
+            model,
+            None if not result.solved else result.variables,
+            spec=vspec, profile=prof, instance=instance,
+            reported_objective=result.reported_objective,
+            floor_by_id=floor_by_id,
+            reference=args.reference,
+            verifier_source=source_text,
+            resolution=resolution,
+        )
+        payload.append({
+            "variant": tag,
+            "solver_form": model.solver_form,
+            "solve_status": result.status.normalized,
+            "solved": result.solved,
+            "report": report.to_dict(),
+        })
+        if any(c.blocks_progress for c in report.checks):
+            worst = 1
+        if not args.json:
+            _print_verification(
+                report, result,
+                f"{'探针实例' if not args.instance else args.instance} · {tag}",
+            )
+
+    if args.json:
+        print(json.dumps(
+            {"spec_id": vspec.get("spec_id"), "variants": payload},
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return worst
+
+    verdicts = [v["report"]["verdict"] for v in payload]
+    counts: dict[str, int] = {}
+    for v in payload:
+        for c in v["report"]["checks"]:
+            counts[c["status"]] = counts.get(c["status"], 0) + 1
+    print(f"  汇总：{verdicts}　"
+          + " / ".join(f"{k} {v}" for k, v in sorted(counts.items()))
+          + f"（共 {sum(counts.values())} 条，跨 {len(payload)} 个变体）")
+    n_blocked = counts.get("BLOCKED", 0)
+    if n_blocked:
+        print(f"  ⚠ {n_blocked} 条 BLOCKED 表示**这一环没检查成**，"
+              "不得读成通过（逐条理由见上）。")
+    n_warn = counts.get("WARN", 0)
+    if n_warn:
+        print(f"  · {n_warn} 条 WARN 属可解释性提示，不阻塞推进。")
+    return worst
+
+
+def _print_verification(report, result, title: str) -> None:
+    print("=" * 78)
+    print(f"解校验（T04-02D）｜ {title}")
+    print("=" * 78)
+    print(f"  结论：{report.verdict}　（求解状态 {result.status.normalized}）")
+    print("  容差表：" + ", ".join(
+        f"{k}={v!r}" for k, v in report.tolerances))
+    if report.objective:
+        print("  目标值：" + ", ".join(f"{k}={v!r}" for k, v in report.objective))
+    if report.tier_distribution:
+        print("  层归属分布：" + ", ".join(
+            f"{k}={v}" for k, v in report.tier_distribution))
+    print()
+    for c in report.checks:
+        mark = {"PASS": "✓", "WARN": "△", "FAIL": "✗",
+                "BLOCKED": "■", "SKIP": "○"}.get(c.status, "?")
+        print(f" {mark} [{c.item}] {c.status}")
+        print(f"      {c.reason}")
     print("-" * 78)
 
 

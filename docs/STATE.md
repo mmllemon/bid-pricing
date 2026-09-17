@@ -5,15 +5,15 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-17 08:01:06** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-17 08:56:34** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`f08af12` ｜ 累计 32 次提交
-- 最新提交信息：feat(t00-11): c_i 来源落值 SUPPLIER_QUOTE + 附证交叉满足机制（ADR-0011）
+- 提交：`cebcc80` ｜ 累计 34 次提交
+- 最新提交信息：feat(t00-10a,t00-10b): q1 假设声明书 —— 预测不是事实（ADR-0012）
 - 最近里程碑标签：`cost-basis-v1`
 - 工作区：干净
 
@@ -43,15 +43,15 @@
 
 | 制品 key | 类型 | hash | 冻结时间 |
 |---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-16T23:59:40+00:00 |
-| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-16T23:59:40+00:00 |
-| `constraint_schema_version` | versioned | sha256:771e84c8ec74 | 2026-09-16T23:59:40+00:00 |
-| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-16T23:59:40+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-16T23:59:40+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-16T23:59:40+00:00 |
-| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-16T23:59:40+00:00 |
-| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-16T23:59:40+00:00 |
-| `pricing_rule_card_version` | versioned | sha256:29040209cd8b | 2026-09-16T23:59:40+00:00 |
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-17T00:55:11+00:00 |
+| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-17T00:55:11+00:00 |
+| `constraint_schema_version` | versioned | sha256:771e84c8ec74 | 2026-09-17T00:55:11+00:00 |
+| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-17T00:55:11+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-17T00:55:11+00:00 |
+| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-17T00:55:11+00:00 |
+| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-17T00:55:11+00:00 |
+| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-17T00:55:11+00:00 |
+| `pricing_rule_card_version` | versioned | sha256:29040209cd8b | 2026-09-17T00:55:11+00:00 |
 | `adjustment_scope` | enum | **未冻结** | — |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
@@ -60,13 +60,13 @@
 
 ## 四、质量门
 
-- 单元测试：**368** 项，结果 **通过**（OK）
+- 单元测试：**389** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
 ```
 
-- 跨制品一致性：**PASS**（16/16 项判据通过） —— 判「已冻结制品彼此是否自洽」，与闸门正交；两者的关系是「hash 对不对」与「说法一致不一致」，缺一不可
+- 跨制品一致性：**PASS**（17/17 项判据通过） —— 判「已冻结制品彼此是否自洽」，与闸门正交；两者的关系是「hash 对不对」与「说法一致不一致」，缺一不可
   - 核心判据：13 条约束的 inputs 全部在字段字典中已声明
 
 ```bash
@@ -79,7 +79,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 | WP | 任务数 | 状态分布 |
 |---|---|---|
-| WP0 | 15 | done 10、not_started 3、partial 2 |
+| WP0 | 15 | done 10、not_started 1、partial 4 |
 | WP1 | 11 | done 10、not_started 1 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | not_started 7 |
@@ -92,7 +92,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ### 已启动 / 已完成任务
 
-> 共 22 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 24 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -106,6 +106,8 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T00-06B | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | partial | ✓ 成立 | 恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落；src/bidpricing/identity.py 存在 |
 | T00-07 | 规则集优先级冻结 | done | ✓ 成立 | rule_set_selector_spec 已冻结 sha256:0dd335b5a8ae |
 | T00-09 | 成本口径证明包 | done | — | 2026-09-17 完成 config/cost_basis_spec.json 成本构成规范：C_individual 八项分解（labor/material/equipment/subcontract/management/allocated_overhead/tax_and_fee_treatment/risk_reserve），显式声明 ≠ 社会平均成本；含 2024 科目重映射（规费拆分、安全生产措施费、综合单价不含税）、分摊规则与风险储备的显式声明要求、partial_declaration_policy=BLOCKED。Gate 0b 受控制品已冻结。 |
+| T00-10A | $q^1$ 假设声明：格式与冻结时点 | partial | — | 需人工：q^1 格式与冻结时点声明 |
+| T00-10B | $q^1$ 来源判定 | partial | — | 依赖 T01-00B 合同解析产出 |
 | T00-11 | 成本 $c_i$ 假设与来源声明 | done | — | 2026-09-17 完成 config/cost_assumption_spec.json c_i 假设声明书（三要素：来源/格式/冻结时点）+ src/bidpricing/validation/cost_basis.py + CLI cost-check。来源词表 COST_DB/HISTORICAL_SETTLEMENT/SUPPLIER_QUOTE/EXPERT_ESTIMATE 且各有 required_when 附证要求；**未声明=BLOCKED 不静默补全**；说了但不在词表=FAIL（数据违反≠声明缺失）；未冻结=WARN（Gate 0b 前）。--declare-source/--evidence/--freeze 落值；**带病拒冻**（有阻断项时 --freeze 退出码 1）。当前真实状态：AS-01 BLOCKED（成本清单已提供但来源未声明，待用户一句话确认）。 |
 | T01-00A | 招标文件计价口径与输入协议 Schema 冻结 | done | ✓ 成立 | input_protocol_schema 已冻结 sha256:1696175b90ff |
 | T01-00B | 招标文件解析器实现 | done | — | 解析器 src/bidpricing/io/（零依赖读取器 + 表号/别名双键 + 双行表头合并 + 分节标题四信号判据）；CLI parse-boq 三项产出在真实配对样本上验证：82 行/0 失败/加权下浮 8.0084% 与 pair.json 交叉印证；tests/test_io_boq.py 19 项 |
@@ -129,8 +131,8 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 |---|---|---|---|---|
 | T00-06 | WP0 | 报价项可竞争性分类与变量集合冻结 | 分类表 + 变量集合定义 | partial |
 | T00-06B | WP0 | $P_{\text{competitive}}$ 与不可竞争费基数联动规则 | 总价分解计算规范（T00-06 的补充附件，冲突时以本规范为准） | partial |
-| T00-10A | WP0 | $q^1$ 假设声明：格式与冻结时点 | 《$q^1$ 假设声明书（格式篇）》 | not_started |
-| T00-10B | WP0 | $q^1$ 来源判定 | 《$q^1$ 假设声明书（来源篇）》 | not_started |
+| T00-10A | WP0 | $q^1$ 假设声明：格式与冻结时点 | 《$q^1$ 假设声明书（格式篇）》 | partial |
+| T00-10B | WP0 | $q^1$ 来源判定 | 《$q^1$ 假设声明书（来源篇）》 | partial |
 | T00-12 | WP0 | 利润口径桥接表 | 《利润口径桥接表》 | not_started |
 | T01-03A | WP1 | 缺失值与异常值策略 | 缺失值规则表 | not_started |
 

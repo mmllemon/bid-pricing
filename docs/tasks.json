@@ -106,10 +106,14 @@
         {
           "kind": "artifact",
           "key": "constraint_schema_version"
+        },
+        {
+          "kind": "file",
+          "path": "config/constraint_schema.json"
         }
       ],
-      "status": "not_started",
-      "note": ""
+      "status": "done",
+      "note": "2026-09-17 结清。完成判据（实施路线 v3.2.1 L280「每条含表达式、输入字段、输出指标、threshold、tolerance、severity、可开关性」）已逐条核实：C1–C13 每条均含 expression / inputs / metric / tolerance / severity / toggleable，机制常量（θ、N_max、d_max、σ_max、R_min、tol_lo/hi）在各自 inputs 中显式列名，未写成字面量。制品 `constraint_schema.json` 已冻结（Gate 0a.constraint_schema_version = sha256:771e84c8ec74），并被 contract-check 的 constraint_schema.tolerance_defined 判据覆盖（13 条 tolerance 名全部可解析到 precision_profile 的 eps_*，无空话容差）。三条重定义留痕完备：C3/C5 的 supersedes + original_note_for_audit（ADR-0007 动因：把用户未提及误记为用户已声明）、C13 的 raised_at/open_question/resolved。状态故由 not_started 转 done —— 制品本身早已就绪，此前状态漂移系任务板未跟进。"
     },
     {
       "id": "T00-04",
@@ -127,10 +131,18 @@
         {
           "kind": "artifact",
           "key": "precision_profile_version"
+        },
+        {
+          "kind": "file",
+          "path": "config/precision_profile.json"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0020-strict-equality-mode-a.md"
         }
       ],
-      "status": "not_started",
-      "note": ""
+      "status": "done",
+      "note": "2026-09-17 结清。完成判据：ε_solver/ε_price/ε_quantity/ε_abs/ε_total 全部给定 + ε_total = max(ε_abs, ε_rel·P*) + internal/display precision 分离 + **equality_tolerance_mode.current 非 null**（制品自身声明的 Gate 0a 前置）。末项是本轮实体工作：自主裁定 `current = \"A\"`（内部严格等式 + 输出层独立舍入调和）。裁定依据三条机械判据 —— D1（决定性，与 benchmark 无关）：模式 B 使内外层判据同宽 R2 = 1 ⇒ 复核层退化为内层判据的复制，丧失独立否定能力；要求 R2 ≥ 1e3，A 下 R2 = 1e6 PASS。D2：R1 = eps_solver/HiGHS默认容差 = 0.1 < 1 ⇒ 容差带不宽于默认容差，无任何放宽收益；同时否定「改 A 更难解」的顾虑（A 的求解器容差同样收到 1e-9，难度等价）。D3：§8.2 自陈「性能更差」须 benchmark 后决定 ⇒ benchmark_status = NOT_RUN ⇒ 未证收益不得交换已证语义性质。另记录 §8.2「两层同一 ε 口径」的读法：该条禁的是**松进严出**，A 使内层无放宽 ⇒ 无需补偿 ⇒ 更强满足，非违反。「未 benchmark」转为显式状态 + reopen_condition（含 D1 不可交易约束），owner = T04-06。制品冻结 hash 更新为 sha256:146e8e6ffbc4；contract-check 17/17，闸门全 PASS。"
     },
     {
       "id": "T00-05",
@@ -171,10 +183,22 @@
         {
           "kind": "artifact",
           "key": "competitiveness_classification"
+        },
+        {
+          "kind": "artifact",
+          "key": "project_classification_table"
+        },
+        {
+          "kind": "file",
+          "path": "config/competitiveness_classification.json"
+        },
+        {
+          "kind": "file",
+          "path": "config/project_classification_table.json"
         }
       ],
-      "status": "partial",
-      "note": "规则书已冻结；项目级落值表为空，属 Phase 0 输入门判据"
+      "status": "done",
+      "note": "2026-09-17 结清。两层均已就绪：① 机制层规则书 `competitiveness_classification.json`（Gate 0a，sha256:2913378715d5）—— 五角色定义 + 四清单缺省角色 + not_itemized（规费/税金）+ 「缺省即角色、例外才登记」原则；② 项目层落值表 `project_classification_table.json`（Phase 0 输入门判据）—— xiyong_l_district / GB/T50500-2024、四清单缺省角色齐备、external_constants 三项（安全文明施工费/规费/税金）、exceptions = [] 且带 search_basis 说明「已检索、结论为空」。Phase 0 输入门判 PASS、准入 RELEASED，正是本判据在真实项目上通过的证据。原 partial 的理由（「项目级落值表为空」）已消失。**变量集合 X_opt 的定义因此闭合**：BOQ ∪ TECH_MEASURE 的 OPTIMIZABLE 项（扣清单自带列命中的例外）→ X_opt；ORG_MEASURE(NON_COMPETITIVE) + OTHER(PASS_THROUGH) + 规费税金 → P_fixed 侧。本条是 T04-02A 的第三个硬前置，故一并结清以解封。"
     },
     {
       "id": "T00-06B",
@@ -870,9 +894,26 @@
       ],
       "summary": "变量、目标、约束映射完整；总价约束按可竞争部分实现：$\\sum_{i\\in X_{\\text{opt}}}p_iq_i^0=P^*_{\\text{competitive}}$；C1 按容差带实现（见 §8.2）",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/lp_formulation_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/formulation.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_lp_formulation.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0021-lp-formulation-positions.md"
+        }
+      ],
+      "status": "done",
+      "note": "2026-09-17 完成。交付 `config/lp_formulation_spec.json`（变量/非变量/参数/索引集/目标/C1–C13 逐条映射/箱型预处理/求解器形态/F 判据 11 条/消费者/挂账）+ `src/bidpricing/solver/formulation.py`（只形式化不建模）+ CLI `formulate-check`（LP 与 MILP 两变体各 11 条判据，22/22 PASS）。**核心结论一：目标对 p 严格线性** —— r_eff 由 (r_i, 规则集参数, alpha_i) 全外生决定，P1 分支在建模期已知 ⇒ R_i 对 p 线性 ⇒ LP 成立，MILP 的**唯一**来源是 C7 的二元变量 z_i（F-09 即以此判据：「MILP 切换条件唯一」）。区分两个边际：∂R/∂p = q0·r_eff（r_eff 的定义式，F-02 检它）与 ∂Z/∂p = q1·r_eff（目标系数，乘 r 倍）。**结论二：C1 按可竞争部分实现** —— Σ_{i∈C1_scope} p_i q0_i == P*_competitive，右端由 compute_P_competitive(P*, FIXED_PRETAX, 税率) 提供（入参是锁定总价而非报价向量，否则 C1 变成恒真式）；固定项不进左端。**结论三：三条约束须改变位置** —— ① C5 的 LP 下界必须抬到报价分辨率 lb_C5 = max(eps_price·P*, rounding.resolution)：P*=1e6 时裸 eps_price·P* 仅 1e-3 元，舍入后为 0.00 ⇒ 提交的报价违反 C5（内层约束与外层舍入的耦合点，ADR-0020 模式 A 的显式处理对象）；② C12 在可行域上是**常量**（两种作用域读法同结论）⇒ 应作 P* 的前置可接受性判据，写成 LP 约束会得到恒真/恒假的平凡约束并掩盖真实问题；③ C11 的 MAD/σ 替换方向相反（σ→MAD 收紧、MAD-with-free-center 放松）⇒ 挂账给 T04-02B，不静默选定。**本轮抓到两个 bug**：① 实现侧 settlement_revenue 的区间内分支漏了作用域判断（SEGMENT ∧ alpha≠0 时与 compute_r_eff 差 (1+α) 倍，alpha=0 时完全不可见）——已修，并加数值差分回归测试；② 判据自身首版借道 instance.r_eff，被实例 Phase1Params 覆盖了传入 scope，**自己制造假 FAIL** —— 修为先按 (scope, alpha) 构造 scoped 参数、解析式直用 compute_r_eff。据此确立原则：**判据的覆盖面不得取决于被测数据**（F-02 自扫 FULL/SEGMENT，不沿用实例 scope）。另修 status.check_evidence 第三处缺口：phase_0 项目级输入（project_classification_table）本就不做版本冻结，按「hash 已冻结」判会永远不成立 ⇒ 改用「文件存在」，与输入门的「声明式就绪」同向。本层状态域新增 SKIP（字符串，非全局 Status 四态枚举）：缺实例时「没检查」必须与「检查过且通过」可区分。测试 527 → 555（新增 tests/test_lp_formulation.py 28 项，含两个区分度测试：注入旧分叉必须FAIL、两组 p 向量必须真的不同）。contract-check 17/17，闸门全 PASS。"
     },
     {
       "id": "T04-02B",

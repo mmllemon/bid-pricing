@@ -10,6 +10,40 @@
 
 ## [未发布]
 
+### T00-04 / T00-03 / T00-06 结清 + T04-02A 完成：LP 模型形式化
+
+- `config/precision_profile.json`：`equality_tolerance_mode.current = "A"`
+  （内部严格等式 + 输出层独立舍入调和）。三条机械判据：D1（决定性，与 benchmark
+  无关）模式 B 使内外层判据同宽 ⇒ 复核层退化为内层判据的复制；D2 容差带
+  R1 = eps_solver/HiGHS 默认容差 = 0.1 < 1 ⇒ 无任何放宽收益；D3 benchmark_status
+  = NOT_RUN ⇒ 未证收益不得交换已证语义性质。含 `reopen_condition`（D1 不可交易）。
+  冻结 hash → `sha256:146e8e6ffbc4`。
+- **T00-03 / T00-04 / T00-06 三个前置任务结清**（制品早已就绪，状态漂移系任务板
+  未跟进），T04-02A 依赖解封。
+- `config/lp_formulation_spec.json`：变量/非变量/参数/索引集/目标/C1–C13 逐条
+  映射/箱型预处理/求解器形态/F 判据 11 条/消费者/挂账。**核心结论**：目标对 `p`
+  严格线性（`r_eff` 全外生 ⇒ P1 分支建模期已知）⇒ LP 成立，MILP 唯一来源是 C7
+  的二元变量；`∂R/∂p = q0·r_eff` 与 `∂Z/∂p = q1·r_eff` 是两个不同的量。
+- `src/bidpricing/solver/formulation.py`：把实例编译为求解器无关的 LP 词汇
+  （**只形式化、不建模**——建模是 T04-02B，后端是 T04-02C）。新增本地状态域
+  **SKIP**：缺实例时「没检查」必须与「检查过且通过」可区分。
+- **三条约束改变位置**：C5 的 LP 下界抬到报价分辨率（否则 P*=1e6 时解为 1e-3 元，
+  舍入成 0.00 ⇒ 提交的报价违反 C5）；C12 在可行域上是常量 ⇒ 作 `P*` 的前置
+  可接受性判据而非 LP 约束；C11 的 MAD/σ 替换方向相反 ⇒ 挂账给 T04-02B。
+- CLI `formulate-check`：LP 与 MILP 两变体各 11 条判据，**22/22 PASS**。
+
+#### 修正
+
+- `settlement_revenue` 的区间内分支漏了作用域判断：`SEGMENT ∧ alpha≠0` 时它返回
+  含 `(1+alpha)` 的收入，而 `compute_r_eff` 返回 `r` ⇒ 相差 `(1+alpha)` 倍。按
+  §5.3.1（alpha 只作用于 FULL）后者为错。`alpha = 0` 时完全不可见。
+- `status.check_evidence` 第三处缺口：phase_0 的项目级输入
+  （`project_classification_table`）本就不做版本冻结，按「hash 已冻结」判会永远
+  不成立 ⇒ 改用「文件存在」，与 Phase 0 输入门的「声明式就绪」同向。
+- 判据自身的一处反向风险：F-02 首版借道 `instance.r_eff`，被实例 `Phase1Params`
+  覆盖了传入的 scope，**自己制造出假 FAIL**。据此确立原则：**判据的覆盖面不得
+  取决于被测数据**（F-02 自扫 FULL/SEGMENT，不沿用实例 scope）。
+
 ### T04-00 完成：Phase 1 精确性条件与反例集（WP4 求解层第一块）
 
 - `config/phase1_exactness_spec.json`：九条条件 `EC-1..EC-9` + 九个反例

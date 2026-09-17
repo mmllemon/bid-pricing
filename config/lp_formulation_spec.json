@@ -1,0 +1,466 @@
+{
+  "spec_id": "lp_formulation_v1",
+  "task": "T04-02A",
+  "title": "LP 模型形式化：变量 / 目标 / 约束映射",
+  "source_of_truth": "实施路线 v3.2.1 T04-02A + §8.1（求解器栈）、§8.2（等式容差化）；model_v0.3_R2.md §5.4 约束全集、§7.1 求解路径、§3.7 预处理",
+  "task_summary": "变量、目标、约束映射完整；总价约束按可竞争部分实现 Σ_{i∈X_opt} p_i q_i^0 = P*_competitive；C1 的等式/容差形式由 precision_profile.equality_tolerance_mode 决定",
+  "scope_boundary": {
+    "in_scope": [
+      "把 C1–C13 逐条映射为求解器可执行形式（或显式声明为何不是求解器约束）",
+      "锁定变量集合、索引集合、参数集合（含哪些量**不是**变量）",
+      "证明目标对 p 的线性性（决定 LP/MILP 分叉的唯一依据）",
+      "声明箱型预处理与诊断信息保全的边界"
+    ],
+    "not_in_scope": [
+      "建模器调用：把本制品的形式化描述翻译为 PuLP 对象 = T04-02B（约束编译器）",
+      "求解后端对接：HiGHS 适配 = T04-02C",
+      "解校验器 = T04-02D；不可行诊断 = T04-02E",
+      "C7 的 MILP 最优性验收 = T04-07；Phase 1 解析解 = T04-01",
+      "C11 的非线性形式选择 = T04-02B（见 constraint_map.C11）"
+    ],
+    "boundary_note": "本制品**不含任何求解器代码**：它是「模型长什么样」的受控声明，不是「怎么建出来」的实现。此界线的意义是让 T04-02B 与 T04-02C 有可被逐条比对的对象——否则『实现与规格一致』无法机械判定。"
+  },
+  "index_sets": [
+    {
+      "name": "X_opt",
+      "definition": "{ i : pricing_role(i) = OPTIMIZABLE }",
+      "source": "project_classification_table.covered_lists[default_role] ∪ exceptions",
+      "cardinality_source": "真实项目实测 115 条明细（5 个单位工程）中落 OPTIMIZABLE 者",
+      "note": "决策变量集合。由「清单缺省角色 + 例外登记」机械得出，不由人工逐行判断（T00-06 修订）。"
+    },
+    {
+      "name": "C1_scope",
+      "definition": "{ i ∈ X_opt : in_c1_scope(i) }",
+      "note": "C1 的作用域。**本项目 C1_scope = X_opt**（两者相等是 EC-1 的判据，不是定义）。分开命名是为了让「声明作用域 ≠ 可竞争部分」这一错误可被机械抓到。"
+    },
+    {
+      "name": "N_cap",
+      "definition": "{ i ∈ X_opt : cap_i 非空 }",
+      "note": "C2 的**活跃**作用域。"
+    },
+    {
+      "name": "N_free",
+      "definition": "X_opt \\ N_cap",
+      "note": "不限价项集合。**合法语义**（ALLOW_EMPTY_NO_CAP），不是数据缺口。真实样本 xiyong_l_district 含 1 项（031301017001 脚手架搭拆）。"
+    },
+    {
+      "name": "T_front",
+      "definition": "工程款前载集合（C10 用）",
+      "source": "招标文件付款条款，外生给定",
+      "note": "不是从数据推断的量——无此声明则 C10 不激活。"
+    }
+  ],
+  "parameters": [
+    {"name": "q0_i", "kind": "EXOGENOUS", "unit": "计量单位", "source": "招标限价清单工程量（表-09 列『工程量』）", "used_by": ["C1", "C6", "C10", "C12", "objective"]},
+    {"name": "q1_i", "kind": "EXOGENOUS", "unit": "计量单位", "source": "成本清单工程量（q1_point，用户 2026-09-16 裁定）", "used_by": ["C6", "C9", "objective"], "note": "**q0 与 q1 来自两份不同清单**（限价侧 / 成本侧），工程量不同。C1 与 C10 用 q0（投标口径），目标与 C6/C9 用 q1（结算口径）——混用不会报错，只会算错。"},
+    {"name": "c_i", "kind": "EXOGENOUS", "unit": "元/计量单位", "source": "成本清单单价", "used_by": ["C4", "C6", "C7", "C8", "C9", "C12", "objective"], "note": "自身个别成本 ≠ 市场平均成本（口径 5）。来源已声明 SUPPLIER_QUOTE（ADR-0011）。"},
+    {"name": "p0_i", "kind": "EXOGENOUS", "unit": "元/计量单位", "source": "base_i := cap_i（用户 2026-09-16 裁定）", "used_by": ["r_eff", "C2"], "note": "基准单价。取 cap 使 δ⁺ 失效、C2 成为纯单边上界（记忆口径 2）。"},
+    {"name": "p_i", "kind": "DECISION", "unit": "元/计量单位", "note": "见 variables[0]——列为参数仅为与 p0 对照，避免误当外生量。"},
+    {"name": "U_i", "kind": "DERIVED", "expr": "U_i = cap_i（本项目；δ⁺ 已失效）", "nullable": true, "null_means": "不限价（ALLOW_EMPTY_NO_CAP）", "used_by": ["C2"], "owner_task": "T03-02"},
+    {"name": "L_i", "kind": "DERIVED", "expr": "L_i = max(L_i^tender, 0)", "used_by": ["C3", "C4"], "owner_task": "T03-02", "note": "多来源取大（OI-04）；δ⁻ 只在招标明示幅度时参与，不得编造。"},
+    {"name": "floor_i", "kind": "DERIVED", "expr": "floor_i = max(L_i, c_i·(1 − mu_i))", "used_by": ["C4"], "owner_task": "T03-02"},
+    {"name": "r_eff_i", "kind": "DERIVED", "expr": "r_eff_i := (∂R_i/∂p_i) / q0_i", "used_by": ["objective", "sort_key"], "owner_task": "T03-02", "note": "**排序键**。唯一实现 = contracts/pricing_card.compute_r_eff。与 r_i 的区别见 T04-00 EC-2。"},
+    {"name": "alpha_i", "kind": "EXOGENOUS", "unit": "无量纲", "default": 0.0, "used_by": ["objective"], "note": "未越界时的协商调整率（§8.9.1 情形 1 取 0）。**只作用于 FULL 分支**——SEGMENT 下未越界部分按原单价结算。"},
+    {"name": "rho_i", "kind": "EXOGENOUS", "unit": "无量纲", "used_by": ["C10"], "note": "现金流前载系数（进度款比例），来自付款条款。"},
+    {"name": "theta", "kind": "EXOGENOUS", "unit": "无量纲", "used_by": ["C6"], "note": "亏损风险总量阈值。合规口径依赖 T00-09 成本口径证明包。"},
+    {"name": "N_max", "kind": "EXOGENOUS", "unit": "项", "used_by": ["C7"]},
+    {"name": "d_max", "kind": "EXOGENOUS", "unit": "无量纲", "used_by": ["C8"]},
+    {"name": "kappa_max", "kind": "EXOGENOUS", "unit": "无量纲", "used_by": ["C11"]},
+    {"name": "R_min", "kind": "EXOGENOUS", "unit": "无量纲", "used_by": ["C12"]},
+    {"name": "Z_min", "kind": "EXOGENOUS", "unit": "元", "used_by": ["C9"]},
+    {"name": "pi_target", "kind": "EXOGENOUS", "unit": "无量纲", "used_by": ["C9"]},
+    {"name": "P*", "kind": "EXOGENOUS", "unit": "元", "source": "用户给定的投标总价（含税）", "note": "**用户定 P*，模型给最优单价结构**（用户 2026-09-16 裁定）。P*_max 出题外另行提供。"},
+    {"name": "P*_competitive", "kind": "DERIVED", "expr": "compute_P_competitive(P*, FIXED_PRETAX, vat_rate, surtax_rate, supplied_material)", "used_by": ["C1"], "owner_task": "T00-06B", "note": "C1 右端的**唯一提供者**。入参是**锁定的总价 P***，不是报价向量 p——后者会把 C1 变成恒真式（判据零区分度）。"},
+    {"name": "FIXED_PRETAX", "kind": "EXOGENOUS", "unit": "元", "source": "总价划分律的固定项桶（NON_COMPETITIVE + PASS_THROUGH + CONTRACT_DEFINED）", "used_by": ["P*_competitive"], "note": "安全文明施工费 / 规费 / 暂列金额等，**不进 X_opt**（ADR-0014）。"},
+    {"name": "vat_rate / surtax_rate", "kind": "EXOGENOUS", "unit": "无量纲", "used_by": ["P*_competitive"], "note": "税率由调用方传入，无默认值（记忆口径 6）。"}
+  ],
+  "non_variables": [
+    {
+      "symbol": "lambda",
+      "why_not_a_variable": "λ 是 Phase 1 阈值分割解析解的**门槛值输出**（'哪些项顶到上界'的分界），不是 LP 的决策变量。LP 里不存在 λ：C1 是等式，预算约束以等式形式直接给出，无须对偶变量参与建模。",
+      "where_it_lives": "T04-01 的输出（--lambda 与层归属）；T04-04 对拍时作为解析侧的特征量",
+      "risk_if_confused": "把 λ 当 LP 变量会引入一个目标系数为 0 的自由变量 → 解不唯一、对拍无法比较。"
+    },
+    {
+      "symbol": "delta_eff_i / r_i",
+      "why_not_a_variable": "均为 (q1_i, q0_i) 的确定性函数，不依赖 p。列此以防被误当决策量。"
+    },
+    {
+      "symbol": "R_i / Z",
+      "why_not_a_variable": "表达式（p 的线性函数），不是自由变量。Z 只作为 C9 的约束书写便利量出现。"
+    }
+  ],
+  "variables": [
+    {
+      "symbol": "p_i",
+      "kind": "CONTINUOUS",
+      "index_set": "X_opt",
+      "unit": "元/计量单位",
+      "lower_bound": {"expr": "lb_i = max(L_i, floor_i, lb_C5)", "source_fields": ["L", "floor", "eps_price", "P*", "rounding.resolution"]},
+      "upper_bound": {"expr": "ub_i = U_i（若 i ∈ N_cap）；+inf（若 i ∈ N_free）", "source_fields": ["U", "cap"]},
+      "enters_objective": true,
+      "present_in": ["LP", "MILP"],
+      "bounds_note": "上下界的**合并**只用于建模；逐条诊断须用 C3/C4/C5 各自的原始阈值独立复算（见 box_preprocessing）。"
+    },
+    {
+      "symbol": "s_i",
+      "kind": "CONTINUOUS",
+      "index_set": "X_opt",
+      "unit": "元/计量单位",
+      "lower_bound": {"expr": "0", "source_fields": []},
+      "upper_bound": {"expr": "+inf", "source_fields": []},
+      "enters_objective": false,
+      "present_in": ["LP", "MILP"],
+      "definition": "s_i := max(c_i − p_i, 0)，C6 的亏损缺口。引入它是为了把 max(·,0) 线性化。",
+      "risk_if_omitted": "直接在 C6 里写 Σ max(c_i − p_i, 0)·q1_i 会得到**非光滑**约束，LP 不接受。"
+    },
+    {
+      "symbol": "z_i",
+      "kind": "BINARY",
+      "index_set": "X_opt",
+      "unit": "无量纲",
+      "lower_bound": {"expr": "0", "source_fields": []},
+      "upper_bound": {"expr": "1", "source_fields": []},
+      "enters_objective": false,
+      "present_in": ["MILP"],
+      "definition": "z_i := I(p_i < c_i)，C7 的亏损指示。**唯一**使问题从 LP 升为 MILP 的变量。"
+    },
+    {
+      "symbol": "u_i",
+      "kind": "CONTINUOUS",
+      "index_set": "X_opt",
+      "unit": "无量纲",
+      "introduced_by": "C11",
+      "status": "DEFERRED_PENDING_T04-02B",
+      "enters_objective": false,
+      "present_in": [],
+      "definition": "C11 线性化所需的偏差绝对值变量（u_i ≥ |d_i − 中心|）。**当前未引入**：C11 的形式待 T04-02B 选择（见 constraint_map.C11）。列此以保证变量清单「完整」——包括已知会来但还没来的变量。"
+    }
+  ],
+  "objective": {
+    "sense": "MAXIMIZE",
+    "symbol": "Z",
+    "level": "Z_OBJECTIVE",
+    "expression": "Z = Σ_{i∈X_opt} q1_i · ( r_eff_i · p_i − c_i )",
+    "source": "profit_bridge_spec.objective（唯一 enters_objective = true 的行，判据 PB-02）",
+    "tax_caliber": "EXCL_VAT —— 报价 p 与成本 c 两侧同为不含增值税口径（basis_declarations：cap / cost 两端均 EXCL_VAT）。故目标本身不含增值税；不可竞争费与税金不进目标（见 constant_part）。",
+    "linearity": {
+      "is_linear_in_p": true,
+      "proof": "r_eff_i 由 (r_i = q1_i/q0_i, 规则集参数, alpha_i) 决定，**全部是外生给定**。故 P1 的哪个分支在建模期即已知 ⇒ settlement_revenue 对 p 是线性函数：R_i(p) = q0_i · r_eff_i · p（逐分支验证见 marginal_verification）。分支不由决策驱动 ⇒ **不需要**为分支引入二元变量。",
+      "consequence": "LP 成立。MILP 的唯一来源是 C7 的二元变量 z_i（见 solver_form.switch_rule）。",
+      "marginal_verification": {
+        "statement": "排序键 r_eff 的定义是 ``r_eff_i := (∂R_i/∂p_i) / q0_i``，故必须逐分支满足 ``q0_i · r_eff_i == ∂R_i/∂p_i``。这是一条**跨来源对账**（解析式来自 compute_r_eff，数值差分来自 settlement_revenue 的业务公式），不是恒真式。",
+        "relation_to_objective": "注意区分两个边际：``∂R_i/∂p_i = q0_i · r_eff_i``（收入对报价），``∂Z/∂p_i = q1_i · r_eff_i``（目标对报价，含结算量因子 q1）。二者相差 r_i 倍，**不是同一个量**——F-02 检前者（这正是 r_eff 的定义式），目标侧用的后者必须由同一 r_eff 导出，不得各自实现。",
+        "method": "中心差分 (R_i(p+h) − R_i(p−h))/(2h)，h = 1e-6。**作用域由判据自己扫**（scope ∈ {FULL, SEGMENT} × alpha ∈ {0, 0.2}），不沿用实例的 adjustment_scope——覆盖面不得取决于被测数据（实例是 SEGMENT，若沿用则实例改回 FULL 后这条判据再也测不到该分叉）。实例各项自动覆盖 DECREASE / IN_RANGE / INCREASE 三分支，格数 = 项数 × 4。",
+        "known_failure_found": "2026-09-17 首跑即抓到真分叉：scope=SEGMENT ∧ 分支=IN_RANGE ∧ alpha≠0 时，settlement_revenue 返回含 (1+alpha) 的收入而 compute_r_eff 返回 r（不含 alpha）⇒ 两者相差 (1+alpha) 倍。根因是 settlement_revenue 的区间内分支漏了作用域判断。已修（区间内：FULL 用 (1+alpha)，SEGMENT 用 1）。",
+        "why_it_matters": "该分叉在 alpha=0 时不可见，故本项目真实数据（alpha=0）不会暴露它；但一旦 alpha 被设非 0，解析解与 LP 解就会不一致，且**不触发任何可行性检查**——典型的『全绿但错』。"
+      }
+    },
+    "constant_part": {
+      "expr": "− Σ_{i∈X_opt} c_i · q1_i",
+      "role": "不影响最优解（不依赖 p），但**必须出现在报告层**——profit_bridge.reported_vs_objective 要求报告口径与目标口径可对照。",
+      "must_not": "不得把常数项并入目标系数；也不得因为「不影响最优解」就在报告里省略（那会让 Z 的报告值与桥接表的差值项无法解释）。"
+    },
+    "risk_addend": {
+      "field": "alpha_i",
+      "applies_when": "分支 = IN_RANGE 且 adjustment_scope = FULL",
+      "note": "区间内 GET 协商调整率。SEGMENT 下**不生效**（未越界部分按原单价结算，§5.3.1）。"
+    },
+    "marginal_coefficient": {"expr": "∂Z/∂p_i = q1_i · r_eff_i", "cross_check": "与 ∂R_i/∂p_i = q0_i · r_eff_i 共用同一个 r_eff；F-02 锁定后者，目标系数由前者导出"} 
+  },
+  "constraint_map": [
+    {
+      "constraint_id": "C1",
+      "severity": "P0",
+      "model_form": "EQUALITY",
+      "solver_expression": "Σ_{i∈C1_scope} p_i · q0_i == P*_competitive",
+      "coefficient_sources": ["q0", "P*_competitive"],
+      "scope_note": "Σ 的作用域是 **C1_scope ⊆ X_opt**（即「可竞争部分」）。固定项（NON_COMPETITIVE / PASS_THROUGH / CONTRACT_DEFINED）**不进左端**——它们的金额已在总价划分律里进了 FIXED_PRETAX / TAX 桶。把固定项放进左端再让右端等于 P*，是本项目早期踩过的重复计错误（ADR-0014）。",
+      "rhs_source": {"expr": "compute_P_competitive(P*, FIXED_PRETAX, vat_rate, surtax_rate, supplied_material)", "module": "bidpricing.total_price", "owner_task": "T00-06B"},
+      "mode_linkage": {
+        "artifact": "precision_profile.equality_tolerance_mode",
+        "A": "EQUALITY（本制品当前形态）——内部严格等式 + 仅对最终输出做舍入调和",
+        "B": "INEQUALITY_BAND——Σ ∈ [P*_competitive − eps_solver, P*_competitive + eps_solver]",
+        "decided": "A（ADR-0020）。改此处而不改 precision_profile，判据 F-04 判 FAIL。"
+      },
+      "diagnostic_metric": "|Σ_{i∈C1_scope} p_i q0_i − P*_competitive|",
+      "tolerance": "内层 eps_solver（求解器原始可行性残差）；外层 eps_abs = 0.01 元（舍入调和，owner T06-06）",
+      "note": "本任务是「按可竞争部分实现 C1」——R7 修订的核心。原式 Σ_i p_i q_i^0 = P* 在固定项存在时无解。"
+    },
+    {
+      "constraint_id": "C2",
+      "severity": "P0",
+      "model_form": "BOX_UPPER",
+      "solver_expression": "p_i <= U_i   for i ∈ N_cap",
+      "applicable_when": "cap_i 非空",
+      "exempt_set": "N_free",
+      "coefficient_sources": ["U", "cap"],
+      "null_cap_handling": {
+        "semantics": "ALLOW_EMPTY_NO_CAP——招标不限制该项单价。**合法语义**，不是数据缺口（ADR-0004：未定态 = key 完全缺失；cap 为空是明确的键值语义）。",
+        "must_not": [
+          "p_i <= 0（会直接把该项算成不可行）",
+          "p_i <= 任何有限的替代上界（大 M）——引入无依据的界，且会改变 Phase 1 的层归属",
+          "把该项从 X_opt 移除（等价于 p_i 恒 0，违反 C5）"
+        ],
+        "implicit_bound": "由 C1 隐式给出 p_i ≤ P*_competitive / q0_i（因为其余项 ≥ 0）。这是**推论**，不得写成显式约束——写进去会掩盖「该项独占预算」这一真实解结构，并让 T04-02E 的不可行诊断把边界误报成 C2 冲突。",
+        "phase1_branch": "T04-00 EC-9：阈值分割中不限价项作为**临界项**显式求解（U = +inf 使它成为吸收剩余预算的桶）。本项目样本含 1 项，故 Phase 1 算法**必须**实现该分支（EC-9 对样本判 WARN 即此）。"
+      }
+    },
+    {
+      "constraint_id": "C3",
+      "severity": "P0",
+      "model_form": "BOX_LOWER",
+      "solver_expression": "p_i >= L_i",
+      "L_definition": "L_i = max(L_i^tender, 0)；多来源取大（OI-04 裁定）；δ⁻ 只在招标文件明示幅度时参与，不得编造。",
+      "coefficient_sources": ["L"]
+    },
+    {
+      "constraint_id": "C4",
+      "severity": "P0",
+      "model_form": "BOX_LOWER",
+      "solver_expression": "p_i >= floor_i = max(L_i, c_i·(1 − mu_i))",
+      "coefficient_sources": ["L", "c_i", "mu"],
+      "note": "成本地板。与 C6（亏损风险）并存而非互斥：C4 是逐项地板，C6 是总量约束（记忆口径 5）。"
+    },
+    {
+      "constraint_id": "C5",
+      "severity": "P0",
+      "model_form": "BOX_LOWER",
+      "solver_expression": "p_i >= lb_C5",
+      "lb_C5_rule": "lb_C5 = max(eps_price × P*, rounding.resolution)",
+      "why_not_plain_eps_price": "schema 的表达式写的是 p_i >= eps_price，而 eps_price 是**相对量**（×P* ≈ 1.4e-3 元）。报价表的最小可表示非零值是 0.01 元（rounding.resolution）。若 LP 下界取 1.4e-3，最优解可能给出 p_i = 0.0014 元——舍入到 0.01 后变成 0.00，**实际提交的报价违反 C5**。故 LP 下界必须被抬到报价分辨率。这是内层约束与外层舍入的耦合点，正是模式 A 要显式处理的对象（ADR-0020）。",
+      "coefficient_sources": ["eps_price", "P*", "rounding.resolution"],
+      "cross_artifact": "precision_profile.rounding.resolution（判据 F-06）"
+    },
+    {
+      "constraint_id": "C6",
+      "severity": "P0",
+      "model_form": "LINEAR_INEQ",
+      "toggleable": true,
+      "solver_expression": [
+        "s_i >= c_i − p_i        for i ∈ X_opt",
+        "s_i >= 0                for i ∈ X_opt",
+        "Σ_{i∈X_opt} s_i · q1_i <= theta · P*"
+      ],
+      "coefficient_sources": ["c_i", "q1_point", "theta", "P*"],
+      "why_q1_not_q0": "亏损缺口按**结算量**加权（亏损在实际结算时发生），故用 q1。用 q0 会把风险总量按投标口径估，与业务含义不符。",
+      "activation": "由实例 active_soft_constraints 决定。未激活时 s_i 也不引入（避免退化的零目标变量）。"
+    },
+    {
+      "constraint_id": "C7",
+      "severity": "P0",
+      "model_form": "MILP_BINARY",
+      "toggleable": true,
+      "solver_expression": [
+        "Σ_{i∈X_opt} z_i <= N_max",
+        "p_i >= c_i − M_i · z_i",
+        "p_i <= c_i − eps_res + M_i · (1 − z_i)"
+      ],
+      "coefficient_sources": ["c_i", "N_max", "U", "rounding.resolution"],
+      "big_m": {
+        "expr": "M_i = c_i − lb_i",
+        "tightest": true,
+        "why_tightest": "M_i ≥ c_i − lb_i 是「z_i = 1 时第一式退化为恒真」的**充要**条件，故 c_i − lb_i 是最小合法值。禁止 1e9 式大 M：它会松弛 LP 松弛界，使分支定界失去 tightness（本项目 n 可达 115 项，影响非平凡）。",
+        "degenerate": "若 c_i ≤ lb_i（成本已低于地板）则 M_i ≤ 0 ⇒ 该项**恒不亏损**，z_i 可固定为 0 并从问题中移除。这是机械可判的化简，须在 T04-02B 实现。"
+      },
+      "eps_res": {"expr": "rounding.resolution = 0.01 元", "why": "第三式强制 z_i = 1 ⇒ p_i < c_i **严格**成立。仅用前两式时 z_i 可以虚报（z_i = 1 而实际 p_i ≥ c_i），使「亏损项数」的报告值失真。"},
+      "linkage": "BIDIRECTIONAL_BIG_M（双向）。单向形式（只有第二式）下 z_i=1 只表示『允许亏损』，不表示『确实亏损』——判据无法区分『亏损项数 ≤ N_max』与『自称亏损的项数 ≤ N_max』。",
+      "deferred_to": "T04-07（MILP 独立验收协议）",
+      "solver_effect": "只要 C7 激活且未禁用，问题由 LP 升为 MILP。这是 solver_form 切换的**唯一**触发条件。"
+    },
+    {
+      "constraint_id": "C8",
+      "severity": "P0",
+      "model_form": "BOX_LOWER",
+      "toggleable": true,
+      "solver_expression": "p_i >= c_i · (1 − d_max)",
+      "coefficient_sources": ["c_i", "d_max"],
+      "note": "对 c_i = 0 的项，本式退化为 p_i ≥ 0，与 C5 合并后由 lb_C5 承担。须在 T04-02B 显式处理这一退化（不得除以 0）。"
+    },
+    {
+      "constraint_id": "C9",
+      "severity": "P0",
+      "model_form": "LINEAR_INEQ",
+      "toggleable": true,
+      "solver_expression": [
+        "Z >= Z_min",
+        "Z >= pi_target · Σ_{i∈X_opt} c_i · q1_i"
+      ],
+      "coefficient_sources": ["Z", "Z_min", "pi_target", "c_i", "q1_point"],
+      "why_linear": "Z 是 p 的线性函数（objective.linearity），故 C9a/C9b 都是线性约束。若目标曾是非线性的，C9 会变成非线性约束——这是「目标线性性」必须在形式化阶段证明的另一个理由。",
+      "denominator_note": "C9b 的分母 Σ c_i q1_i 是常量，故可移项为 Z ≥ pi_target · 常量（避免引入分式约束）。"
+    },
+    {
+      "constraint_id": "C10",
+      "severity": "P0",
+      "model_form": "LINEAR_INEQ",
+      "toggleable": true,
+      "solver_expression": "Σ_{i∈T_front} (rho_i · p_i − c_i) · q0_i >= 0",
+      "coefficient_sources": ["rho_i", "q0", "c_i", "T_front"],
+      "why_q0_not_q1": "现金流前载约束的语义是「**投标期**的收款节奏不低于成本投入」。进度款按清单工程量计价，故用 q0。用 q1 会把它错误地对齐到结算口径。",
+      "activation": "T_front 未声明则 C10 不激活——该集合来自付款条款，不是从数据推断的。"
+    },
+    {
+      "constraint_id": "C11",
+      "severity": "P1",
+      "model_form": "NONLINEAR_DEFERRED",
+      "toggleable": true,
+      "deferred_to": "T04-02B",
+      "schema_metric": "MAD 或 sigma(d)，其中 d_i = (p_i − base_i) / base_i",
+      "why_deferred": [
+        "σ(d) 需二次约束或二阶锥 → 把问题推离线性，且使 Phase 1 解析解不再可比（解析解的存在性依赖线性结构）。",
+        "MAD 需辅助变量 u_i ≥ |d_i − 中心|，而『中心』（d 的均值 d̄）本身依赖 p ⇒ 引入自由度。中心被优化选择时约束会**变松**（自由中心使 Σ|d_i − d̄| 取到最小），与 σ 的固定中心语义不同。",
+        "两者都是**语义替换**（σ → MAD 收紧；MAD-with-free-center 放松），方向相反。不得在形式化阶段静默选定。"
+      ],
+      "decision_owner": "T04-02B",
+      "constraint_on_owner": "若最终选定替换形式，必须在制品里显式声明（i）所选 metric 与 schema metric 的差异方向（紧/松）及其证明，（ii）违反后果。若招标文件明确以**标准差**表述离散度上限，则任何替换都不成立，该约束须退回判定层（DISCRETE_CHECK）实现，移出 LP。",
+      "severity_note": "P1 且可开关 ⇒ 本条的形式未定**不阻塞** P0 主干（C1–C5 与 C6–C10）。"
+    },
+    {
+      "constraint_id": "C12",
+      "severity": "P1",
+      "model_form": "CONSTANT_CHECK",
+      "toggleable": true,
+      "solver_expression": null,
+      "why_not_lp": "R_pc = Σ_i p_i q0_i / Σ_i c_i q0_i。在**满足 C1 的可行域上**，分子是**常量**：(a) 若 Σ 遍历 X_opt ⇒ 分子 = P*_competitive（C1 直接给出）；(b) 若 Σ 遍历全部项 ⇒ 分子 = P*_competitive + Σ_{非 X_opt} p_i q0_i，而后者是外生给定单价（NON_COMPETITIVE / PASS_THROUGH / CONTRACT_DEFINED 均为固定值）⇒ 仍是常量。两种作用域读法给出**同一结论**。",
+      "precision_note": "**恒定性是约束面上的性质，不是函数意义上的常数**：作为无约束函数，∂R_pc/∂p_i = q0_i / Σ c_i q0_i ≠ 0——只是任何 λ·∇R_pc 方向都不可行（会破坏 C1）。这一点是本条最容易被实现层误处理的地方：若把它当普通线性约束加进 LP，它在可行域上**不改变任何东西**（恒真）或**直接判空**（恒假），且两种情形下求解器都不会报出真正的问题。",
+      "why_that_matters": "写成 LP 约束会得到一条**在可行域上恒真或恒假**的平凡约束：不约束解、不产生松弛量、也不参与诊断。更糟的是它会掩盖真实问题——若 R_pc < R_min，真正该做的是判定「这个 P* 不可接受」，而不是让求解器报 infeasible。",
+      "correct_placement": "作为对 P* 的**前置可接受性判据**，在构造 C1 之前求值。这是 T03-06 不可行诊断的前置分支，而非 LP 约束。",
+      "diagnostic_metric": "R_pc",
+      "tolerance": "eps_price",
+      "coefficient_sources": ["q0", "c_i", "R_min"]
+    },
+    {
+      "constraint_id": "C13",
+      "severity": "P0",
+      "model_form": "NOT_A_BID_CONSTRAINT",
+      "toggleable": true,
+      "solver_expression": null,
+      "why_not_modeled": "本项目已裁定 C13 的机制 = SETTLEMENT_ADJUSTMENT（**结算期**条件修正），不是投标有效性约束（OI-05）。其偏高侧为**死分支**（C2 恒有 p_i ≤ cap_i ⇒ (p_i − cap_i)/cap_i > 0.50 永不触发）；偏低侧触发条件是「(cap_i − p_i)/cap_i > 0.50 且该子目工程量减少 > 15%」——后者是**结算期事实**，投标期不可知。",
+      "correct_placement": "结算修正模拟（敏感性扫描）：对触发项用名义修正价 p_rev_i 重算 R_i，输出 Z 的区间而非单点。修正价取值待 OI-06。",
+      "note": "把 C13 写成投标期约束会引入一个『用投标期不可知的信息定价』的错误——这是 ADR-0007 的同类失效模式。"
+    }
+  ],
+  "box_preprocessing": {
+    "why": "§8.2 第二条工程经验：提供更紧的变量上下界几乎零成本提升性能。",
+    "merge_rule": "lb_i = max(L_i, floor_i, lb_C5)；ub_i = U_i（i ∈ N_cap），否则 +inf",
+    "diagnostic_preservation": "合并下界**只用于建模**。C3 / C4 / C5 的逐条判定必须在判定层（T03-04）用各自的**原始阈值**独立复算——否则无可行解时（T03-06）的 conflict set 无法定位是哪条下界卡住，只能报出合并后的一个数。",
+    "feasibility_guard": "合并后若 lb_i > ub_i ⇒ 该项箱型**局部不可行**，必须在建模前判 BLOCKED 并报出项名与两条界，**不得**交给求解器报泛化的 infeasible（那会把一个数据问题呈现为模型问题）。"
+  },
+  "solver_form": {
+    "default": "LP",
+    "switch_rule": "active_soft_constraints ∩ {C7} ≠ ∅ 且 C7 未禁用 ⇒ MILP。除此之外无 MILP 来源（目标对 p 线性，见 objective.linearity）。",
+    "backend": {"modeler": "PuLP", "modeler_role": "仅建模器，不是求解器", "solver": "HiGHS", "owner_task": "T04-02C"},
+    "milp_acceptance": "T04-07（独立验收协议）",
+    "forbidden": "禁用 KKT 条件证明 MILP 最优性——KKT 只对连续可微（凸）问题成立，对含整数变量的 MILP 无适用性。MILP 的最优性只能靠对偶界 + 分支定界证据。",
+    "performance_target": "P95(T_solve) < 5 s（在基准硬件与固定测试集上建立基线，而非『毫秒至秒级』的经验表述）"
+  },
+  "formulation_checks": [
+    {
+      "id": "F-01",
+      "name": "变量覆盖完备",
+      "statement": "C1_scope 中每个项恰好对应一个 p_i 变量；不多不少。",
+      "check": "count({v.symbol 以 'p_' 或 'p_i' 形式实例化}) == |C1_scope|；且无重复项。",
+      "on_violation": "FAIL",
+      "cross_artifact": false
+    },
+    {
+      "id": "F-02",
+      "name": "目标边际与排序键一致（跨来源）",
+      "statement": "q0_i · r_eff_i == ∂R_i/∂p_i，逐分支成立。",
+      "check": "数值中心差分复算 R_i（来自 contracts/pricing_card.settlement_revenue）与解析式 q0_i·r_eff_i 比较；覆盖 2 作用域 × 3 分支 × 2 alpha 共 12 格。**不得**用「r_eff 等于自己」式的恒真比对。",
+      "on_violation": "FAIL",
+      "cross_artifact": false,
+      "found_a_bug": "2026-09-17 首跑抓到 SEGMENT ∧ IN_RANGE ∧ alpha≠0 的分叉（已在 settlement_revenue 修正）。"
+    },
+    {
+      "id": "F-03",
+      "name": "约束覆盖完整（制品集合对账）",
+      "statement": "constraint_schema 中 severity = P0 的每条约束在本制品有唯一 model_form 声明；且本制品不得声明 schema 里不存在的约束 id。",
+      "check": "set(本制品 constraint_id) == set(constraint_schema.constraints.id)；P0 子集必须全部有 model_form 且非 null（除非 model_form ∈ {NOT_A_BID_CONSTRAINT} 并给出理由）。",
+      "on_violation": "FAIL",
+      "cross_artifact": true,
+      "artifact": "constraint_schema.json"
+    },
+    {
+      "id": "F-04",
+      "name": "C1 形式与精度模式相容（跨制品）",
+      "statement": "C1 的 model_form 必须与 precision_profile.equality_tolerance_mode.current 相容。",
+      "check": "映射 A ⇒ 'EQUALITY'，B ⇒ 'INEQUALITY_BAND'；当前 current = 'A' 而本制品 C1.model_form = 'EQUALITY' ⇒ 相容。改任一侧不同步即 FAIL。",
+      "on_violation": "FAIL",
+      "cross_artifact": true,
+      "artifact": "precision_profile.json"
+    },
+    {
+      "id": "F-05",
+      "name": "不限价项不得被赋替代上界",
+      "statement": "cap 为空的项在 C2 上必须标为不适用，且不得出现任何有限替代上界。",
+      "check": "count(C2 条目的 exempt_set) == count(实例中 cap 为空的项)；且 C2 的 solver_expression 不含 BIG_M / 常数替代界。",
+      "on_violation": "FAIL",
+      "cross_artifact": false
+    },
+    {
+      "id": "F-06",
+      "name": "C5 下界不得低于报价分辨率（跨制品）",
+      "statement": "C5 的 LP 下界必须 ≥ precision_profile.rounding.resolution，否则 LP 可行解舍入后违反 C5。",
+      "check": "lb_C5 = max(eps_price·P*, resolution) ≥ resolution ⇒ 恒成立；判据实际检的是『实现是否用了裸 eps_price·P*』——取 P* = 1e6 时 eps_price·P* = 1e-3 < 0.01 ⇒ 若实现取该值为界即 FAIL。",
+      "on_violation": "FAIL",
+      "cross_artifact": true,
+      "artifact": "precision_profile.json"
+    },
+    {
+      "id": "F-07",
+      "name": "系数来源须为命名字段",
+      "statement": "每条约束的 coefficient_sources 必须非空且全部可解析到已知参数名或 constraint_schema.inputs，不得是字面量。",
+      "check": "每条 coefficient_sources ⊆ (本制品 parameters 名 ∪ constraint_schema.inputs 并集)；空列表 ⇒ FAIL。",
+      "on_violation": "FAIL",
+      "cross_artifact": true
+    },
+    {
+      "id": "F-08",
+      "name": "退化为常量的约束须标出",
+      "statement": "若某条约束在**可行域上**恒定（C1 成立时不含决策自由度），必须标 model_form = CONSTANT_CHECK 且不进入 LP。",
+      "check": "① C12 的 model_form == 'CONSTANT_CHECK' 且 solver_expression 为 null；② 实现复算：构造**两组不同的 p**（都满足 C1，例如把预算在两项之间挪动），分别求值 R_pc，两者必须相等（容差 eps_price）。**不得**用「∂R_pc/∂p_i == 0」这类函数意义上的判据——那对无约束函数是假的（偏导 = q0_i/Σc q0 ≠ 0），会被误读成 FAIL。",
+      "on_violation": "FAIL",
+      "cross_artifact": false
+    },
+    {
+      "id": "F-07b",
+      "name": "非 LP 形式须给出理由",
+      "statement": "model_form ∈ {CONSTANT_CHECK, NONLINEAR_DEFERRED, NOT_A_BID_CONSTRAINT} 的条目必须带非空的理由字段（why_not_lp / why_deferred / why_not_modeled），否则「不建模」会被读成「忘了建模」。",
+      "check": "逐条检查理由字段存在且非空；LP 内形式（EQUALITY / BOX_UPPER / BOX_LOWER / LINEAR_INEQ / MILP_BINARY）反向要求 coefficient_sources 非空且可解析（判据 F-07）。",
+      "on_violation": "FAIL",
+      "cross_artifact": false
+    },
+    {
+      "id": "F-09",
+      "name": "MILP 切换条件唯一",
+      "statement": "求解器形态必须由 C7 激活与否唯一决定。",
+      "check": "instance.active_soft_constraints 含 'C7' ⇒ formulation.solver_form == 'MILP'；不含 ⇒ 'LP'。无第三种触发源。",
+      "on_violation": "FAIL",
+      "cross_artifact": false
+    },
+    {
+      "id": "F-10",
+      "name": "目标常量项分列",
+      "statement": "目标中的常量项（−Σ c_i q1_i）必须与决策相关项分列，不进系数。",
+      "check": "objective 的系数列表只含 r_eff·q1 形态的项；常量单独字段存在；实现产出的 coefficients 中不含 c_i。",
+      "on_violation": "FAIL",
+      "cross_artifact": false
+    }
+  ],
+  "consumers": [
+    {"task": "T04-02B", "uses": "constraint_map + box_preprocessing + variables ⇒ 机械翻译为 PuLP 对象，无手写约束"},
+    {"task": "T04-02C", "uses": "solver_form.backend ⇒ HiGHS adapter"},
+    {"task": "T04-02D", "uses": "diagnostic_metric + tolerance ⇒ 解校验器（独立于求解路径）"},
+    {"task": "T04-01", "uses": "objective.linearity + F-02 ⇒ 解析解与 LP 解的边际一致性依据"},
+    {"task": "T04-07", "uses": "C7 的 big_m / linkage / eps_res ⇒ MILP 独立验收"},
+    {"task": "T04-06", "uses": "precision_profile.reopen_condition ⇒ 等式形式 benchmark（本制品是待重开对象）"}
+  ],
+  "open_items": [
+    "C11 的线性化形式待 T04-02B 选定（见 constraint_map.C11.constraint_on_owner）；形式未定**不阻塞** P0 主干。",
+    "C7 的 tight Big-M 对分支定界收敛速度的实际影响待 T04-07 验收量化。",
+    "q0（限价清单量）与 q1（成本清单量）的双来源口径须补 attribution 记录——目前 q1_point := 成本清单量 是用户 2026-09-16 的口头裁定，尚未落成受控声明。",
+    "C8 在 c_i = 0 项上的退化处理（避免除以 0）须在 T04-02B 显式实现并留痕。"
+  ]
+}

@@ -115,7 +115,7 @@ def collect_git() -> dict:
 def check_evidence(task: dict, registry: dict, root: Path) -> tuple[bool | None, str]:
     """核对任务的代码证据。返回 (是否成立, 说明)；无 evidence 声明返回 (None, "")。
 
-    2026-09-17 修正两处缺口（原实现会让**真实成立的证据被判不成立**，
+    2026-09-17 修正三处缺口（原实现会让**真实成立的证据被判不成立**，
     从而逼着人往任务板里填假证据）：
 
     * ``kind="artifact"`` 原先**只查 gate_0a**。任一以 Gate 0b 受控制品为
@@ -123,12 +123,22 @@ def check_evidence(task: dict, registry: dict, root: Path) -> tuple[bool | None,
       现按 gate_0a ∪ gate_0b 取并集。
     * 新增 ``kind="adr"``：决策记录的路径是 ``docs/adr/<file>``，原实现
       只能写 module/file 的仓库相对路径，语义上分不清「代码」与「决策」。
+    * 新增 **phase_0 项目级输入**分支：这类制品（project_classification_table）
+      本就不做版本冻结，按「hash 已冻结」判会永远不成立。改用「文件存在」，
+      与 Phase 0 输入门的「声明式就绪」判据同向。
     """
     ev = task.get("evidence") or []
     if not ev:
         return None, ""
 
     records = [r for gate in ("gate_0a", "gate_0b") for r in parse_records(registry, gate)]
+    # phase_0 是**项目级输入**（如 project_classification_table），不做版本冻结——
+    # 它的就绪性由 Phase 0 输入门按「声明式就绪」判（key 必须存在；空列表是合法
+    # 结论）。故这里对它改用「文件存在」而非「hash 已冻结」判定。判据不得因为
+    # 「这个制品本来就不该冻结」而把一个真实成立的证据判成不成立。
+    project_inputs = {
+        r.key: r for r in parse_records(registry, "phase_0") if r.artifact_path
+    }
 
     details: list[str] = []
     ok = True
@@ -137,8 +147,19 @@ def check_evidence(task: dict, registry: dict, root: Path) -> tuple[bool | None,
         if kind == "artifact":
             rec = next((r for r in records if r.key == e.get("key")), None)
             if rec is None:
-                ok = False
-                details.append(f"{e.get('key')} 未在注册表声明")
+                p0 = project_inputs.get(str(e.get("key")))
+                if p0 is None:
+                    ok = False
+                    details.append(f"{e.get('key')} 未在注册表声明")
+                else:
+                    path = root / "config" / str(p0.artifact_path)
+                    if path.exists():
+                        details.append(
+                            f"{e.get('key')} 存在（项目级输入，不冻结 hash）"
+                        )
+                    else:
+                        ok = False
+                        details.append(f"{e.get('key')} 缺失：{p0.artifact_path}")
             elif rec.hash:
                 details.append(f"{e.get('key')} 已冻结 {str(rec.hash)[:19]}")
             else:

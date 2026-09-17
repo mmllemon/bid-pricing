@@ -332,4 +332,12 @@ def settlement_revenue(
         in_range = params.increase_threshold * q0 * p
         excess = (q1 - params.increase_threshold * q0) * p1
         return in_range + excess
-    return q1 * p * (1.0 + alpha)
+    # 区间内：协商调整率 alpha **只作用于 FULL 分支**（§5.3.1）——SEGMENT 下
+    # 未越界部分按原单价结算，alpha 不生效。此处必须与 ``compute_r_eff`` 的
+    # 区间内分支逐分支对齐：否则 ``settlement_revenue`` 与 ``q0·r_eff`` 会在
+    # 「SEGMENT + 区间内 + alpha≠0」这一格上分歧（实测差 (1+alpha) 倍），
+    # 表现形态是「解析解与 LP 解对不上」——由 tests/test_lp_formulation.py 的
+    # 数值差分判据逐分支锁定。
+    if params.adjustment_scope == "FULL":
+        return q1 * p * (1.0 + alpha)
+    return q1 * p

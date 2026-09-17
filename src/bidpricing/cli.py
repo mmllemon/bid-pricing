@@ -981,6 +981,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_p1.add_argument("--json", action="store_true", help="输出 JSON")
     p_p1.set_defaults(func=cmd_phase1_check)
 
+    # ------------------------------------------------------- formulate-check
+    p_fm = sub.add_parser(
+        "formulate-check",
+        help="T04-02A LP 形式化（变量/目标/约束映射 + 制品↔实现双向锁定）")
+    p_fm.add_argument("--instance", default=None,
+                      help="Phase 1 实例 JSON；省略则用内置探针实例")
+    p_fm.add_argument("--json", action="store_true", help="输出 JSON")
+    p_fm.set_defaults(func=cmd_formulate_check)
+
     return parser
 
 
@@ -1010,6 +1019,131 @@ def _print_exactness(verdict, title: str) -> None:
         for n in verdict.implementation_notes:
             print(f"    · {n}")
     print()
+
+
+def _print_formulation(fm, rows, title: str) -> None:
+    print("=" * 78)
+    print(f"T04-02A LP 形式化（制品↔实现双向锁定）｜ {title}")
+    print("=" * 78)
+    print(f"  求解器形态：{fm.solver_form}　（active_soft_constraints = "
+          f"{list(fm.active) or '空'}）")
+    print(f"  变量 {fm.n_vars} 列 / 约束行 {fm.n_rows} 行")
+    print(f"  目标：{fm.objective_expr}")
+    print(f"        常量项 = {fm.objective_constant:,.2f}（不进系数，须出现在报告层）")
+    print(f"  C5 下界 lb_c5 = {fm.lb_c5:.6g} 元（= max(eps_price·P*, 报价分辨率)）")
+    if fm.box_notes:
+        print("  箱型警告：")
+        for n in fm.box_notes:
+            print(f"    [!] {n}")
+    if fm.constant_checks:
+        for cc in fm.constant_checks:
+            verdict = {True: "PASS", False: "FAIL", None: "只报值不判"}[cc.passes]
+            print(f"  常量判据 {cc.constraint_id}（{cc.metric}）= "
+                  f"{cc.value if cc.value is None else round(cc.value, 6)} ⇒ {verdict}")
+            print(f"           {cc.reason}")
+    if fm.deferred:
+        print("  挂账项（不静默丢弃）：")
+        for d in fm.deferred:
+            print(f"    · {d.constraint_id} [{d.form}] → {d.owner_task}：{d.reason}")
+    print()
+    print("  逐条判据：")
+    for it in rows:
+        tag = {"PASS": "  PASS", "WARN": "  WARN", "SKIP": "  SKIP",
+               "FAIL": "  FAIL", "BLOCKED": "BLOCKED"}[it.status]
+        print(f"  [{tag}] {it.item}")
+        print(f"           {it.reason}")
+    print()
+
+
+def cmd_formulate_check(args) -> int:
+    """T04-02A LP 形式化判定 —— 「变量/目标/约束映射是否完整」。
+
+    与 ``phase1-check`` 的分工：那个判**求解论域**（阈值分割解在这实例上是否
+    最优）；本命令判**模型表述**——C1–C13 是否各有明确形式、变量集合是否与
+    可竞争性分类闭合、目标线性性是否成立、以及制品与实现是否互相锁死。
+
+    默认跑两个变体：``active_soft_constraints = ()``（LP）与 ``("C7",)``
+    （MILP）——F-09 的判据要求「MILP 切换条件唯一」，只跑一侧等于没检。
+    """
+    import dataclasses
+    from pathlib import Path
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.formulation import (
+        build_formulation,
+        check_formulation,
+        load_formulation_spec,
+        probe_instance,
+    )
+    from .solver.instance import Phase1Instance
+
+    cfg = config_dir()
+    spec = load_formulation_spec(cfg)
+    schema = json.loads((cfg / "constraint_schema.json").read_text(encoding="utf-8"))
+    prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
+    card = load_pricing_card(cfg)
+    resolved = resolve_parameters(card)
+    eps_abs = float(prof["eps_abs"]["value"])
+    eps_price = float(prof["eps_price"]["value"])
+    resolution = float(prof["rounding"]["resolution"])
+
+    variants: list[tuple[str, object]] = []
+    if args.instance:
+        path = Path(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        base = Phase1Instance.from_dict(
+            json.loads(path.read_text(encoding="utf-8")), source=str(path)
+        )
+        for tag, act in (("LP", ()), ("MILP", ("C7",))):
+            variants.append(
+                (tag, dataclasses.replace(base, active_soft_constraints=tuple(act)))
+            )
+    else:
+        variants = [
+            ("LP", probe_instance()),
+            ("MILP", probe_instance(active=("C7",))),
+        ]
+
+    payload: list[dict] = []
+    worst = 0
+    for tag, instance in variants:
+        fm = build_formulation(
+            instance, resolved,
+            eps_abs=eps_abs, eps_price=eps_price, resolution=resolution,
+            theta=getattr(instance.params, "theta", None),
+        )
+        rows = check_formulation(
+            spec, fm,
+            instance=instance, resolved=resolved,
+            constraint_schema=schema, precision_profile=prof,
+            eps_price=eps_price, eps_abs=eps_abs,
+        )
+        payload.append({
+            "variant": tag,
+            "formulation": fm.to_dict(),
+            "checks": [r.to_dict() for r in rows],
+        })
+        for r in rows:
+            if r.blocks_progress:
+                worst = 1
+        if not args.json:
+            _print_formulation(fm, rows, f"{'探针实例' if not args.instance else args.instance} · {tag}")
+
+    if args.json:
+        print(json.dumps(
+            {"spec_id": spec.get("spec_id"), "variants": payload},
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return worst
+
+    total = sum(len(v["checks"]) for v in payload)
+    npass = sum(1 for v in payload for c in v["checks"] if c["status"] == "PASS")
+    nskip = sum(1 for v in payload for c in v["checks"] if c["status"] == "SKIP")
+    print(f"  汇总：{npass} PASS / {nskip} SKIP / {total - npass - nskip} 待处理"
+          f"（共 {total} 条，跨 {len(payload)} 个变体）")
+    return worst
 
 
 def cmd_phase1_check(args) -> int:

@@ -46,11 +46,50 @@
     "allowed": ["A", "B"],
     "A": "内部严格等式 + 仅对最终输出做舍入调和",
     "B": "全程容差带 |.| <= eps_P（此时 Phase 3 复核必须使用同一 eps_P）",
-    "current": null,
-    "note": "二选一，不得混用。current 为 null 表示尚未冻结——需在 Gate 0a 前确定（T00-04 完成判据）"
+    "current": "A",
+    "decided_at": "2026-09-17T10:55:00+08:00",
+    "decided_by": "agent（用户 2026-09-17 授权「自主裁定，继续推进」）",
+    "clause_8_2_reading": {
+      "literal": "「两层必须使用同一 ε 口径——不得『求解时容差化、复核时严格等式』」",
+      "reading": "该条禁的是**松进严出**（内层容差化、外层严格等式）——那会误杀求解器只能给出带内残差的可行解。其正确实现是「内层放宽的部分必须在外层被显式补偿」。模式 A 使内层**无放宽** ⇒ 无需补偿 ⇒ 两层口径天然一致（都是「不许偏离 P*_c」）。模式 B 是「两层同宽」的字面读法，代价见 D1。故 A 是该条的**更强满足**，不是违反。"
+    },
+    "decision_basis": {
+      "D1_independence": {
+        "statement": "外层复核必须能**独立否定**内层解。模式 B 把内层残差判据与外层复核判据设成同一宽度 ε_P，于是「残差恰好落在带内」的解同时通过两关——复核层退化为内层判据的复制，丧失独立否定能力。",
+        "check": "两层判据宽度之比 R2 = outer_tol / inner_tol；要求 R2 ≥ 1e3（两层的失败模式必须可区分）。A 下 outer=eps_abs=0.01 元、inner=eps_solver=1e-8 ⇒ R2 = 1e6 ≥ 1e3 PASS；B 下 outer = inner ⇒ R2 = 1 FAIL。",
+        "on_violation": "FAIL ⇒ 模式 B 不可采",
+        "decisive": true,
+        "why_decisive": "本判据与 benchmark 结果**无关**：即便 benchmark 证明容差带性能更优，也不能用「复核层复制」去换——性能问题必须在保住 D1 的前提下另解（见 reopen_condition）。"
+      },
+      "D2_magnitude": {
+        "statement": "容差带只有在**显著宽于**求解器默认原始可行性容差时才起放宽作用；否则它只是口号——不提供任何性能收益，却改变了模型语义。",
+        "check": "R1 = eps_solver / HiGHS 默认 primal_feasibility_tolerance（1e-7）。R1 ≤ 1 ⇒ 带不宽于默认容差 ⇒ 无「放宽」可言。本项目 R1 = 1e-8 / 1e-7 = 0.1 < 1 ⇒ FAIL。",
+        "on_violation": "FAIL ⇒ 模式 B 无收益",
+        "corollary": "同时否定「改 A 会更难解」这一顾虑：A 的实现也是把求解器容差收到同一量级（见 mode_A_implementation.inner），两者求解难度等价。"
+      },
+      "D3_no_evidence": {
+        "statement": "§8.2 末段已声明「『等式约束性能显著更差』不应写成无条件事实，**须在本项目 benchmark 后决定**」——即该收益尚属**未证**。",
+        "check": "benchmark_status ∈ {RUN_PASS, RUN_FAIL}？本项目 = NOT_RUN ⇒ 无证据 ⇒ 不得据未证收益交换已证的语义性质。",
+        "on_violation": "n/a（NOT_RUN 即取语义保守侧 A）"
+      }
+    },
+    "mode_A_implementation": {
+      "inner": "C1 以**严格等式**建模：Σ_{i∈X_opt} p_i q_i^0 = P*_competitive。求解器侧显式设 primal_feasibility_tolerance = 1e-9（≤ eps_solver/10，留一个数量级余量），并在报告中声明该值属**数值极限**而非语义容差——它不授权解偏离 P*_competitive，只授权浮点舍入。",
+      "outer": "独立环节 TotalPriceReconciliation（owner_task = T06-06）：四舍五入至 0.01 元 → 总价重算 → 差额修正 → 全约束复验 → 输出可提交报价。判据固定为 eps_abs = 0.01 元（舍入分辨率），**不得**沿用 eps_total。",
+      "separation": "两层 ε 不同名、不同源、不同 owner：内层 = eps_solver（求解器原始可行性残差），外层 = eps_abs（舍入分辨率）。二者相差 6 个数量级，故一个层的失败不会伪装成另一层的通过。",
+      "prohibited": "禁止把「求解器内已容差化」当作复核依据（§8.2 原话）；禁止用 eps_total 做舍入后校验（eps_total 是总价类**残差**容差，不是**舍入**容差）。"
+    },
+    "benchmark_status": "NOT_RUN",
+    "reopen_condition": {
+      "trigger": "benchmark_status = RUN_FAIL 且 D2 的 R1 > 10（即容差带确实宽于求解器默认容差一个数量级以上）",
+      "measurement": "同一实例集（须含真实样本 xiyong_l_district 电气设备安装工程）上，严格等式式 vs 不等式带式的 P95 求解时延之比 > 1.5，且实例规模 n ≥ 1e4 项",
+      "constraint_on_reopen": "**D1 不可交易**：即使重开，也只能改内层表示（严格等式 → 不等式带 + 外层显式补偿项），外层必须始终是独立严格判据。禁止把外层一并放宽。",
+      "owner_task": "T04-06（数值稳定性处理，含 P95 求解时延基线）"
+    },
+    "note": "二选一，不得混用。current 非 null ⇒ T00-04 完成判据（Gate 0a 前确定）已满足。"
   },
   "open_items": [
-    "「等式约束性能显著更差」不应写成无条件事实，须在本项目 benchmark 后决定（§8.2 末段）",
-    "对 P* > 1e7 元的项目，eps_price*P* 项已大于 0.01 元舍入分辨率，T06-06 的舍入后校验须单独使用 eps_abs=0.01，不得沿用 eps_total"
+    "「等式约束性能显著更差」已由 benchmark_status = NOT_RUN + equality_tolerance_mode.reopen_condition 显式化：**未证收益不得交换已证语义性质**，故取模式 A；重开条款见该字段（含 D1 不可交易的约束）。owner = T04-06。",
+    "对 P* > 1e7 元的项目，eps_price*P* 项已大于 0.01 元舍入分辨率，T06-06 的舍入后校验须单独使用 eps_abs=0.01，不得沿用 eps_total。模式 A 下外层判据已固定为 eps_abs，本条自动满足——保留以记录动因。"
   ]
 }

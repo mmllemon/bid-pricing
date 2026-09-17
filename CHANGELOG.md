@@ -10,6 +10,38 @@
 
 ## [未发布]
 
+### T04-07 完成：MILP 独立验收协议（ADR-0028）
+
+**新增**
+
+- `config/milp_acceptance_spec.json`：六字段（status / integer_feasible /
+  objective_gap / best_bound / time_limit / incumbent）+ MA-01..MA-10 判据 +
+  三个具名容差（`eps_gap_abs` / `eps_gap_rel` / `eps_int`）。
+- `src/bidpricing/solver/milp_acceptance.py`：`build_acceptance`（生产结论）与
+  `judge_milp`（判定）分离，判据只吃 `MilpFacts` 原始量，可被注入的错误结论否定。
+- CLI `milp-check`（`--form LP|MILP|both` / `--time-limit` / `--json`）。
+- `tests/test_milp_acceptance.py`：38 项（全量 877 → **915**，双环境全绿）。
+
+**变更**
+
+- `SolveResult` 新增 `diagnostics`（对偶界 / 自报间隙 / 整数性违规 / 节点数），
+  并暴露 `best_bound_min` / `reported_gap` 只读属性；取数在适配层内以
+  `hasattr` **能力探测**完成（`backend._pulp_diagnostics`），取不到即留空。
+
+**修正**
+
+- ★ HiGHS 的 `mip_dual_bound` **不含 `objective_constant`**：只做 min→max 取反
+  会得到 bound=2,730,000 对 Z=460,000（复算间隙 4.9 而自报 0.0），由 MA-06
+  跨来源对账抓出。换算改为两步（取反 + 补常量）。
+- HiGHS 用 ±inf 表示「该量无定义」（LP 形态的 `mip_gap`）⇒ 非有限值一律不写键。
+
+**实测**
+
+- `pulp_highs` ⇒ `OPTIMAL`（最优性已证，全判据 PASS）；
+  `pulp_cbc`（命令行后端，`solverModel=None`）⇒ diagnostics 为空 ⇒ MA-05 WARN
+  + MA-06 BLOCKED ⇒ 降级 `FEASIBLE`、未证。这是「能力必须探测、不得硬编码」的
+  价值证据：写死「一定有诊断量」会让 CBC 上静默宣称最优。
+
 ### T04-08 完成：独立参考实现（第二条计算路径 + 三层隔离证明，ADR-0027）
 
 **新增**

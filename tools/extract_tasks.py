@@ -140,6 +140,12 @@ EVIDENCE: dict[str, list[dict]] = {
         {"kind": "module", "path": "tests/test_phase1_solver.py"},
         {"kind": "adr", "path": "ADR-0026-phase1-analytic-solver.md"},
     ],
+    "T04-07": [
+        {"kind": "file", "path": "config/milp_acceptance_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/solver/milp_acceptance.py"},
+        {"kind": "module", "path": "tests/test_milp_acceptance.py"},
+        {"kind": "adr", "path": "ADR-0028-milp-acceptance-protocol.md"},
+    ],
 }
 
 #: 初次提取时的状态种子。仅当 JSON 中不存在该任务时才写入；

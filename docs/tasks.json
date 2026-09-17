@@ -1092,9 +1092,26 @@
       ],
       "summary": "定义 `status / integer_feasible / objective_gap / best_bound / time_limit / incumbent`；未证明最优时不得标记 OPTIMAL；定义 MILP 超时降级策略",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/milp_acceptance_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/milp_acceptance.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_milp_acceptance.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0028-milp-acceptance-protocol.md"
+        }
+      ],
+      "status": "done",
+      "note": "2026-09-18：MILP 独立验收协议落地。spec=config/milp_acceptance_spec.json（MA-01..MA-10 + 六字段 + 三容差具名）；实现 src/bidpricing/solver/milp_acceptance.py（build_acceptance 生产 / judge_milp 判定分离，只吃 MilpFacts 原始量）；适配层 backend._pulp_diagnostics 以 hasattr 能力探测取 best_bound/mip_gap/integrality_violation，取不到即留空（不用 Z 顶替）。最优性四项全满足才标 OPTIMAL，否则单向下坡降级 FEASIBLE（never_upgrade）；超时按有无 incumbent 分叉；禁 KKT 证 MILP 最优性。38 项测试（全量 877→915，双环境全绿），含注入『FEASIBLE 状态却给 OPTIMAL』必 FAIL、无 bound 却标 OPTIMAL 必 FAIL、制品漏声明容差必 BLOCKED、超时写成 INFEASIBLE 必 FAIL。CLI milp-check（--form LP|MILP|both / --time-limit / --json）。★ 接线首跑抓到真口径错误：HiGHS 的 mip_dual_bound 不含 objective_constant（探针常量 −2,270,000；只做 min→max 取反得 bound=2,730,000 对 Z=460,000，复算间隙 4.9 而自报 0.0），由 MA-06 跨来源对账抓出，补两步换算后一致。★ 实测能力差异：pulp_highs ⇒ OPTIMAL（已证）；pulp_cbc（命令行后端 solverModel=None）⇒ diagnostics 为空 ⇒ MA-05 WARN + MA-06 BLOCKED ⇒ 降级 FEASIBLE 未证（若硬编码『一定有诊断量』，CBC 上会静默宣称最优）。遗留 OI-MA-A：M_hi 对分支定界收敛的影响仍待量化（T04-02B 挂账项）。"
     },
     {
       "id": "T04-08",

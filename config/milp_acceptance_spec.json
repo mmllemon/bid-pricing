@@ -1,0 +1,216 @@
+{
+  "spec_id": "milp_acceptance_spec_v1",
+  "task": "T04-07",
+  "title": "MILP 独立验收协议",
+  "role": "回答一个且仅一个问题：**这一次求解的结果能不能被当作「已证最优」接受**。它不建模、不求最优性证明、不做可行性诊断——它只把求解器回传的东西按协议逐项核一遍，并给出「最优性已证 / 未证 / 不可判」三态。",
+  "why_a_separate_artifact": "求解器自报 `Optimal` 是**求解器自己的结论**，不是本项目的验收结论。二者混用的后果在对拍器（T04-04）上最致命：B 组判据要求「Phase 1 可行时 Phase 2 目标值不得优于真实最优值」，若把 `status=Optimal` 直接当作「真实最优值」，则这条判据退化成恒真——它只能发现 Phase 2 比自报值更好（不可能），发现不了两者共同的错误。故最优性必须由**可核的量**（对偶界、相对间隙、整数性违规）证明，而不是由一个词证明。",
+  "source_of_truth": "实施路线 v3.2.1 §3 任务表 T04-07；§4.1 A/B 验收；solver_backend_spec.json（归一状态域）；precision_profile.json（容差量级参考）",
+  "scope_boundary": {
+    "in_scope": [
+      "六字段的声明、来源与缺失策略：status / integer_feasible / objective_gap / best_bound / time_limit / incumbent",
+      "最优性接受规则（何时可标 OPTIMAL）与强制降级规则（never_upgrade）",
+      "MILP 超时/中断的降级分叉",
+      "对偶界与自报间隙的跨来源对账"
+    ],
+    "not_in_scope": [
+      "建模与编译 = T04-02A/02B；求解与状态归一 = T04-02C",
+      "解的可行性/层归属复核 = T04-02D",
+      "LP 的最优性：LP 的最优性是求解器返回的基可行解性质，本协议不适用（判 SKIP 而非 PASS）",
+      "不可行诊断 = T04-02E",
+      "对拍（两条路径比较）= T04-04"
+    ],
+    "boundary_note": "与 T04-02C 的分工：后者回答「这次求解是什么状态」，本制品回答「这个状态够不够格被当作最优」。状态域复用 T04-02C 的归一结果，**不另立一套状态词表**——另立一套等于把同一种机器状态编码两次（规则⑨同族）。"
+  },
+  "fields": [
+    {
+      "name": "status",
+      "source": "T04-02C 的 NormalizedStatus（native → normalized）",
+      "missing_policy": "BLOCK",
+      "semantics": "求解器侧结论，非验收结论。本协议只可**降级**，不可升级。"
+    },
+    {
+      "name": "integer_feasible",
+      "source": "逐变量复算：整数/二元变量取值与其最近整数的距离 ≤ eps_int",
+      "missing_policy": "BLOCK",
+      "semantics": "**不得**只信 status。求解器可能因净化或数值原因返回非整数取值而仍报 Optimal；也可能本层按 item_id 取变量时取错族（T04-08 接线时已实证过 z_i 覆盖 p_i）。"
+    },
+    {
+      "name": "objective_gap",
+      "source": "（首选）后端自报相对间隙 mip_gap；（对照）由 |Z − bound| / max(|Z|, eps_gap_abs) 复算",
+      "missing_policy": "BLOCK",
+      "semantics": "两个来源必须同时存在且一致（MA-06）。只有自报值 = 同源自证（规则⑥）；只有复算值 = 无对照。"
+    },
+    {
+      "name": "best_bound",
+      "source": "适配层能力探测：prob.solverModel 暴露 getInfo() 时取 mip_dual_bound",
+      "missing_policy": "BLOCK",
+      "semantics": "求解器侧（min）口径；换算到模型口径须按 objective_sense 取反。取不到即留空——**不得**用 Z 顶替（|Z−Z|=0 会让任何解都「已证最优」）。"
+    },
+    {
+      "name": "time_limit",
+      "source": "调用方显式入参（秒）",
+      "missing_policy": "BLOCK",
+      "semantics": "未声明时限 ⇒ 无法区分「算完了」与「被中断」⇒ 最优性不可判。"
+    },
+    {
+      "name": "incumbent",
+      "source": "SolveResult 是否携带解（status.carried_solution）",
+      "missing_policy": "BLOCK",
+      "semantics": "超时分叉的唯一依据：有 incumbent ⇒ FEASIBLE（禁宣最优）；无 ⇒ UNSOLVED。"
+    }
+  ],
+  "diagnostics": {
+    "_problem": "后端是否暴露对偶界/间隙**是环境能力问题，不是本仓的设计选择**。把它硬编码成「PuLP+HiGHS 一定有」会在换后端或降版本后变成假话。",
+    "extraction_rule": "只允许在适配层（solver/backend.py 的 _solve_via_pulp）内取 prob.solverModel；逐项用 hasattr 探测，取不到即留 None。",
+    "keys": {
+      "best_bound_min": "求解器侧对偶界（min 口径）",
+      "mip_gap": "求解器自报相对间隙（无量纲，非负）",
+      "integrality_violation": "求解器自报最大整数性违规（可与逐变量复算互校）",
+      "node_count": "分支定界节点数（仅作留痕）",
+      "model_status": "原生模型状态字符串（仅作留痕，不参与判定）"
+    },
+    "sense_convention": "换算**两步**，缺任一步都会得到一个看起来合理的错界：(1) 口径取反——PuLP 恒以 min 口径送求解器 ⇒ 最大化模型 bound = −bound_min；(2) 补回目标常量——HiGHS 的 mip_dual_bound **不含** objective_constant。★ T04-07 接线实证：探针常量 −2,270,000，只做第 (1) 步得到 bound=2,730,000 对 Z=460,000（复算间隙 4.9 而自报 0.0），由 MA-06 跨来源对账当场抓出。若将来后端改变任一约定，MA-06 会再次分叉——这正是要它做的。",
+    "non_finite_policy": "HiGHS 用 ±inf 表示「该量无定义」（LP 形态下 mip_gap / max_integrality_violation 即 inf）。非有限值一律**不写键**，与「取不到」同处理——保留 inf 会让它看起来像一个数值（一个极大的间隙），而不是「没这个量」。"
+  },
+  "optimality_rule": {
+    "statement": "标 OPTIMAL 需同时满足四条：① normalized status = OPTIMAL；② integer_feasible = 真（逐变量核）；③ best_bound 已知；④ gap ≤ eps_gap_abs + eps_gap_rel·max(|Z|,|bound|)。",
+    "on_any_failure": "**降级**（never_upgrade）：accepted 退为 FEASIBLE 并记明缺哪一条。禁止反向——FEASIBLE 不得被任何规则提升为 OPTIMAL。",
+    "why_four_conditions": "①是别人的结论；②防「解不是整数」；③防「没有界也算最优」；④防「界很远但自称最优」。四条都指向同一件事：**最优性必须有一个可被否定的量**——若某条判据无法被任何输入否定，它就不是判据。"
+  },
+  "timeout_policy": {
+    "timeout_with_incumbent": "FEASIBLE（附 incumbent 与 bound；**禁止**出现在任何「最优」结论栏）",
+    "timeout_without_incumbent": "UNSOLVED（≠ INFEASIBLE：「没算出解」不是「已证无解」）",
+    "why_split": "T04-02C 状态域已定的分叉；本协议只负责在分叉后**追加**「最优性未证」这一事实，不改写状态。"
+  },
+  "tolerances": {
+    "_why_here": "MILP 间隙容差是**本协议专有的判决宽度**，精度画像（T00-04）覆盖的是约束残差与总价残差，两者量纲不同。放这里是单一声明处；若将来精度画像声明同名容差，须新增跨来源对账，不得两边各判一次（规则⑨）。",
+    "eps_gap_abs": {
+      "value": 0.01,
+      "unit": "元",
+      "note": "与 eps_abs 同阶（分项舍入分辨率）"
+    },
+    "eps_gap_rel": {
+      "value": 1e-08,
+      "unit": "无量纲（相对）",
+      "note": "与 eps_solver 同阶"
+    },
+    "eps_int": {
+      "value": 1e-06,
+      "unit": "无量纲（到最近整数的距离）",
+      "note": "整数性容差；二元变量同用此值"
+    },
+    "missing_policy": "任一具名容差缺失 ⇒ BLOCKED，**不得按 0 放行**（按 0 等于把「没声明宽度」当成「宽度为零」，与 DV-01 同族）。"
+  },
+  "forbidden": [
+    "**禁用 KKT / 对偶间隙以外的方式证 MILP 最优性**——MILP 的可行域非凸，KKT 既非必要也非充分；用 KKT 证 MILP 是把 LP 的定理搬到它不适用的地方。",
+    "禁止把求解器自报的 `Optimal` 直接当作本项目的验收结论。",
+    "禁止在 best_bound 缺失时用 Z 顶替 bound（|Z−Z|=0 ⇒ 恒「已证最优」）。",
+    "禁止把超时且有 incumbent 的结果写成 OPTIMAL 或「最优（未证）」这类含糊表述——三态里没有这一格。",
+    "禁止对 LP 形态套用本协议（应判 SKIP；「没走到」≠「已通过」）。"
+  ],
+  "status_domain": [
+    {"id": "OPTIMAL", "means": "最优性已证（四条全满足）", "may_appear_in": ["最优结论栏", "对拍 B 组参照"]},
+    {"id": "FEASIBLE", "means": "有可行解，最优性未证或降级", "may_appear_in": ["可行解栏"], "never": ["最优结论栏"]},
+    {"id": "UNSOLVED", "means": "超时且无 incumbent / 未算出结论", "may_appear_in": ["未决栏"], "never": ["最优结论栏", "可行解栏（无解可给）"]},
+    {"id": "INFEASIBLE", "means": "已证无可行解（沿用 T04-02C）", "may_appear_in": ["不可行栏"]},
+    {"id": "BLOCKED", "means": "协议本身判不了（缺字段 / 缺容差 / 形态不符）", "may_appear_in": ["未判栏"]}
+  ],
+  "verdict_aggregation": {
+    "order": ["FAIL", "BLOCKED", "WARN", "SKIP", "PASS"],
+    "note": "与 T04-02D / T04-01 / T04-08 同一聚合序；空判据集 ⇒ BLOCKED（「没判过」不是 PASS）。"
+  },
+  "judges": [
+    {
+      "id": "MA-01",
+      "name": "形态适配（LP 判 SKIP，不判 PASS）",
+      "statement": "模型 solver_form == MILP 时启用本协议；LP / UNKNOWN 一律 SKIP 并写明理由。",
+      "check": "读 CompiledModel.solver_form；非 MILP ⇒ SKIP（不进聚合的最严档）。",
+      "on_violation": "SKIP",
+      "why": "把 LP 塞进 MILP 协议会得到假结果（LP 没有整数性，也没有 MIP 间隙）；而判 PASS 会把「没走到」记成「已通过」。"
+    },
+    {
+      "id": "MA-02",
+      "name": "状态不得被升级（never_upgrade）",
+      "statement": "accepted 的严格程度**只能 ≤** normalized status 的严格程度：FEASIBLE/UNSOLVED 不得被任何规则推成 OPTIMAL。",
+      "check": "逐条核对降级映射表；出现「输入 FEASIBLE 却输出 OPTIMAL」即违规。",
+      "on_violation": "FAIL",
+      "why": "这是本协议最容易被绕过的一条：只要某一处代码想让报告好看一点，就会在状态上做一次「向上取整」。"
+    },
+    {
+      "id": "MA-03",
+      "name": "整数可行性逐变量核（不得只信 status）",
+      "statement": "每个 BINARY/INTEGER 变量取值到最近整数的距离 ≤ eps_int。",
+      "check": "对 CompiledModel.binary_symbols() 与 kind=INTEGER 的变量逐项复算；缺 eps_int ⇒ BLOCKED。",
+      "on_violation": "FAIL",
+      "why": "求解器可能因数值原因返回 0.9999999；本层也可能按 item_id 取错变量族（T04-08 实证）。只看 status 两者都发现不了。"
+    },
+    {
+      "id": "MA-04",
+      "name": "间隙双容差具名（绝对 + 相对）",
+      "statement": "gap 判定必须用 eps_gap_abs + eps_gap_rel·max(|Z|,|bound|) 的混合形式；两个容差都必须具名可查。",
+      "check": "tolerances 缺任一键 ⇒ BLOCKED；缺名（只给数字）⇒ BLOCKED。",
+      "on_violation": "BLOCKED",
+      "why": "DV-01/DV-02 同族：容差的**名字**与数值必须一起传递，否则下游只能硬编码另一个值，两侧各自自洽地错着。"
+    },
+    {
+      "id": "MA-05",
+      "name": "best_bound 缺失 ⇒ 最优性不可证",
+      "statement": "bound 为 None 时 accepted 不得为 OPTIMAL；判 WARN（已查、结论是「未证」），不判 PASS。",
+      "check": "bound is None ⇒ 降级 FEASIBLE + WARN，并在理由里写明「适配层未取到对偶界」。",
+      "on_violation": "WARN",
+      "why": "不能用 Z 顶替 bound（同源相减恒为 0）。这一条正是「在没有 HiGHS 诊断能力的环境下，本协议如实报未证」的出口。"
+    },
+    {
+      "id": "MA-06",
+      "name": "对偶界 × 自报间隙 跨来源对账",
+      "statement": "后端自报 mip_gap 与由 (Z, bound) 复算的相对间隙必须在容差内一致；两者都缺失 ⇒ BLOCKED；只有其一 ⇒ BLOCKED（无对照）。",
+      "check": "|gap_reported − gap_recomputed| ≤ eps_gap_rel + eps_gap_abs/max(|Z|, eps_gap_abs)。",
+      "on_violation": "BLOCKED",
+      "why": "规则⑥：判据不得自证。只有自报间隙时，「自报 0」与「自报 0」永远一致；必须有第二个来源（界）才构成对账。两侧不一致说明 sense 约定失效或量纲错位。",
+      "cross_source": true
+    },
+    {
+      "id": "MA-07",
+      "name": "时限声明与超时分叉",
+      "statement": "time_limit 未声明 ⇒ BLOCKED；超时时按有无 incumbent 分叉（有 ⇒ FEASIBLE / 无 ⇒ UNSOLVED），**禁止**落在 INFEASIBLE。",
+      "check": "time_limit is None ⇒ BLOCKED；status 为超时族且 carried_solution 真/假 ⇒ 对应分叉。",
+      "on_violation": "BLOCKED",
+      "why": "「没算出解」与「已证无解」是两种机器状态；把前者写成后者会让对拍器以为 Phase 2 真的不可行。"
+    },
+    {
+      "id": "MA-08",
+      "name": "未证最优不得进最优结论栏",
+      "statement": "optimality_proven 为假时，任何下游（T04-04 对拍 / T05 情景）都不得把该结果当作「真实最优值」使用。",
+      "check": "accepted != OPTIMAL ⇒ optimality_proven=False 且 may_appear_in 不含最优结论栏。",
+      "on_violation": "FAIL",
+      "why": "这是本协议对下游唯一有约束力的输出；若下游可以忽略它，本协议就只是一张留痕表。"
+    },
+    {
+      "id": "MA-09",
+      "name": "状态域封闭",
+      "statement": "normalized status 不在本协议状态域表内 ⇒ BLOCKED，不得按 0 / 默认 / 空串处理。",
+      "check": "查 status_domain 表；未命中即 BLOCKED。",
+      "on_violation": "BLOCKED",
+      "why": "未知状态是**信息**，不是缺失值。用默认值顶掉等于把「我没见过这种状态」写成「这种状态已判」。"
+    },
+    {
+      "id": "MA-10",
+      "name": "聚合与空集",
+      "statement": "按 FAIL>BLOCKED>WARN>SKIP>PASS 聚合；判据集为空 ⇒ BLOCKED。",
+      "check": "复算聚合序；空集 ⇒ BLOCKED。",
+      "on_violation": "BLOCKED",
+      "why": "空判据集若不判 BLOCKED，整条链路会在「什么都没判」的情况下显示绿。"
+    }
+  ],
+  "consumers": [
+    {"task": "T04-04", "uses": "对拍器 B 组判据③「Phase 2 目标不得优于真实最优值」——真实最优值只能取 optimality_proven=True 的结果；未证时该条判 BLOCKED 而非 PASS。"},
+    {"task": "T04-05", "uses": "Phase 3 验证的 MILP 模式：integer feasibility + status + gap，禁 KKT。"},
+    {"task": "T05-00", "uses": "Baseline 对比时，若候选解的最优性未证，Optimization Gain 是下界而非等式。"}
+  ],
+  "open_items": [
+    "OI-MA-A：M_hi 对分支定界收敛的影响仍待量化（T04-02B 挂账项，本制品的 owner 之一）。本制品只保证「最优性有没有被证明」可判，不保证收敛快慢。",
+    "OI-MA-B（**已实测 2026-09-18**）：CBC 路径（PULP_CBC_CMD）为命令行后端，`prob.solverModel` 为 None ⇒ diagnostics 为空字典 ⇒ MA-05 WARN + MA-06 BLOCKED，accepted 降级 FEASIBLE、optimality_proven=False。这是如实结论，不是缺陷；同一模型换 pulp_highs 即得 OPTIMAL（已证）。★ 这条实测正是「能力必须探测、不得硬编码」的价值证据：若当初写死「PuLP 一定有诊断量」，CBC 上会静默宣称最优。",
+    "OI-MA-C：gap 的两个来源在 Z≈0 时相对间隙退化（分母趋于 0）。本制品用 max(|Z|, eps_gap_abs) 兜底，但未做数值实验；若出现 Z 量级极小的实例须回 T04-06 复核。"
+  ],
+  "evidence_pointer": "docs/adr/ADR-0028-milp-acceptance-protocol.md"
+}

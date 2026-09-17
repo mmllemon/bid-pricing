@@ -27,8 +27,9 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -533,6 +534,11 @@ class RawOutcome:
     reported_objective: float | None
     has_incumbent: bool
     message: str = ""
+    #: T04-07 的最优性诊断量（对偶界 / 自报间隙 / 整数性违规 / 节点数）。
+    #: **只由适配层能力探测填充**：取不到就留空字典，不填默认值、不用 Z 顶替。
+    #: 空字典的含义是「本后端没给」，不是「间隙为 0」——下游（milp_acceptance）
+    #: 据此判「最优性未证」，而不是判最优。
+    diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
 
 class SolverBackend:
@@ -634,7 +640,54 @@ def _solve_via_pulp(
         reported_objective=reported,
         has_incumbent=has_incumbent,
         message=f"solver_factory={entry.get('solver_factory')!r}",
+        diagnostics=_pulp_diagnostics(prob),
     )
+
+
+def _pulp_diagnostics(prob: Any) -> dict[str, Any]:
+    """取 MILP 最优性诊断量（T04-07 六字段中的 bound / gap / integrality）。
+
+    ★ **一切靠能力探测**：``prob.solverModel`` 在命令行型后端（CBC）上是
+    ``None``，在 persistent 型后端（highspy）上才是模型对象。逐项 ``hasattr``
+    探测，取不到就**不写该键**——空字典代表「后端没给」，而不是「值为 0」。
+    把它硬编码成「一定有」会在换后端后变成假话（规则⑧同族）。
+
+    读取位置在适配层内，业务侧只见一个 ``Mapping``：BB-03 要求求解器对象
+    不得走出适配层。
+    """
+    diag: dict[str, Any] = {}
+    model = getattr(prob, "solverModel", None)
+    if model is None:
+        return diag                      # 命令行后端：无诊断面，如实留空
+    info = None
+    getter = getattr(model, "getInfo", None)
+    if callable(getter):
+        try:
+            info = getter()
+        except Exception:                # pragma: no cover - 后端差异
+            info = None
+    if info is not None:
+        for key in ("mip_dual_bound", "mip_gap", "max_integrality_violation",
+                    "mip_node_count"):
+            value = getattr(info, key, None)
+            if value is None:
+                continue
+            try:
+                number = float(value)
+            except (TypeError, ValueError):       # pragma: no cover - 后端差异
+                continue
+            # HiGHS 用 ±inf 表示「该量无定义」（例如 LP 形态下的 mip_gap）。
+            # 保留 inf 会让它看起来像一个**数值**（一个极大的间隙），而不是
+            # 「没这个量」——故非有限值一律不写键，与「取不到」同处理。
+            if math.isfinite(number):
+                diag[key] = number
+    status_getter = getattr(model, "getModelStatus", None)
+    if callable(status_getter):
+        try:
+            diag["model_status"] = str(status_getter())
+        except Exception:                # pragma: no cover - 后端差异
+            pass
+    return diag
 
 
 def _solve_via_none(
@@ -706,6 +759,21 @@ class SolveResult:
     #: False 时 ``evaluation.feasible`` 退回严格算术口径（1e-12），
     #: 它**不是**可行性结论——报告必须据此自述口径，不得含糊。
     tolerances_applied: bool = False
+    #: T04-07 的最优性诊断量（透传 ``RawOutcome.diagnostics``）。为空代表
+    #: 「后端未提供」——**最优性未证**，不得据此宣称 OPTIMAL。
+    diagnostics: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def best_bound_min(self) -> float | None:
+        """求解器侧（min 口径）对偶界；未提供即 ``None``。"""
+        value = self.diagnostics.get("mip_dual_bound")
+        return None if value is None else float(value)
+
+    @property
+    def reported_gap(self) -> float | None:
+        """求解器自报相对间隙；未提供即 ``None``。"""
+        value = self.diagnostics.get("mip_gap")
+        return None if value is None else float(value)
 
     @property
     def solved(self) -> bool:
@@ -739,6 +807,7 @@ class SolveResult:
             "seconds": self.seconds,
             "message": self.message,
             "tolerances_applied": self.tolerances_applied,
+            "diagnostics": dict(self.diagnostics),
         }
 
 
@@ -785,7 +854,7 @@ def solve_compiled(
             status=status, selection=selection, variables={}, missing=(),
             reported_objective=None, recomputed_objective=None,
             evaluation=None, solution_check=None, seconds=0.0,
-            message=selection.reason,
+            message=selection.reason, diagnostics={},
         )
 
     started = time.perf_counter()
@@ -808,7 +877,7 @@ def solve_compiled(
             selection=selection, variables={}, missing=(),
             reported_objective=None, recomputed_objective=None,
             evaluation=None, solution_check=None, seconds=elapsed,
-            message=str(exc),
+            message=str(exc), diagnostics={},
         )
     elapsed = time.perf_counter() - started
 
@@ -855,6 +924,7 @@ def solve_compiled(
         seconds=elapsed,
         message=raw.message,
         tolerances_applied=tolerances is not None,
+        diagnostics=dict(raw.diagnostics or {}),
     )
 
 

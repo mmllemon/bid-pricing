@@ -996,6 +996,28 @@ def build_parser() -> argparse.ArgumentParser:
     p_p1s.add_argument("--json", action="store_true", help="输出 JSON")
     p_p1s.set_defaults(func=cmd_phase1_solve)
 
+    # ---- T04-07：MILP 独立验收协议 --------------------------------
+    p_ma = sub.add_parser(
+        "milp-check",
+        help="MILP 独立验收协议（T04-07）——这次求解够不够格被当作「已证最优」",
+        description=(
+            "按 config/milp_acceptance_spec.json 验收一次求解：六字段"
+            "（status / integer_feasible / objective_gap / best_bound /"
+            " time_limit / incumbent）逐项核验，输出「最优性已证 / 未证 / 不可判」。"
+            "★ 求解器自报 Optimal 不是验收结论；never_upgrade；禁 KKT 证 MILP。"
+        ),
+    )
+    p_ma.add_argument(
+        "--form", choices=("LP", "MILP", "both"), default="both",
+        help="要验收的模型形态（默认 both：LP 应判 SKIP、MILP 才适用）",
+    )
+    p_ma.add_argument(
+        "--time-limit", type=float, default=30.0,
+        help="求解时限（秒）。未声明时限 ⇒ MA-07 判 BLOCKED（无法区分算完与被中断）",
+    )
+    p_ma.add_argument("--json", action="store_true", help="输出 JSON")
+    p_ma.set_defaults(func=cmd_milp_check)
+
     # ---- T04-08 独立参考实现 --------------------------------------------
     p_ref = sub.add_parser(
         "ref-check",
@@ -1566,6 +1588,98 @@ def _print_reference(report, title: str, iso, z_solver) -> None:
     if iso.get("ISO-3", {}).get("status") != "PASS":
         print("  ★ 隔离③未成立 ⇒ T04-04 对拍结论栏**强制 BLOCKED**，"
               "不得出现『对拍通过』字样")
+
+
+def cmd_milp_check(args) -> int:
+    """T04-07 MILP 独立验收协议 —— 这次求解够不够格被当作「已证最优」。
+
+    与 ``verify-solution`` 的分工：那个判**解对不对**（可行性 / 层归属 /
+    目标复算）；本命令判**最优性有没有被证明**。两者的对象不同：
+    一个解可以完全正确却仍未证最优（例如求解器被时限中断、或后端不给对偶界）。
+
+    ★ 三条纪律：
+      ① 求解器自报 ``Optimal`` **不是**验收结论，最优性须由 bound + gap +
+         整数性三项可核的量证明；
+      ② **never_upgrade**——结论只能比归一状态更宽松；
+      ③ 禁用 KKT 证 MILP 最优性（可行域非凸，KKT 既非必要也非充分）。
+    """
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.backend import load_backend_spec, solve_compiled
+    from .solver.compiler import compile_model
+    from .solver.formulation import build_formulation, probe_instance
+    from .solver.milp_acceptance import (
+        STATUS_PASS,
+        acceptance_report,
+        facts_from_result,
+        load_milp_spec,
+    )
+
+    cfg = config_dir()
+    prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
+    eps_abs = float(prof["eps_abs"]["value"])
+    eps_price = float(prof["eps_price"]["value"])
+    resolved = resolve_parameters(load_pricing_card(cfg))
+    spec = load_milp_spec(cfg)
+    bspec = load_backend_spec(cfg)
+    time_limit = float(getattr(args, "time_limit", 30.0) or 30.0)
+
+    wanted = str(getattr(args, "form", "both") or "both").upper()
+    candidates = {
+        "LP": lambda: probe_instance(),
+        "MILP": lambda: probe_instance(active=("C7",)),
+    }
+    forms = [f for f in ("LP", "MILP") if wanted in (f, "BOTH")]
+
+    payload = []
+    worst = 0
+    for tag in forms:
+        instance = candidates[tag]()
+        formulation = build_formulation(
+            instance, resolved, eps_abs=eps_abs, eps_price=eps_price
+        )
+        model = compile_model(formulation, source=f"cli:milp-check:{tag}")
+        result = solve_compiled(
+            model, spec=bspec, instance=instance, resolved=resolved,
+        )
+        facts = facts_from_result(result, model, time_limit=time_limit)
+        report = acceptance_report(facts, spec=spec)
+        if args.json:
+            payload.append({"form": tag, **report.to_dict()})
+        else:
+            _print_milp(tag, model, result, report)
+        if report.verdict() != STATUS_PASS and report.verdict() != "SKIP":
+            worst = max(worst, 0)
+        if report.verdict() == "FAIL":
+            worst = 1
+
+    if args.json:
+        print(json.dumps({"spec_id": spec.get("spec_id"), "variants": payload},
+                         ensure_ascii=False, indent=2))
+    return worst
+
+
+def _print_milp(tag: str, model, result, report) -> None:
+    acc = report.acceptance
+    print("=" * 72)
+    print(f"■ {tag}：形态 {model.solver_form} / 归一状态 {acc.normalized_status}")
+    print(f"  诊断量：{dict(result.diagnostics) or '（后端未提供）'}")
+    print(
+        f"  验收结论：{acc.accepted} ｜ 最优性已证：{acc.optimality_proven}"
+        f" ｜ 聚合：{report.verdict()}"
+    )
+    if acc.accepted is None:
+        print("  说明：形态非 MILP ⇒ 本协议不适用（SKIP，不是 PASS）")
+    else:
+        print(
+            f"  Z={acc.objective} ｜ 对偶界={acc.best_bound} ｜ "
+            f"间隙(自报)={acc.gap_reported} ｜ 间隙(复算)={acc.gap_recomputed}"
+        )
+        for reason in acc.reasons:
+            print(f"    · {reason}")
+    for check in report.checks:
+        print(f"  {check.item} {check.status} ｜ {check.reason}")
+        if check.status in ("FAIL", "BLOCKED"):
+            print(f"        actual={check.actual} / expected={check.expected}")
 
 
 def _print_phase1(report, title: str) -> None:

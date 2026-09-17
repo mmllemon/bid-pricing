@@ -1169,7 +1169,11 @@ def cmd_cost_check(args) -> int:
         if evidence:
             print(f"   证据：{evidence}")
         need = (src.get("required_when") or {}).get(args.declare_source) or []
-        lack = [k for k in need if k not in evidence]
+        cross = [k for k in (src.get("cross_satisfied_by") or {})
+                 if not k.startswith("_")]
+        lack = [k for k in need if k not in evidence and k not in cross]
+        if cross:
+            print(f"   · 已由其它制品交叉满足，无需重复声明：{cross}")
         if lack:
             print(f" ⚠ 该来源要求附证：{need}；仍缺：{lack}")
 

@@ -8,7 +8,7 @@
   "cost_basis_ref": "config/cost_basis_spec.json（T00-09 八项分解，c_i 的构成口径）",
   "three_elements": {
     "source": {
-      "value": null,
+      "value": "SUPPLIER_QUOTE",
       "vocabulary": [
         "COST_DB",
         "HISTORICAL_SETTLEMENT",
@@ -42,8 +42,15 @@
           "估计依据"
         ]
       },
-      "status": "UNDETERMINED",
-      "status_note": "**待用户声明（2026-09-17）**：真实成本清单已提供（成本/西永L分区…成本清单.xlsx，sha256 7a8110d65b24），但其单价属于上列哪一来源，模型不得代为推断——不同来源的可信度与复核路径完全不同。"
+      "cross_satisfied_by": {
+        "含税/不含税口径": "CB-04",
+        "_rule": "附证若已由其它受控制品声明，判定为交叉满足，不再要求重复声明——「说了两遍」与「没说」是两回事，但「在别处说过一次」等价于说过（ADR-0002：机制层已定的口径不要求数据层重复）。值为本报告内判据 ID，该判据 PASS 即视为满足；判据不存在或非 PASS 则退回要求显式附证。"
+      },
+      "status": "RESOLVED",
+      "status_note": "**用户亲述落值（2026-09-17）**：c_i 来源 = SUPPLIER_QUOTE（供应商询价）。真实成本清单已提供（成本/西永L分区…成本清单.xlsx，sha256 7a8110d65b24）。「询价日期」「品牌规格」为数据层附证，须由用户补齐后方可冻结——模型不得代为填值。",
+      "declared_evidence": {},
+      "declared_by": "user(亲述 2026-09-17)",
+      "declared_at": "2026-09-16T23:54:42.946465+00:00"
     },
     "format": {
       "value": "POINT",

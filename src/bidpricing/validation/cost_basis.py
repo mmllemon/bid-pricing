@@ -168,20 +168,37 @@ def check_cost_basis(config_dir: Path) -> CostBasisReport:
             need = (src.get("required_when") or {}).get(value) or []
             rep.results.append(_ok(
                 "AS-01", f"c_i 来源已声明：{value}（须附 {need}）"))
-            # AS-02：证据齐备性——**逐项列出缺什么**，不笼统告警
+            # AS-02：证据齐备性——**逐项列出缺什么**，不笼统告警。
+            # 交叉满足：附证已在其它受控制品里声明过的（如税口径由 CB-04 锁定），
+            # 不再要求重复声明——「没说」和「在别处说过」必须区分开（ADR-0002）。
             declared = src.get("declared_evidence") or {}
-            lack = [k for k in need if k not in declared]
+            cross = {k: v for k, v in (src.get("cross_satisfied_by") or {}).items()
+                     if not k.startswith("_")}
+            satisfied, stale = [], []
+            for k, rule_id in cross.items():
+                hit = next((x for x in rep.results if x.rule_id == rule_id), None)
+                if hit is not None and hit.status == STATUS_PASS:
+                    satisfied.append(k)
+                else:
+                    stale.append(f"{k}→{rule_id}(未 PASS)")
+            lack = [k for k in need
+                    if k not in declared and k not in satisfied]
+            ev = [f"须附全量：{need}", f"已附：{sorted(declared) or '无'}"]
+            if satisfied:
+                ev.append("交叉满足：" + "、".join(
+                    f"{k}（由 {cross[k]} 锁定）" for k in satisfied))
+            if stale:
+                ev.append("交叉引用失效：" + "、".join(stale))
             if not need:
                 rep.results.append(_ok("AS-02", f"来源 {value} 无强制附证要求"))
             elif lack:
                 rep.results.append(_bad(
                     "AS-02", STATUS_WARN,
-                    f"来源 {value} 须附 {need}；仍缺 {lack}——"
-                    "补齐前 c_i 不可作为 C4 地板依据",
-                    [f"已附：{sorted(declared)}"]))
+                    f"来源 {value} 仍缺附证 {lack}——"
+                    "补齐前 c_i 不可作为 C4 地板依据（须附全量见证据行）", ev))
             else:
                 rep.results.append(_ok(
-                    "AS-02", f"来源 {value} 附证齐备：{sorted(declared)}"))
+                    "AS-02", f"来源 {value} 附证齐备：{sorted(declared)}", ev))
 
         fmt = three.get("format") or {}
         if fmt.get("value") not in (fmt.get("allowed") or []):

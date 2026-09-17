@@ -261,3 +261,75 @@ def compute_p1(
         status=STATUS_PASS, branch=branch, r=r, p0=p0, p1=p1,
         settlement=settlement, parameters=params.to_dict(), basis=basis,
     )
+
+
+# ---------------------------------------------------------------------------
+# T04-00 所需两个派生量的**唯一实现**
+# ---------------------------------------------------------------------------
+# 求解层（``bidpricing.solver``）必须复用本处实现，不得自行推导 R_i 或 r_eff：
+# 一旦 solver 里出现第二份公式，「同一规则两处说法」就会以「解析解与 LP 解对不上」
+# 的形式在 Phase 1/Phase 2 对拍时才暴露，排查成本远高于在此处集中一次。
+#
+# 注意 SEGMENT 分支的**区间内**口径：r_eff ≡ r（不带 (1+alpha)）——因为
+# SEGMENT 下未越界部分按原单价结算，协商调整率 alpha 只作用于 FULL 分支。
+# 这与 model_v0.3_R2.md §5.3.1 的两组公式逐字对应，改动须同步 §5.3.1。
+
+
+def compute_r_eff(
+    r: float,
+    params: ResolvedParameters,
+    alpha: float = 0.0,
+) -> float:
+    """有效效率比 ``r_eff := (dR_i/dp_i) / q0_i``——**排序键**。
+
+    ``r`` 是结算量比 ``q1/q0``；``alpha`` 是未越界时的协商调整率（8.9.1 情形 1 取 0）。
+
+    ``r_eff`` 与 ``r`` 的分工是 T04-00 的核心：排序必须按 ``r_eff``，
+    按 ``r`` 排序会给出**满足全部约束但次优**的解（见 CE-02）——这类错误
+    不会触发任何可行性检查。
+    """
+    if r > params.increase_threshold:
+        if params.adjustment_scope == "FULL":
+            return (1.0 - params.rho_plus) * r
+        # SEGMENT：阈值内保原单价，仅超出部分按 P1。
+        # 注意 ``params.increase_threshold`` **本身已是 (1 + theta_dev)**——
+        # 写成 ``1.0 + params.increase_threshold`` 会得到 2.15 而不是 1.15，
+        # 使 r_eff 在越界段被系统性高估（tests/test_phase1_exactness.py
+        # 的例 2R 用例抓到过这个错误）。
+        return params.increase_threshold + (1.0 - params.rho_plus) * (
+            r - params.increase_threshold
+        )
+    if r < params.decrease_threshold:
+        return (1.0 + params.rho_minus) * r
+    if params.adjustment_scope == "FULL":
+        return (1.0 + alpha) * r
+    return r
+
+
+def settlement_revenue(
+    q0: float,
+    q1: float,
+    p: float,
+    params: ResolvedParameters,
+    alpha: float = 0.0,
+) -> float:
+    """``R_i(p)``——投标单价 ``p`` 对应的结算收入（含调整作用域）。
+
+    与 ``compute_p1`` 的关系：``compute_p1`` 是「给定 P0 求 P1」的**业务接口**
+    （带状态机与依据链）；本函数是同一公式的**纯函数形态**，供求解层与
+    反例复算器调用。``alpha = 0`` 时两者必须逐值一致，
+    由 ``tests/test_pricing_card.py`` 交叉锁定。
+    """
+    r = q1 / q0
+    branch = classify_branch(r, params)
+    if branch == BRANCH_DECREASE:
+        # 减量侧：「减少后剩余部分」本就是全部 Q1 → FULL 与 SEGMENT 等价
+        return q1 * p * (1.0 + params.rho_minus)
+    if branch == BRANCH_INCREASE:
+        p1 = p * (1.0 - params.rho_plus)
+        if params.adjustment_scope == "FULL":
+            return q1 * p1
+        in_range = params.increase_threshold * q0 * p
+        excess = (q1 - params.increase_threshold * q0) * p1
+        return in_range + excess
+    return q1 * p * (1.0 + alpha)

@@ -58,6 +58,16 @@ EVIDENCE: dict[str, list[dict]] = {
     "T00-06B": [{"kind": "module", "path": "src/bidpricing/identity.py"}],
     "T01-00A": [{"kind": "artifact", "key": "input_protocol_schema"}],
     "T01-02C": [{"kind": "file", "path": "tests/data/xiyong_l_district/pair.json"}],
+    # T04-00：证据的**唯一来源**是本字典（脚本派生），tasks.json 里的是派生物。
+    # 两边必须一致，否则 extract_tasks --check 会报结构漂移。
+    "T04-00": [
+        {"kind": "file", "path": "config/phase1_exactness_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/solver/exactness.py"},
+        {"kind": "module", "path": "src/bidpricing/solver/cases.py"},
+        {"kind": "module", "path": "src/bidpricing/solver/instance.py"},
+        {"kind": "module", "path": "tests/test_phase1_exactness.py"},
+        {"kind": "adr", "path": "ADR-0019-phase1-exactness-by-exchange-argument.md"},
+    ],
 }
 
 #: 初次提取时的状态种子。仅当 JSON 中不存在该任务时才写入；

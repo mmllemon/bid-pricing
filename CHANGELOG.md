@@ -10,6 +10,36 @@
 
 ## [未发布]
 
+### T04-00 完成：Phase 1 精确性条件与反例集（WP4 求解层第一块）
+
+- `config/phase1_exactness_spec.json`：九条条件 `EC-1..EC-9` + 九个反例
+  `CE-01..CE-09` + 一个正例 `PE-01`。每条条件含形式化命题、机械判据、
+  违反后果与对应反例；每个反例含「误用解 vs 正确解」的数值见证。
+- `src/bidpricing/solver/`：`instance`（Phase 1 论域与解校验）、
+  `exactness`（EC 判定器）、`cases`（反例集机械复算器）。
+- CLI `phase1-check`：跑制品里的全部实例，把 `expected` 与 `witness.assertions`
+  逐条喂给实现——**制品与实现的双向锁定**。
+- **证明路径**：定理 T1（阈值分割）用**交换论证**证明，不走 KKT。
+  KKT 是 T04-02A/D 的实现路线，两者共用会让证明与实现按同一个误解同时成立，
+  T04-08 的独立性验收即失去对象。
+- **条件分两组**：A 组（EC-1..EC-7）违反 ⇒ 阈值分割解不是 P_A 最优解；
+  B 组（EC-8 舍入可调和 / EC-9 上界有限）违反 ⇒ 只加实现性义务。
+  `verdict` **只看 A 组**——首版把 EC-8 归 A 组的结果是任何实例都判不出
+  `EXACT`（舍入上界 `0.005·Σq0` 几乎总超 `eps_total`）。
+- **本项目真实结论**：EC-9 对西永L样本判 WARN（存在不限价项
+  `031301017001`），故 Phase 1 算法**必须内建「空 cap 项固定为临界项」分支**，
+  不得依赖「所有项都有 cap」这一假前提。
+- 修正 `compute_r_eff` 的 SEGMENT 分支：`increase_threshold` 本身已是
+  `(1 + θ_dev)`，原式再加 `1.0` 使越界段 `r_eff` 被系统性高估
+  （例 2R 的 r=1.6 处算成 2.04 而非 1.24）。附录 B 例 2R 的期望值用例抓到。
+- 新增 `compute_r_eff` / `settlement_revenue` 于 `contracts/pricing_card.py`
+  作为**唯一实现**，测试用 `compute_p1` 逐值交叉锁定，防止出现第二事实源。
+- 测试 477 → **527** 项；`phase1-check` 10/10 一致；contract-check 17/17；闸门全 PASS。
+- **发现（既存，未修）**：`tools/extract_tasks.py --check` 长期报「任务板已过期」——
+  `tasks.json` 中多个任务的 `evidence` 多于脚本内 `EVIDENCE` 字典（历史上手改过
+  派生物）。本轮已把 T04-00 的证据写进 `EVIDENCE` 单一来源，其余任务的对齐
+  需重跑 `extract_tasks.py`（会重写结构字段，属破坏性操作，待确认）。
+
 ## [boq-parser-v1] — 2026-09-16
 
 ### T01-00B 完成：清单解析器（WP1 第一块落地）

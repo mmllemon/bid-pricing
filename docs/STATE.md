@@ -5,17 +5,17 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-17 10:08:17** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-17 10:40:32** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`3e965ac` ｜ 累计 41 次提交
-- 最新提交信息：feat(t00-01): 合同核对结论须署名 + 审批签的是责任制品（ADR-0017/0018）
+- 提交：`7deaedf` ｜ 累计 42 次提交
+- 最新提交信息：feat(gate0b): 四角色签署落定 → Gate 0b 通过，WP4 求解层解封
 - 最近里程碑标签：`cost-basis-v1`
-- 工作区：有 4 处未提交改动
+- 工作区：有 9 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -60,7 +60,7 @@
 
 ## 四、质量门
 
-- 单元测试：**477** 项，结果 **通过**（OK）
+- 单元测试：**527** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -83,7 +83,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP1 | 11 | done 10、not_started 1 |
 | WP2 | 5 | not_started 5 |
 | WP3 | 7 | not_started 7 |
-| WP4 | 13 | not_started 13 |
+| WP4 | 13 | done 1、not_started 12 |
 | WP5 | 5 | not_started 5 |
 | WP6 | 8 | not_started 8 |
 | WP7 | 4 | not_started 4 |
@@ -92,7 +92,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ### 已启动 / 已完成任务
 
-> 共 25 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 26 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -121,6 +121,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T01-04A | 多级 key 与重复 key 治理 | done | — | 2026-09-16 落 config/key_spec.json（canonical_key=(project_id,unit_work,item_id)；扩展键仅人工裁定触发；序号/名称键明令禁止；重复 key BLOCK 禁止自动合并）+ tests/test_key_spec.py 规范↔实现双向锁定。机械部分已于 T01-04 前移至 match.py。 |
 | T01-05 | 源文件版本锁定与完整性 | done | — | 2026-09-16 实现 src/bidpricing/io/import_registry.py + CLI import-register/import-verify。整文件 sha256 + 逐 sheet 值矩阵哈希双层指纹；登记表追加式不可变；未登记=BLOCKED；文件被替换→BLOCKED+定位变化 sheet。真实文件 e2e：登记→PASS；字节级改动单字符串→BLOCKED 且精确定位「表-09 分部分项」。deps T01-02 属数据侧验收（真实成本清单到位后对 cost 侧补登记即可，机制不受阻）。 |
 | T01-06 | D01–D12 校验实现 | done | — | 2026-09-16 实现 src/bidpricing/validation/checks.py + CLI validate-boq + config/validation_rules.json（规范事实源）。27 测试双向锁定规范↔实现。D01–D12 按 ADR-0008 re-base：D02→q1_point>0、D03→cap>0或no_cap、D05→两侧并集覆盖率、W02→价值比cap/c。真实文件 e2e：D01–D05/D07/D10/D11 PASS（覆盖率1.0）；D06 FAIL（82项attribution未标注=OI-01待补）；D08 BLOCKED（税口径未声明）；D09 BLOCKED（contract_type未声明）——三项均为真实 Phase 0 输入缺口，退出码 1。 |
+| T04-00 | Phase 1 适用条件证明与反例集 | done | ✓ 成立 | 2026-09-17 完成《Phase 1 精确性条件》+ 反例集。**定理 T1（阈值分割）用交换论证证明**，刻意不走 KKT——KKT 是 T04-02A/D 的实现路线，两者共用会让「证明」与「实现」按同一个误解同时成立，T04-08 的独立性验收即失去对象（ADR-0019）。九条条件分两组：A 组（EC-1 作用域完备 / EC-2 排序键正确 / EC-3 权重正 / EC-4 系数非负 / EC-5 非退化 / EC-6 软约束不激活 / EC-7 可行域非空）违反则阈值分割解不再是 P_A 最优解；B 组（EC-8 舍入可调和 / EC-9 上界有限）违反只加实现性义务。**verdict 只看 A 组**——首版把 EC-8 放 A 组的结果是任何实例都判不出 EXACT（舍入上界 0.005·Σq0 几乎总超 eps_total），一个永远需要附注的 verdict 等于没有 verdict。反例集 CE-01..CE-09 每个都带「误用解 vs 正确解」数值见证，由 check_solution 代回原式复算；expected 做**双向**比对（实现判 FAIL 的条件不得漏声明——CE-07 首跑即踩到单向比对的漏洞）。正例 PE-01 = 附录 B 例 2R 的 SEGMENT 分支（本项目已落 SEGMENT），用 n=2 端点比较做**完整**最优性验证。副产品：修掉 compute_r_eff 的 SEGMENT 分支真 bug（increase_threshold 本身已是 1+θ_dev，原式再加 1.0 使越界段 r_eff 系统性高估）。本项目真实结论：EC-9 对西永L样本判 WARN（031301017001 cap 空），故 Phase 1 算法必须内建「空 cap 项固定为临界项」分支。测试 50 项；phase1-check 10/10 制品↔实现一致。；config/phase1_exactness_spec.json 存在（32868 字节）；src/bidpricing/solver/exactness.py 存在；src/bidpricing/solver/cases.py 存在；src/bidpricing/solver/instance.py 存在；tests/test_phase1_exactness.py 存在；ADR ADR-0019-phase1-exactness-by-exchange-argument.md 存在 |
 
 ---
 
@@ -135,12 +136,17 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T02-01 | WP2 | Config Schema | 配置定义表 | not_started |
 | T03-01 | WP3 | 结算规则引擎 | `SettlementRule.evaluate(Q0, Q1, P0, ContractContext)` | not_started |
 | T03-02 | WP3 | 派生量计算 | 派生模块 | not_started |
-| T04-00 | WP4 | Phase 1 适用条件证明与反例集 | 《Phase 1 精确性条件》+ 反例集 | not_started |
+| T04-02A | WP4 | LP 模型形式化 | LP formulation | not_started |
 
 ---
 
 ## 七、遗留项与已知限制
 
+- phase1_exactness_spec.json → known_limits: T1 的结论只覆盖 P_A（C1 + 箱型）。C6/C9/C10/C11/C12/C13 激活时的结构由 §7.3 三层分割描述，本制品不证明其最优性。
+- phase1_exactness_spec.json → known_limits: 交换论证假设 R_i(p_i) 对 p_i 线性——即 r_i 与 p_i 无关。这在本模型成立（q0/q1 均为外生预测），但对「单价影响结算量」的反向情形不成立。该情形不在本模型范围内。
+- phase1_exactness_spec.json → known_limits: EC-5 的机械判据只能给出「存在平台」的必要信号，不能枚举全部多最优解。完整处理见 T04-06B（退化与多最优解处理）。
+- phase1_exactness_spec.json → known_limits: EC-8 的判据给出的是**理论上界**（0.005 · sum q0）。实际舍入残差通常远小于上界，但判据按保守侧取——因为舍入调和环节的有无是结构性问题，不应依赖运气。
+- phase1_exactness_spec.json → known_limits: 反例集不覆盖 T04-07 的 MILP 模式（C7 升 MILP 后 KKT 不适用，须走独立验收协议）。
 - ruleset_selector_spec.json → known_limits: region / project_type / funding_type 三个输入当前不参与判定，仅留痕——待 T00-01 补充规则表后启用
 - ruleset_selector_spec.json → known_limits: 2024 版减量侧（r < 0.85）FULL 与 SEGMENT 等价（「减少后剩余部分」本就是全部 q1），作用域分叉只出现在增量侧
 - ruleset_selector_spec.json → known_limits: 规则层分叉（同一报价在两种口径下的结算差）不等于报价层的最优利润差：规格书附录 B 例 2R 的约 4.5 倍差需由 WP4 在两条口径下分别求解后比较

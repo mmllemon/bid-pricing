@@ -969,7 +969,144 @@ def build_parser() -> argparse.ArgumentParser:
                       help="冻结 q1 假设声明书（须先解除全部阻断项）")
     p_qc.set_defaults(func=cmd_qty_check)
 
+    # ---- T04-00 Phase 1 精确性条件 -------------------------------------
+    p_p1 = sub.add_parser(
+        "phase1-check",
+        help="T04-00 Phase 1 精确性条件判定 + 反例集复算")
+    p_p1.add_argument("--case", default="all",
+                      help="只跑指定 case（CE-01…CE-09 / PE-01）；默认 all")
+    p_p1.add_argument("--instance", default=None,
+                      help="对自定义实例 JSON 跑判定（结构见 "
+                           "Phase1Instance.from_dict）")
+    p_p1.add_argument("--json", action="store_true", help="输出 JSON")
+    p_p1.set_defaults(func=cmd_phase1_check)
+
     return parser
+
+
+def _print_exactness(verdict, title: str) -> None:
+    from .solver.exactness import IMPLEMENTABILITY_IDS
+
+    print("=" * 78)
+    print(f"Phase 1 精确性条件判定（T04-00）｜ {title}")
+    print("=" * 78)
+    print(f"  结论：{verdict.verdict}　（solver_form = {verdict.solver_form}）")
+    if verdict.verdict == "EXACT":
+        print("       阈值分割解与 P_A 最优解一致——Phase 1 解析解可用作 candidate")
+    elif verdict.verdict == "INAPPLICABLE":
+        print("       阈值分割解**不是** P_A 的最优解——必须交 Phase 2（LP/MILP）")
+    else:
+        print("       输入未定态，判据算不出来——不得降级为 EXACT")
+    print()
+    for c in verdict.conditions:
+        tag = {"PASS": "  PASS", "WARN": "  WARN",
+               "FAIL": "  FAIL", "BLOCKED": "BLOCKED"}[c.status]
+        group = "A 精确性" if c.id not in IMPLEMENTABILITY_IDS else "B 可实现性"
+        print(f"[{tag}] {c.id} {c.name}　（{group}）")
+        print(f"           {c.detail}")
+    if verdict.implementation_notes:
+        print()
+        print("  实施性义务（不改变结论，但不做会出错）：")
+        for n in verdict.implementation_notes:
+            print(f"    · {n}")
+    print()
+
+
+def cmd_phase1_check(args) -> int:
+    """T04-00 Phase 1 精确性条件判定 —— 「阈值分割解在本实例上是不是最优」。
+
+    与 ``gate-check`` / ``contract-check`` 的分工：那两个判「制品是否就绪、
+    彼此是否自洽」；本命令判**求解论域**——Phase 1 的「排序 + 二分 + 贪心定容」
+    解析解只在 EC-1..EC-7 全通过时才与 P_A 最优解一致。条件不满足时两条路径
+    不一致是**正确行为**，把它们一并判成 bug 会把对的实现改坏
+    （impl_plan_v321 §4.1 的实验名由此从「数学等价性实验」改为
+    「解析候选解一致性实验」）。
+
+    ``--case`` 只跑指定实例；无参数时跑制品里的全部反例与正例，
+    并把制品的 ``expected`` 与实际判定逐条比对——这是**制品与实现的双向锁定**。
+    """
+    from pathlib import Path
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.cases import load_exactness_spec, run_cases
+    from .solver.exactness import condition_status_line, overall_line
+    from .solver.exactness import check_exactness
+    from .solver.instance import Phase1Instance
+
+    cfg = config_dir()
+    prof = json.loads((cfg / "precision_profile.json").read_text(encoding="utf-8"))
+    eps_abs = float(prof["eps_abs"]["value"])
+    eps_price = float(prof["eps_price"]["value"])
+    card = load_pricing_card(cfg)
+    resolved = resolve_parameters(card)
+
+    if args.instance:
+        inst_path = Path(args.instance)
+        if not inst_path.exists():
+            print(f"■ 实例文件不存在：{inst_path}")
+            return 1
+        instance = Phase1Instance.from_dict(
+            json.loads(inst_path.read_text(encoding="utf-8")), source=str(inst_path)
+        )
+        verdict = check_exactness(
+            instance, resolved, eps_abs=eps_abs, eps_price=eps_price
+        )
+        if args.json:
+            print(json.dumps(verdict.to_dict(), ensure_ascii=False, indent=2))
+        else:
+            _print_exactness(verdict, str(inst_path))
+        return 0 if verdict.exact else 1
+
+    spec = load_exactness_spec(cfg)
+    results = run_cases(
+        spec, resolved, eps_abs=eps_abs, eps_price=eps_price, only=args.case
+    )
+    if not results:
+        print(f"■ 没有匹配 --case {args.case!r} 的实例"
+              f"（可用：CE-01…CE-09 / PE-01 / all）")
+        return 1
+
+    if args.json:
+        print(json.dumps(
+            {
+                "spec_id": spec.get("spec_id"),
+                "eps_abs": eps_abs,
+                "eps_price": eps_price,
+                "cases": [r.to_dict() for r in results],
+            },
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return 0 if all(r.ok for r in results) else 1
+
+    print("=" * 78)
+    print(f"Phase 1 精确性条件 · 反例集与正例集复算（T04-00）｜ {spec.get('spec_id')}")
+    print("=" * 78)
+    print("  判据：制品 phase1_exactness_spec.json 的 expected / witness.assertions")
+    print("        必须与实现逐条一致——任何不一致都是「制品与实现两处说法」")
+    print()
+    for r in results:
+        mark = "✓" if r.ok else "✗"
+        print(f" {mark} [{r.case_id}] {r.title}")
+        print(f"      {overall_line(r.verdict)}")
+        if r.condition_mismatches:
+            for m in r.condition_mismatches:
+                print(f"      ✗ 条件层不一致：{m}")
+        mismatch_note = condition_status_line(r.verdict)
+        if mismatch_note:
+            print(f"      {mismatch_note}")
+        if r.witness:
+            print(f"      见证层：{'通过' if r.witness.ok else '**不一致**'}"
+                  f"　{r.witness.detail}")
+            for f in r.witness.failures():
+                print(f"      ✗ 见证层不一致：{f}")
+        print()
+    bad = [r for r in results if not r.ok]
+    print("-" * 78)
+    print(f" 共 {len(results)} 个实例：通过 {len(results) - len(bad)}、不一致 {len(bad)}")
+    print(" 结论：制品与实现一致。" if not bad
+          else " 结论：制品与实现不一致——先查判据是否写成了恒真式，"
+               "再查实现是否漏改。")
+    return 0 if not bad else 1
 
 
 def cmd_contract_check(args) -> int:

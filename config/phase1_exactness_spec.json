@@ -1,0 +1,458 @@
+{
+  "spec_id": "phase1_exactness_spec_v1",
+  "task": "T04-00",
+  "title": "Phase 1 精确性条件与反例集",
+  "wp": "WP4",
+  "gate": "Gate 3",
+  "source_of_truth": "model_v0.3_R2.md §7.2/§7.2.1/§7.3/§7.5/§5.2.2/§5.3/§5.4/§3.7/附录 B + impl_plan_v321.md §3 WP4/T04-00、§4.1、§5.3",
+  "naming_consequence": "本制品完成前，§4.1 的实验只能称为「解析候选解一致性实验」，不得称为「数学等价性实验」（impl_plan_v321 §4.1 v3 更正）。本制品定义该实验的**适用范围**：仅在判为 EXACT 的实例上要求一致性。",
+  "notation": {
+    "X_opt": "可自由优化单价的项集合（pricing_role = OPTIMIZABLE）",
+    "p_i": "第 i 项的投标综合单价（决策变量）",
+    "q0_i": "清单工程量（招标基准）",
+    "q1_point_i": "预估结算工程量的点估计",
+    "r_i": "q1_point_i / q0_i，结算量比",
+    "r_eff_i": "有效效率比。定义 r_eff_i := (dR_i/dp_i) / q0_i，是**排序键**",
+    "a_i": "C1 总价锁定的系数（正确口径 a_i = q0_i）",
+    "lam0_i": "目标对 p_i 的偏系数，lam0_i = dR_i/dp_i = r_eff_i · q0_i",
+    "L_i": "单价下界 = max(L_i^tender, 0)（C3）",
+    "U_i": "单价上界 = cap_i（C2）；cap 为空表示本约束对该项不适用",
+    "floor_i": "成本地板 = max(L_i, c_i(1-mu_i))（C4）",
+    "B": "P*_competitive，可竞争部分的总价锁定值",
+    "lam": "C1 的影子价格，即阈值。经济含义：可竞争总价每增 1 元，最大边际利润增量",
+    "theta_dev": "工程量偏差阈值，取自 rule_set_id，不得硬编码",
+    "rho_plus_rho_minus": "越界后的合理下调/上调率",
+    "alpha_i": "未越界时的协商调整率（8.9.1 情形 1 取 0）"
+  },
+  "problem_form": {
+    "id": "P_A",
+    "name": "A 组子模型（Phase 1 的论域）",
+    "objective": "max_p  Z(p) = sum_{i in X_opt} r_eff_i · q0_i · p_i + const",
+    "constraints": [
+      "sum_{i in X_opt} q0_i · p_i = B   （C1，作用域限为可竞争部分）",
+      "L_i <= p_i <= U_i               （C2 + C3 + C4 合成箱型）"
+    ],
+    "note": "const = -sum_i c_i q1_point_i + sum_{i not in X_opt} R_i(p_i)，与 p 无关，不影响最优解结构，但进入 C9 与体检单。C5（p_i != 0）在实现中并入箱型下界。",
+    "solver_form": "纯 LP（线性目标 + 单一等式 + 箱型），无整数变量、无耦合软约束"
+  },
+  "theorem": {
+    "id": "T1",
+    "title": "阈值分割定理",
+    "assumptions": ["EC-1", "EC-2", "EC-3", "EC-4", "EC-5", "EC-6", "EC-7"],
+    "statement": "若 P_A 满足 EC-1..EC-7，则存在阈值 lam 使任一最优解 p* 满足：r_eff_i > lam => p*_i = U_i；r_eff_i < lam => p*_i = L_i；r_eff_i = lam => p*_i in [L_i, U_i]。且 lam 在非退化（EC-5）时唯一，等于 C1 的影子价格。",
+    "proof_method": "交换论证（exchange argument）",
+    "proof": [
+      "取任意最优解 p*。设 i、j 为两个**均非饱和**的项（L_i < p_i < U_i，L_j < p_j < U_j）。",
+      "取 delta > 0 足够小，作交换：p_i += delta / q0_i，p_j -= delta / q0_j。该交换保持 C1（因 a_i = q0_i）且不越界（内点邻域宽松）。",
+      "目标变化 dZ = delta·(r_eff_i - r_eff_j)。若 r_eff_i != r_eff_j，则取符号使 dZ > 0，与 p* 最优矛盾。故所有非饱和项 r_eff 相等，记作 lam。",
+      "再设 i 非饱和、p_j = U_j。交换（p_i 增、p_j 减）得 dZ = delta·(r_eff_i - r_eff_j) <= 0，即 r_eff_i <= r_eff_j，故 r_eff_i = lam <= r_eff_j，即 r_eff_j > lam => p_j = U_j。逆否即得结论。",
+      "同理对 p_j = L_j 得 r_eff_i = lam >= r_eff_j。"
+    ],
+    "why_not_kkt": "交换论证是 LP 最优性的**独立**证明路径：不依赖 KKT 条件、对偶变量或排序算法。因此 T04-00 的结论与 T04-01 的实现互为独立证据，可用于 T04-08 的独立性要求。",
+    "corollary": "按 r_eff 降序排列后，最优解必为「前 k 项取 U、第 k+1 项部分填充、其余取 L」，k 与 lam 由 C1 唯一确定（非退化时）。这是 T04-01 解析算法的依据，但**算法本身不属于本任务**。",
+    "what_it_does_not_claim": [
+      "不声称 Phase 1 解析算法与 Phase 2 LP/MILP 数学等价——仅在 EC-1..EC-8 全部 PASS 的实例子集上，两者解同一问题 P_A。",
+      "不声称阈值分割解是最终交付解。T04-01 明确定位为 candidate / 上界。",
+      "不覆盖 C6/C9/C10/C11/C12/C13 激活的实例（EC-6）。"
+    ]
+  },
+  "status_domain": ["PASS", "WARN", "FAIL", "BLOCKED"],
+  "verdict_domain": {
+    "EXACT": "EC-1..EC-7 均无 FAIL / BLOCKED——Phase 1 阈值分割解与 P_A 最优解一致",
+    "INAPPLICABLE": "EC-1..EC-7 中任一条判 FAIL——阈值分割**不是** P_A 的最优解，必须交 Phase 2",
+    "BLOCKED": "EC-1..EC-7 中任一条判 BLOCKED（输入未定态，判据算不出）——不得降级为 PASS"
+  },
+  "verdict_scope_note": "verdict 只看 A 组。B 组（EC-8/EC-9）的 WARN 进入 implementation_notes，**不改变 verdict**——因为「数学上是否精确」与「算法/输出环节是否需要额外义务」是两个正交的问题，混在一起会让 verdict 几乎永远不是 EXACT，从而失去区分力。",
+  "condition_groups": {
+    "EXACTNESS": "A 组（EC-1..EC-7）：违反 => 阈值分割不再是 P_A 的最优解（verdict = INAPPLICABLE / BLOCKED）",
+    "IMPLEMENTABILITY": "B 组（EC-8/EC-9）：违反 => 数学结论仍成立，但算法或输出环节须走分支实现，记入 implementation_notes"
+  },
+  "conditions": [
+    {
+      "id": "EC-1",
+      "group": "EXACTNESS",
+      "name": "C1 作用域完备性",
+      "statement": "C1 的求和作用域恰为可自由取值项的集合：scope(C1) = {i : p_i 可被求解器自由调整} = X_opt。",
+      "check": "读实例的 c1_scope 字段（每项 in_c1_scope 布尔）与 pricing_role 交叉：存在 role != OPTIMIZABLE 而 in_c1_scope = true 的项 => FAIL；存在 role = OPTIMIZABLE 而 in_c1_scope = false 的项 => FAIL（该变量无总价约束约束，目标可能无界）。",
+      "on_violation": "FAIL",
+      "consequence": "系数向量 a_i 与目标系数 lam0_i 不再成比例（固定项的目标斜率为 0，但其 a_i = q0_i != 0），排序键 r_eff 不存在。求解器会为腾出预算而「优化」不可竞争项，产生**数学最优、投标非法**的解。",
+      "counterexample": "CE-01",
+      "source": "model_v0.3_R2.md §5.4 C1 note；§5.5「R7：作用域改为 X_opt」；§8.2.3"
+    },
+    {
+      "id": "EC-2",
+      "group": "EXACTNESS",
+      "name": "排序键正确性",
+      "statement": "排序键必须取「目标系数 ÷ C1 系数」= lam0_i / a_i = r_eff_i，而不是 r_i，也不是 (1 + alpha_i)。",
+      "check": "比较 r_eff 与 r 的**严格偏序**：若存在 (i,j) 使 (r_i - r_j)·(r_eff_i - r_eff_j) < 0，则两键给出相反排序 => WARN（本实例对键选择敏感）。只比较严格偏序而不比较「等于」，是因为 (1 + alpha_i) 在 alpha 全 0 时对全部项取同一值——把「平」也算「不同排序」会让几乎全部实例都 WARN，判据随即失去区分力。",
+      "on_violation": "WARN（本实例对键选择敏感，须记入体检单「倒挂项」栏）；实现若声明用 r 或 (1 + alpha) 作排序键则整体 FAIL",
+      "consequence": "EC-2 是本任务最易被实现层悄悄破坏的条件：r_eff 的自由度来自逐项 alpha_i 与分段系数。误用 r_i 会给出**满足全部约束但次优**的解——不会触发任何可行性检查。",
+      "counterexample": "CE-02",
+      "source": "model_v0.3_R2.md §7.2.1 反例集「alpha_i 逐项不同导致排序与 r_i 不一致」；§5.3.1"
+    },
+    {
+      "id": "EC-3",
+      "group": "EXACTNESS",
+      "name": "权重正性",
+      "statement": "q0_i > 0 对所有 i in X_opt 成立（r_i 与交换步长 delta/q0_i 均有定义）。",
+      "check": "q0_i 缺失 => BLOCKED；q0_i = 0 => FAIL（r_i 无定义）。判据必须能区分「缺失」与「0」（ADR-0004）。",
+      "on_violation": "FAIL",
+      "consequence": "q0_i = 0 使 a_i = 0：该变量的取值完全不受 C1 约束，而 lam0_i = r_eff_i·q0_i = inf·0 为不定式。实际后果是该变量被无意义地推向 U_i，凭空产生收益。",
+      "counterexample": "CE-03",
+      "source": "model_v0.3_R2.md §3.7 预处理 1；§7.5 退化情形表"
+    },
+    {
+      "id": "EC-4",
+      "group": "EXACTNESS",
+      "name": "系数非负性（收入非负）",
+      "statement": "分段斜率系数 (1 + alpha_i)、(1 - rho_plus_i)、(1 + rho_minus_i) 均 >= 0，从而 r_eff_i >= 0。",
+      "check": "对每个越界/未越界分支复算系数与 r_eff：r_eff_i < 0 => FAIL；并用 R_i(p_i = 1) < 0 作为二级见证（收入为负）。",
+      "on_violation": "FAIL",
+      "consequence": "rho_plus > 1 使增段 r_eff < 0：模型认为「提高该项单价会减少收入」，且 R_i 本身为负（收入不能为负，非物理）。数据非法，须在规则卡层拦截。",
+      "counterexample": "CE-04",
+      "source": "model_v0.3_R2.md §5.3.2 收敛性「rho_plus = 1 时高段 r_eff 恒为 0」"
+    },
+    {
+      "id": "EC-5",
+      "group": "EXACTNESS",
+      "name": "非退化",
+      "statement": "r_eff 的取值分级间隔大于 eps_r（默认 1e-6），即不存在两个可优化项有相同 r_eff 且同时可非饱和。",
+      "check": "按 r_eff 降序分组，检查是否存在「同组元素数 >= 2 且该组两侧箱型区间之和足以容纳 B」的情形：若存在 => WARN（多最优解，需 canonical tie-break）；若实例未声明 tie_break_policy => FAIL。",
+      "on_violation": "FAIL",
+      "consequence": "lam 落在平台区间，多个非饱和项可任意分配 => 无穷多最优解。此时 §4.1 的**三级变量一致性判定不可执行**（p 不唯一），必须先设 canonical tie-break（T04-06B）。",
+      "counterexample": "CE-05",
+      "source": "model_v0.3_R2.md §7.5 退化情形表第 1/4 行；impl_plan_v321 §4.1 三级判定"
+    },
+    {
+      "id": "EC-6",
+      "group": "EXACTNESS",
+      "name": "软约束不激活",
+      "statement": "C6（亏损风险总量）、C9（盈利门槛）、C10（现金流前载）、C11（离散度）、C12（总价成本比）、C13（不平衡报价条件修正）均不激活。",
+      "check": "读实例的 active_soft_constraints 字段：非空 => FAIL（该实例越出 Phase 1 论域）。C7 因升为 MILP 一律视为激活。",
+      "on_violation": "FAIL",
+      "consequence": "C6 引入第二组权重（q1_point_i），与 C1 的权重（q0_i）不成比例 => 排序键被 (1+eta) 修正为**多阈值分层**结构；C11 的 MAD 线性化引入全项耦合（含均值 p_bar）=> 阈值结构整体失效。",
+      "counterexample": "CE-06",
+      "source": "model_v0.3_R2.md §7.2「成立条件：C6、C9、C10 均不激活」；§7.4"
+    },
+    {
+      "id": "EC-7",
+      "group": "EXACTNESS",
+      "name": "可行域非空且边界自洽",
+      "statement": "L_i <= U_i 对所有 i in X_opt，且 B in [sum a_i L_i, sum a_i U_i]。",
+      "check": "逐项比较 L_i 与 U_i（L_i > U_i => FAIL）；比较 B 与两侧加权和（越界 => FAIL）。U_i 为空（不限价）时只检下界侧并为上界侧标 WARN（见 EC-9）。",
+      "on_violation": "FAIL",
+      "consequence": "B 越界时问题不可行，应由 Phase 0 边界证书判 FAIL 并走 §6.3 放弃投标判据表；**不得**让优化器通过不平衡报价「硬找解」。",
+      "counterexample": "CE-07",
+      "source": "model_v0.3_R2.md §6.1/§6.2；§7.5「floor_i > U_i 可行域为空」"
+    },
+    {
+      "id": "EC-8",
+      "group": "EXACTNESS",
+      "name": "舍入可调和性",
+      "statement": "单价四舍五入至 0.01 元后，C1 残差可由独立调和环节（T06-06 TotalPriceReconciliation）修正至 <= eps_total。",
+      "check": "复算舍入残差的理论上界 rounded_residual_bound = (0.01 / 2) · sum_{i in X_opt} q0_i，与 eps_total = max(eps_abs, eps_price · B) 比较：bound <= eps_total => PASS；bound > eps_total 且实例未声明调和环节 => FAIL；bound > eps_total 且已声明 => WARN（附义务）。",
+      "on_violation": "WARN（已声明舍入调和环节，附推进义务）/ FAIL（未声明调和环节——S2 的舍入后复验无处落地）",
+      "consequence": "舍入误差按工程量加权累计，与项数成正比而与项数无关的 eps_abs 无关系。本项目 n 与 sum q0 均非小量，该上界必然远超 eps_total——因此「求解器内已容差化」不能替代舍入调和（§8.2：不得「求解时容差化、复核时严格等式」）。",
+      "counterexample": "CE-08",
+      "source": "model_v0.3_R2.md §8.2；impl_plan_v321 §8.2 两层必须同口径；precision_profile.rounding"
+    },
+    {
+      "id": "EC-9",
+      "group": "IMPLEMENTABILITY",
+      "name": "上界有限性",
+      "statement": "U_i < +inf 对所有 i in X_opt（cap 非空）。",
+      "check": "存在 cap 为空的项 => WARN，并列出这些项（须走分支实现）。",
+      "on_violation": "WARN",
+      "consequence": "注意：**交换论证不要求 U_i 有限**（引理只用箱型区间的存在性与内点邻域）。cap 为空时阈值分割定理仍成立，故本条件属 B 组。被破坏的是「前缀和 + 二分」算法：S(k) 含 inf 项，二分比较退化。分支实现：把空 cap 项固定为「临界项（部分填充项）」，其余项按 r_eff 排序定容。**禁止**把空 cap 当 0（U_i = 0 < L_i 直接不可行——数值实现最危险的静默错误）。",
+      "counterexample": "CE-09",
+      "source": "constraint_schema.C2.null_cap_semantics（2026-09-16 用户裁定）；model_v0.3_R2.md §7.2 算法步骤 3"
+    }
+  ],
+  "counterexamples": [
+    {
+      "id": "CE-01",
+      "violates": "EC-1",
+      "title": "C1 未剔除不可竞争项 —— 数学最优、投标非法",
+      "source": "model_v0.3_R2.md §5.4 C1 note / §5.5 R7 修订理由",
+      "expected": {"EC-1": "FAIL", "verdict": "INAPPLICABLE"},
+      "instance": {
+        "items": [
+          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 150, "c_i": 30, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0},
+          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 80, "c_i": 80, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0},
+          {"item_id": "F", "role": "NON_COMPETITIVE", "in_c1_scope": true, "q0": 100, "q1_point": 100, "c_i": 0, "p0": 50, "cap": 100, "L": 0, "U": 100, "alpha": 0.0}
+        ],
+        "B": 20000,
+        "P_star": 25000,
+        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true
+      },
+      "witness": {
+        "wrong_solution": {"p": [199.99, 50.0, 0.01]},
+        "right_solution": {"p": [150.0, 50.0, 50.0]},
+        "assertions": {
+          "wrong_solution_feasible": false,
+          "right_solution_feasible": true,
+          "wrong_competitive_total_gt_B": true,
+          "wrong_Z_gt_right_Z": true
+        },
+        "conclusion": "误用解的可竞争部分为 24999 ≠ B = 20000（超 4999 元），且把不可竞争费压到 0.01 元——C1 复核判不可行。而它的目标值**更高**（求解器会主动选它）：这正是「数学最优、投标非法」。正确解把不可竞争项按固定值 50 报出，C1 残差为 0。"
+      }
+    },
+    {
+      "id": "CE-02",
+      "violates": "EC-2",
+      "title": "排序键误用 r_i（漏乘逐项 (1+alpha_i)）",
+      "source": "model_v0.3_R2.md §7.2.1 反例集第 3 项",
+      "expected": {"EC-2": "WARN", "verdict": "EXACT"},
+      "expected_note": "本实例的 A 组无 FAIL——用对键（r_eff）就是精确的。EC-2 判 WARN 是因为**键的选择在本实例上有后果**：误用 r 会得到满足全部约束但目标低 1000 元的解。判定器把这一风险写进 implementation_notes，而不是否决精确性——否则「实例对键敏感」会被误读成「Phase 1 不可用」。",
+      "instance": {
+        "items": [
+          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 100, "c_i": 50, "p0": 100, "cap": 150, "L": 50, "U": 150, "alpha": 0.5},
+          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 140, "c_i": 50, "p0": 100, "cap": 150, "L": 50, "U": 150, "alpha": 0.0}
+        ],
+        "B": 20000,
+        "P_star": 20000,
+        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true
+      },
+      "witness": {
+        "wrong_solution": {"p": [50.0, 150.0]},
+        "right_solution": {"p": [150.0, 50.0]},
+        "key_r_eff": [1.5, 1.4],
+        "key_r": [1.0, 1.4],
+        "key_1_plus_alpha": [1.5, 1.0],
+        "assertions": {
+          "wrong_solution_feasible": true,
+          "right_solution_feasible": true,
+          "wrong_Z_gt_right_Z": false
+        },
+        "conclusion": "按 r_i 排序会把预算给 B（误用解 = [50,150]，目标更低），按 r_eff_i 排序给 A（正确解 = [150,50]）。两个解**都满足 C1 与箱型**——误用解不会触发任何可行性检查，只会静默地少赚。这是最危险的一类错误：全绿但次优。"
+      }
+    },
+    {
+      "id": "CE-03",
+      "violates": "EC-3",
+      "title": "q0 = 0 而 q1 > 0：变量失去 C1 约束（目标无界方向）",
+      "source": "model_v0.3_R2.md §3.7 预处理 1；§7.5「q_i^0 -> 0 但 q_i^1 > 0」",
+      "expected": {"EC-3": "FAIL", "verdict": "INAPPLICABLE"},
+      "instance": {
+        "items": [
+          {"item_id": "Z", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 0, "q1_point": 100, "c_i": 50, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0},
+          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 100, "c_i": 50, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0}
+        ],
+        "B": 20000,
+        "P_star": 20000,
+        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true
+      },
+      "witness": {
+        "wrong_solution": {"p": [200.0, 100.0]},
+        "right_solution": {"p": [100.0, 100.0]},
+        "assertions": {
+          "wrong_solution_feasible": false,
+          "right_solution_feasible": false
+        },
+        "conclusion": "两条断言都为 false，这本身就是结论：只要实例带上 q0 = 0 的项，**任何**解都无法通过复核（解校验器会在该项上中断）——即「不预处理就不可能产出可校验的解」。这证明 §3.7 预处理 1 是不可跳过的前置步骤，而不是可选优化。对比之下，若不剔除而让求解器自由处理，p_Z 会被推到 U_Z = 200，凭空贡献 100 × (200 − 100) = 10000 元的虚假收益。"
+      }
+    },
+    {
+      "id": "CE-04",
+      "violates": "EC-4",
+      "title": "rho_plus > 1：结算收入为负（非物理）",
+      "source": "model_v0.3_R2.md §5.3.2 收敛性",
+      "expected": {"EC-4": "FAIL", "verdict": "INAPPLICABLE"},
+      "instance": {
+        "items": [
+          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 160, "c_i": 50, "p0": 100, "cap": 200, "L": 50, "U": 200, "alpha": 0.0}
+        ],
+        "B": 10000,
+        "P_star": 10000,
+        "params": {"theta_dev": 0.15, "rho_plus": 1.2, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true
+      },
+      "witness": {
+        "branch": "INCREASE",
+        "r_eff": -0.32,
+        "R_at_p_equal_1": -0.2,
+        "conclusion": "rho_plus = 1.2 使增段系数 1 - rho_plus = -0.2 < 0。R_A(p_A = 1) = 1 · (-0.2) · 160 = -32 元，即结算收入为负。r_eff = -0.32 < 0 亦使「效率比」的经济解释反转。rho_plus 必须落 [0, 1]，由规则卡层拦截而非求解层兜底。"
+      }
+    },
+    {
+      "id": "CE-05",
+      "violates": "EC-5",
+      "title": "rho_plus = 1 使 r_eff 成平台 —— 无穷多最优解",
+      "source": "model_v0.3_R2.md §5.3.2 收敛性；§7.5 第 1 行；impl_plan_v321 §4.1 三级判定",
+      "expected": {"EC-5": "FAIL", "verdict": "INAPPLICABLE"},
+      "instance": {
+        "items": [
+          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 160, "c_i": 50, "p0": 100, "cap": 120, "L": 50, "U": 120, "alpha": 0.0},
+          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 160, "c_i": 50, "p0": 100, "cap": 120, "L": 50, "U": 120, "alpha": 0.0}
+        ],
+        "B": 17000,
+        "P_star": 17000,
+        "params": {"theta_dev": 0.15, "rho_plus": 1.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true,
+        "tie_break_policy": null
+      },
+      "witness": {
+        "r_eff": [0.0, 0.0],
+        "all_optimal_solutions": "p_A ∈ [50, 120]，p_B = 170 - p_A ∈ [50, 120]，即 [p_A, p_B] ∈ {[50,120], [85,85], [120,50], ...} 全部取得相同 Z（两项对目标的系数均为 r_eff · q0 = 0）",
+        "conclusion": "rho_plus = 1 时越界增项的单价对结算收入**完全无贡献**（§5.3.2：模型将把预算全部调离该项）。两项 r_eff 相同 => lam 落在平台 => 变量的最优取值不唯一。此时 §4.1 的三级变量一致性判定不可执行，必须先设 canonical tie-break（T04-06B）。"
+      }
+    },
+    {
+      "id": "CE-06",
+      "violates": "EC-6",
+      "title": "C6 激活 —— 单阈值结构被破坏（v0.2 反例复现）",
+      "source": "model_v0.3_R2.md 附录 B 例 1",
+      "expected": {"EC-6": "FAIL", "verdict": "INAPPLICABLE"},
+      "instance": {
+        "items": [
+          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 150, "c_i": 30, "p0": 100, "cap": 120, "L": 50, "U": 120, "alpha": 0.0},
+          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 80, "c_i": 80, "p0": 100, "cap": 120, "L": 50, "U": 120, "alpha": 0.0}
+        ],
+        "B": 17000,
+        "P_star": 17000,
+        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL", "theta": 0.02},
+        "active_soft_constraints": ["C6"],
+        "rounding_reconciliation_present": true
+      },
+      "witness": {
+        "wrong_solution": {"p": [120.0, 50.0]},
+        "right_solution": {"p": [94.25, 75.75]},
+        "assertions": {
+          "wrong_solution_feasible": true,
+          "right_solution_feasible": true,
+          "wrong_Z_gt_right_Z": true
+        },
+        "conclusion": "两条解在 A 组约束（C1 + 箱型 + C5）下**都可行**，而阈值解的目标值更高（11100 > 9297.5）。也就是说：**只看 A 组约束与目标值，会选中一个违反 C6 的解**。这是 EC-6 必须独立成条的原因——若只做「目标值比较」，会得出「阈值解更好」的错误结论。C6 下的真实最优把 A 从顶格降到 94.25、把 B 从地板抬到 75.75，结构方向完全反转。"
+      }
+    },
+    {
+      "id": "CE-07",
+      "violates": "EC-7",
+      "title": "B 越出边界证书 —— 不可行，不得「硬找解」",
+      "source": "model_v0.3_R2.md §6.1/§6.2/§6.3",
+      "expected": {"EC-1": "PASS", "EC-2": "PASS", "EC-3": "PASS", "EC-4": "PASS", "EC-5": "PASS", "EC-6": "PASS", "EC-7": "FAIL", "verdict": "INAPPLICABLE"},
+      "instance": {
+        "items": [
+          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 110, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
+          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 90, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0}
+        ],
+        "B": 15000,
+        "P_star": 15000,
+        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "FULL"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true
+      },
+      "witness": {
+        "P_min": 16000.0,
+        "P_max": 24000.0,
+        "B_outside_by": 1000.0,
+        "conclusion": "B = 15000 < P_min = 16000：任何满足箱型的解都有 sum q0 p >= 16000，问题不可行。规格书要求 Phase 0 边界证书判 FAIL 并走 §6.3 放弃投标判据表（上调 P* 重新预检），**不得**借不平衡报价把不可行变成「可行」。"
+      }
+    },
+    {
+      "id": "CE-08",
+      "violates": "EC-8",
+      "title": "舍入残差按工程量加权累计 —— n·eps_abs 与 sum q0 不同量级",
+      "source": "model_v0.3_R2.md §8.2；impl_plan_v321 §8.2、§5.3 S2；precision_profile.rounding",
+      "expected": {"EC-8": "WARN", "verdict": "EXACT"},
+      "instance": {
+        "items": [
+          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 30000, "q1_point": 33000, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
+          {"item_id": "B", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 30000, "q1_point": 30000, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
+          {"item_id": "C", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 40000, "q1_point": 36000, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0}
+        ],
+        "B": 10000000,
+        "P_star": 10000000,
+        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "SEGMENT"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true,
+        "synthetic_note": "本反例只需 sum q0 = 100000 与 B 的量级；工程量取真实项目量级（万米级），故 bound = 0.005 × 1e5 = 500 元。判据本身不依赖具体项目，CLI 的 --from-master 用法可在真实实例上复算。",
+        "synth_sum_q0": 100000.0
+      },
+      "witness": {
+        "half_resolution": 0.005,
+        "sum_q0": 100000.0,
+        "rounded_residual_bound": 500.0,
+        "eps_total": 0.01,
+        "over_by": 499.99,
+        "conclusion": "半分辨率 0.005 元与 sum q0 = 1e5 相乘得 500 元，远超 eps_total = max(0.01, 1e-9 · 20000) = 0.01 元。舍入误差**与工程量同尺度**，与项数无关的 eps_abs 完全不能覆盖。故 S2 的舍入后复验必须由独立环节（T06-06）承担，且不得以「求解时已容差化」代替。"
+      }
+    },
+    {
+      "id": "CE-09",
+      "violates": "EC-9",
+      "title": "cap 为空 —— 定理仍成立，但前缀和算法退化（本项目真实存在）",
+      "source": "constraint_schema.C2.null_cap_semantics；真实样本 西永L分区公立学校配电工程·电气设备安装工程",
+      "expected": {"EC-9": "WARN", "verdict": "EXACT"},
+      "instance": {
+        "items": [
+          {"item_id": "A", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 1000, "q1_point": 1050, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
+          {"item_id": "031301017001", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 200, "q1_point": 200, "c_i": 30, "p0": 100, "cap": null, "L": 0.01, "U": null, "alpha": 0.0}
+        ],
+        "B": 120000,
+        "P_star": 120000,
+        "params": {"theta_dev": 0.15, "rho_plus": 0.0, "rho_minus": 0.0, "adjustment_scope": "SEGMENT"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true,
+        "synthetic_note": "本反例的判据只关于 EC-9 的判定语义：cap = null 是**合法语义**（ALLOW_EMPTY_NO_CAP，招标不限制该项单价），不是数据缺口。为让 EC-9 有作用对象，此处把该项标为 OPTIMIZABLE——真实项目中该子目的分类以 project_classification_table 为准（脚手架搭拆按 T00-06 规则书本应落 NON_COMPETITIVE）；分类一旦裁定为可优化，本项即适用。",
+        "real_sample_ref": "031301017001 脚手架搭拆（西永L分区公立学校配电工程·电气设备安装工程，限价侧综合单价为空）"
+      },
+      "witness": {
+        "misinterpretations": [
+          {"treatment": "当作数据缺口拒收", "outcome": "违反 2026-09-16 裁定（ALLOW_EMPTY_NO_CAP）"},
+          {"treatment": "当作 cap = 0", "outcome": "U_i = 0 < L_i = 0.01 => 直接不可行（数值实现最危险的静默错误）"},
+          {"treatment": "当作 cap = +inf 后直接跑前缀和二分", "outcome": "S(k) 含 inf，二分比较退化，k 的搜索失去意义"}
+        ],
+        "correct_treatment": "阈值分割定理的交换论证**不要求 U_i 有限**（只用内点邻域与箱型区间），故 Phase 1 对含空 cap 项的实例仍然精确。受损的只是「前缀和 + 二分」算法：须把空 cap 项固定为临界项（部分填充项）显式求解，其余项按 r_eff 排序定容。",
+        "conclusion": "因此 EC-9 归 B 组（可实现性），判 WARN 而非 FAIL。本项目真实样本已存在 cap 为空项（031301017001 脚手架搭拆），故 Phase 1 算法实现必须内建该分支，不得依赖「所有项都有 cap」这一假前提。"
+      }
+    }
+  ],
+  "positive_examples": [
+    {
+      "id": "PE-01",
+      "title": "附录 B 例 2R —— SEGMENT 分支（本项目已落 adjustment_scope = SEGMENT）",
+      "source": "model_v0.3_R2.md 附录 B 例 2R",
+      "expected": {"EC-1": "PASS", "EC-2": "PASS", "EC-3": "PASS", "EC-4": "PASS", "EC-5": "PASS", "EC-6": "PASS", "EC-7": "PASS", "EC-8": "WARN", "EC-9": "PASS", "verdict": "EXACT"},
+      "expected_note": "EC-8 判 WARN 是**正确行为**而非缺陷：即使 n = 2、sum q0 = 200 的微型实例，舍入残差上界 0.005 × 200 = 1 元也已超过 eps_total = 0.01 元。这说明「舍入调和环节」不是大规模项目才需要的补丁，而是**任何实例都必需**的输出环节。verdict 仍为 EXACT，因为 EC-8 属 B 组。",
+      "instance": {
+        "items": [
+          {"item_id": "1", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 110, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0},
+          {"item_id": "2", "role": "OPTIMIZABLE", "in_c1_scope": true, "q0": 100, "q1_point": 160, "c_i": 50, "p0": 100, "cap": 120, "L": 80, "U": 120, "alpha": 0.0}
+        ],
+        "B": 20000,
+        "P_star": 20000,
+        "params": {"theta_dev": 0.15, "rho_plus": 0.8, "rho_minus": 0.0, "adjustment_scope": "SEGMENT"},
+        "active_soft_constraints": [],
+        "rounding_reconciliation_present": true
+      },
+      "witness": {
+        "wrong_solution": {"p": [120.0, 80.0]},
+        "right_solution": {"p": [80.0, 120.0]},
+        "assertions": {
+          "wrong_solution_feasible": true,
+          "right_solution_feasible": true,
+          "wrong_Z_gt_right_Z": false
+        },
+        "r_eff": [1.10, 1.24],
+        "proof_of_optimality": "n = 2 且两项各自落在单一线性段内 => 目标在可行区间 p_1 ∈ [80, 120]、p_2 = 200 - p_1 上为线性函数 => 最大值必在端点取得。故比较两个顶点即构成**完整**的最优性验证，无需 KKT 或对偶。",
+        "conclusion": "EC 的 A 组全 PASS，verdict = EXACT，阈值分割解 p = [80, 120]（SEGMENT 下把预算给越界项——与 FULL 分支结论相反）经独立端点比较确认最优。本实例可作为 T04-01 解析算法与 T04-04 对拍的正例锚点。"
+      }
+    }
+  ],
+  "known_limits": [
+    "T1 的结论只覆盖 P_A（C1 + 箱型）。C6/C9/C10/C11/C12/C13 激活时的结构由 §7.3 三层分割描述，本制品不证明其最优性。",
+    "交换论证假设 R_i(p_i) 对 p_i 线性——即 r_i 与 p_i 无关。这在本模型成立（q0/q1 均为外生预测），但对「单价影响结算量」的反向情形不成立。该情形不在本模型范围内。",
+    "EC-5 的机械判据只能给出「存在平台」的必要信号，不能枚举全部多最优解。完整处理见 T04-06B（退化与多最优解处理）。",
+    "EC-8 的判据给出的是**理论上界**（0.005 · sum q0）。实际舍入残差通常远小于上界，但判据按保守侧取——因为舍入调和环节的有无是结构性问题，不应依赖运气。",
+    "反例集不覆盖 T04-07 的 MILP 模式（C7 升 MILP 后 KKT 不适用，须走独立验收协议）。"
+  ]
+}

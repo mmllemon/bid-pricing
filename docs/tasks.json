@@ -806,9 +806,34 @@
       ],
       "summary": "输出形式化命题：Phase 1 精确 iff（统一排序指标 $r^{\\text{eff}}$ 存在且单调、单一 $\\lambda$ 阈值成立、$R_i(p_i)$ 保持目标函数结构、$L_i/U_i/\\text{floor}_i$ 与总价约束共同存在时最优性成立）；并给出违反条件的反例集。未完成前，§4.1 不得称为「…",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/phase1_exactness_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/exactness.py"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/cases.py"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/instance.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_phase1_exactness.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0019-phase1-exactness-by-exchange-argument.md"
+        }
+      ],
+      "status": "done",
+      "note": "2026-09-17 完成《Phase 1 精确性条件》+ 反例集。**定理 T1（阈值分割）用交换论证证明**，刻意不走 KKT——KKT 是 T04-02A/D 的实现路线，两者共用会让「证明」与「实现」按同一个误解同时成立，T04-08 的独立性验收即失去对象（ADR-0019）。九条条件分两组：A 组（EC-1 作用域完备 / EC-2 排序键正确 / EC-3 权重正 / EC-4 系数非负 / EC-5 非退化 / EC-6 软约束不激活 / EC-7 可行域非空）违反则阈值分割解不再是 P_A 最优解；B 组（EC-8 舍入可调和 / EC-9 上界有限）违反只加实现性义务。**verdict 只看 A 组**——首版把 EC-8 放 A 组的结果是任何实例都判不出 EXACT（舍入上界 0.005·Σq0 几乎总超 eps_total），一个永远需要附注的 verdict 等于没有 verdict。反例集 CE-01..CE-09 每个都带「误用解 vs 正确解」数值见证，由 check_solution 代回原式复算；expected 做**双向**比对（实现判 FAIL 的条件不得漏声明——CE-07 首跑即踩到单向比对的漏洞）。正例 PE-01 = 附录 B 例 2R 的 SEGMENT 分支（本项目已落 SEGMENT），用 n=2 端点比较做**完整**最优性验证。副产品：修掉 compute_r_eff 的 SEGMENT 分支真 bug（increase_threshold 本身已是 1+θ_dev，原式再加 1.0 使越界段 r_eff 系统性高估）。本项目真实结论：EC-9 对西永L样本判 WARN（031301017001 cap 空），故 Phase 1 算法必须内建「空 cap 项固定为临界项」分支。测试 50 项；phase1-check 10/10 制品↔实现一致。"
     },
     {
       "id": "T04-01",

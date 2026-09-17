@@ -9,7 +9,11 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 
-from bidpricing.artifact import freeze_record, load_registry
+from bidpricing.artifact import (
+    compute_artifact_hash,
+    freeze_record,
+    load_registry,
+)
 from bidpricing.contracts.selector import select_rule_set
 from bidpricing.gates.gate0 import (
     GATE_0A_RELEASE_EXCLUSIONS,
@@ -422,50 +426,185 @@ class Gate0bTest(unittest.TestCase):
         # **不写死具体清单**：哪些制品已冻结会随推进变化（cost_basis_spec /
         # cost_assumption_spec 已于 2026-09-17 冻结），断言的应是**机制**——
         # 注册表里 version 仍为 null 的制品必须出现在阻塞项中，一个都不能漏。
+        # 未冻结的制品必须出现在阻塞项中，一个都不能漏。
+        # 2026-09-17 起 5 项制品全部冻结，故 unfrozen 为空是**正常状态**——
+        # 但这条机制断言仍须生效，否则「未冻结却不阻塞」将无人发现。
         unfrozen = {k for k, spec in (registry.get("gate_0b") or {}).items()
                     if isinstance(spec, dict) and spec.get("kind") == "versioned"
                     and not spec.get("hash")}
-        self.assertTrue(unfrozen, "若全部冻结，本用例的前提已变，须改写")
         for field in unfrozen:
             self.assertIn(field, blocked, f"{field} 未冻结却未阻塞")
+        # approvals 未签署 → 必须阻塞（当前真实仓库状态）
         self.assertIn("approvals", blocked)
 
+    def _env(self, tmp: Path, responsibility: dict | None = None,
+             signed: dict | None = None) -> dict:
+        """造一个最小 Gate 0b：两份真实存在的制品 + approvals 块。
+
+        制品必须真实存在且 hash 正确——否则被测的就不是审批判据，
+        而是 hash 绑定判据了（两件事分开测）。
+        """
+        (tmp / "card.json").write_text('{"kind": "card"}', encoding="utf-8")
+        (tmp / "cost.json").write_text('{"kind": "cost"}', encoding="utf-8")
+        rec = {
+            name: {
+                "kind": "versioned", "artifact_path": f"{name}.json",
+                "version": compute_artifact_hash(tmp / f"{name}.json"),
+                "hash": compute_artifact_hash(tmp / f"{name}.json"),
+                "frozen_at": "2026-01-01T00:00:00+00:00",
+            }
+            for name in ("card", "cost")
+        }
+        rec["approvals"] = {
+            "kind": "approvals",
+            "roles": list(GATE_0B_APPROVAL_ROLES),
+            "responsibility": responsibility if responsibility is not None else {
+                role: {"artifacts": ["card.json"]} for role in GATE_0B_APPROVAL_ROLES
+            },
+            "signed": signed if signed is not None else {},
+        }
+        return {"gate_0b": rec}
+
+    def _approvals(self, registry: dict, cdir: Path) -> CheckItem:
+        report = check_gate_0b(registry, cdir)
+        return next(i for i in report.items if i.item == "approvals")
+
     def test_single_checkbox_cannot_freeze_business_caliber(self):
-        """v3.2 的 all_required_approvals=true 可被一人勾选通过——本版必须拦住。"""
+        """v3.2 的 all_required_approvals=true 可被一人勾选通过——本版必须拦住。
+
+        旧格式（只有 hash、无署名、不指向具体制品）在新判据下同样不成立：
+        它正是「签一个与任何制品都无关的字符串」的形态。
+        """
         with tempfile.TemporaryDirectory() as tmp:
             cdir = Path(tmp)
-            registry = {
-                "gate_0b": {
-                    "approvals": {
-                        "kind": "approvals",
-                        "roles": list(GATE_0B_APPROVAL_ROLES),
-                        "signed": {"合同": {"hash": "sha256:" + "a" * 12}},
-                    }
-                }
-            }
-            report = check_gate_0b(registry, cdir)
-            approvals = next(i for i in report.items if i.item == "approvals")
+            registry = self._env(
+                cdir, signed={"合同": {"hash": "sha256:" + "a" * 12}})
+            approvals = self._approvals(registry, cdir)
             self.assertIs(approvals.status, Status.BLOCKED)
-            self.assertIn("审批角色不齐", approvals.reason)
+            self.assertIn("未签署", approvals.reason)
+            self.assertIn("未署名", approvals.reason)
 
     def test_full_approvals_pass(self):
+        """四角色各签署其责任制品 → PASS。"""
         with tempfile.TemporaryDirectory() as tmp:
             cdir = Path(tmp)
-            registry = {
-                "gate_0b": {
-                    "approvals": {
-                        "kind": "approvals",
-                        "roles": list(GATE_0B_APPROVAL_ROLES),
-                        "signed": {
-                            role: {"hash": "sha256:" + "a" * 12}
-                            for role in GATE_0B_APPROVAL_ROLES
-                        },
-                    }
-                }
+            registry = self._env(cdir)
+            h = compute_artifact_hash(cdir / "card.json")
+            registry["gate_0b"]["approvals"]["signed"] = {
+                role: {"by": "user", "artifacts": {"card.json": h},
+                       "signed_at": "2026-09-17T10:00:00+08:00"}
+                for role in GATE_0B_APPROVAL_ROLES
             }
+            approvals = self._approvals(registry, cdir)
+            self.assertIs(approvals.status, Status.PASS, approvals.reason)
+            self.assertIn("逐角色签署", approvals.reason)
+
+    def test_signing_wrong_artifact_is_blocked(self):
+        """签非责任制品 = 签一个模糊 hash，与打勾无异 → BLOCKED。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            resp = {role: {"artifacts": ["card.json"]} for role in GATE_0B_APPROVAL_ROLES}
+            registry = self._env(cdir, responsibility=resp)
+            h = compute_artifact_hash(cdir / "card.json")
+            registry["gate_0b"]["approvals"]["signed"] = {
+                role: {"by": "user", "artifacts": {"card.json": h}}
+                for role in GATE_0B_APPROVAL_ROLES
+            }
+            # 合同角色改签 cost.json —— 不是它的责任制品
+            registry["gate_0b"]["approvals"]["signed"]["合同"] = {
+                "by": "user", "artifacts": {"cost.json": h}}
+            approvals = self._approvals(registry, cdir)
+            self.assertIs(approvals.status, Status.BLOCKED)
+            self.assertIn("未签署责任制品", approvals.reason)
+
+    def test_signature_voided_when_artifact_changes(self):
+        """制品在签署后被改动 → 签名自动作废（这是逐角色签 hash 的全部意义）。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            registry = self._env(cdir)
+            stale = compute_artifact_hash(cdir / "card.json")
+            registry["gate_0b"]["approvals"]["signed"] = {
+                role: {"by": "user", "artifacts": {"card.json": stale}}
+                for role in GATE_0B_APPROVAL_ROLES
+            }
+            # 制品被改（签署之后）：制品记录与文件都改了，签名 hash 停在旧值
+            (cdir / "card.json").write_text('{"kind": "card", "tampered": 1}',
+                                           encoding="utf-8")
+            fresh = compute_artifact_hash(cdir / "card.json")
+            self.assertNotEqual(stale, fresh)
+            registry["gate_0b"]["card"]["hash"] = fresh
+            registry["gate_0b"]["card"]["version"] = fresh
+            approvals = self._approvals(registry, cdir)
+            self.assertIs(approvals.status, Status.BLOCKED)
+            self.assertIn("签名已失效", approvals.reason)
+
+    def test_not_covered_is_warn_not_blocked(self):
+        """显式声明「本角色无人承担」是真话，不是假审批 → WARN，不阻塞。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            registry = self._env(cdir)
+            h = compute_artifact_hash(cdir / "card.json")
+            registry["gate_0b"]["approvals"]["signed"] = {
+                role: {"by": "user", "artifacts": {"card.json": h}}
+                for role in GATE_0B_APPROVAL_ROLES
+            }
+            registry["gate_0b"]["approvals"]["signed"]["法务"] = {
+                "status": "NOT_COVERED",
+                "reason": "本项目无专职法务，合规风险由本人知悉并承担"}
+            approvals = self._approvals(registry, cdir)
+            self.assertIs(approvals.status, Status.WARN, approvals.reason)
+            self.assertIn("风险敞口", approvals.reason)
+
+    def test_not_covered_without_reason_is_blocked(self):
+        """「无人负责」本身是断言，不给理由 = 没说 → BLOCKED。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            registry = self._env(cdir)
+            h = compute_artifact_hash(cdir / "card.json")
+            registry["gate_0b"]["approvals"]["signed"] = {
+                role: {"by": "user", "artifacts": {"card.json": h}}
+                for role in GATE_0B_APPROVAL_ROLES
+            }
+            registry["gate_0b"]["approvals"]["signed"]["法务"] = {
+                "status": "NOT_COVERED"}
+            approvals = self._approvals(registry, cdir)
+            self.assertIs(approvals.status, Status.BLOCKED)
+            self.assertIn("未给理由", approvals.reason)
+
+    def test_contract_review_missing_is_blocked(self):
+        """规则卡缺 contract_review = 用「文件没改」冒充「条款已核对」→ BLOCKED。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            (cdir / "card.json").write_text('{"no_review": true}', encoding="utf-8")
+            registry = {"gate_0b": {
+                "contract_ruleset_version": {
+                    "kind": "versioned", "artifact_path": "card.json",
+                    "version": "sha256:" + "a" * 12, "hash": "sha256:" + "a" * 12,
+                    "frozen_at": "2026-01-01T00:00:00+00:00",
+                }
+            }}
             report = check_gate_0b(registry, cdir)
-            approvals = next(i for i in report.items if i.item == "approvals")
-            self.assertIs(approvals.status, Status.PASS)
+            item = next(i for i in report.items if i.item == "contract_review")
+            self.assertIs(item.status, Status.BLOCKED)
+            self.assertIn("contract_review", item.reason)
+
+    def test_contract_review_not_reviewed_blocks(self):
+        """status=NOT_REVIEWED 时 Gate 0b 不得通过。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            cdir = Path(tmp)
+            (cdir / "card.json").write_text(json.dumps({
+                "contract_review": {"status": "NOT_REVIEWED", "declared_by": "user"}
+            }), encoding="utf-8")
+            registry = {"gate_0b": {
+                "contract_ruleset_version": {
+                    "kind": "versioned", "artifact_path": "card.json",
+                    "version": "sha256:" + "a" * 12, "hash": "sha256:" + "a" * 12,
+                    "frozen_at": "2026-01-01T00:00:00+00:00",
+                }
+            }}
+            report = check_gate_0b(registry, cdir)
+            item = next(i for i in report.items if i.item == "contract_review")
+            self.assertIs(item.status, Status.BLOCKED)
 
 
 class Assertion5Test(unittest.TestCase):

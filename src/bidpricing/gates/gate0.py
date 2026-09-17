@@ -95,6 +95,16 @@ GATE_0A_RELEASE_EXCLUSIONS = (
 #: Gate 0b 要求的审批角色（断言：分级审批，每角色签署制品 hash 非空）
 GATE_0B_APPROVAL_ROLES = ("合同", "造价", "法务", "项目经理")
 
+#: ``contract_review.status`` 的合法取值。**词表是机制不是数据**（ADR-0002）——
+#: 由本常量定义，不得依赖各项目制品自带一份（否则改词表就改了判据，
+#: 且两份词表必然分叉）。制品中的 ``vocabulary`` 只作说明，须与本常量逐字一致。
+CONTRACT_REVIEW_VOCAB: tuple[str, ...] = (
+    "USER_DISCRETION",
+    "REVIEWED_NO_EXTRA_CLAUSES",
+    "REVIEWED_WITH_FINDINGS",
+    "NOT_REVIEWED",
+)
+
 #: 断言 6：配置层**不得**为其提供任何默认值的字段（含模板与示例配置）
 NO_DEFAULT_FIELD_PREFIXES = ("adjustment_scope", "q1", "c_i")
 
@@ -593,67 +603,215 @@ def check_phase0_inputs(
 # ----------------------------------------------------------------- Gate 0b
 
 
+def _check_contract_review(registry: dict, config_dir: Path) -> CheckItem:
+    """Gate 0b 对 ``contract_ruleset_version`` 的**业务层**判据。
+
+    hash 只能证明「文件没改」，证明不了「合同条款已核对」——两者的差别正是
+    路线隐藏依赖 19 要防的失效模式。故本项额外要求规则卡携带 ``contract_review``
+    并给出可复核的核对结论。
+    """
+    spec = (registry.get("gate_0b") or {}).get("contract_ruleset_version") or {}
+    rel = spec.get("artifact_path")
+    target = config_dir / str(rel or "")
+    if not rel or not target.exists():
+        return CheckItem(
+            scope="§7.1-Gate0b", item="contract_review", status=Status.BLOCKED,
+            reason=f"规则卡不存在（artifact_path={rel!r}），contract_review 无从核对",
+            actual=None, expected="pricing_rule_card.json",
+        )
+    try:
+        card = json.loads(target.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return CheckItem(
+            scope="§7.1-Gate0b", item="contract_review", status=Status.FAIL,
+            reason=f"规则卡解析失败：{exc}",
+        )
+
+    cr = card.get("contract_review")
+    if not isinstance(cr, dict):
+        return CheckItem(
+            scope="§7.1-Gate0b", item="contract_review", status=Status.BLOCKED,
+            reason=(
+                "规则卡未声明 contract_review——合同条款核对结论缺失。"
+                "只校验 hash 等于用「文件没改」冒充「条款已核对」"
+            ),
+            actual=None, expected=["contract_review"],
+        )
+
+    declared_vocab = cr.get("vocabulary")
+    if isinstance(declared_vocab, dict) and set(declared_vocab) != set(CONTRACT_REVIEW_VOCAB):
+        return CheckItem(
+            scope="§7.1-Gate0b", item="contract_review", status=Status.FAIL,
+            reason=(
+                f"制品自带词表与机制层词表不一致：制品 {sorted(declared_vocab)} "
+                f"vs 机制 {sorted(CONTRACT_REVIEW_VOCAB)}——两处各说各话"
+            ),
+            actual=sorted(declared_vocab), expected=sorted(CONTRACT_REVIEW_VOCAB),
+        )
+
+    status_v = cr.get("status")
+    if status_v not in CONTRACT_REVIEW_VOCAB:
+        return CheckItem(
+            scope="§7.1-Gate0b", item="contract_review", status=Status.FAIL,
+            reason=f"contract_review.status={status_v!r} 不在词表内",
+            actual=status_v, expected=list(CONTRACT_REVIEW_VOCAB),
+        )
+    if status_v == "NOT_REVIEWED":
+        return CheckItem(
+            scope="§7.1-Gate0b", item="contract_review", status=Status.BLOCKED,
+            reason="合同条款尚未核对（NOT_REVIEWED）——Gate 0b 不得通过",
+        )
+    if not cr.get("declared_by"):
+        return CheckItem(
+            scope="§7.1-Gate0b", item="contract_review", status=Status.BLOCKED,
+            reason="contract_review 未署名（declared_by 缺失）——核对结论无责任人",
+        )
+    if status_v == "REVIEWED_WITH_FINDINGS" and not cr.get("findings"):
+        return CheckItem(
+            scope="§7.1-Gate0b", item="contract_review", status=Status.FAIL,
+            reason="声明「已核对且有发现」却未列出 findings——结论不可复核",
+        )
+
+    agent = cr.get("agent_assertion", "NONE")
+    tail = "（由用户承担结论，Agent 未代为断言）" if agent == "NONE" else ""
+    return CheckItem(
+        scope="§7.1-Gate0b", item="contract_review", status=Status.PASS,
+        reason=f"合同条款核对结论合法：{status_v}，declared_by={cr['declared_by']}{tail}",
+        actual=status_v, expected=list(CONTRACT_REVIEW_VOCAB),
+    )
+
+
+def _check_approvals(registry: dict, config_dir: Path) -> list[CheckItem]:
+    """分级审批（路线 §7.1 Gate 0b + 隐藏依赖 19）。
+
+    三档语义：
+
+    * **已签署** —— 条目含 ``by``，且签署了该角色的**全部责任制品**，
+      且每条签名 hash 与制品现值一致（制品被改动 → 签名自动作废）。
+    * **NOT_COVERED（WARN）** —— 显式声明本角色无人承担并给出理由。
+      ``signed={}`` 是「没人说过」，NOT_COVERED 是「说了没人负责」——
+      前者是假审批（BLOCKED），后者是真话（不阻塞，但为风险敞口）。
+    * **其余（BLOCKED）** —— 缺条目 / 无 ``by`` / 无制品 / 签了未声明制品 /
+      hash 为空或失配。签署对象必须指向已声明制品：否则签一个与任何制品
+      都无关的字符串，与打一个勾没有区别。
+    """
+    raw = registry.get("gate_0b", {}).get("approvals")
+    if not isinstance(raw, dict):
+        return [CheckItem(
+            scope="§7.1-Gate0b", item="approvals", status=Status.BLOCKED,
+            reason="注册表未声明 approvals 块",
+        )]
+
+    roles = tuple(raw.get("roles") or GATE_0B_APPROVAL_ROLES)
+    resp = raw.get("responsibility") or {}
+    signed = raw.get("signed") or {}
+
+    recs = [r for r in parse_records(registry, "gate_0b") if r.kind != "approvals"]
+    live = {r.artifact_path: r.hash for r in recs if r.artifact_path}
+
+    ok_roles: list[str] = []
+    not_covered: list[str] = []
+    problems: list[str] = []
+
+    for role in roles:
+        entry = signed.get(role)
+        if not isinstance(entry, dict) or not entry:
+            problems.append(f"{role}：未签署")
+            continue
+        if entry.get("status") == "NOT_COVERED":
+            if entry.get("reason"):
+                not_covered.append(role)
+            else:
+                problems.append(
+                    f"{role}：声明 NOT_COVERED 却未给理由——"
+                    "「本角色无人负责」本身是断言，须写明原因"
+                )
+            continue
+
+        role_problems: list[str] = []
+        by = entry.get("by")
+        arts = entry.get("artifacts")
+        if not by:
+            role_problems.append(f"{role}：未署名（by 缺失）")
+        if not isinstance(arts, dict) or not arts:
+            role_problems.append(f"{role}：未签署任何制品 hash")
+        else:
+            need = list((resp.get(role) or {}).get("artifacts") or [])
+            lack = [a for a in need if a not in arts]
+            if lack:
+                role_problems.append(
+                    f"{role}：未签署责任制品 {lack}——"
+                    "签非责任制品与打一个勾无异"
+                )
+            for rel, sig in arts.items():
+                if rel not in live:
+                    role_problems.append(f"{role}：签署了未声明制品 {rel}")
+                elif not sig:
+                    role_problems.append(f"{role}：{rel} 的签名 hash 为空")
+                elif sig != live.get(rel):
+                    role_problems.append(
+                        f"{role}：{rel} 的签名已失效（签 {str(sig)[:19]}，"
+                        f"现值 {str(live[rel])[:19]}）——制品在签署后被改动，须重签"
+                    )
+        if role_problems:
+            problems.extend(role_problems)
+        else:
+            ok_roles.append(role)
+
+    if problems:
+        return [CheckItem(
+            scope="§7.1-Gate0b", item="approvals", status=Status.BLOCKED,
+            reason=(
+                "审批未到位：" + "；".join(problems)
+                + "。v3.2 的单一布尔位可被一人勾选通过，业务口径并未真正冻结"
+            ),
+            actual={"signed": sorted(signed)}, expected=list(roles),
+        )]
+    if not_covered:
+        return [CheckItem(
+            scope="§7.1-Gate0b", item="approvals", status=Status.WARN,
+            reason=(
+                f"{len(ok_roles)}/{len(roles)} 个角色已签署各自责任制品；"
+                f"{'、'.join(not_covered)} 显式声明无人承担——"
+                "这是真话不是假审批，不阻塞 WP4，但构成风险敞口"
+            ),
+            actual={"signed": sorted(ok_roles), "not_covered": sorted(not_covered)},
+            expected=list(roles),
+        )]
+    return [CheckItem(
+        scope="§7.1-Gate0b", item="approvals", status=Status.PASS,
+        reason=(
+            f"{len(roles)} 个角色均已签署各自责任制品，且签名 hash 与制品现值一致"
+            "（逐角色签署，非一次签署覆盖多角色）"
+        ),
+        actual=list(roles), expected=list(roles),
+    )]
+
+
 def check_gate_0b(registry: dict, config_dir: Path) -> GateReport:
     """Gate 0b：Business Caliber & Compliance Frozen。
 
-    机械判据：5 项 versioned 制品齐备 + 分级审批 4 角色**每角色签署 hash 非空**。
-    v3.2 仅要求 ``all_required_approvals = true``，可被单人勾选通过——本版修正。
+    机械判据：5 项 versioned 制品齐备 ∧ 规则卡 contract_review 结论合法
+    ∧ 分级审批 4 角色每角色签署**其责任制品**的 hash。
+
+    v3.2 仅要求 ``all_required_approvals = true``，可被单人勾选通过；
+    v3.2.1 改为分角色签署，但只校验「hash 非空」——签一个与制品无关的字符串
+    仍可过关。本版补上「签署对象必须是已声明制品且覆盖该角色责任制品」。
     """
     report = GateReport(
         gate="Gate 0b",
         purpose="业务口径与合规依据冻结 → 阻塞 WP4 求解层，不阻塞 WP1/WP2/WP3",
     )
 
-    records = parse_records(registry, "gate_0b")
-    approval_rec: ArtifactRecord | None = None
-
-    for rec in records:
+    for rec in parse_records(registry, "gate_0b"):
         if rec.kind == "approvals":
-            approval_rec = rec
             continue
         report.add(verify_versioned(rec, config_dir))
 
-    # 分级审批（断言：每角色签署制品 hash 非空）
-    raw = registry.get("gate_0b", {}).get("approvals", {})
-    signed = raw.get("signed", {}) if isinstance(raw, dict) else {}
-    missing_roles = []
-    blank_hash_roles = []
-    for role in GATE_0B_APPROVAL_ROLES:
-        entry = signed.get(role)
-        if not entry:
-            missing_roles.append(role)
-            continue
-        if not isinstance(entry, dict) or not entry.get("hash"):
-            blank_hash_roles.append(role)
+    report.add(_check_contract_review(registry, config_dir))
+    for item in _check_approvals(registry, config_dir):
+        report.add(item)
 
-    if missing_roles:
-        report.add(
-            CheckItem(
-                scope="§7.1-Gate0b", item="approvals", status=Status.BLOCKED,
-                reason=(
-                    f"审批角色不齐，缺少：{', '.join(missing_roles)}。"
-                    "v3.2 的单一布尔位可被一人勾选通过，业务口径并未真正冻结"
-                ),
-                actual=sorted(signed.keys()), expected=list(GATE_0B_APPROVAL_ROLES),
-            )
-        )
-    elif blank_hash_roles:
-        report.add(
-            CheckItem(
-                scope="§7.1-Gate0b", item="approvals", status=Status.BLOCKED,
-                reason=f"以下角色的签署制品 hash 为空：{', '.join(blank_hash_roles)}",
-                actual=signed, expected="每角色 {hash: sha256:...}",
-            )
-        )
-    else:
-        report.add(
-            CheckItem(
-                scope="§7.1-Gate0b", item="approvals", status=Status.PASS,
-                reason=f"{len(GATE_0B_APPROVAL_ROLES)} 个角色均已签署且 hash 非空",
-                actual=list(GATE_0B_APPROVAL_ROLES), expected=list(GATE_0B_APPROVAL_ROLES),
-            )
-        )
-    _ = approval_rec
     return report
 
 

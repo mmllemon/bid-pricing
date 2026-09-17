@@ -5,17 +5,17 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-17 09:47:51** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-17 10:02:23** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`1bbcf31` ｜ 累计 39 次提交
-- 最新提交信息：chore(state): 重新生成状态快照
+- 提交：`2bb41ec` ｜ 累计 40 次提交
+- 最新提交信息：feat(t00-06b,t00-12): 总价划分律 + 利润口径桥接表；金额舍入统一为四舍五入
 - 最近里程碑标签：`cost-basis-v1`
-- 工作区：有 16 处未提交改动
+- 工作区：有 7 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -43,15 +43,15 @@
 
 | 制品 key | 类型 | hash | 冻结时间 |
 |---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-17T01:45:41+00:00 |
-| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-17T01:45:41+00:00 |
-| `constraint_schema_version` | versioned | sha256:771e84c8ec74 | 2026-09-17T01:45:41+00:00 |
-| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-17T01:45:41+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-17T01:45:41+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-17T01:45:41+00:00 |
-| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-17T01:45:41+00:00 |
-| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-17T01:45:41+00:00 |
-| `pricing_rule_card_version` | versioned | sha256:29040209cd8b | 2026-09-17T01:45:41+00:00 |
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-17T01:58:20+00:00 |
+| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-17T01:58:20+00:00 |
+| `constraint_schema_version` | versioned | sha256:771e84c8ec74 | 2026-09-17T01:58:20+00:00 |
+| `precision_profile_version` | versioned | sha256:6ce483e8d221 | 2026-09-17T01:58:20+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-17T01:58:20+00:00 |
+| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-17T01:58:20+00:00 |
+| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-17T01:58:20+00:00 |
+| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-17T01:58:20+00:00 |
+| `pricing_rule_card_version` | versioned | sha256:d88298683924 | 2026-09-17T01:58:20+00:00 |
 | `adjustment_scope` | enum | **未冻结** | — |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
@@ -60,7 +60,7 @@
 
 ## 四、质量门
 
-- 单元测试：**470** 项，结果 **通过**（OK）
+- 单元测试：**476** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -97,7 +97,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
 | T00-08 | 规则集选择器 | done | ✓ 成立 | 2026-09-16 复核确认已完成（任务板此前滞后未落账）：config/ruleset_selector_spec.json（spec v2）+ src/bidpricing/contracts/selector.py（select_rule_set / ruleset_self_test 指纹自检）+ 规则集三实现（2013/2024/base）。判据：输入 9 键、precedence_chain=Contract>Tender>Regional>Standard、2013 过渡双条件成立才回落否则 BLOCKED、adjustment_scope 未定态即 key 缺失。；src/bidpricing/contracts/selector.py 存在 |
-| T00-01 | 合同计价与调价口径冻结 | done | — | 2026-09-16 完成《计价规则卡 v1》config/pricing_rule_card.json（Gate 0a 受控制品，freeze 后 hash sha256:cf6efb75b63c）：符号绑定 Q0/Q1/P0/P1/S/r、阈值与 ρ±、P1 公式三分支、**P1 五项澄清 P1-A~E 全 RESOLVED**、override 链与未登记键阻断、不平衡报价条款口径（OI-05/06）。实现 src/bidpricing/contracts/pricing_card.py + CLI pricing-card（展示/试算/--from-match 分支扫描）。ADR-0010 记录 re-base 与「ρ±=0 是机制层默认而非数据缺省」的性质区分。规范↔代码常量↔项目落值三层双向锁定（contract-check 第 12 判据）。真实数据：82 键中 IN_RANGE 75 / DECREASE 6 / INCREASE 0。 |
+| T00-01 | 合同计价与调价口径冻结 | done | ✓ 成立 | 2026-09-16 完成《计价规则卡 v1》config/pricing_rule_card.json（Gate 0a 受控制品，freeze 后 hash sha256:cf6efb75b63c）：符号绑定 Q0/Q1/P0/P1/S/r、阈值与 ρ±、P1 公式三分支、**P1 五项澄清 P1-A~E 全 RESOLVED**、override 链与未登记键阻断、不平衡报价条款口径（OI-05/06）。实现 src/bidpricing/contracts/pricing_card.py + CLI pricing-card（展示/试算/--from-match 分支扫描）。ADR-0010 记录 re-base 与「ρ±=0 是机制层默认而非数据缺省」的性质区分。规范↔代码常量↔项目落值三层双向锁定（contract-check 第 12 判据）。真实数据：82 键中 IN_RANGE 75 / DECREASE 6 / INCREASE 0。；contract_ruleset_version 已冻结 sha256:d88298683924；src/bidpricing/contracts/pricing_card.py 存在；ADR ADR-0017-contract-review-must-be-attributed.md 存在 |
 | T00-02 | 字段字典冻结 | done | ✓ 成立 | 2026-09-17 复核闭环（制品早已冻结，任务板滞后）：field_schema 36→38 字段。本轮补两处真缺口——①c_i=0 处理未表态（T00-02 四项要求之一，q0 已表态而 c_i 没有）→ 补：仅 PASS_THROUGH 项合法，OPTIMIZABLE 而 c_i=0 判 BLOCKED，且 0 与缺失必须机器可区分；②派生量 p1 / settlement_amount 未登记 → 补字段并新增 missing_policy 取值 DERIVED（值域增项，checker 仍以制品域为事实源）。另修契约矛盾：rho_plus/rho_minus 原为字段级 DEFAULT 0.0，与 conventions 声明的「合同口径类禁止 DEFAULT」自相矛盾 → 改 BLOCK，默认值改由 T00-01 规则卡提供（ADR-0010：机制层默认可审计，字段级静默填值不可）。tests/test_t0002_field_dictionary.py（15）：八属性齐全/值域/精度/唯一键与 key_spec 一致/百分比小数/零值表态/派生量。；field_schema_version 已冻结 sha256:0745655aa4b6 |
 | T00-03 | 约束字典冻结 | done | ✓ 成立 | constraint_schema_version 已冻结 sha256:771e84c8ec74 |
 | T00-04 | 精度与容差策略冻结 | done | ✓ 成立 | precision_profile_version 已冻结 sha256:6ce483e8d221 |

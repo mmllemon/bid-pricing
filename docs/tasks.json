@@ -178,11 +178,21 @@
       "evidence": [
         {
           "kind": "module",
-          "path": "src/bidpricing/identity.py"
+          "path": "src/bidpricing/total_price.py"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/money.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0014-total-price-is-a-partition.md"
         }
       ],
-      "status": "partial",
-      "note": "恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落"
+      "status": "done",
+      "note": "恒等式判据已实现并过真实样本（残差 0）；P_competitive 扣减式与不可竞争费联动规则未落",
+      "status_note": "2026-09-17 完成：总价分解规范落地为 src/bidpricing/total_price.py（可执行规范）+ 判据 TP-01~TP-07 + CLI total-price-check。★更正路线 ①② 原式：甲供材料费**只减计税基数、不进总价划分**（依据=实测恒等式 + 招标文件表-12 原文），暂列金额改为父项披露列（结构上不可重复计）。联动函数 compute_P_competitive 入参取锁定总价而非报价向量 p（取 p 会使 C1 成为恒真式）。见 ADR-0014。",
+      "updated_at": "2026-09-17T09:45:00+08:00"
     },
     {
       "id": "T00-07",
@@ -299,9 +309,28 @@
       ],
       "summary": "逐项映射 $p\\to$ 结算收入 $R_i$ / 成本 $c_iq_i^1$ / 税金 / 规费 / 不可竞争费 / 利润 $Z$，明确哪一层级进入优化目标、哪些为派生量；与 T00-06B 的总价分解同源同值（桥接表任一行与 T00-06B 总价恒等式不符即判 BLOCK）；供 Phase 3 独立复核逐项对账使用。…",
       "gate": "Gate 0a / 0b",
-      "evidence": [],
-      "status": "not_started",
-      "note": "依赖 T00-06B、T00-09"
+      "evidence": [
+        {
+          "kind": "artifact",
+          "key": "profit_bridge_spec"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/validation/profit_bridge.py"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/total_price.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0015-objective-must-be-named.md"
+        }
+      ],
+      "status": "done",
+      "note": "依赖 T00-06B、T00-09",
+      "status_note": "2026-09-17 完成：config/profit_bridge_spec.json（Gate 0b 受控制品，sha256:5d42943755f3）+ validation/profit_bridge.py（PB-01~PB-06）+ CLI profit-check。目标层级唯一 Z_OBJECTIVE（R_SETTLEMENT − C_SETTLEMENT），税口径 EXCL_VAT；单项亏损政策 TOTAL_PROFIT_ONLY（ADR-0009）；与 T00-06B 同源同值（PB-03 跨来源对账）。见 ADR-0015。",
+      "updated_at": "2026-09-17T09:45:00+08:00"
     },
     {
       "id": "T01-00A",

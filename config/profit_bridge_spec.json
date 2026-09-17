@@ -1,0 +1,177 @@
+{
+  "spec_id": "profit_bridge_spec_v1",
+  "task": "T00-12",
+  "title": "利润口径桥接表",
+  "role": "把「报价 p → 结算收入 → 成本 → 利润」逐层摊开，明确**哪一层级进入优化目标、哪些只是派生量**，并给 Phase 3 独立复核一张可逐项对账的表。与 T00-06B《总价分解规范》**同源同值**：任一行与总价恒等式不符即判 BLOCK（判据 PB-03）。",
+  "why": "路线 v3.2.1 的失效模式是「算的是税前利润、报告写的是含税利润」——两者差一个税金和一个不可竞争费，项目越大差得越多。桥接表把这个差**显式写成表里的一行**，让口径错层变成可机械判定的错误，而不是靠措辞小心。",
+  "freeze_timing": "Gate 0b 之前冻结；冻结前不得进入 WP4 求解层（与其余业务口径制品同门）。",
+  "tax_caliber_of_objective": "EXCL_VAT",
+  "objective": {
+    "level": "Z_OBJECTIVE",
+    "sense": "MAXIMIZE",
+    "definition": "结算口径的可竞争部分利润：Σ_i [ 结算收入_i − 成本_i ]，其中 i ∈ X_opt（可分部分项 + 施工技术措施）。",
+    "binding": [
+      "Z_OBJECTIVE 是桥接表中**唯一** enters_objective = true 的行（判据 PB-02）。多于一行的表无法回答「算的是哪个口径的利润」，等于没写。",
+      "enters_objective = 参与目标函数定义（含目标本身）；is_objective = 本行就是目标函数。二者不是一回事：进出「参与」集合的可以有多个（收入、成本），但「目标本身」只能有一个——判据 PB-02 分别卡这两件事。",
+      "报价 p 与成本 c 两侧同为**不含增值税**口径（config/basis_declarations.json：cap / cost 两端均 EXCL_VAT；亦见 cost_basis_spec.components.tax_and_fee_treatment）。故目标函数本身不含增值税。",
+      "不可竞争费与税金**不进目标函数**：它们或与报价无关（外生常量），或只依赖报价水平而不依赖分配（税金），因此在「总价锁定下怎么分配」这个问题上是常数。常数不影响最优解，但**必须在报告层出现**——这正是 reported_vs_objective 存在的理由。"
+    ],
+    "operands": [
+      "R_SETTLEMENT",
+      "C_SETTLEMENT"
+    ]
+  },
+  "levels": [
+    {
+      "key": "P_TOTAL",
+      "label": "投标总价（含税）",
+      "kind": "EXOGENOUS_LOCKED",
+      "enters_objective": false,
+      "formula": "P* = 分部分项 + 措施 + 其他 + 规费 + 税金",
+      "source_of_truth": "total_price.Partition.total（T00-06B）；值由用户给定或由招标限价下浮确定",
+      "note": "C1 约束锁定的对象。锁定的是总价，不是分配——分配才是决策。",
+      "is_objective": false
+    },
+    {
+      "key": "P_PRETAX",
+      "label": "税前工程费",
+      "kind": "DERIVED",
+      "enters_objective": false,
+      "formula": "P_PRETAX = P_TOTAL − TAX",
+      "source_of_truth": "total_price.Partition.pre_tax",
+      "note": "恒等式 B1 的右端项。报告口径的税费分离点。",
+      "is_objective": false
+    },
+    {
+      "key": "P_COMPETITIVE",
+      "label": "可竞争部分（决策范围）",
+      "kind": "DECISION_SCOPE",
+      "enters_objective": false,
+      "formula": "P_COMPETITIVE = Σ_{i ∈ X_opt} p_i · q_i^0",
+      "source_of_truth": "total_price.compute_P_competitive（T00-06B ④，C1 右端的唯一提供者；T03-03 直接调用，禁止重实现）",
+      "note": "总价锁定 ⇒ 本值由 P* 反解，**不是自由的**：决策变量只有 X_opt 内部的**分配**。这一点决定了本问题是一个「预算固定下的分配问题」，而非一般的收益最大化问题。",
+      "is_objective": false
+    },
+    {
+      "key": "P_FIXED_PRETAX",
+      "label": "固定税前部分",
+      "kind": "EXOGENOUS_CONSTANT",
+      "enters_objective": false,
+      "formula": "P_FIXED_PRETAX = 措施(施工组织) + 其他项目 + 规费",
+      "source_of_truth": "total_price.Partition.fixed_pretax",
+      "note": "恒等式 B2 的右端项。含暂列金额（以父项「其中：」披露列的形式存在，不另计）。",
+      "is_objective": false
+    },
+    {
+      "key": "R_SETTLEMENT",
+      "label": "结算收入（税前）",
+      "kind": "DERIVED",
+      "enters_objective": true,
+      "formula": "R_SETTLEMENT = Σ_i R_i(p_i, q_i^0, q_i^1)，R_i 由结算规则引擎按计价规则卡给出",
+      "source_of_truth": "T03-01 结算规则引擎 + config/pricing_rule_card.json（P1 公式三分支）；工程量由 q1_assumption_spec.json 声明",
+      "note": "结算量口径 = q^1（竣工按实确定）；投标期取 q1_assumption_spec 声明的格式（本项目 POINT = 成本清单量）。**不得用 q^0 算收入**——用 q^0 算收入会得到「报价越高收入越高」的假单调性，把不平衡报价的方向抹平。",
+      "is_objective": false
+    },
+    {
+      "key": "C_SETTLEMENT",
+      "label": "结算成本（税前）",
+      "kind": "DERIVED",
+      "enters_objective": true,
+      "formula": "C_SETTLEMENT = Σ_i cost_i · q_i^1",
+      "source_of_truth": "config/cost_basis_spec.json（八项分解）+ config/cost_assumption_spec.json（来源与冻结时点）",
+      "note": "cost_i 是**投标人自身个别成本** C_individual，不等于社会平均成本。以结算量 q^1 计，与收入同量纲——两端必须同量才能相减。 本行以 enters_objective=true 参与目标，但**不是目标本身**（is_objective=false）。",
+      "is_objective": false
+    },
+    {
+      "key": "Z_OBJECTIVE",
+      "label": "目标函数（优化口径利润）",
+      "kind": "OBJECTIVE",
+      "enters_objective": true,
+      "formula": "Z_OBJECTIVE = R_SETTLEMENT − C_SETTLEMENT",
+      "source_of_truth": "本表；WP4 求解层目标函数",
+      "note": "税前口径。**单项可为负**：目标只约束总量（见 single_item_loss_policy）。 本行是 is_objective=true 的**唯一**行；kind=OBJECTIVE 的行必须 is_objective=true（PB-02）。",
+      "is_objective": true
+    },
+    {
+      "key": "Z_REPORTED",
+      "label": "报告口径利润",
+      "kind": "DERIVED",
+      "enters_objective": false,
+      "formula": "Z_REPORTED = P_TOTAL − C_SETTLEMENT − 规费 − 实缴税金",
+      "source_of_truth": "T06-03 决策支持结论页",
+      "note": "对外披露口径。与 Z_OBJECTIVE 的差额由 reported_vs_objective.difference_terms 逐项列出——**不允许只报一个数字而不写差额构成**。",
+      "is_objective": false
+    },
+    {
+      "key": "TAX",
+      "label": "税金（增值税 + 附加税）",
+      "kind": "DERIVED_FROM_PRICE_LEVEL",
+      "enters_objective": false,
+      "formula": "TAX = f(计税基数)，计税基数 = 分部分项 + 措施 + 其他 + 规费 − 甲供材料费（招标文件表-12 原文）",
+      "source_of_truth": "total_price.compute_tax（T00-06B ③）",
+      "note": "**依赖报价水平，但不依赖分配**：总价锁定下，怎么分配 X_opt 内部，税金都一样。故对目标函数是常数（可略去），但报告层必须计入。判据 TP-06 用五组报价锁死这一点。",
+      "is_objective": false
+    },
+    {
+      "key": "NON_COMPETITIVE_FEES",
+      "label": "不可竞争费",
+      "kind": "EXOGENOUS_CONSTANT",
+      "enters_objective": false,
+      "formula": "安全文明施工费 / 规费等，投标期为招标文件给定固定值",
+      "source_of_truth": "config/project_classification_table.json → external_constants",
+      "note": "不随报价变化，故不进 X_opt、不进目标函数。注意这是**投标期**口径；结算期按基数计取是另一回事（D2 裁定）。",
+      "is_objective": false
+    }
+  ],
+  "identities": [
+    {
+      "id": "B1",
+      "expression": "P_TOTAL = P_PRETAX + TAX",
+      "mirrors": "total_price.Partition.total",
+      "note": "与 T00-06B ② 同源同值。甲供材料费不在本式内（它只减计税基数）。"
+    },
+    {
+      "id": "B2",
+      "expression": "P_PRETAX = P_COMPETITIVE + P_FIXED_PRETAX",
+      "mirrors": "total_price.Partition.pre_tax",
+      "note": "划分律：每一元属于且仅属于一个桶（T00-06B ②，判据 TP-03）。"
+    },
+    {
+      "id": "B3",
+      "expression": "Z_OBJECTIVE = R_SETTLEMENT − C_SETTLEMENT",
+      "mirrors": "objective.level",
+      "note": "目标函数的定义式。它不含 TAX / NON_COMPETITIVE_FEES / P_FIXED_PRETAX 任一项——这不是疏忽，是常数项不影响最优解；差额在 reported_vs_objective 中显式列出。"
+    }
+  ],
+  "reported_vs_objective": {
+    "objective": "Z_OBJECTIVE",
+    "reported": "Z_REPORTED",
+    "difference_terms": [
+      "TAX",
+      "NON_COMPETITIVE_FEES"
+    ],
+    "bridge_expression": "Z_REPORTED ≈ Z_OBJECTIVE + (P_COMPETITIVE − R_SETTLEMENT 的可竞争部分) − FIXED_PRETAX 中不构成成本的部分 − TAX − NON_COMPETITIVE_FEES",
+    "why_not_identical": "报告口径从**总价**出发扣成本与税费；目标口径只看**可竞争部分**的收入减成本。二者的差来自固定部分与税费——这两块在目标函数里是常数（不影响最优分配），在报告里是真金白银。",
+    "failure_mode_prevented": "「为了优化，把不含税利润报成含税利润」——即用 Z_OBJECTIVE 冒充 Z_REPORTED。判据 PB-03 要求两个口径在真实样本上同时可复算，且差额构成逐项出现。"
+  },
+  "single_item_loss_policy": {
+    "declared": "TOTAL_PROFIT_ONLY",
+    "statement": "目标只约束**总利润**，不禁止单项亏损。清单本身有亏有赚，求解器可以在 C4 地板与 C2 上界之间自由分配，只要总利润最大。",
+    "basis": "用户裁定（2026-09-16）：「考虑整体利润，本来单项清单就是有亏有赚的」。落地见 ADR-0009：C4 地板被招标上界钳制（floor_i := min(floor_i, cap_i)），亏损项由 C6 总量约束兜底，而不是逐项禁止。",
+    "consequence": "禁止把「逐项均不亏损」当作求解目标或后置过滤——那会把最优解切掉，且与用户裁定冲突。"
+  },
+  "consumers": [
+    "WP4 求解层目标函数（T04-01 / T04-02A）",
+    "T05-02 三指标价值评估",
+    "T06-03 决策支持结论页（报告口径）",
+    "T06-02 风险体检单",
+    "Phase 3 独立复核逐项对账"
+  ],
+  "open_items": [
+    "R_i 的最终形式取决于 T03-01 结算规则引擎与计价规则卡 P1 三分支；本表只固定「用 q^1 算收入、用 q^1 算成本、税前口径」三条，不重复定义分支规则。",
+    "报告口径利润是否再扣企业层面分摊（cost_basis_spec.allocated_overhead）由 T06-03 决定——本表只要求差额项显式列出，不预设结论。"
+  ],
+  "frozen_at": "2026-09-17T01:42:42.151572+00:00",
+  "frozen_by": "agent(代操作：用户 2026-09-17 授权「你自己推进」)",
+  "frozen_note": "本表内容全部由既有裁定与规范推导（p/c 不含税、总价划分律、ADR-0009 单项亏损），**Agent 未新增任何业务声明**；此处记录的是机制冻结的执行人，不是声明人。"
+}

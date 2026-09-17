@@ -113,17 +113,29 @@ def collect_git() -> dict:
 
 
 def check_evidence(task: dict, registry: dict, root: Path) -> tuple[bool | None, str]:
-    """核对任务的代码证据。返回 (是否成立, 说明)；无 evidence 声明返回 (None, "")。"""
+    """核对任务的代码证据。返回 (是否成立, 说明)；无 evidence 声明返回 (None, "")。
+
+    2026-09-17 修正两处缺口（原实现会让**真实成立的证据被判不成立**，
+    从而逼着人往任务板里填假证据）：
+
+    * ``kind="artifact"`` 原先**只查 gate_0a**。任一以 Gate 0b 受控制品为
+      唯一证据的任务（如 T00-12 的 profit_bridge_spec）永远判不成立。
+      现按 gate_0a ∪ gate_0b 取并集。
+    * 新增 ``kind="adr"``：决策记录的路径是 ``docs/adr/<file>``，原实现
+      只能写 module/file 的仓库相对路径，语义上分不清「代码」与「决策」。
+    """
     ev = task.get("evidence") or []
     if not ev:
         return None, ""
+
+    records = [r for gate in ("gate_0a", "gate_0b") for r in parse_records(registry, gate)]
 
     details: list[str] = []
     ok = True
     for e in ev:
         kind = e.get("kind")
         if kind == "artifact":
-            rec = next((r for r in parse_records(registry, "gate_0a") if r.key == e.get("key")), None)
+            rec = next((r for r in records if r.key == e.get("key")), None)
             if rec is None:
                 ok = False
                 details.append(f"{e.get('key')} 未在注册表声明")
@@ -150,6 +162,13 @@ def check_evidence(task: dict, registry: dict, root: Path) -> tuple[bool | None,
             else:
                 ok = False
                 details.append(f"{e.get('path')} 缺失")
+        elif kind == "adr":
+            p = root / "docs" / "adr" / str(e.get("path", ""))
+            if p.exists():
+                details.append(f"ADR {e.get('path')} 存在")
+            else:
+                ok = False
+                details.append(f"ADR {e.get('path')} 缺失")
         else:
             ok = False
             details.append(f"未知证据类型 {kind!r}")

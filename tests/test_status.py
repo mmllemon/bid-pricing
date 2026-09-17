@@ -109,6 +109,32 @@ class EvidenceCheckTest(unittest.TestCase):
         self.assertIsNone(ok)
         self.assertEqual(detail, "")
 
+    def test_gate_0b_artifact_satisfies(self):
+        """Gate 0b 受控制品做证据必须成立——原实现只查 gate_0a，永远判不过。"""
+        registry = {"gate_0b": {"bridge": {
+            "kind": "versioned", "artifact_path": "x.json",
+            "version": "sha256:abc", "hash": "sha256:abc",
+            "frozen_at": "2026-01-01T00:00:00+00:00",
+        }}}
+        ok, detail = check_evidence(
+            {"evidence": [{"kind": "artifact", "key": "bridge"}]}, registry, repo_root()
+        )
+        self.assertTrue(ok, detail)
+        self.assertIn("已冻结", detail)
+
+    def test_adr_evidence(self):
+        ok, _ = check_evidence(
+            {"evidence": [{"kind": "adr", "path": "ADR-0014-total-price-is-a-partition.md"}]},
+            {"gate_0a": {}}, repo_root(),
+        )
+        self.assertTrue(ok)
+        missing, detail = check_evidence(
+            {"evidence": [{"kind": "adr", "path": "ADR-9999-nope.md"}]},
+            {"gate_0a": {}}, repo_root(),
+        )
+        self.assertFalse(missing)
+        self.assertIn("缺失", detail)
+
     def test_unknown_kind_fails_loudly(self):
         """未知证据类型必须判不成立——不能默默当作"无法判定"而放行。"""
         ok, detail = check_evidence(

@@ -57,7 +57,16 @@ from .selection_options import (
 from .status import collect as collect_status
 from .status import render as render_status
 from .status import write_state
+from .validation.profit_bridge import check_profit_bridge
 from .states import Status, aggregate
+from .total_price import (
+    check_partition,
+    check_tax_base_document,
+    check_tax_response,
+    load_fixture,
+    partition_from_fixture,
+    tax_basis_text_from_fixture,
+)
 
 _STATUS_MARK = {"PASS": "PASS", "WARN": "WARN", "FAIL": "FAIL", "BLOCKED": "BLOCKED"}
 
@@ -553,6 +562,140 @@ def cmd_identity_check(args) -> int:
 # --------------------------------------------------------------------- main
 
 
+def cmd_total_price_check(args) -> int:
+    """T00-06B 总价分解核验 —— 划分是否闭合、联动函数是否往返一致。
+
+    与 ``identity-check`` 的关系：``identity-check`` 判「总价恒等式闭不闭合」，
+    本命令在它之上判**总价怎么被划分成可竞争/固定/税金三块**，以及 C1 约束
+    右端 ``P_competitive`` 的取值。二者共用同一套舍入与容差口径。
+    """
+    fx = load_fixture(args.fixture)
+    side = args.side
+    part = partition_from_fixture(fx, side)
+    items = check_partition(part, part.declared_total)
+    items += check_tax_response(part)
+    items.append(check_tax_base_document(tax_basis_text_from_fixture(fx, side)))
+
+    if args.json:
+        print(json.dumps(
+            {"partition": part.to_dict(),
+             "checks": [i.to_dict() for i in items]},
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return 0
+
+    d = part.to_dict()
+    print("=" * 78)
+    print(f"总价分解核验（T00-06B）｜ {fx['fixture_id']} ｜ 口径："
+          f"{'投标报价' if side == 'bid' else '招标限价'}")
+    print("=" * 78)
+    print(f"  {'可竞争 COMPETITIVE':<22} {d['competitive']:>18,.2f}")
+    print(f"  {'固定 FIXED_PRETAX':<22} {d['fixed_pretax']:>18,.2f}")
+    print(f"  {'税金 TAX':<22} {d['tax']:>18,.2f}")
+    print(f"  {'-' * 42}")
+    print(f"  {'总价':<22} {d['total']:>18,.2f}")
+    print(f"  其中：暂列金额（披露）      {d['provisional_disclosed']:>18,.2f}"
+          "   ← 已是父项内部的一笔，不另计")
+    print(f"  计税基数 = 税前合计 − 甲供材  {d['tax_base']:>17,.2f}")
+    print()
+    for i in items:
+        tag = {Status.PASS: "  PASS", Status.WARN: "  WARN",
+               Status.FAIL: "  FAIL", Status.BLOCKED: "BLOCKED"}[i.status]
+        print(f"[{tag}] {i.item}")
+        print(f"           {i.reason}")
+    print()
+    bad = [i for i in items if i.status in (Status.FAIL, Status.BLOCKED)]
+    print("结论：划分闭合、联动往返一致。" if not bad
+          else f"结论：{len(bad)} 条判据不通过——先查分项是否有重复计或漏计。")
+    return 0 if not bad else 1
+
+
+def cmd_profit_check(args) -> int:
+    """T00-12 利润口径桥接表核验 —— 目标口径、同源同值、亏损政策。
+
+    与 ``total-price-check`` 的分工：后者判「总价怎么分」，本命令判
+    「分完之后算的是哪个口径的利润」。两者共用同一份真实样本划分。
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    part = None
+    if args.with_fixture:
+        fx = load_fixture(args.fixture)
+        part = partition_from_fixture(fx, args.side)
+
+    if args.freeze and not args.actor:
+        print("■ 拒绝冻结：必须用 --actor 如实标明执行人（业务声明=user，"
+              "代操作=agent(...)）。不写等于把责任归属留空")
+        return 1
+    if args.freeze:
+        spec_path = config_dir() / "profit_bridge_spec.json"
+        if not spec_path.exists():
+            print(f"■ 桥接表缺失：{spec_path}")
+            return 1
+        probe = check_profit_bridge(config_dir(), partition=part)
+        if probe.blocking:
+            print("■ 拒绝冻结：尚有阻断项 " +
+                  "、".join(r.rule_id for r in probe.blocking) +
+                  "——带病冻结等于把未定态伪装成已定态")
+            return 1
+        spec_doc = json.loads(spec_path.read_text(encoding="utf-8"))
+        spec_doc["frozen_at"] = _dt.now(_tz.utc).isoformat()
+        spec_doc["frozen_by"] = args.actor
+        spec_path.write_text(
+            json.dumps(spec_doc, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8")
+        print(f" ✓ 已冻结：frozen_at = {spec_doc['frozen_at']}"
+              "（注意：制品内容已变，须重新 freeze --all 更新登记表 hash）")
+
+    rep = check_profit_bridge(config_dir(), partition=part)
+    spec = _read_config("profit_bridge_spec.json") or {}
+
+    if args.json:
+        print(json.dumps(
+            {"objective": spec.get("objective"),
+             "levels": spec.get("levels"),
+             "checks": rep.to_dict()},
+            ensure_ascii=False, indent=2, default=str,
+        ))
+        return 0 if not rep.blocking else 1
+
+    print("=" * 78)
+    print("利润口径桥接表核验（T00-12）")
+    print("=" * 78)
+    print(f"  {'层级':<22} {'kind':<26} {'进目标':<6}")
+    print(f"  {'-' * 60}")
+    for lv in spec.get("levels") or []:
+        mark = "← 是" if lv.get("enters_objective") else ""
+        print(f"  {lv['key']:<22} {lv['kind']:<26} {mark}")
+    obj = spec.get("objective") or {}
+    print(f"\n  目标口径：{obj.get('level')}（{obj.get('sense')}，"
+          f"{spec.get('tax_caliber_of_objective')}）")
+    loss = (spec.get("single_item_loss_policy") or {}).get("declared")
+    print(f"  单项亏损：{loss}")
+    print()
+    for r in rep.results:
+        tag = {"PASS": "  PASS", "WARN": "  WARN", "FAIL": "  FAIL",
+               "BLOCKED": "BLOCKED", "INFO": "  ℹINFO", "SKIP": "   SKIP",
+               }.get(r.status, r.status)
+        print(f"[{tag}] {r.rule_id}")
+        print(f"           {r.detail}")
+    print()
+    print("结论：目标口径明确、与总价分解同源同值。" if not rep.blocking
+          else f"结论：{len(rep.blocking)} 条判据阻断——目标函数口径未定，"
+               "WP4 不得开工。")
+    return 0 if not rep.blocking else 1
+
+
+def _read_config(fname: str) -> dict | None:
+    p = config_dir() / fname
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bidpricing",
@@ -651,6 +794,43 @@ def build_parser() -> argparse.ArgumentParser:
                       help="核验哪一侧：bid=投标报价（默认，数据完整）/ cap=招标限价")
     p_id.add_argument("--json", action="store_true", help="输出 JSON")
     p_id.set_defaults(func=cmd_identity_check)
+
+    # ------------------------------------------------------ total-price-check
+    p_tp = sub.add_parser(
+        "total-price-check",
+        help="T00-06B 总价分解核验（划分闭合 + P_competitive 联动往返）",
+    )
+    p_tp.add_argument(
+        "--fixture",
+        default=str(repo_root() / "tests" / "data" / "xiyong_l_district" / "pair.json"),
+        help="限价/报价配对样本 JSON 路径",
+    )
+    p_tp.add_argument("--side", default="bid", choices=("bid", "cap"),
+                      help="报价侧(bid) 或限价侧(cap)")
+    p_tp.add_argument("--json", action="store_true", help="输出 JSON")
+    p_tp.set_defaults(func=cmd_total_price_check)
+
+    # ------------------------------------------------------ profit-check
+    p_pb = sub.add_parser(
+        "profit-check",
+        help="T00-12 利润口径桥接表核验（目标口径 / 同源同值 / 亏损政策）",
+    )
+    p_pb.add_argument(
+        "--fixture",
+        default=str(repo_root() / "tests" / "data" / "xiyong_l_district" / "pair.json"),
+        help="用于 PB-03 数值对账的配对样本",
+    )
+    p_pb.add_argument("--side", default="bid", choices=("bid", "cap"))
+    p_pb.add_argument("--no-fixture", dest="with_fixture", action="store_false",
+                      default=True, help="跳过 PB-03 数值对账")
+    p_pb.add_argument("--json", action="store_true")
+    p_pb.add_argument("--freeze", action="store_true",
+                      help="写入 frozen_at（须先解除全部阻断项）")
+    p_pb.add_argument("--actor", default=None,
+                      help="冻结执行人标识，**必填且如实填写**："
+                           "业务声明须为 user（ADR-0007）；机制冻结若由 Agent "
+                           "代操作，须写明 agent(...)，不得冒充用户")
+    p_pb.set_defaults(func=cmd_profit_check)
 
     # ------------------------------------------------------ contract-check
     p_cc = sub.add_parser(

@@ -36,6 +36,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from .money import money, money_sum
 from .paths import config_dir
 from .states import CheckItem, Status
 
@@ -89,35 +90,35 @@ class TaxDecomposition:
 
     @property
     def vat(self) -> float:
-        return round(self.totals.taxable_base * self.vat_rate, 2)
+        return money(self.totals.taxable_base * self.vat_rate)
 
     @property
     def surtax(self) -> float:
-        return round(self.vat * self.surtax_rate, 2)
+        return money(self.vat * self.surtax_rate)
 
     @property
     def tax(self) -> float:
         """税金合计 = 增值税 + 附加税 + 环境保护税。"""
-        return round(self.vat + self.surtax + self.env_tax, 2)
+        return money(self.vat + self.surtax + self.env_tax)
 
     @property
     def total(self) -> float:
-        return round(self.totals.pre_tax + self.tax, 2)
+        return money(self.totals.pre_tax + self.tax)
 
     def to_dict(self) -> dict:
         return {
-            "分部分项工程费": round(self.totals.division, 2),
-            "措施项目费": round(self.totals.measures, 2),
-            "其他项目费": round(self.totals.other, 2),
-            "规费": round(self.totals.fees, 2),
-            "甲供材料费": round(self.totals.supplied_material, 2),
-            "税前合计": round(self.totals.pre_tax, 2),
-            "计税基数": round(self.totals.taxable_base, 2),
+            "分部分项工程费": money(self.totals.division),
+            "措施项目费": money(self.totals.measures),
+            "其他项目费": money(self.totals.other),
+            "规费": money(self.totals.fees),
+            "甲供材料费": money(self.totals.supplied_material),
+            "税前合计": money(self.totals.pre_tax),
+            "计税基数": money(self.totals.taxable_base),
             "增值税率": self.vat_rate,
             "增值税": self.vat,
             "附加税率": self.surtax_rate,
             "附加税": self.surtax,
-            "环境保护税": round(self.env_tax, 2),
+            "环境保护税": money(self.env_tax),
             "税金合计": self.tax,
             "总价": self.total,
         }
@@ -238,7 +239,7 @@ def check_component_sum(
     这是**输入保真性**判据：小计对不上通常意味着解析漏行、把分部标题行当明细，
     或把合计行重复计入——而不是业务问题。
     """
-    got = round(sum(parts.values()), 2)
+    got = money_sum(parts.values())
     tol = eps if eps is not None else eps_total(stated)
     d = round(got - stated, 4)
     return CheckItem(

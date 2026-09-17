@@ -1,0 +1,118 @@
+{
+  "spec_id": "q1_assumption_spec_v1",
+  "task": "T00-10A + T00-10B",
+  "title": "结算工程量 q1 假设声明书",
+  "role": "与 T00-11（c_i 假设声明书）同构，但**声明的核心不同**：c_i 是已发生事实，核心是「谁说的」（来源可信度）；q1 是未发生的预测——投标期结算量不可观测，核心是「不确定性怎么表达」（格式）。照搬 c_i 的来源词表会得到假答案：q1 的来源永远是「造价员估的」，真正影响 P* 可靠性的是它取点值还是区间。",
+  "frozen_at": null,
+  "frozen_at_note": "**冻结时点：Gate 0b 之前**。当前为 null = 尚未冻结。",
+  "field_binding_ref": "config/field_schema.json：q0 / q1_point / q1_lo / q1_hi（missing_policy 均为 BLOCK）",
+  "observability": {
+    "statement": "q1 在投标期**不可观测**（结算量于竣工后按实确定），故 q1 的一切取值都是假设而非数据。",
+    "consequence": "假设必须可证伪——点值假设必须附敏感性义务，否则 P* 的精度是虚假的（把预测算成确定值）。",
+    "analogy": "与 OI-06 同构：10.4.1.3 修正价投标期不可知，取名义值 + 敏感性扫描；q1 同理。"
+  },
+  "three_elements": {
+    "basis": {
+      "value": "COST_LISTING_QUANTITY",
+      "vocabulary": [
+        "Q0_NO_CHANGE",
+        "COST_LISTING_QUANTITY",
+        "REDRAWN_QUANTITY",
+        "HISTORICAL_RATIO",
+        "EXPERT_ESTIMATE"
+      ],
+      "vocabulary_definition": {
+        "Q0_NO_CHANGE": "q1 = q0，假设工程量无变化（最保守，等价于放弃工程量套利的建模）",
+        "COST_LISTING_QUANTITY": "以**成本清单工程量**作为结算量预判（投标人自行算量）",
+        "REDRAWN_QUANTITY": "按施工图重新算量（最重，须锁定图纸版本）",
+        "HISTORICAL_RATIO": "按类似项目结算系数 q1/q0 推算",
+        "EXPERT_ESTIMATE": "造价人员估计"
+      },
+      "required_when": {
+        "Q0_NO_CHANGE": [
+          "变更风险评估结论"
+        ],
+        "COST_LISTING_QUANTITY": [
+          "算量依据（图纸版本）",
+          "与 q0 差异归因"
+        ],
+        "REDRAWN_QUANTITY": [
+          "图纸版本号",
+          "算量范围说明"
+        ],
+        "HISTORICAL_RATIO": [
+          "样本量",
+          "项目相似度说明",
+          "系数区间"
+        ],
+        "EXPERT_ESTIMATE": [
+          "估计人/角色",
+          "估计依据"
+        ]
+      },
+      "cross_satisfied_by": {
+        "与 q0 差异归因": "QB-02",
+        "_rule": "该项已由 config/basis_declarations.json 的 default_attribution 声明（DRAWING_DIFF），由 QB-02 判据跨文件读取校验；判据非 PASS 时退回要求显式附证。"
+      },
+      "status": "RESOLVED",
+      "status_note": "**用户亲述落值（2026-09-16）**：原话「q1_point:=成本清单量」。",
+      "declared_evidence": {},
+      "declared_by": "user(亲述 2026-09-16)",
+      "declared_at": "2026-09-16T23:35:00+08:00"
+    },
+    "format": {
+      "value": "POINT",
+      "allowed": [
+        "POINT",
+        "INTERVAL",
+        "SCENARIO_SET"
+      ],
+      "field_binding": "POINT→q1_point；INTERVAL→q1_lo+q1_hi 必须成对存在；SCENARIO_SET→须登记场景数与权重来源",
+      "consistency_rule": "格式必须与字段字典一致——不得在 q1_point 单字段里塞区间文本（与 AS-03 同构）。",
+      "status": "RESOLVED_BY_FIELD_BINDING",
+      "status_note": "用户以「q1_point:=成本清单量」的表述选定了 q1_point 字段，POINT 是其必然结果——格式不是独立声明，而是字段选择的推论；由 QB-04 判据与字段字典互锁。"
+    },
+    "freeze_timing": {
+      "value": "BEFORE_GATE_0B",
+      "rule": "Gate 0b 之前冻结；冻结后改动 q1 取值必须留变更记录（谁、何时、为什么）。",
+      "status": "RESOLVED"
+    }
+  },
+  "sensitivity_requirement": {
+    "value": null,
+    "trigger": "format = POINT 时**强制**：点值 q1 会把 P* 算成确定值，掩盖工程量风险。",
+    "vocabulary": [
+      "RATIO_SCAN",
+      "SCENARIO_SWEEP",
+      "NOT_REQUIRED_JUSTIFIED"
+    ],
+    "vocabulary_definition": {
+      "RATIO_SCAN": "对 r = q1/q0 做区间扫描（如 ±5% / ±10%），输出 P* 对 r 的敏感性",
+      "SCENARIO_SWEEP": "对 q1 做离散场景集（乐观/基准/悲观）分别求解",
+      "NOT_REQUIRED_JUSTIFIED": "显式论证本项目无需敏感性分析（须写明理由，如 q1 已由合同锁定）"
+    },
+    "status": "UNDETERMINED",
+    "status_note": "**待用户裁定**：本项目 q1_point 取成本清单量，与限价清单量 q0 存在差异（真实样本 82 键中 6 项减量越界），r 的偏差会直接改变最优报价结构。选 RATIO_SCAN 还是 SCENARIO_SWEEP，取决于你希望模型输出曲线还是几个离散方案——**这是商务偏好，不是技术问题**，模型不得代为选择。"
+  },
+  "attribution_ref": {
+    "file": "config/basis_declarations.json",
+    "key": "default_attribution",
+    "current": "DRAWING_DIFF",
+    "note": "逐项覆盖路径保留：少数变更项由用户另行逐项声明（CHANGE_ORDER），不预先编造。"
+  },
+  "per_item_override": {
+    "mechanism": "逐项 basis / format 可覆盖全局声明（如个别项按变更签证单取量）。",
+    "policy": "逐项覆盖**只增不减**：未列出的项沿用全局声明；取值不在词表内 → BLOCKED。",
+    "current": "未设置——用户已声明「少数变更项我再单独说」，届时为那些项登记 CHANGE_ORDER 覆盖。"
+  },
+  "undetermined_consequence": {
+    "level": "BLOCKED",
+    "reason": "q1 与 P* 直接相乘进入目标函数（P* = Σ p_i · q1_i 类结构），取值依据未声明时，P* 的量纲与量级均无据——这与 c_i 不同：c_i 影响的是地板（约束），q1 影响的是目标函数本身。",
+    "not_silently_defaulted": "禁止按 Q0_NO_CHANGE 等任一取值静默补全（ADR-0004）。特别注意：Q0_NO_CHANGE 看似「最保守」，实为**放弃工程量套利的建模**，是实质性的商务选择，不得作为默认值。"
+  },
+  "cross_checks": [
+    "与 basis_declarations.json 一致：attribution 标签来源唯一（避免两处各说各话）",
+    "与字段字典一致：format 必须能落到 q1_point / q1_lo+q1_hi 之一",
+    "与 D 系列一致：q1 与 q0 同为工程量口径，单位须可比，否则 r = q1/q0 无意义"
+  ]
+}

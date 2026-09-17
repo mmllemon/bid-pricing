@@ -776,6 +776,19 @@ def build_parser() -> argparse.ArgumentParser:
                       help="冻结假设声明书（写 frozen_at；须先解除全部阻断项）")
     p_cc.set_defaults(func=cmd_cost_check)
 
+    # ---- T00-10A / T00-10B 结算工程量 q1 -------------------------------
+    p_qc = sub.add_parser(
+        "qty-check", help="T00-10A/10B 结算工程量 q1 假设声明书校验")
+    p_qc.add_argument("--declare-sensitivity", default=None,
+                      choices=["RATIO_SCAN", "SCENARIO_SWEEP",
+                               "NOT_REQUIRED_JUSTIFIED"],
+                      help="声明点值 q1 的敏感性义务并落值（需 --actor）")
+    p_qc.add_argument("--actor", default=None,
+                      help="声明人（与 --declare-sensitivity 同用）")
+    p_qc.add_argument("--freeze", action="store_true",
+                      help="冻结 q1 假设声明书（须先解除全部阻断项）")
+    p_qc.set_defaults(func=cmd_qty_check)
+
     return parser
 
 
@@ -1209,6 +1222,72 @@ def cmd_cost_check(args) -> int:
         print(" 阻断项（c_i 不得进入 C4/C6 约束直至解除）：" +
               "、".join(r.rule_id for r in rep.blocking))
     return 0 if rep.status == "PASS" else 1
+
+
+def cmd_qty_check(args) -> int:
+    """T00-10A / T00-10B：结算工程量 q1 假设声明书校验（可顺带落值敏感性义务）。"""
+    import json as _json
+    from datetime import datetime as _dt, timezone as _tz
+
+    from .validation.quantity_basis import check_quantity_basis
+
+    _NL = chr(10)
+    cdir = config_dir()
+    spec_path = cdir / "q1_assumption_spec.json"
+
+    if args.declare_sensitivity:
+        if not spec_path.exists():
+            print(f"■ q1 假设声明书缺失：{spec_path}")
+            return 1
+        spec = _json.loads(spec_path.read_text(encoding="utf-8"))
+        sens = spec.setdefault("sensitivity_requirement", {})
+        voc = sens.get("vocabulary") or []
+        if args.declare_sensitivity not in voc:
+            print(f"■ 敏感性义务 {args.declare_sensitivity!r} 不在词表 {voc} 内")
+            return 1
+        sens["value"] = args.declare_sensitivity
+        sens["status"] = "RESOLVED"
+        sens["declared_by"] = args.actor or "UNKNOWN"
+        sens["declared_at"] = _dt.now(_tz.utc).isoformat()
+        spec_path.write_text(
+            _json.dumps(spec, ensure_ascii=False, indent=2) + _NL, encoding="utf-8")
+        print(f" ✓ 已落值敏感性义务 = {args.declare_sensitivity}"
+              f"（声明人：{sens['declared_by']}）")
+
+    if args.freeze:
+        if not spec_path.exists():
+            print(f"■ q1 假设声明书缺失：{spec_path}")
+            return 1
+        probe = check_quantity_basis(cdir)
+        if probe.blocking:
+            print("■ 拒绝冻结：尚有阻断项 " +
+                  "、".join(r.rule_id for r in probe.blocking) +
+                  "——带病冻结等于把未定态伪装成已定态")
+            return 1
+        spec = _json.loads(spec_path.read_text(encoding="utf-8"))
+        spec["frozen_at"] = _dt.now(_tz.utc).isoformat()
+        spec_path.write_text(
+            _json.dumps(spec, ensure_ascii=False, indent=2) + _NL, encoding="utf-8")
+        print(f" ✓ 已冻结：frozen_at = {spec['frozen_at']}")
+
+    if spec_path.exists():
+        rep = check_quantity_basis(cdir)
+        for r in rep.results:
+            mark = {"PASS": "✓", "WARN": "⚠", "BLOCKED": "■",
+                    "FAIL": "■", "SKIP": "–"}[r.status]
+            print(f" {mark} [{r.status:>7}] {r.rule_id}  {r.detail}")
+            for e in r.evidence:
+                print(f"            · {e}")
+        s = rep.to_dict()["summary"]
+        print(f"\n 汇总：{rep.status}   （" +
+              " / ".join(f"{k} {v}" for k, v in sorted(s.items())) + "）")
+        if rep.status != "PASS":
+            print(" 阻断项（q1 不得进入目标函数直至解除）：" +
+                  "、".join(r.rule_id for r in rep.blocking))
+        return 0 if rep.status == "PASS" else 1
+
+    print(f"■ q1 假设声明书缺失：{spec_path}")
+    return 1
 
 
 def _pricing_card_branch_scan(card: dict, override: dict | None, path) -> int:

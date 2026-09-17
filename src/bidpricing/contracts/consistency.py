@@ -493,6 +493,50 @@ def _check_pricing_card_bindings(config_dir: Path, field_art: dict) -> list[Chec
     return out
 
 
+def _check_quantity_attribution_mirror(config_dir: Path) -> list[CheckItem]:
+    """q1 声明书（T00-10A）↔ 口径声明（D08）跨制品一致。
+
+    工程量差异归因 ``default_attribution`` 的事实源是 ``basis_declarations.json``，
+    q1 声明书只应**引用**它。若声明书另存一份副本，两处必然漂移——而漂移后
+    QB-02 判据读的是声明文件、阅读者看的是声明书，谁都不会发现矛盾。
+    """
+    out: list[CheckItem] = []
+
+    def _read(fname: str) -> dict | None:
+        p = Path(config_dir) / fname
+        if not p.exists():
+            return None
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+
+    qty = _read("q1_assumption_spec.json")
+    if qty is None:
+        out.append(_bad("q1_assumption.attribution_mirror",
+                        "q1 假设声明书缺失/不可解析：T00-10A 未冻结"))
+        return out
+
+    ref = qty.get("attribution_ref") or {}
+    decl = _read("basis_declarations.json")
+    if decl is None:
+        out.append(_bad("q1_assumption.attribution_mirror",
+                        "口径声明缺失（basis_declarations.json）——归因无从校验"))
+        return out
+
+    actual = decl.get("default_attribution")
+    expected = ref.get("current")
+    item = "q1_assumption.attribution_mirror"
+    if expected != actual:
+        out.append(_bad(
+            item,
+            "q1 声明书记录的归因与口径声明现值不一致——声明书应引用而非另存副本",
+            actual=actual, expected=expected))
+    else:
+        out.append(_ok(item, f"归因引用一致（{actual}），未另存副本"))
+    return out
+
+
 def check_contract_consistency(config_dir: Path) -> list[CheckItem]:
     """执行全部跨制品一致性判据。返回判据列表（不抛异常，供闸门聚合）。"""
     try:
@@ -510,4 +554,5 @@ def check_contract_consistency(config_dir: Path) -> list[CheckItem]:
     out += _check_code_alias_mirror(loaded["input_protocol_schema"])
     out += _check_pricing_card_selection(config_dir)
     out += _check_pricing_card_bindings(config_dir, loaded["field_schema"])
+    out += _check_quantity_attribution_mirror(config_dir)
     return out

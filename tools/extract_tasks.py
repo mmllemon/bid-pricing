@@ -49,13 +49,43 @@ TASK_ROW = re.compile(r"^\|\s*\*{0,2}(T\d{2}-\d{2}[A-Z]?)\*{0,2}\s*\|")
 #: 未列出的任务一律 status = "not_started"，需人工推进后再补证据。
 EVIDENCE: dict[str, list[dict]] = {
     "T00-02": [{"kind": "artifact", "key": "field_schema_version"}],
-    "T00-03": [{"kind": "artifact", "key": "constraint_schema_version"}],
-    "T00-04": [{"kind": "artifact", "key": "precision_profile_version"}],
+    # 以下 T00-01/03/04/06/06B/12 六条系 2026-09-17 非破坏性回灌：
+    # 方向是「tasks.json 的富 evidence → 字典」（存盘值更全、曾发现字典
+    # 把 T00-06B 写成 identity.py 的错误路径），而非反向重写存盘值。
+    "T00-01": [
+        {"kind": "artifact", "key": "contract_ruleset_version"},
+        {"kind": "module", "path": "src/bidpricing/contracts/pricing_card.py"},
+        {"kind": "adr", "path": "ADR-0017-contract-review-must-be-attributed.md"},
+    ],
+    "T00-03": [
+        {"kind": "artifact", "key": "constraint_schema_version"},
+        {"kind": "file", "path": "config/constraint_schema.json"},
+    ],
+    "T00-04": [
+        {"kind": "artifact", "key": "precision_profile_version"},
+        {"kind": "file", "path": "config/precision_profile.json"},
+        {"kind": "adr", "path": "ADR-0020-strict-equality-mode-a.md"},
+    ],
     "T00-05": [{"kind": "artifact", "key": "architecture_decision_version"}],
-    "T00-06": [{"kind": "artifact", "key": "competitiveness_classification"}],
+    "T00-06": [
+        {"kind": "artifact", "key": "competitiveness_classification"},
+        {"kind": "artifact", "key": "project_classification_table"},
+        {"kind": "file", "path": "config/competitiveness_classification.json"},
+        {"kind": "file", "path": "config/project_classification_table.json"},
+    ],
     "T00-07": [{"kind": "artifact", "key": "rule_set_selector_spec"}],
     "T00-08": [{"kind": "module", "path": "src/bidpricing/contracts/selector.py"}],
-    "T00-06B": [{"kind": "module", "path": "src/bidpricing/identity.py"}],
+    "T00-06B": [
+        {"kind": "module", "path": "src/bidpricing/total_price.py"},
+        {"kind": "module", "path": "src/bidpricing/money.py"},
+        {"kind": "adr", "path": "ADR-0014-total-price-is-a-partition.md"},
+    ],
+    "T00-12": [
+        {"kind": "artifact", "key": "profit_bridge_spec"},
+        {"kind": "module", "path": "src/bidpricing/validation/profit_bridge.py"},
+        {"kind": "module", "path": "src/bidpricing/total_price.py"},
+        {"kind": "adr", "path": "ADR-0015-objective-must-be-named.md"},
+    ],
     "T01-00A": [{"kind": "artifact", "key": "input_protocol_schema"}],
     "T01-02C": [{"kind": "file", "path": "tests/data/xiyong_l_district/pair.json"}],
     # T04-00：证据的**唯一来源**是本字典（脚本派生），tasks.json 里的是派生物。
@@ -220,6 +250,11 @@ def build(plan_path: Path, prev: dict) -> dict:
             # 人工字段一律保留脚本不覆盖；结构字段以上文提取结果为准
             t["status"] = old.get("status", "not_started")
             t["note"] = old.get("note", "")
+            # 人字段（status_note/updated_at）：不在本脚本 schema 内，
+            # 但**重跑不得静默删除**——存在即原样保留（2026-09-17 修复）。
+            for _human in ("status_note", "updated_at"):
+                if _human in old:
+                    t[_human] = old[_human]
         else:
             seed = SEED_STATUS.get(t["id"], {})
             t["status"] = seed.get("status", "not_started")
@@ -258,12 +293,16 @@ def main() -> int:
     data = build(args.plan, prev)
 
     if args.check:
+        # 排除元组 = 全部「人维护字段」：status/note（schema 内）+
+        # status_note/updated_at（人字段，build() 已改为存在即保留）。
+        # 结构漂移只应反映结构字段，不得被人字段触发。
+        HUMAN_FIELDS = ("status", "note", "status_note", "updated_at")
         old_struct = [
-            {k: v for k, v in t.items() if k not in ("status", "note")}
+            {k: v for k, v in t.items() if k not in HUMAN_FIELDS}
             for t in prev.get("tasks", [])
         ]
         new_struct = [
-            {k: v for k, v in t.items() if k not in ("status", "note")}
+            {k: v for k, v in t.items() if k not in HUMAN_FIELDS}
             for t in data["tasks"]
         ]
         if old_struct != new_struct:

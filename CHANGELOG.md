@@ -10,6 +10,19 @@
 
 ## [未发布]
 
+### extract_tasks --check 长期红修复（非破坏性，9 项漂移清零）
+
+**修正**
+- ★ **A 类（evidence 回灌）**：方向是「tasks.json 的富 evidence → 脚本 `EVIDENCE`
+  字典」（存盘值更全），不是反向重写。修正了字典把 T00-06B 写成 `identity.py`
+  的错误路径（实为 `total_price.py`+`money.py`），并补齐 T00-01/03/04/06/12 的
+  缺失条目（T00-06 补 `project_classification_table` 两项）。
+- ★ **B 类（人字段）**：`status_note`/`updated_at` 不在脚本 schema 内，原
+  `build()` 不保留 ⇒ 重跑**静默删除**，且不在 `--check` 排除元组 ⇒ 一存在即恒判
+  漂移。修复：`build()` 存在即原样保留（dry-run 验证零丢失）+ `--check` 排除
+  元组扩为四个维护字段。
+- `extract_tasks --check` 首次转绿（68 项一致）；全量 838 测试不受影响。
+
 ### T04-01 完成：Phase 1 解析解（排序+二分+贪心定容，ADR-0026）
 
 **新增**

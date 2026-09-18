@@ -169,6 +169,14 @@ EVIDENCE: dict[str, list[dict]] = {
         {"kind": "module", "path": "tests/test_diagnose.py"},
         {"kind": "adr", "path": "ADR-0032-oracle-wiring.md"},
     ],
+    "T03-01": [
+        {"kind": "file", "path": "config/settlement_rule_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/settlement.py"},
+        {"kind": "module", "path": "tests/test_settlement.py"},
+        {"kind": "module", "path": "src/bidpricing/contracts/rule_sets/base.py"},
+        {"kind": "module", "path": "src/bidpricing/contracts/pricing_card.py"},
+        {"kind": "adr", "path": "ADR-0033-settlement-rule-engine.md"},
+    ],
 }
 
 #: 初次提取时的状态种子。仅当 JSON 中不存在该任务时才写入；

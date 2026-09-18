@@ -10,6 +10,14 @@
 
 ## [未发布]
 
+### T03-01 完成：结算规则引擎（ADR-0033）
+
+- `src/bidpricing/settlement.py`：`SettlementRule.evaluate(Q0, Q1, P0, ContractContext)` → `settlement_amount / effective_price / rule_id / rule_branch`；`rule_set_id` 严格分发（未注册 ⇒ BLOCKED 且不回填）；`p1_source` 随版本分发（2013=REDETERMINE / 2024=ADJUST_ON_CONTRACT_PRICE）；SR-01..SR-09 判据（含三类坏引擎否定用例）。
+- **分层互锁修正**：规则卡互锁只约束 Standard 层（声明值 = 实现常量），合同/招标/地方层覆盖标准阈值**允许偏离并留痕**——旧实现会把「合同约定按 10% 调价」判违规。
+- `RuleSet.classify_branch / settlement_amount / effective_revenue_multiple` 增加阈值可注入参数（默认取规范常量，既有调用零行为变更）。
+- `config/settlement_rule_spec.json`：注册表 + 固定探针网格 + 具名容差（eps_ratio 与 eps_total 分列，DV-02）。
+- CLI `settlement-check`（含 `--judge`）；测试 +37，全量 1046 → 1083 双环境绿。
+
 ### T04-02E 完成：不可行诊断的预言机接线（ADR-0032）
 
 - `solver/diagnose.py` 新增 `milp_oracle`（build_formulation→compile_model→solve_compiled 归一映射：INFEASIBLE⇒INFEASIBLE、OPTIMAL/FEASIBLE⇒FEASIBLE、其余含 UNAVAILABLE/UNSUPPORTED⇒UNKNOWN——没跑成 ≠ 不可行）与 `chained_oracle`（首个非 UNKNOWN 胜出，整链 UNKNOWN⇒UNKNOWN）；backend 注入点透传（BB-06 同源）。

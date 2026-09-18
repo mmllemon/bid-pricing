@@ -46,6 +46,13 @@ class RuleSet(ABC):
     legal_basis: str = ""
     #: 该规则集的 ``adjustment_scope`` 是否在规范层面存在歧义
     scope_ambiguous: bool = False
+    #: P1 的**生成方式**（T03-01 登记，随 ``rule_set_id`` 分发）：
+    #: ``ADJUST_ON_CONTRACT_PRICE`` = 在合同单价 P0 上按系数调整（2024 §8.9.2）；
+    #: ``REDETERMINE`` = 重新确定综合单价、与 P0 脱钩（2013 §9.6.2）。
+    #: 两版生成方式不同 → **不得混用**（规则卡 p1_clarifications P1-A）。
+    #: 本字段是「实现侧声明」，制品 ``config/settlement_rule_spec.json`` 的
+    #: ``rule_set_registry`` 是「登记侧声明」，两处必须一致——由 SR-04 跨来源核对。
+    p1_source: str = ""
     #: 该规则集下 ``adjustment_scope`` 的**合法取值集合**。
     #: 长度为 1 表示规范已明文确定（非可选项）；长度 > 1 表示属项目级选择项。
     #: 取值集合由 :mod:`bidpricing.selection_options` 统一登记，此处仅作实现侧声明，
@@ -55,16 +62,26 @@ class RuleSet(ABC):
     # ------------------------------------------------------------------ 分档
 
     @staticmethod
-    def classify_branch(r: float) -> str:
+    def classify_branch(
+        r: float,
+        *,
+        decrease_threshold: float | None = None,
+        increase_threshold: float | None = None,
+    ) -> str:
         """工程量比值分档。
 
         边界归属遵循路线 §5.2 **J2**：
         ``Q1 = 0.85·Q0`` 判为「不触发减量调价」、``Q1 = 1.15·Q0`` 判为「不触发增量调价」，
         即触发条件为**严格不等式**。
+
+        阈值可注入（T03-01）：合同层覆盖标准阈值时，判定必须用**解析后**的阈值，
+        否则覆盖只记参数、判定仍走常量（SR-05 的失败模式）。``None`` ⇒ 用规范常量。
         """
-        if r < DECREASE_THRESHOLD:
+        lo = DECREASE_THRESHOLD if decrease_threshold is None else decrease_threshold
+        hi = INCREASE_THRESHOLD if increase_threshold is None else increase_threshold
+        if r < lo:
             return BRANCH_DECREASE
-        if r > INCREASE_THRESHOLD:
+        if r > hi:
             return BRANCH_INCREASE
         return BRANCH_IN_RANGE
 
@@ -79,8 +96,15 @@ class RuleSet(ABC):
         rho_plus: float = 0.0,
         rho_minus: float = 0.0,
         scope: str | None = None,
+        *,
+        decrease_threshold: float | None = None,
+        increase_threshold: float | None = None,
     ) -> float:
-        """某清单项的结算金额（未含税）。"""
+        """某清单项的结算金额（未含税）。
+
+        ``decrease_threshold`` / ``increase_threshold`` 为 ``None`` 时取规范常量；
+        合同层覆盖阈值时由调用方（结算引擎）注入。
+        """
 
     @abstractmethod
     def effective_revenue_multiple(
@@ -91,6 +115,9 @@ class RuleSet(ABC):
         rho_plus: float = 0.0,
         rho_minus: float = 0.0,
         scope: str | None = None,
+        *,
+        decrease_threshold: float | None = None,
+        increase_threshold: float | None = None,
     ) -> float:
         """``r_eff`` —— 以 ``q0·p0`` 归一的结算收入倍数。"""
 

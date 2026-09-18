@@ -33,6 +33,8 @@ class GB50500_2013_RuleSet(RuleSet):
         "（住建部公告第 1567 号）。**自 2025-09-01 起废止**"
         "（住建部公告 2024 年第 212 号），仅适用于过渡项目或合同另有约定者"
     )
+    #: 2013 版 §9.6.2 明文「重新确定综合单价」→ P1 与 P0 脱钩
+    p1_source = "REDETERMINE"
     #: 2013 版 §9.6.2 已明确规定分段累加，不存在作用域歧义
     scope_ambiguous = False
     #: 该规则集下 adjustment_scope **只有一种合法取值** → 非选择项（规范明文确定）
@@ -46,10 +48,18 @@ class GB50500_2013_RuleSet(RuleSet):
         rho_plus: float = 0.0,
         rho_minus: float = 0.0,
         scope: str | None = None,
+        *,
+        decrease_threshold: float | None = None,
+        increase_threshold: float | None = None,
     ) -> float:
         if q0 <= 0:
             raise ValueError("q0 必须大于 0（0 工程量项应在数据层按 MISSING_POLICY 处理）")
-        branch = self.classify_branch(q1 / q0)
+        hi = INCREASE_THRESHOLD if increase_threshold is None else increase_threshold
+        branch = self.classify_branch(
+            q1 / q0,
+            decrease_threshold=decrease_threshold,
+            increase_threshold=increase_threshold,
+        )
 
         if branch == BRANCH_DECREASE:
             # §9.6.2 后半句：工程量减少 15% 以上，减少后剩余部分单价调高
@@ -57,8 +67,8 @@ class GB50500_2013_RuleSet(RuleSet):
 
         if branch == BRANCH_INCREASE:
             # §9.6.2 前半句：工程量增加 15% 以上，"其增加部分"单价调低 —— 分段累加
-            contract_part = INCREASE_THRESHOLD * q0 * p0
-            excess_part = (q1 - INCREASE_THRESHOLD * q0) * p0 * (1.0 - rho_plus)
+            contract_part = hi * q0 * p0
+            excess_part = (q1 - hi * q0) * p0 * (1.0 - rho_plus)
             return contract_part + excess_part
 
         return q1 * p0
@@ -71,7 +81,12 @@ class GB50500_2013_RuleSet(RuleSet):
         rho_plus: float = 0.0,
         rho_minus: float = 0.0,
         scope: str | None = None,
+        *,
+        decrease_threshold: float | None = None,
+        increase_threshold: float | None = None,
     ) -> float:
         return self.settlement_amount(
-            q0, q1, p0, rho_plus=rho_plus, rho_minus=rho_minus, scope=scope
+            q0, q1, p0, rho_plus=rho_plus, rho_minus=rho_minus, scope=scope,
+            decrease_threshold=decrease_threshold,
+            increase_threshold=increase_threshold,
         ) / (q0 * p0)

@@ -54,6 +54,8 @@ class GBT50500_2024_RuleSet(RuleSet):
         "§8.2.1、§8.9.1~8.9.3、§10.2"
         "（住建部公告 2024 年第 212 号，2024-11-26，自 2025-09-01 施行）"
     )
+    #: 2024 §8.9.2 明文「合理下调/上调**其合同单价**」→ 以 P0 为基数调整
+    p1_source = "ADJUST_ON_CONTRACT_PRICE"
     #: 规范未明说是否分段 —— 必须由 T00-01 冻结
     scope_ambiguous = True
     #: 该规则集下 adjustment_scope 属**项目级选择项**（两种解读均合法）
@@ -78,11 +80,19 @@ class GBT50500_2024_RuleSet(RuleSet):
         rho_plus: float = 0.0,
         rho_minus: float = 0.0,
         scope: str | None = None,
+        *,
+        decrease_threshold: float | None = None,
+        increase_threshold: float | None = None,
     ) -> float:
         if q0 <= 0:
             raise ValueError("q0 必须大于 0（0 工程量项应在数据层按 MISSING_POLICY 处理）")
         resolved = self._require_scope(scope)
-        branch = self.classify_branch(q1 / q0)
+        hi = INCREASE_THRESHOLD if increase_threshold is None else increase_threshold
+        branch = self.classify_branch(
+            q1 / q0,
+            decrease_threshold=decrease_threshold,
+            increase_threshold=increase_threshold,
+        )
 
         if branch == BRANCH_DECREASE:
             # §8.9：工程量减少后，剩余工程量单价调高。
@@ -94,8 +104,8 @@ class GBT50500_2024_RuleSet(RuleSet):
             if resolved == "FULL":
                 return q1 * adjusted_unit_price
             # SEGMENT：仅超出部分按调整后单价
-            contract_part = INCREASE_THRESHOLD * q0 * p0
-            excess_part = (q1 - INCREASE_THRESHOLD * q0) * adjusted_unit_price
+            contract_part = hi * q0 * p0
+            excess_part = (q1 - hi * q0) * adjusted_unit_price
             return contract_part + excess_part
 
         return q1 * p0
@@ -108,12 +118,17 @@ class GBT50500_2024_RuleSet(RuleSet):
         rho_plus: float = 0.0,
         rho_minus: float = 0.0,
         scope: str | None = None,
+        *,
+        decrease_threshold: float | None = None,
+        increase_threshold: float | None = None,
     ) -> float:
         # 指纹自检使用 SEGMENT 之外的默认作用域会掩盖不连续性，
         # 故此处显式要求 scope；调用方（fingerprint）由子类覆写提供探针值。
         resolved = self._require_scope(scope)
         return self.settlement_amount(
-            q0, q1, p0, rho_plus=rho_plus, rho_minus=rho_minus, scope=resolved
+            q0, q1, p0, rho_plus=rho_plus, rho_minus=rho_minus, scope=resolved,
+            decrease_threshold=decrease_threshold,
+            increase_threshold=increase_threshold,
         ) / (q0 * p0)
 
     def fingerprint(

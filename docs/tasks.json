@@ -707,9 +707,36 @@
       ],
       "summary": "返回 `settlement_amount / effective_price / rule_id / rule_branch`；覆盖 $Q_1<0.85Q_0$ / 区间内 / $Q_1>1.15Q_0$ 三段且边界归属正确；规则阈值与 $P_1$ 来源按 `rule_set_id` 分发；支持合同规则覆盖标准阈值",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/settlement_rule_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/settlement.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_settlement.py"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/contracts/rule_sets/base.py"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/contracts/pricing_card.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0033-settlement-rule-engine.md"
+        }
+      ],
+      "status": "done",
+      "note": "",
+      "status_note": "SettlementRule.evaluate(Q0,Q1,P0,ContractContext) → settlement_amount/effective_price/rule_id/rule_branch；rule_set_id 严格分发（未注册⇒BLOCKED 不回填）；p1_source 三处一致（2013=REDETERMINE/2024=ADJUST_ON_CONTRACT_PRICE）；阈值可注入 + 合同层覆盖生效（互锁分层修正：Standard 层仍受常量约束，ADR-0033）；SR-01..09 判据含三类坏引擎否定用例。35 测试，全量 1046→1083 双环境绿。CLI settlement-check。遗留：selector._ruleset_for 的 else 兜底建议改严格查表。",
+      "updated_at": "2026-09-18T16:40:00+08:00"
     },
     {
       "id": "T03-02",

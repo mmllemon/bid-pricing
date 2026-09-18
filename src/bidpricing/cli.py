@@ -1047,6 +1047,34 @@ def build_parser() -> argparse.ArgumentParser:
     p_dg.add_argument("--json", action="store_true", help="输出 JSON")
     p_dg.set_defaults(func=cmd_diagnose)
 
+    # ---- T03-01 结算规则引擎 ----------------------------------------------
+    p_st = sub.add_parser(
+        "settlement-check",
+        help="T03-01 结算规则引擎：三段调价 / 边界归属 / 规则集分发 / 合同覆盖；"
+             "--judge 跑 SR-01..SR-09 判据套件")
+    p_st.add_argument("--rule-set", default="GB/T50500-2024",
+                      dest="rule_set",
+                      help="rule_set_id（未注册 ⇒ BLOCKED，不默认取任一侧）")
+    p_st.add_argument("--q0", type=float, default=None, help="招标清单工程量")
+    p_st.add_argument("--q1", type=float, default=None, help="结算预期工程量")
+    p_st.add_argument("--p0", type=float, default=None, help="中标综合单价")
+    p_st.add_argument("--scope", default=None,
+                      choices=("SEGMENT", "FULL"),
+                      help="adjustment_scope（2024 未冻结 ⇒ BLOCKED）")
+    p_st.add_argument("--override", action="append", default=None,
+                      metavar="KEY=VALUE",
+                      help="合同层覆盖（可重复）；未登记键 ⇒ BLOCKED")
+    p_st.add_argument("--override-layer", default="contract",
+                      dest="override_layer",
+                      help="覆盖来源层标签（contract/tender/regional；"
+                           "standard 标签下不得偏离实现常量）")
+    p_st.add_argument("--declared-by", default=None, dest="declared_by",
+                      help="依据出处（合同条款号等），留痕用")
+    p_st.add_argument("--judge", action="store_true",
+                      help="跑 SR-01..SR-09 判据套件（固定探针网格）")
+    p_st.add_argument("--json", action="store_true", help="输出 JSON")
+    p_st.set_defaults(func=cmd_settlement_check)
+
     # ---- T04-07：MILP 独立验收协议 --------------------------------
     p_ma = sub.add_parser(
         "milp-check",
@@ -1731,6 +1759,93 @@ def build_derived_for_cli(cfg, instance, resolved):
     from .solver.precheck import build_derived
 
     return build_derived(instance, resolved)
+
+
+def cmd_settlement_check(args) -> int:
+    """T03-01 结算规则引擎 —— 三段调价 / 边界归属 / 规则集分发 / 合同覆盖。
+
+    ``--judge`` 跑 SR-01..SR-09 判据套件（在制品固定的探针网格上）；
+    不带 ``--judge`` 则对给定 (Q0, Q1, P0, rule_set, overrides) 出一次结算结论。
+    """
+    from .settlement import (
+        ContractContext,
+        SettlementRule,
+        judge_settlement,
+        load_settlement_spec,
+    )
+
+    spec = load_settlement_spec(config_dir())
+    overrides: dict[str, Any] = {}
+    for item in getattr(args, "override", None) or ():
+        if "=" not in item:
+            print(f"■ --override 需形如 key=value，收到 {item!r}")
+            return 1
+        k, v = item.split("=", 1)
+        try:
+            overrides[k.strip()] = float(v)
+        except ValueError:
+            overrides[k.strip()] = v.strip()
+
+    rule_id = str(getattr(args, "rule_set", None) or "GB/T50500-2024")
+
+    if args.judge:
+        rep = judge_settlement(SettlementRule(spec=spec))
+        if args.json:
+            print(json.dumps({
+                "spec_id": spec.get("spec_id"),
+                "overall": rep.verdict(),
+                "overall_all": rep.verdict_all(),
+                "verdicts": [
+                    {"judge_id": v.judge_id, "status": v.status,
+                     "severity": v.severity, "detail": v.detail,
+                     "actual": v.actual, "limit": v.limit}
+                    for v in rep.verdicts
+                ],
+            }, ensure_ascii=False, indent=2))
+        else:
+            print("=== T03-01 结算规则引擎判据套件（固定探针网格）")
+            print(f"{'判据':<8}{'状态':<9}{'severity':<9}说明")
+            for v in rep.verdicts:
+                print(f"{v.judge_id:<8}{v.status:<9}{v.severity:<9}{v.detail[:70]}")
+            print(f"\n整体结论（P0）：{rep.verdict()}   含 P1：{rep.verdict_all()}")
+        return 0 if rep.verdict() == "PASS" else 1
+
+    q0 = float(getattr(args, "q0", None) or spec["probe_grid"]["q0"])
+    q1 = float(getattr(args, "q1", None)
+               or spec["probe_grid"]["q0"] * 1.3)
+    p0 = float(getattr(args, "p0", None) or spec["probe_grid"]["p0"])
+    ctx = ContractContext(
+        rule_set_id=rule_id,
+        overrides=overrides,
+        source_label=str(getattr(args, "override_layer", None) or "contract"),
+        adjustment_scope=getattr(args, "scope", None),
+        declared_by=getattr(args, "declared_by", None),
+    )
+    out = SettlementRule(spec=spec).evaluate(q0, q1, p0, ctx)
+
+    if args.json:
+        print(json.dumps(out.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(f"=== T03-01 结算规则引擎 · rule_set={rule_id}")
+        print(f"  入口：Q0={q0:,.4f}  Q1={q1:,.4f}  P0={p0:,.4f}"
+              f"  覆盖={overrides or '（无）'}  层={ctx.source_label}")
+        print(f"  结论：{out.status}"
+              + (f" ｜ 分支 {out.rule_branch}（r={out.r:.6f}）"
+                 if out.rule_branch else ""))
+        if out.status == "PASS":
+            print(f"  settlement_amount   = {out.settlement_amount:,.2f}")
+            print(f"  effective_price     = {out.effective_price:,.6f}"
+                  "（= 金额/Q1，加权平均）")
+            print(f"  adjusted_unit_price = {out.adjusted_unit_price:,.6f}"
+                  "（= P1 本身）")
+            print(f"  p1_source           = {out.p1_source}")
+            print("  ▲ effective_price 与 P1 在 SEGMENT 增量段**不相等**："
+                  "阈值内部分仍按 P0 结算")
+            for line in out.basis:
+                print(f"    · {line}")
+        else:
+            print(f"  阻断原因：{out.blocked_reason}")
+    return 0 if out.status == "PASS" else 1
 
 
 def cmd_diagnose(args) -> int:

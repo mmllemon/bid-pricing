@@ -50,6 +50,13 @@ REGISTERED_OVERRIDES = (
     "adjustment_scope",
 )
 
+#: **Standard 层**标签（T03-01 分层互锁）：带这些标签的覆盖代表「规范/规则卡自身的
+#: 声明」，必须与实现常量一致；其余标签（``contract`` / ``tender`` / ``regional``）
+#: 属优先级链上层（Contract > Tender > Regional > Standard），**允许**覆盖标准阈值
+#: ——否则「合同约定按 10% 阈值调价」这类约定无法建模（T03-01 完成判据要求
+#: 『支持合同规则覆盖标准阈值』）。
+STANDARD_LAYER_LABELS = frozenset({"standard", "pricing_rule_card"})
+
 
 class PricingCardError(RuntimeError):
     """规则卡缺失、结构不合法，或出现未登记 override。"""
@@ -137,18 +144,37 @@ def resolve_parameters(
     *,
     source_label: str = "override",
 ) -> ResolvedParameters:
-    """按 ``precedence_chain`` 解析参数：override 层优先于 Standard 层。
+    """按 ``precedence_chain`` 解析参数：上层（合同/招标/地方）优先于 Standard 层。
 
     出现规则卡未登记的 override 键 → ``PricingCardError``（BLOCKED）。
+
+    **分层互锁（T03-01）**：规则卡（Standard 层）自身声明的阈值必须等于实现常量
+    ——这是「同一规则两处说法」的防线。来自优先级链**上层**的覆盖允许偏离并记录
+    来源；若覆盖自带 Standard 层标签（``standard`` / ``pricing_rule_card``），
+    说明有人声称规范层与实现不一致，仍按违规处理。
     """
     p = card["parameters"]
     scope = card.get("adjustment_scope")
 
+    # ---- ① Standard 层互锁：规则卡声明的阈值 vs 实现常量 -------------------
+    declared_inc = float(p["increase_threshold"])
+    declared_dec = float(p["decrease_threshold"])
+    if declared_inc != INCREASE_THRESHOLD:
+        raise PricingCardError(
+            f"increase_threshold 声明值 {declared_inc} 与实现常量 "
+            f"{INCREASE_THRESHOLD} 不一致——同一规则出现两处说法。"
+        )
+    if declared_dec != DECREASE_THRESHOLD:
+        raise PricingCardError(
+            f"decrease_threshold 声明值 {declared_dec} 与实现常量 "
+            f"{DECREASE_THRESHOLD} 不一致——同一规则出现两处说法。"
+        )
+
     resolved = ResolvedParameters(
         rho_plus=float(p["rho_plus"]),
         rho_minus=float(p["rho_minus"]),
-        increase_threshold=float(p["increase_threshold"]),
-        decrease_threshold=float(p["decrease_threshold"]),
+        increase_threshold=declared_inc,
+        decrease_threshold=declared_dec,
         adjustment_scope=str(scope),
         sources={k: "pricing_rule_card" for k in
                  ("rho_plus", "rho_minus", "increase_threshold",
@@ -160,6 +186,16 @@ def resolve_parameters(
         if key not in REGISTERED_OVERRIDES:
             unknown.append(key)
             continue
+        if (key in ("increase_threshold", "decrease_threshold")
+                and source_label in STANDARD_LAYER_LABELS
+                and float(value) != (INCREASE_THRESHOLD
+                                     if key == "increase_threshold"
+                                     else DECREASE_THRESHOLD)):
+            raise PricingCardError(
+                f"Standard 层覆盖 {key} = {value} 与实现常量不一致——"
+                f"Standard 层标签 {sorted(STANDARD_LAYER_LABELS)} 下不得声称"
+                "规范与实现分叉；若该值来自合同/招标/地方约定，请改用相应层标签。"
+            )
         setattr(resolved, key, value)
         resolved.sources[key] = source_label
 
@@ -168,18 +204,6 @@ def resolve_parameters(
             "出现规则卡未登记的 override 键："
             f"{sorted(unknown)}。已登记键 = {list(REGISTERED_OVERRIDES)}。"
             "未登记约定不得静默忽略——请先补登记再计算（ADR-0007）。"
-        )
-
-    # ---- 与代码常量互锁：声明值必须等于实现常量 -------------------------
-    if resolved.increase_threshold != INCREASE_THRESHOLD:
-        raise PricingCardError(
-            f"increase_threshold 声明值 {resolved.increase_threshold} 与实现常量 "
-            f"{INCREASE_THRESHOLD} 不一致——同一规则出现两处说法。"
-        )
-    if resolved.decrease_threshold != DECREASE_THRESHOLD:
-        raise PricingCardError(
-            f"decrease_threshold 声明值 {resolved.decrease_threshold} 与实现常量 "
-            f"{DECREASE_THRESHOLD} 不一致——同一规则出现两处说法。"
         )
     return resolved
 

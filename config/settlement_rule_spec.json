@@ -1,0 +1,142 @@
+{
+  "spec_id": "settlement_rule_spec_v1",
+  "task": "T03-01",
+  "title": "结算规则引擎 —— 三段调价 / 边界归属 / 规则集分发 / 合同覆盖",
+  "role": "判定层出口：拿到 (Q0, Q1, P0, ContractContext) 后返回 settlement_amount / effective_price / rule_id / rule_branch。引擎**不自建调价公式**——公式唯一实现是 contracts/rule_sets 的两套独立 RuleSet，引擎只负责「分发规则集 + 施加覆盖链 + 归一输出」。",
+  "source_of_truth": [
+    "model_v0.3_R2.md §5.2 J2（边界归属）、§5.3（R_i 分段）、§8.4（BLOCKED 清单含『P1 依据缺失』）",
+    "实施路线 v3.2.1 T03-01 行 + §4.0 实验零（合同规则映射一致性：分段边界 / 调价方向 / P1 取值三点同时一致）",
+    "config/pricing_rule_card.json（T00-01：P1 公式、precedence_chain、override_policy）",
+    "src/bidpricing/contracts/rule_sets/*（T00-07：两版独立实现）"
+  ],
+  "callable": {
+    "signature": "SettlementRule.evaluate(Q0, Q1, P0, ContractContext) -> SettlementOutcome",
+    "note": "关键字形式 evaluate(q0=, q1=, p0=, context=) 等价；参数名沿用任务书的 Q0/Q1/P0 便于与造价侧对读。"
+  },
+
+  "outputs": {
+    "settlement_amount": "结算金额（未含税），= 对应规则集 settlement_amount 的返回值。",
+    "effective_price": "**结算加权平均单价 = settlement_amount / Q1**。SEGMENT 增量段它 **不等于** P1（阈值内部分仍按 P0）——这两个量在报告里必须分列，合并即静默错（DV-02 同族）。",
+    "rule_id": "生效的 rule_set_id（来自 ContractContext，经注册表校验）。**不得**回填成引擎默认值。",
+    "rule_branch": "DECREASE / IN_RANGE / INCREASE，由**解析后**的阈值判定（合同覆盖改变阈值时，分支随之移动）。",
+    "adjusted_unit_price": "P1 本身（供审计与利润桥接使用；非任务书要求的四个出口之一，但不得省略——见 SR-08）。",
+    "p1_source": "P1 生成方式标签，随 rule_id 分发（见 p1_source_registry）。"
+  },
+
+  "rule_set_registry": {
+    "_why": "规则集按 id 显式登记。**未注册 id ⇒ BLOCKED**，不得落到任一侧默认值（ADR-0004：未定态不得降级为默认值）。注意 selector.py 的 `_ruleset_for` 使用 `else` 兜底到 2024 版——那一层的兜底由其自身状态机与 Gate 0a 把关，本层**不复制**该兜底（同一规则两处说法即漂移源）。",
+    "entries": [
+      {
+        "rule_set_id": "GB50500-2013",
+        "standard_code": "GB 50500-2013",
+        "p1_source": "REDETERMINE",
+        "p1_source_note": "§9.6.2『重新确定综合单价』→ P1 与 P0 脱钩；本实现的公式层以 P0·(1∓ρ) 给出可计算近似（ρ 为机制层默认 0）。",
+        "supported_scopes": ["SEGMENT"],
+        "scope_ambiguous": false,
+        "increase_threshold": 1.15,
+        "decrease_threshold": 0.85
+      },
+      {
+        "rule_set_id": "GB/T50500-2024",
+        "standard_code": "GB/T 50500-2024",
+        "p1_source": "ADJUST_ON_CONTRACT_PRICE",
+        "p1_source_note": "§8.9.2『合理下调/上调其合同单价』→ 以 P0 为基数调整。",
+        "supported_scopes": ["FULL", "SEGMENT"],
+        "scope_ambiguous": true,
+        "increase_threshold": 1.15,
+        "decrease_threshold": 0.85
+      }
+    ],
+    "interlock": "本表各字段必须与实现侧（rule_sets 的类属性与 base 常量）逐一相等——两处登记即两处漂移源，故 SR-04/SR-05 须跨来源核对：注册表（制品）× 实现类（代码）× 结算出口（引擎）。"
+  },
+
+  "branch_semantics": {
+    "definition": "r = Q1 / Q0（工程量比，非金额比）",
+    "DECREASE": "r < decrease_threshold",
+    "IN_RANGE": "decrease_threshold <= r <= increase_threshold",
+    "INCREASE": "r > increase_threshold",
+    "boundary_rule": "路线 §5.2 J2：触发条件是**严格不等式**——Q1 = 0.85·Q0 判「不触发减量调价」、Q1 = 1.15·Q0 判「不触发增量调价」。边界归属必须双向验证（±ε 两侧结论不同），只验一侧的判据无法发现『把 <= 写成 <』。",
+    "tolerance": "边界比较用 eps_quantity（相对工程量残差）；金额比较用 eps_total 公式（见 precision_profile.json）。"
+  },
+
+  "override_policy": {
+    "_source": "config/pricing_rule_card.json override_policy + precedence_chain（Contract > Tender > Regional > Standard）",
+    "registered_keys": ["rho_plus", "rho_minus", "increase_threshold", "decrease_threshold", "adjustment_scope"],
+    "unknown_key": "BLOCKED（列出未知键，不得静默忽略——ADR-0007 沉默不是断言）",
+    "threshold_override": "★ 合同层覆盖标准阈值**必须生效**（本任务完成判据明文要求）。因此 interlock（声明值 vs 实现常量）只约束 **Standard 层**：规则卡自身声明的阈值必须等于实现常量；来自 Contract/Tender/Regional 层的覆盖允许偏离并记录来源。把两层混为一谈会导致『合同约定 10% 阈值』被判违规而无法建模。",
+    "scope_override": "2013 规则集下 adjustment_scope 被规范明文确定为 SEGMENT，落 FULL 判 BLOCKED（不静默覆盖）；2024 下 FULL/SEGMENT 均为合法项目级选择项。",
+    "layer_labels": {
+      "Contract": "contract",
+      "Tender": "tender",
+      "Regional": "regional",
+      "Standard": "pricing_rule_card"
+    }
+  },
+
+  "probe_grid": {
+    "_why": "判据覆盖面必须**固定在制品里**，不得由被测数据决定（规则⑧）。SR-01/SR-02/SR-09 全部在此网格上跑——网格以外再加样本不算扩大覆盖面。",
+    "q0": 1000.0,
+    "p0": 100.0,
+    "rho_plus_probe": 0.05,
+    "rho_minus_probe": 0.05,
+    "r_values": [0.5, 0.7, 0.849999, 0.85, 1.0, 1.15, 1.150001, 1.3, 2.0],
+    "boundary_pairs": [
+      {"r": 0.85, "side": "DECREASE 侧（0.849999）与边界（0.85）", "expected": ["DECREASE", "IN_RANGE"]},
+      {"r": 1.15, "side": "边界（1.15）与 INCREASE 侧（1.150001）", "expected": ["IN_RANGE", "INCREASE"]}
+    ],
+    "rule_sets": ["GB50500-2013", "GB/T50500-2024"],
+    "scopes": ["SEGMENT", "FULL"],
+    "threshold_override_witness": {"rule_set_id": "GB50500-2013", "r": 1.10,
+      "override": {"increase_threshold": 1.05}},
+    "fingerprint_delta": 1e-09
+  },
+
+  "tolerances": {
+    "_why": "具名容差；同名跨层共用（ADR-0024 DV-01 纪律）。金额与比值两类**不得**互借容差。",
+    "eps_total": {"formula": "max(eps_abs, eps_price * P*)", "unit": "元", "scope": "结算金额类比较"},
+    "eps_quantity": {"value": 1e-06, "unit": "相对值", "scope": "r = Q1/Q0 的边界比较与分支判定"},
+    "eps_ratio": {"value": 1e-09, "unit": "无量纲绝对", "scope": "effective_price / P1 之间的比值比较（**禁用 eps_price×P\\***：那是绝对金额尺度，会把比值容差放大 10⁶ 倍，DV-02 教训）"}
+  },
+
+  "judges": [
+    {"judge_id": "SR-01", "name": "三段覆盖", "severity": "P0",
+     "rule": "三个分支（DECREASE / IN_RANGE / INCREASE）在**固定样本集**上必须各至少被走到一次，且返回的 rule_branch 与输入所属段一致——覆盖面不得取决于被测数据（规则⑧）",
+     "actual": "已覆盖分支数", "limit": 3},
+    {"judge_id": "SR-02", "name": "边界归属双向", "severity": "P0",
+     "rule": "r = 0.85 与 r = 1.15 恰在区间内；两侧 ±ε 必须落到相邻分支。**必须两个边界都验**：只验 1.15 的实现会把『减量侧写成 <=』漏过去",
+     "actual": "边界样本对", "limit": 4},
+    {"judge_id": "SR-03", "name": "规则集分发", "severity": "P0",
+     "rule": "rule_id ∉ 注册表 ⇒ BLOCKED，且**不得**默认取任一规则集；返回的 rule_id 必须等于请求值（回填即伪造分发证据）",
+     "actual": "分发结论", "limit": "注册表内一致"},
+    {"judge_id": "SR-04", "name": "P1 来源随规则集分发", "severity": "P0",
+     "rule": "p1_source 必须由 rule_id 决定（2013=REDETERMINE / 2024=ADJUST_ON_CONTRACT_PRICE），且与注册表、实现类属性三处一致；两版取值必须**可区分**（相同则等于把『重新确定』与『在合同价上调整』混为一谈）",
+     "actual": "三处取值", "limit": "两两一致且两版不同"},
+    {"judge_id": "SR-05", "name": "合同覆盖阈值生效", "severity": "P0",
+     "rule": "合同层覆盖阈值后，分支边界必须随之移动：存在至少一个见证 r，使『覆盖前』与『覆盖后』的 rule_branch 不同。只把覆盖值记进参数、判定仍用常量 ⇒ FAIL",
+     "actual": "见证点分支对", "limit": "至少 1 组不同"},
+    {"judge_id": "SR-06", "name": "未登记覆盖键", "severity": "P0",
+     "rule": "出现规则卡未登记的 override 键 ⇒ BLOCKED 并列出未知键（ADR-0007）",
+     "actual": "未知键列表", "limit": "空"},
+    {"judge_id": "SR-07", "name": "未定态不降级", "severity": "P0",
+     "rule": "Q0 / Q1 / P0 任一缺失，或 Q0 <= 0 ⇒ BLOCKED；**不得**以 0 或任一侧默认值继续计算（§8.4 BLOCKED 清单含『P1 依据缺失』）",
+     "actual": "未定态处理", "limit": "BLOCKED"},
+    {"judge_id": "SR-08", "name": "输出三量不得混用", "severity": "P0",
+     "rule": "settlement_amount / effective_price(=S/Q1) / adjusted_unit_price(P1) 是三个量：SEGMENT 增量段必须 effective_price ≠ P1，其余段相等。把三者当同一个量 ⇒ FAIL（DV-02 同族的量纲混用）",
+     "actual": "段内相等性", "limit": "SEGMENT+INCREASE 不等，其余相等"},
+    {"judge_id": "SR-09", "name": "与规则集指纹方向对账", "severity": "P1",
+     "rule": "跨来源对账（引擎出口 vs 规则集差分）：2024+FULL+ρ>0 时 r_eff 跳降 <= 0；2013 与 2024+SEGMENT 时 |跳变量| ≈ 0。**同源相减恒为 0**，故必须走两条不同路径（出口差分 vs effective_revenue_multiple 差分）",
+     "actual": "跳变量", "limit": "方向/量级符合注册表"}
+  ],
+
+  "aggregation": {
+    "order": "FAIL > BLOCKED > WARN > SKIP > PASS",
+    "skip_rule": "SKIP 不参与最严竞争（ADR-0029 跨层不变量）；全 SKIP ⇒ BLOCKED；空判据集 ⇒ BLOCKED",
+    "P1_blocking": "P1 判据的 FAIL 不阻塞 P0 主干（verdict() 只看 P0；verdict_all() 含 P1）"
+  },
+
+  "consumers": [
+    "T03-05 判定层测试矩阵（规则优先级：标准阈值与合同阈值并存时合同阈值生效；规则集切换：2013/2024 同输入输出可区分）",
+    "T04-04 对拍器（Phase 1/2 一致性）",
+    "T06-06 利润桥接与总价对账（P1 与 effective_price 分列）"
+  ]
+}

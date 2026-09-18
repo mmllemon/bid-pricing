@@ -117,10 +117,34 @@ class TestConstantLock(unittest.TestCase):
                 self.assertEqual(classify_branch(r, self.params),
                                  rs.classify_branch(r))
 
-    def test_threshold_override_conflicting_with_constant_is_blocked(self):
+    def test_standard_layer_declaration_is_interlocked(self):
+        """**Standard 层**：卡片声明值必须等于实现常量（T03-01 分层后仍成立）。
+
+        旧用例断言「任何阈值 override 都 BLOCKED」——那是把优先级链两层混为一谈：
+        合同层覆盖标准阈值是**合法**的（T03-01 完成判据明文要求支持），
+        故互锁改为只约束 Standard 层。见 ADR-0033。
+        """
+        bad = json.loads(json.dumps(self.card))
+        bad["parameters"]["increase_threshold"] = 1.2
         with self.assertRaises(PricingCardError) as ctx:
-            resolve_parameters(self.card, {"increase_threshold": 1.2})
+            resolve_parameters(bad)
         self.assertIn("两处说法", str(ctx.exception))
+
+    def test_standard_layer_label_override_deviation_is_blocked(self):
+        with self.assertRaises(PricingCardError) as ctx:
+            resolve_parameters(self.card, {"increase_threshold": 1.2},
+                               source_label="pricing_rule_card")
+        self.assertIn("Standard 层", str(ctx.exception))
+
+    def test_contract_layer_threshold_override_is_allowed(self):
+        """合同层覆盖标准阈值必须生效并留来源（优先级链 Contract > Standard）。"""
+        params = resolve_parameters(self.card, {"increase_threshold": 1.05},
+                                    source_label="contract")
+        self.assertEqual(params.increase_threshold, 1.05)
+        self.assertEqual(params.sources["increase_threshold"], "contract")
+        # 未覆盖的键仍来自 Standard 层
+        self.assertEqual(params.decrease_threshold, 0.85)
+        self.assertEqual(params.sources["rho_plus"], "pricing_rule_card")
 
     def test_registered_overrides_match_card_policy(self):
         self.assertEqual(set(self.card["override_policy"]["registered_overrides"]),

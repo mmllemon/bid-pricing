@@ -146,6 +146,12 @@ EVIDENCE: dict[str, list[dict]] = {
         {"kind": "module", "path": "tests/test_milp_acceptance.py"},
         {"kind": "adr", "path": "ADR-0028-milp-acceptance-protocol.md"},
     ],
+    "T03-04": [
+        {"kind": "file", "path": "config/constraint_judge_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/solver/constraint_judge.py"},
+        {"kind": "module", "path": "tests/test_constraint_judge.py"},
+        {"kind": "adr", "path": "ADR-0029-constraint-judge.md"},
+    ],
 }
 
 #: 初次提取时的状态种子。仅当 JSON 中不存在该任务时才写入；

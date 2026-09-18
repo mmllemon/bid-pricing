@@ -996,6 +996,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_p1s.add_argument("--json", action="store_true", help="输出 JSON")
     p_p1s.set_defaults(func=cmd_phase1_solve)
 
+    # ---- T03-04 约束判定器 ----------------------------------------------
+    p_cj = sub.add_parser(
+        "constraint-check",
+        help="T03-04 约束判定器：对候选报价向量逐条判定 C1–C13（六元组）")
+    p_cj.add_argument("--instance", default=None,
+                      help="JSON 文件：{'instance': {...}, 'p': {...}, 'z': {...},"
+                           " 'Z': ..., 以及 N_max/d_max/Z_min/pi_target/R_min/"
+                           "sigma_max/kappa_max/front_rho}。缺 instance 键时整个"
+                           "文档视为实例，p 取 Phase 1 解析解")
+    p_cj.add_argument("--probe", default="free-cap", choices=("free-cap", "simple"),
+                      help="无 --instance 时用哪个内置探针")
+    p_cj.add_argument("--floor-json", default=None,
+                      help="显式 floor_i 表 JSON：{item_id: 值}（缺省自动向 "
+                           "T03-02 派生量层索取）")
+    p_cj.add_argument("--json", action="store_true", help="输出 JSON")
+    p_cj.set_defaults(func=cmd_constraint_check)
+
     # ---- T04-07：MILP 独立验收协议 --------------------------------
     p_ma = sub.add_parser(
         "milp-check",
@@ -1447,6 +1464,116 @@ def cmd_phase1_solve(args) -> int:
 
     _print_phase1(report, title)
     return 0 if report.verdict() == STATUS_PASS else 1
+
+
+def cmd_constraint_check(args) -> int:
+    """T03-04 约束判定器 —— 对候选报价向量逐条判定 C1–C13。
+
+    与相邻命令的分工：``verify-solution`` 判「解对不对」（可行性/层归属/
+    目标复算）；本命令判「解合不合规」（每约束一个六元组，Gate 2 判定层）。
+    输入默认是 Phase 1 解析解（与 phase1-solve 同一来源），也可用
+    ``--instance`` 提供任意候选 p（JSON：instance + p/z/Z/限值）。
+    """
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.constraint_judge import (
+        JudgeInputs,
+        judge_constraints,
+        load_constraint_spec,
+    )
+    from .solver.instance import Phase1Instance
+    from .solver.phase1 import (
+        phase1_probe_instance,
+        phase1_simple_probe_instance,
+        solve_phase1,
+    )
+
+    cfg = config_dir()
+    resolved = resolve_parameters(load_pricing_card(cfg))
+    spec = load_constraint_spec(cfg)
+
+    z_by_id = None
+    Z = None
+    extra = {}
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        inst_doc = doc.get("instance", doc)
+        instance = Phase1Instance.from_dict(inst_doc, source=str(path))
+        if "instance" in doc:
+            z_by_id = doc.get("z")
+            Z = doc.get("Z")
+            for k in ("theta", "N_max", "d_max", "Z_min", "pi_target",
+                      "R_min", "sigma_max", "kappa_max"):
+                if doc.get(k) is not None:
+                    extra[k] = doc[k]
+            p_by_id = {str(k): float(v) for k, v in (doc.get("p") or {}).items()}
+            explicit_floor = doc.get("floor")
+            title = str(path)
+        else:
+            # 整个文档就是实例 ⇒ 对其跑 Phase 1 解析解作为候选 p
+            sol = solve_phase1(instance, resolved)
+            p_by_id = dict(sol.p_by_id)
+            explicit_floor = None
+            title = f"{path}（p 取 Phase 1 解析解）"
+        front_rho = doc.get("front_rho") if "instance" in doc else None
+    else:
+        instance = (
+            phase1_simple_probe_instance()
+            if args.probe == "simple" else phase1_probe_instance()
+        )
+        sol = solve_phase1(instance, resolved)
+        p_by_id = dict(sol.p_by_id)
+        z_by_id = None
+        Z = None
+        front_rho = None
+        explicit_floor = None
+        title = f"内置探针（{args.probe}）· Phase 1 解析解"
+
+    floor_by_id, floor_source = _resolve_floor_by_id(
+        cfg, instance, resolved, args.floor_json or (
+            {str(k): float(v) for k, v in explicit_floor.items()}
+            if explicit_floor else None)
+    )
+    note = sys.stderr if args.json else sys.stdout
+    print(f"■ floor_i 来源：{floor_source}", file=note)
+    if not p_by_id:
+        print("■ 候选 p 为空：C1–C5 将按缺数据判 BLOCKED", file=note)
+
+    report = judge_constraints(
+        JudgeInputs(
+            instance=instance,
+            p_by_id=p_by_id,
+            z_by_id=z_by_id,
+            Z=Z,
+            floor_by_id=floor_by_id,
+            front_rho=front_rho,
+            **extra,
+        ),
+        spec=spec,
+    )
+
+    if args.json:
+        print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(f"=== T03-04 约束判定 · {title}")
+        print(f"{'约束':<6}{'状态':<9}{'严重度':<7}{'actual':>16}"
+              f"{'limit':>16}{'slack':>16}")
+        for v in report.verdicts:
+            def _fmt(x):
+                return "-" if x is None else (
+                    f"{x:.4g}" if isinstance(x, float) else str(x))
+            print(f"{v.constraint_id:<6}{v.status:<9}{v.severity:<7}"
+                  f"{_fmt(v.actual):>16}{_fmt(v.limit):>16}{_fmt(v.slack):>16}")
+        print(f"\n整体结论（P0）：{report.verdict()}；含 P1：{report.verdict_all()}")
+        for v in report.verdicts:
+            if v.status in ("FAIL", "BLOCKED"):
+                print(f"  ■ {v.constraint_id}: {v.reason}")
+    return 0 if report.verdict() in ("PASS", "WARN") else 1
 
 
 def cmd_ref_check(args) -> int:

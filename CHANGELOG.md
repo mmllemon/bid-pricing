@@ -10,6 +10,35 @@
 
 ## [未发布]
 
+### T03-04 完成：约束判定器（C1–C13 六元组，ADR-0029）
+
+**新增**
+
+- `config/constraint_judge_spec.json`：CJ-01..CJ-13 判据 + 六元组语义
+  （constraint_id / status / actual / limit / slack / severity）+ **具名容差
+  注册表**（`eps_c1_abs` / `eps_res` / `eps_total` / `eps_ratio` /
+  `eps_price` / `resolution`）+ 逐约束激活语义表。
+- `src/bidpricing/solver/constraint_judge.py`：`JudgeInputs` 只吃原始量
+  （接口级独立性，不收 SolveResult/Formulation/DerivedReport）；
+  `judge_constraints` 聚合序 FAIL > BLOCKED > WARN > SKIP > PASS，
+  空判据集 ⇒ BLOCKED；P1（C11/C12）FAIL 不阻塞 P0 主干。
+- CLI `constraint-check`（`--instance` / `--probe` / `--floor-json` / `--json`）。
+- `tests/test_constraint_judge.py`：64 项（全量 915 → **979**，双环境全绿）。
+
+**关键裁定**
+
+- ★ **SKIP 不参与最严竞争**：全部判过且通过 ⇒ PASS；「有约束未激活」不是
+  缺陷，但「没判」必须留痕（规则⑧）。
+- ★ **DV-02 显式隔离**：C12 的 R_pc 是无量纲比值，容差独立具名 `eps_ratio`
+  （1e-9 绝对），**禁止**引用 eps_price×P*（会被放大 ~10⁶ 倍静默失效）；
+  测试以「缺口 1e-6 比值」钉住两种读法的分叉。
+- ★ C7 双向 z 一致性：虚报（z=1 但 p>c−eps_res）与漏报（z=0 但 p<c）
+  都抓；无 z 向量且计数未超限 ⇒ WARN（自称口径未核），不是 PASS。
+- ★ C11 仅给 kappa_max ⇒ BLOCKED：MAD 已被否决（同中心 MAD ≤ σ），
+  不得静默替换判据。C13 恒 SKIP（结算期事实投标期不可知）。
+- C4 floor 缺失 ⇒ BLOCKED：μ 未落值挂账（OI-DQ-A）在判定层可见化。
+- 两探针交叉验证：Phase 1 解析解在 C1/C2/C3/C5 全 PASS。
+
 ### T04-07 完成：MILP 独立验收协议（ADR-0028）
 
 **新增**

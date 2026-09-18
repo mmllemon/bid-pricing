@@ -1,0 +1,174 @@
+{
+  "spec_id": "constraint_judge_v1",
+  "task": "T03-04",
+  "title": "约束判定器：C1–C13 逐条六元组判定",
+  "source_of_truth": "实施路线 v3.2.1 T03-04；config/lp_formulation_spec.json（constraint_map，C1–C13 的模型形态与作用域）；config/precision_profile.json（容差注册）；ADR-0014/0020/0021/0022/0024/0025",
+  "task_summary": "每约束返回六元组 constraint_id/status/actual/limit/slack/severity；status 取值域为 PASS / WARN / FAIL / BLOCKED（外加 SKIP 表「未判定」，见 status_domain.skip_justification），禁止只返回 PASS/FAIL",
+  "scope_boundary": {
+    "in_scope": [
+      "对**任意候选报价向量 p**（不限于求解器输出）逐条判定 C1–C13",
+      "六元组输出 + 逐项明细行 + 聚合结论",
+      "具名容差解析：判据只引用容差名，缺名⇒BLOCKED（DV-01 教训）"
+    ],
+    "not_in_scope": [
+      "求解（phase1.py / backend.py 负责）",
+      "解校验器（verifier.py，T04-02D——那个判『解对不对』，本判定器判『解合不合规』）",
+      "派生量计算（derived.py，T03-02——本层只引用 floor_by_id 等原始量表，不重算）",
+      "MILP 最优性验收（milp_acceptance.py，T04-07）"
+    ],
+    "boundary_note": "本层是判定层（Gate 2）的约束侧。它**不 import** formulation/verifier 的判据，只复用其公开函数（compute_lb_c5），保证复核层不是内层判据的复制（ADR-0020 规则⑧）。"
+  },
+  "six_tuple": {
+    "fields": ["constraint_id", "status", "actual", "limit", "slack", "severity"],
+    "field_semantics": {
+      "actual": "该约束的被测量（原始量，来自候选 p 与实例外生参数，不由判定器重算派生量）",
+      "limit": "该约束的限值（外生给定或由具名公式得出）",
+      "slack": "actual 与 limit 的有向余量；等式约束为 limit−actual（带号）；SKIP/BLOCKED 时为 null",
+      "severity": "取自 lp_formulation_spec.constraint_map[].severity（P0/P1），**同一约束在各层共用同一个名**（规则⑨）"
+    },
+    "anti_pattern": "actual 与 limit 同源相减得 slack 时，必须先问『这两个数会不会同时错』——故 actual 一律来自候选 p 的求和，limit 一律来自外生声明或唯一实现函数（compute_lb_c5），两侧来源强制不同。"
+  },
+  "status_domain": {
+    "values": ["PASS", "WARN", "FAIL", "BLOCKED", "SKIP"],
+    "skip_justification": "任务摘要的四态指**判定结论**必须四态可区分（禁止只有 PASS/FAIL）。SKIP 表示『本约束未判定』（未激活/不适用/该子项无界），刻意保留：把『没判』折叠进 PASS 正是规则⑧（判据覆盖面不得取决于被测数据）禁止的失效模式。聚合序 FAIL > BLOCKED > WARN > SKIP > PASS；**空判据集 ⇒ BLOCKED**（不是 PASS）。",
+    "tier_linkage": "FAIL/BLOCKED ⇒ 阻断（正确性）；WARN ⇒ 可解释性降级；SKIP ⇒ 不改变结论但必须在明细里可见；PASS ⇒ 通过"
+  },
+  "tolerances": {
+    "registry_note": "全部容差**具名**且只在此注册；判据引用名字，实现侧 resolve 后使用。缺名或取不到值 ⇒ 该约束 BLOCKED（DV-01：行上容差名从未被解析成数值的失效模式）。",
+    "entries": {
+      "eps_c1_abs": {
+        "source": "precision_profile.eps_abs",
+        "value": 0.01,
+        "unit": "元",
+        "used_by": ["C1"],
+        "note": "C1 外层等式容差（舍入调和口径）。内层 eps_solver=1e-8 与外层宽度比 1e6 ≥ 1e3（ADR-0020 D1）。"
+      },
+      "eps_res": {
+        "source": "precision_profile.rounding.resolution",
+        "value": 0.01,
+        "unit": "元",
+        "used_by": ["C7"],
+        "note": "报价分辨率；C7 的 z 一致性用它强制『亏损』严格成立（p_i ≤ c_i − eps_res）。"
+      },
+      "eps_price": {
+        "source": "precision_profile.eps_price",
+        "value": 1e-09,
+        "unit": "相对值（×P*）——仅在单价语境使用",
+        "used_by": ["C5"],
+        "note": "C5 下界公式 max(eps_price×P*, resolution) 中作**单价相对量**读法。C12 禁止引用本名（见 eps_ratio.note）。"
+      },
+      "resolution": {
+        "source": "precision_profile.rounding.resolution",
+        "value": 0.01,
+        "unit": "元",
+        "used_by": ["C5"],
+        "note": "报价表最小可表示非零值；lb_C5 必须被抬到该分辨率（内层与外层舍入的耦合点，ADR-0020）。"
+      },
+      "eps_total": {
+        "formula": "max(eps_abs, eps_price * P_star)",
+        "unit": "元",
+        "used_by": ["C6", "C9", "C10"],
+        "note": "总价类残差两层同口径（§8.2：不得『求解时容差化、复核时严格等式』）。P_star 由实例取值，缺 P_star ⇒ BLOCKED。"
+      },
+      "eps_ratio": {
+        "value": 1e-09,
+        "unit": "无量纲（比值上的绝对容差）",
+        "used_by": ["C12"],
+        "note": "**DV-02 显式隔离**：eps_price 在单价语境的读法是『相对值 ×P*』，而 C12 的被测量 R_pc 是无量纲比值——两种量纲读法必须两个名字。若把 eps_price×P* 搬到比值上，容差被放大 P* 倍（约 10^6 倍），判据静默失效。故 C12 用独立具名 eps_ratio（比值上的绝对容差），**禁止**引用 eps_price。"
+      }
+    },
+    "forbidden": "判据代码中出现裸数值容差（如 1e-12）⇒ 违规；箱型比较（C2/C3/C4/C5/C8）为金额精确比较，不用容差——违反就是违反，0.005 元的『轻微』越界在提交报价表里同样是越界。"
+  },
+  "activation_semantics": {
+    "note": "toggleable 约束的激活由**输入是否声明**决定，不由判定器推断（规则⑤：沉默不是断言——『用户没给 theta』≠『用户声明 C6 不激活』）。",
+    "table": {
+      "C1": "恒激活（无 B=P*_competitive ⇒ BLOCKED，不是 SKIP）",
+      "C2": "恒激活；作用域 N_cap={i: cap_i 非空}；N_free 项逐项 SKIP（ALLOW_EMPTY_NO_CAP 合法语义）",
+      "C3": "恒激活；L 缺失 ⇒ 逐项 BLOCKED（数据缺口）",
+      "C4": "恒激活；floor 缺失 ⇒ 逐项 BLOCKED（μ 未落值 OI-DQ-A 挂账可见化）",
+      "C5": "恒激活；需 P_star + eps_price + resolution（经 compute_lb_c5 唯一实现）",
+      "C6": "'C6' ∈ active_soft_constraints 才激活；theta 缺失 ⇒ BLOCKED",
+      "C7": "'C7' ∈ active_soft_constraints 才激活；N_max 缺失 ⇒ BLOCKED；z 向量缺失 ⇒ 降 WARN（按实际亏损计数，自称口径未核）",
+      "C8": "'C8' ∈ active_soft_constraints 才激活；d_max 缺失 ⇒ BLOCKED；c_i=0 项 SKIP（退化由 C5 承担）",
+      "C9": "'C9' ∈ active_soft_constraints 才激活；Z 缺失 ⇒ BLOCKED（Z 由调用方经唯一收入实现复算后传入，本层不重算 R_i）",
+      "C10": "front_rho 非空才激活（T_front 来自付款条款，无声明⇒不激活）；rho_i/q0/c 缺 ⇒ BLOCKED",
+      "C11": "sigma_max 或 kappa_max 任一给出才激活（当前 NOT_ACTIVE）；仅 kappa_max ⇒ BLOCKED（MAD 形式已被 lp_formulation_spec 否决，不得静默替换）；cap 空的项无 base ⇒ 从 d 统计中剔除并留痕",
+      "C12": "R_min 给出才激活；R_pc < R_min − eps_ratio ⇒ FAIL（『P* 不可接受』，不是 infeasible）",
+      "C13": "恒 SKIP（结算期条件修正，投标期不可知；非投标有效性约束）"
+    }
+  },
+  "judges": [
+    {"judge_id": "CJ-01", "constraint_id": "C1", "severity": "P0",
+     "actual": "Σ_{i∈C1_scope(声明)} p_i·q0_i", "limit": "B（P*_competitive，唯一提供者 total_price.compute_P_competitive）",
+     "slack": "B − actual（带号）", "pass_when": "|B − actual| ≤ eps_c1_abs",
+     "block_when": ["B 缺失", "作用域内任一项 p 或 q0 缺失"],
+     "anti_degeneracy": "右端是锁定的总价 P* 的派生量，**不是**候选 p 的函数——若右端随 p 变，C1 退化为恒真式（判据零区分度）。"},
+    {"judge_id": "CJ-02", "constraint_id": "C2", "severity": "P0",
+     "actual": "max_{i∈N_cap} p_i", "limit": "对应项 U_i", "slack": "min_{i∈N_cap}(U_i − p_i)",
+     "pass_when": "∀i∈N_cap: p_i ≤ U_i",
+     "block_when": ["cap 非空但 U 缺失（派生量层缺口，不得折 0）"],
+     "anti_degeneracy": "N_free 项**不参与**判定也不得暗中赋上界；曾有空 cap 被折成 0 使该项静默不可行的失效模式（空 cap ≠ 0）。"},
+    {"judge_id": "CJ-03", "constraint_id": "C3", "severity": "P0",
+     "actual": "min_{i∈X_opt} p_i", "limit": "对应项 L_i", "slack": "min_{i∈X_opt}(p_i − L_i)",
+     "pass_when": "∀i∈X_opt: p_i ≥ L_i", "block_when": ["任一 X_opt 项 L 缺失（多来源取大的结果缺失=缺口，不得补 0）"]},
+    {"judge_id": "CJ-04", "constraint_id": "C4", "severity": "P0",
+     "actual": "min_{i∈X_opt} p_i", "limit": "对应项 floor_i", "slack": "min_{i∈X_opt}(p_i − floor_i)",
+     "pass_when": "∀i∈X_opt: p_i ≥ floor_i",
+     "block_when": ["任一 X_opt 项 floor 缺失（μ 未落值 OI-DQ-A 或条款无基准——BLOCKED 使挂账在判定层可见）"],
+     "note": "floor_i 由 T03-02 唯一实现；本层只收 floor_by_id。floor 与 C6 并存不互斥（逐项地板 vs 总量风险）。"},
+    {"judge_id": "CJ-05", "constraint_id": "C5", "severity": "P0",
+     "actual": "min_{i∈X_opt} p_i", "limit": "lb_C5 = max(eps_price×P*, rounding.resolution)（唯一实现 formulation.compute_lb_c5）",
+     "slack": "min_i(p_i − lb_C5)", "pass_when": "∀i∈X_opt: p_i ≥ lb_C5",
+     "block_when": ["P_star 缺失", "eps_price 或 resolution 取不到值"],
+     "anti_degeneracy": "下界必须取 max 而非裸 eps_price：1.4e-3 元的报价舍入到 0.01 后变 0.00，实际提交即违反 C5（内层与外层舍入的耦合点）。"},
+    {"judge_id": "CJ-06", "constraint_id": "C6", "severity": "P0",
+     "actual": "Σ_{i∈X_opt} max(c_i − p_i, 0)·q1_i", "limit": "theta·P_star",
+     "slack": "limit − actual", "pass_when": "actual ≤ limit + eps_total",
+     "block_when": ["激活但 theta 缺失", "任一项 c_i 或 q1 缺失"],
+     "anti_degeneracy": "缺口按**结算量 q1** 加权（结算时发生）。判据必须能被『q0≠q1 且用错量纲』的注入解否定——用 q0 会在 r<1 时低估风险。"},
+    {"judge_id": "CJ-07", "constraint_id": "C7", "severity": "P0",
+     "actual": "|{i∈X_opt : p_i < c_i}|（实际亏损项数）", "limit": "N_max", "slack": "N_max − actual",
+     "pass_when": "actual ≤ N_max 且（若提供 z）z 与事实一致",
+     "warn_when": "actual ≤ N_max 但未提供 z 向量（自称口径未核——z=1 只表示『允许亏损』，不表示『确实亏损』）",
+     "fail_when": ["actual > N_max", "z_i=1 但 p_i > c_i − eps_res（虚报）", "z_i=0 但 p_i < c_i（漏报）"],
+     "block_when": ["激活但 N_max 缺失"],
+     "anti_degeneracy": "z 一致性检查是双向的：只查虚报不查漏报，『自称亏损项数 ≤ N_max』与『实际亏损项数 ≤ N_max』不可区分（BIDIRECTIONAL 教训，PS-06 同族）。"},
+    {"judge_id": "CJ-08", "constraint_id": "C8", "severity": "P0",
+     "actual": "最紧项 p_i", "limit": "对应项 c_i·(1−d_max)", "slack": "min_{i}(p_i − c_i·(1−d_max))",
+     "pass_when": "∀i∈X_opt∧c_i>0: p_i ≥ c_i·(1−d_max)",
+     "block_when": ["激活但 d_max 缺失", "c_i 缺失"],
+     "note": "c_i=0 的项 SKIP（本式退化为 p_i≥0，由 C5 的 lb_C5 承担——显式剔除，不得除 0）。"},
+    {"judge_id": "CJ-09", "constraint_id": "C9", "severity": "P0",
+     "actual": "Z（调用方经唯一收入实现复算后传入）", "limit": "max(Z_min, pi_target·Σ c_i·q1_i)",
+     "slack": "Z − limit", "pass_when": "Z ≥ limit − eps_total",
+     "block_when": ["激活但 Z 缺失", "激活但 Z_min 与 pi_target 均缺失", "任一项 c_i/q1 缺失"],
+     "anti_degeneracy": "Z 必须来自唯一收入实现（pricing_card.settlement_revenue / check_solution），本层**不重实现 R_i**——重实现即第二真相来源（规则⑨）。"},
+    {"judge_id": "CJ-10", "constraint_id": "C10", "severity": "P0",
+     "actual": "Σ_{i∈T_front} (rho_i·p_i − c_i)·q0_i", "limit": 0, "slack": "actual",
+     "pass_when": "actual ≥ −eps_total",
+     "block_when": ["激活但任一前载项 rho_i/c_i/q0 缺失"],
+     "note": "T_front/rho 来自付款条款（外生），未声明⇒SKIP。按**投标口径 q0** 加权（收款节奏对齐清单工程量），用 q1 是量纲混用（DV-02 同族）。"},
+    {"judge_id": "CJ-11", "constraint_id": "C11", "severity": "P1",
+     "actual": "σ(d)，d_i=(p_i−cap_i)/cap_i（中心 0、基准 cap，OI-05）", "limit": "sigma_max", "slack": "sigma_max − actual",
+     "pass_when": "σ(d) ≤ sigma_max",
+     "block_when": ["仅给 kappa_max（MAD 形式已被否决：MAD_c ≤ σ_c 同中心 Cauchy-Schwarz，最坏放松 √n 倍，是方向性错误——不得静默替换判据）"],
+     "note": "cap 空项无 base ⇒ 从 d 统计剔除并在明细留痕（不折 0、不编造基准）。P1 ⇒ 裁定结果不阻塞 P0 主干。"},
+    {"judge_id": "CJ-12", "constraint_id": "C12", "severity": "P1",
+     "actual": "R_pc = (Σ_{X_opt} p_i·q0_i + Σ_{非X_opt} p0_i·q0_i) / (Σ_全 c_i·q0_i)",
+     "limit": "R_min", "slack": "actual − R_min", "pass_when": "R_pc ≥ R_min − eps_ratio",
+     "block_when": ["任一项 c_i 或 q0 缺失", "分母 ≤ 0"],
+     "anti_degeneracy": "① 分子用候选 p 对 X_opt 求和 + 非 X_opt 的外生固定单价——两种作用域读法在 C1 可行域上同值，但**只有一种实现**（全部项求和），跨来源恒等性由测试钉住；② 容差是 eps_ratio（比值上的绝对量），**不是** eps_price×P*（DV-02 显式隔离）；③ FAIL 的语义是『P* 不可接受』（前置判据），不是求解器 infeasible。"},
+    {"judge_id": "CJ-13", "constraint_id": "C13", "severity": "P0",
+     "actual": null, "limit": null, "slack": null, "status": "SKIP（恒定）",
+     "reason": "机制=SETTLEMENT_ADJUSTMENT（结算期条件修正）：偏高侧死分支（C2 保证 p_i ≤ cap_i），偏低侧触发条件含结算期工程量事实，投标期不可知（ADR-0007 同类失效：用不可知的信息定价）。正确位置=结算修正模拟（敏感性扫描），待 OI-06。"}
+  ],
+  "aggregation": {
+    "order": ["FAIL", "BLOCKED", "WARN", "SKIP", "PASS"],
+    "empty_set": "BLOCKED",
+    "overall_semantics": "verdict = 最严状态；P0 与 P1 分开汇总——P1 的 FAIL 不阻塞 P0 主干（C11 severity_note），但必须在报告中可见"
+  },
+  "interface_independence": {
+    "rule": "判定器入参只有原始量（Phase1Instance / p_by_id / z_by_id / Z / floor_by_id / front_rho / tolerances），刻意不收 SolveResult、Formulation、DerivedReport——接口级独立性（ADR-0024 SV-12 同款），保证判据可被注入的错误结论否定。",
+    "single_impl_delegation": ["formulation.compute_lb_c5（C5 下界）"]
+  }
+}

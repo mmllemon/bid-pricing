@@ -797,9 +797,28 @@
       ],
       "summary": "每约束返回六元组 `constraint_id/status/actual/limit/slack/severity`；status 取值域为 PASS / WARN / FAIL / BLOCKED 四态，禁止只返回 PASS/FAIL",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/constraint_judge_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/constraint_judge.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_constraint_judge.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0029-constraint-judge.md"
+        }
+      ],
+      "status": "done",
+      "note": "",
+      "status_note": "CJ-01..CJ-13 六元组判定器；具名容差（eps_ratio 与 eps_price 分名，DV-02）；C7 双向 z 一致性；C11 仅 kappa_max⇒BLOCKED；C13 恒 SKIP。64 测试，全量 979 双环境绿。CLI constraint-check。",
+      "updated_at": "2026-09-18T09:40:00+08:00"
     },
     {
       "id": "T03-07",

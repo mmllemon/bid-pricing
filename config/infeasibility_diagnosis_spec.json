@@ -1,0 +1,87 @@
+{
+  "spec_id": "infeasibility_diagnosis_spec_v1",
+  "task": "T03-06",
+  "title": "不可行诊断——冲突集近似与建议动作",
+  "source_of_truth": [
+    "model_v0.3_R2.md §6.3 放弃投标判据表（建议动作目录的唯一来源）",
+    "config/constraint_schema.json constraints[].toggleable（旋钮域的权威定义）",
+    "config/lp_formulation_spec.json constraint_map（约束语义）",
+    "路线 v3.2.1 T03-06：输出 constraint_id / blocking / conflicting_set / suggested_relaxation；求解器无 IIS 时实现最小冲突集近似或逐项关闭诊断"
+  ],
+  "output_fields": {
+    "constraint_id": "冲突涉及的约束 id——与 constraint_schema 同名（规则⑨：同一约束各层共用同一个名）",
+    "blocking": "true = 关闭/放松该项后可行域恢复非空；false = 非阻塞",
+    "conflicting_set": "最小冲突集（旋钮 id 元组）；结构冲突为参数级旋钮；无 ≤max_conflict_size 阶集合时为 null",
+    "suggested_relaxation": "§6.3 目录动作 + 可计算量（金额/幅度）；无可计算量时给方向性动作，不得空泛"
+  },
+  "two_pass_design": {
+    "pass_A_structural": "参数级冲突，纯算术、无需预言机：① 总价层——P_min=Σ merged_lower·q0 vs min(B, P*)；② 逐项箱——max(L_i, floor_i) > U_i（U 有限时）。产出带数额的建议（B 上调至 P_min、P* 上调 ΔP、cap_i 上调至 eff_lower_i）。",
+    "pass_B_deletion_filter": "旋钮级冲突，需可行性预言机：对 toggleable=true 的软约束逐个关闭（单关→成对关，至 max_conflict_size），可行域恢复非空 ⇒ 该旋钮 blocking、冲突集 = 被关闭集合。**逐项关闭是 IIS 的删除过滤器近似**——找到的是「对可行性的必要成员」，不是完整 IIS，文案必须如此自述。"
+  },
+  "oracle": {
+    "contract": "oracle(instance) -> FEASIBLE | INFEASIBLE | UNKNOWN；三态不得合并（ADR-0023 同族）",
+    "phase1_builtin": "先 check_exactness 后 solve_phase1 的三态映射：全部 A 组 EC 通过⇒按 solve_phase1 状态（OPTIMAL⇒FEASIBLE；INFEASIBLE 已证空域⇒INFEASIBLE）；**仅 EC-7 被否定**（EC-1..EC-6 全过）⇒ INFEASIBLE——EC-7 FAIL = 已证空域（箱倒置 / B<P_min / B>P_max），但 solve_phase1 对它返回 BLOCKED，直接映射会把「已证不可行」吞成「可行性未知」；其余 EC 否定（EC-1..EC-6 任一）⇒ UNKNOWN（适用域外，不猜测）",
+    "lp_reserved": "LP/MILP 预言机由 T04-02E 接线（backend UNAVAILABLE⇒UNKNOWN，不是缺口补位）",
+    "unknown_semantics": "UNKNOWN 不参与「恢复可行」判定：关掉旋钮后从 UNKNOWN 变 FEASIBLE ⇒ blocking 成立；从 UNKNOWN 仍 UNKNOWN ⇒ 无结论"
+  },
+  "knobs": {
+    "structural": [
+      {"knob_id": "C1-B", "constraint_id": "C1", "name": "总价锁定值 B", "toggleable": false,
+       "relaxation": "B ≥ P_min（Σ merged_lower·q0）", "action_key": "ADJUST_TOTAL"},
+      {"knob_id": "P*-MAX", "constraint_id": "P*", "name": "总价限价 P*_max", "toggleable": false,
+       "relaxation": "P* ≥ P*_eff（ΔP 由 Phase 0 证书口径重算）", "action_key": "RAISE_PSTAR"},
+      {"knob_id": "C2-CAP", "constraint_id": "C2", "name": "单项上界 cap", "toggleable": false,
+       "relaxation": "cap_i ≥ eff_lower_i（逐项列名与数额）", "action_key": "RELAX_CAP"},
+      {"knob_id": "C4-FLOOR", "constraint_id": "C4", "name": "成本地板（μ）", "toggleable": false,
+       "relaxation": "μ 上调（地板下调）——调整前须过审批，§6.3 同源", "action_key": "APPROVAL_THETA"}
+    ],
+    "toggleable_source": "config/constraint_schema.json constraints[toggleable=true] ⇒ C6,C7,C8,C9,C10,C11,C12,C13；硬约束（toggleable=false 的 C1..C5）**禁止**进入删除过滤器（DG-05）",
+    "soft_off_semantics": "关 C-k = 从 active_soft_constraints 去掉 'Ck'（数据层语义，非模型改写）"
+  },
+  "action_catalog": {
+    "source": "model_v0.3_R2.md §6.3 放弃投标判据表（原样映射，不得增删语义）",
+    "GIVE_UP_OR_REESTIMATE": "C9 无可行解 ⇒ 放弃投标或重估 c_i",
+    "APPROVAL_THETA": "C6 与 C9 同时收紧后可行域为空 ⇒ 调整 θ 前必须走审批，不得静默放宽",
+    "DECISION_CASHFLOW": "C10 导致不可行 ⇒ 决策层选择：接受前载亏空 / 放弃投标",
+    "RAISE_PSTAR": "P* 被判定不可行 ⇒ 上调 P* 重新预检",
+    "SUPPLEMENT_EVIDENCE": "rule_set_id 无法判定 ⇒ 补契据，不得默认取任一侧",
+    "note": "§6.3 是建议动作不是法律否决（§8.1/§8.5：可行性结论不输出否决性结论）"
+  },
+  "max_conflict_size": 2,
+  "judges": [
+    {"judge_id": "DG-01", "name": "基线可判性", "severity": "P0",
+     "rule": "baseline∈{FEASIBLE,INFEASIBLE} 或 Pass-A 检出结构冲突 或 Pass-B 找到冲突集，三者任一即可出诊断；全 UNKNOWN 且三者皆无 ⇒ 整体 BLOCKED（不可行未证亦未排除）",
+     "actual": "baseline + 结构冲突数 + 冲突集数", "limit": "可判定"},
+    {"judge_id": "DG-02", "name": "结构冲突穷举", "severity": "P0",
+     "rule": "Pass-A 必须两层都查：总价层（P_min vs min(B,P*)）与逐项箱层（max(L,floor)>U）——覆盖面不得取决于被测数据（规则⑧）",
+     "actual": "已查层数", "limit": 2},
+    {"judge_id": "DG-03", "name": "冲突集最小性", "severity": "P0",
+     "rule": "报告的任一 conflicting_set 不得是另一已报集合的真超集；发现 {C6} 后不得再报 {C6,C9}",
+     "actual": "集合间包含关系", "limit": "无真超集"},
+    {"judge_id": "DG-04", "name": "建议可执行", "severity": "P0",
+     "rule": "每条 blocking=true 的项必须带 suggested_relaxation，且 action_key ∈ §6.3 目录；能量化的必须带数额（B/ΔP/cap/μ 方向与数值）",
+     "actual": "缺建议的 blocking 项数", "limit": 0},
+    {"judge_id": "DG-05", "name": "旋钮域封闭", "severity": "P0",
+     "rule": "删除过滤器只准用 constraint_schema.toggleable=true 的约束；硬约束（C1..C5）只能参数级放松（Pass-A），不得整条关闭——关闭 C1 等于放弃投标总价锁定，不是诊断是改题",
+     "actual": "过滤器用到的非 toggleable 旋钮数", "limit": 0},
+    {"judge_id": "DG-06", "name": "量值跨源重算", "severity": "P0",
+     "rule": "建议中的金额/幅度必须由本模块从原始量（q0/L/U/cap/floor/B/P*）重算，不得抄预言机返回的 reason 文案或内部状态（规则⑥：对账跨来源）",
+     "actual": "未重算的量值数", "limit": 0},
+    {"judge_id": "DG-07", "name": "阶数上限诚实", "severity": "P1",
+     "rule": "≤max_conflict_size 阶内未找到冲突集 ⇒ 结论 WARN「无 ≤k 阶冲突集」，不得据此宣称无冲突（k 阶截断是搜索边界不是存在性证明）",
+     "actual": "是否越界宣称", "limit": "不得"},
+    {"judge_id": "DG-08", "name": "三态语义分列", "severity": "P0",
+     "rule": "INFEASIBLE（已证空域）≠ UNKNOWN（预言机不足）≠ BLOCKED（输入缺失）——三者不得合并或互相顶替（ADR-0023/0024 同族裁定）",
+     "actual": "报告自述状态", "limit": "域内且如实"}
+  ],
+  "tolerances": {
+    "eps_total": "总价层比较容差 = max(eps_abs, eps_price·B)——与 phase1/check_solution 同公式名，不另造",
+    "eps_price": "箱型比较容差名（数值由 solution_verifier_spec 解析，本层只引用名）",
+    "resolution": "金额展示分辨率（元），与 precision_profile.rounding.resolution 同源"
+  },
+  "aggregation": {
+    "order": "FAIL > BLOCKED > WARN > SKIP > PASS",
+    "skip_not_competing": "SKIP 不参与最严竞争（ADR-0029 跨层不变量）；空判据集 ⇒ BLOCKED",
+    "baseline_feasible": "基线即可行 ⇒ 诊断报告无冲突项、整体 PASS（如实自述「无可诊断」），不得为了出报告硬找冲突"
+  }
+}

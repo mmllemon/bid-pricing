@@ -1030,6 +1030,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_pc.add_argument("--json", action="store_true", help="输出 JSON")
     p_pc.set_defaults(func=cmd_precheck)
 
+    # ---- T03-06 不可行诊断 ------------------------------------------------
+    p_dg = sub.add_parser(
+        "diagnose",
+        help="T03-06 不可行诊断：结构冲突（Pass A）+ 删除过滤器冲突集"
+             "（Pass B）+ §6.3 建议动作；三态 INFEASIBLE/UNKNOWN/BLOCKED 分列")
+    p_dg.add_argument("--instance", default=None,
+                      help="JSON 文件：{'instance': {...}, 'floor': {...}}")
+    p_dg.add_argument("--probe", default="simple", choices=("free-cap", "simple"),
+                      help="无 --instance 时用哪个内置探针")
+    p_dg.add_argument("--json", action="store_true", help="输出 JSON")
+    p_dg.set_defaults(func=cmd_diagnose)
+
     # ---- T04-07：MILP 独立验收协议 --------------------------------
     p_ma = sub.add_parser(
         "milp-check",
@@ -1714,6 +1726,101 @@ def build_derived_for_cli(cfg, instance, resolved):
     from .solver.precheck import build_derived
 
     return build_derived(instance, resolved)
+
+
+def cmd_diagnose(args) -> int:
+    """T03-06 不可行诊断 —— 结构冲突 + 删除过滤器 + §6.3 建议动作。
+
+    输出四字段：constraint_id / blocking / conflicting_set / suggested_relaxation。
+    三态纪律：INFEASIBLE（已证空域）≠ UNKNOWN（预言机不足）≠ BLOCKED（输入缺失）。
+    """
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.diagnose import (
+        diagnose,
+        load_diagnosis_spec,
+        load_toggleable_ids,
+    )
+    from .solver.instance import Phase1Instance
+    from .solver.phase1 import (
+        phase1_probe_instance,
+        phase1_simple_probe_instance,
+    )
+
+    cfg = config_dir()
+    resolved = resolve_parameters(load_pricing_card(cfg))
+    spec = load_diagnosis_spec(cfg)
+    toggleable = load_toggleable_ids(cfg)
+
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        instance = Phase1Instance.from_dict(doc.get("instance", doc), source=str(path))
+        floor_json = doc.get("floor")
+        title = str(path)
+    else:
+        instance = (
+            phase1_simple_probe_instance()
+            if args.probe == "simple" else phase1_probe_instance()
+        )
+        floor_json = None
+        title = f"内置探针（{args.probe}）"
+
+    floor_by_id, floor_src = _resolve_floor_by_id(cfg, instance, resolved, floor_json)
+
+    rep = diagnose(
+        instance, resolved,
+        floor_by_id=floor_by_id, spec=spec, toggleable=toggleable,
+    )
+
+    print(f"== T03-06 不可行诊断 | {title}")
+    print(f"   floor 来源：{floor_src}")
+    print(f"   基线：{rep.baseline}（FEASIBLE / INFEASIBLE=已证空域 / UNKNOWN=预言机不足）")
+    if rep.structural_conflicts:
+        print("   -- 结构冲突（Pass A，参数级）--")
+        for c in rep.structural_conflicts:
+            print(f"   [{c.knob_id}] {c.detail}")
+            print(f"      建议：{c.suggested_relaxation}")
+    if rep.min_conflict_sets:
+        print("   -- 冲突集（Pass B，删除过滤器近似，非完整 IIS）--")
+        for cs in rep.min_conflict_sets:
+            print(f"   {cs}")
+    elif rep.baseline != "FEASIBLE":
+        print("   -- 无 ≤2 阶冲突集（截断搜索边界，不是无冲突证明）--")
+    if rep.entries:
+        print("   -- 逐条诊断 --")
+        for e in rep.entries:
+            mark = "■" if e.blocking else "□"
+            print(f"   {mark} {e.constraint_id:5} set={e.conflicting_set}")
+            if e.suggested_relaxation:
+                print(f"      建议：{e.suggested_relaxation}")
+    for jid, status, detail in rep.verdicts:
+        print(f"   {jid} {status:8} {detail}")
+    print(f"== 诊断结论（判据聚合）：{rep.overall}")
+
+    if args.json:
+        print(json.dumps({
+            "baseline": rep.baseline,
+            "structural_conflicts": [
+                {"knob_id": c.knob_id, "constraint_id": c.constraint_id,
+                 "detail": c.detail, "suggested_relaxation": c.suggested_relaxation,
+                 "amount": c.amount}
+                for c in rep.structural_conflicts
+            ],
+            "min_conflict_sets": [list(c) for c in rep.min_conflict_sets],
+            "entries": [
+                {"constraint_id": e.constraint_id, "blocking": e.blocking,
+                 "conflicting_set": list(e.conflicting_set) if e.conflicting_set else None,
+                 "suggested_relaxation": e.suggested_relaxation}
+                for e in rep.entries
+            ],
+            "overall": rep.overall,
+        }, ensure_ascii=False, indent=1))
+    return 0
 
 
 def cmd_ref_check(args) -> int:

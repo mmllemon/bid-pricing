@@ -10,6 +10,14 @@
 
 ## [未发布]
 
+### T03-06 完成：不可行诊断（ADR-0031）
+
+- `config/infeasibility_diagnosis_spec.json`：DG-01..DG-08 + 旋钮表（toggleable=C6..C13）+ §6.3 建议动作目录。
+- `solver/diagnose.py`：两遍设计——Pass A 结构冲突（总价层 P_min/P_max vs B + 逐项箱，带数额）+ Pass B 删除过滤器（单关/成对关，IIS 近似，最小性抑制超集）。
+- oracle 三态注入（FEASIBLE/INFEASIBLE/UNKNOWN）+ **EC-7 精化**：EC-7 FAIL=已证空域⇒INFEASIBLE；EC-7 BLOCKED（B 缺失）⇒UNKNOWN——「没给 B」不是「B 定得太低」。
+- 建议动作唯一来源 §6.3 判据表；金额从原始量重算，不抄预言机文案。
+- CLI `diagnose`；tests 30 项，全量 1007→1037 双环境绿。
+
 ### T03-03 完成：Phase 0 预检与可行性证书（ADR-0030）
 
 **新增**

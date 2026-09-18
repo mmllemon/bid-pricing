@@ -798,9 +798,28 @@
       ],
       "summary": "输出 `constraint_id / blocking / conflicting_set / suggested_relaxation`；求解器无 IIS 时实现最小冲突集近似或逐项关闭诊断",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/infeasibility_diagnosis_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/diagnose.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_diagnose.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0031-infeasibility-diagnosis.md"
+        }
+      ],
+      "status": "done",
+      "note": "",
+      "status_note": "两遍诊断：Pass A 结构冲突（总价层 P_min/P_max vs B + 逐项箱，带数额）+ Pass B 删除过滤器（toggleable=C6..C13 单关/成对关，IIS 近似）。oracle 三态注入（phase1 内置 + EC-7 精化：FAIL⇒INFEASIBLE、BLOCKED(B缺)⇒UNKNOWN）；建议动作唯一来源 §6.3；最小性 + ≤2 阶截断诚实。30 测试，全量 1037 双环境绿。CLI diagnose。",
+      "updated_at": "2026-09-18T14:10:00+08:00"
     },
     {
       "id": "T03-04",

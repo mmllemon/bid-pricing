@@ -158,6 +158,12 @@ EVIDENCE: dict[str, list[dict]] = {
         {"kind": "module", "path": "tests/test_precheck.py"},
         {"kind": "adr", "path": "ADR-0030-phase0-precheck.md"},
     ],
+    "T03-06": [
+        {"kind": "file", "path": "config/infeasibility_diagnosis_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/solver/diagnose.py"},
+        {"kind": "module", "path": "tests/test_diagnose.py"},
+        {"kind": "adr", "path": "ADR-0031-infeasibility-diagnosis.md"},
+    ],
 }
 
 #: 初次提取时的状态种子。仅当 JSON 中不存在该任务时才写入；

@@ -5,15 +5,15 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-18 10:45:33** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-18 12:20:27** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`e212c29` ｜ 累计 65 次提交
-- 最新提交信息：feat(t03-03): Phase 0 预检与可行性证书——P_min/P_max/P*_var/P*_eff/ΔP + PC-01..PC-08 判据 + ADR-0030
+- 提交：`cafc366` ｜ 累计 67 次提交
+- 最新提交信息：feat(t03-06): 不可行诊断——两遍设计（结构冲突+删除过滤器）+ oracle 三态注入 + ADR-0031
 - 最近里程碑标签：`cost-basis-v1`
 - 工作区：干净
 
@@ -43,15 +43,15 @@
 
 | 制品 key | 类型 | hash | 冻结时间 |
 |---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-18T02:42:38+00:00 |
-| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-18T02:42:38+00:00 |
-| `constraint_schema_version` | versioned | sha256:bccb081ed800 | 2026-09-18T02:42:38+00:00 |
-| `precision_profile_version` | versioned | sha256:146e8e6ffbc4 | 2026-09-18T02:42:38+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-18T02:42:38+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-18T02:42:38+00:00 |
-| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-18T02:42:38+00:00 |
-| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-18T02:42:38+00:00 |
-| `pricing_rule_card_version` | versioned | sha256:d88298683924 | 2026-09-18T02:42:38+00:00 |
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-18T04:18:36+00:00 |
+| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-18T04:18:36+00:00 |
+| `constraint_schema_version` | versioned | sha256:bccb081ed800 | 2026-09-18T04:18:36+00:00 |
+| `precision_profile_version` | versioned | sha256:146e8e6ffbc4 | 2026-09-18T04:18:36+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-18T04:18:36+00:00 |
+| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-18T04:18:36+00:00 |
+| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-18T04:18:36+00:00 |
+| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-18T04:18:36+00:00 |
+| `pricing_rule_card_version` | versioned | sha256:d88298683924 | 2026-09-18T04:18:36+00:00 |
 | `adjustment_scope` | enum | **未冻结** | — |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
@@ -60,7 +60,7 @@
 
 ## 四、质量门
 
-- 单元测试：**1007** 项，结果 **通过**（OK）
+- 单元测试：**1037** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -82,7 +82,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP0 | 15 | done 15 |
 | WP1 | 11 | done 10、not_started 1 |
 | WP2 | 5 | not_started 5 |
-| WP3 | 7 | done 3、not_started 4 |
+| WP3 | 7 | done 4、not_started 3 |
 | WP4 | 13 | done 8、not_started 5 |
 | WP5 | 5 | not_started 5 |
 | WP6 | 8 | not_started 8 |
@@ -92,7 +92,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ### 已启动 / 已完成任务
 
-> 共 36 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
+> 共 37 项。生效状态由「人工声明」与「证据核对」共同决定（见 `src/bidpricing/status.py::effective_status`）。
 
 | 任务 | 标题 | 生效状态 | 证据核对 | 备注 |
 |---|---|---|---|---|
@@ -123,6 +123,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T01-06 | D01–D12 校验实现 | done | — | 2026-09-16 实现 src/bidpricing/validation/checks.py + CLI validate-boq + config/validation_rules.json（规范事实源）。27 测试双向锁定规范↔实现。D01–D12 按 ADR-0008 re-base：D02→q1_point>0、D03→cap>0或no_cap、D05→两侧并集覆盖率、W02→价值比cap/c。真实文件 e2e：D01–D05/D07/D10/D11 PASS（覆盖率1.0）；D06 FAIL（82项attribution未标注=OI-01待补）；D08 BLOCKED（税口径未声明）；D09 BLOCKED（contract_type未声明）——三项均为真实 Phase 0 输入缺口，退出码 1。 |
 | T03-02 | 派生量计算 | done | ✓ 成立 | 落地 L_i/U_i/floor_i/r_eff_i 的**唯一实现**（config/derived_quantities_spec.json + src/bidpricing/derived.py），判据 DQ-01..DQ-11 全双向可测（tests/test_derived.py，55 项）。★ 闭合 T04-02D 的 SV-07 挂账：floor_by_id 从此有唯一生产者；实测给 floor 后 SV-07 由 BLOCKED 转 PASS。★ 关键口径：ACCEPT 的钳制 min(floor,cap) **只在 cap 非空时生效**（空 cap = 不限价，折成 0 会把地板静默压到 0）；L_i 为多来源**取大**（实例下界 ∪ 条款 CAP·(1−tol_lo)）；r_eff 只委派 compute_r_eff（DQ-08 用 AST 审计禁调 settlement_revenue）。计算与判定分离（judge_derived 只吃 DerivedItem）使判据可注入验证。遗留：μ 与 unbalanced_clause 尚无落值位置（OI-DQ-A/B），故真实项目上 floor 一路如实 BLOCKED。；config/derived_quantities_spec.json 存在（15221 字节）；src/bidpricing/derived.py 存在；tests/test_derived.py 存在；ADR ADR-0025-derived-quantities.md 存在 |
 | T03-03 | Phase 0 预检与可行性证书 | done | ✓ 成立 | config/phase0_precheck_spec.json 存在（11910 字节）；src/bidpricing/solver/precheck.py 存在；tests/test_precheck.py 存在；ADR ADR-0030-phase0-precheck.md 存在 |
+| T03-06 | 不可行诊断 | done | ✓ 成立 | config/infeasibility_diagnosis_spec.json 存在（8006 字节）；src/bidpricing/solver/diagnose.py 存在；tests/test_diagnose.py 存在；ADR ADR-0031-infeasibility-diagnosis.md 存在 |
 | T03-04 | 约束判定器 | done | ✓ 成立 | config/constraint_judge_spec.json 存在（15213 字节）；src/bidpricing/solver/constraint_judge.py 存在；tests/test_constraint_judge.py 存在；ADR ADR-0029-constraint-judge.md 存在 |
 | T04-00 | Phase 1 适用条件证明与反例集 | done | ✓ 成立 | 2026-09-17 完成《Phase 1 精确性条件》+ 反例集。**定理 T1（阈值分割）用交换论证证明**，刻意不走 KKT——KKT 是 T04-02A/D 的实现路线，两者共用会让「证明」与「实现」按同一个误解同时成立，T04-08 的独立性验收即失去对象（ADR-0019）。九条条件分两组：A 组（EC-1 作用域完备 / EC-2 排序键正确 / EC-3 权重正 / EC-4 系数非负 / EC-5 非退化 / EC-6 软约束不激活 / EC-7 可行域非空）违反则阈值分割解不再是 P_A 最优解；B 组（EC-8 舍入可调和 / EC-9 上界有限）违反只加实现性义务。**verdict 只看 A 组**——首版把 EC-8 放 A 组的结果是任何实例都判不出 EXACT（舍入上界 0.005·Σq0 几乎总超 eps_total），一个永远需要附注的 verdict 等于没有 verdict。反例集 CE-01..CE-09 每个都带「误用解 vs 正确解」数值见证，由 check_solution 代回原式复算；expected 做**双向**比对（实现判 FAIL 的条件不得漏声明——CE-07 首跑即踩到单向比对的漏洞）。正例 PE-01 = 附录 B 例 2R 的 SEGMENT 分支（本项目已落 SEGMENT），用 n=2 端点比较做**完整**最优性验证。副产品：修掉 compute_r_eff 的 SEGMENT 分支真 bug（increase_threshold 本身已是 1+θ_dev，原式再加 1.0 使越界段 r_eff 系统性高估）。本项目真实结论：EC-9 对西永L样本判 WARN（031301017001 cap 空），故 Phase 1 算法必须内建「空 cap 项固定为临界项」分支。测试 50 项；phase1-check 10/10 制品↔实现一致。；config/phase1_exactness_spec.json 存在（39093 字节）；src/bidpricing/solver/exactness.py 存在；src/bidpricing/solver/cases.py 存在；src/bidpricing/solver/instance.py 存在；tests/test_phase1_exactness.py 存在；ADR ADR-0019-phase1-exactness-by-exchange-argument.md 存在 |
 | T04-01 | Phase 1 解析解 | done | ✓ 成立 | 2026-09-17：排序+二分+贪心定容解析解落地。spec=config/phase1_solver_spec.json（PS-01..PS-11）；实现 src/bidpricing/solver/phase1.py（solve_phase1/judge_phase1/phase1_report/两个内置探针）；Z 一律由 instance.check_solution 复算（不重实现 R_i）；lb_i 复用 formulation.merged_lower（_merged_lower 提升为公开名，唯一实现不变）。两个探针（free-cap/simple）verdict=PASS。测试 48 项全绿（全量 838），含 PS-06 双向交换探针、r vs r_eff 逆序实例、空 cap 临界项、平台 tie-break、不支持政策 BLOCKED、INFEASIBLE≠BLOCKED。CLI 新增 phase1-solve（--probe/--instance/--json）。遗留：PS-11 曾抓到制品把三容差入参写成一条，已拆分制品（判据先于实现纠错）；PS-06 首版只做单向交换，补齐「先增后减」方向。；config/phase1_solver_spec.json 存在（22640 字节）；src/bidpricing/solver/phase1.py 存在；tests/test_phase1_solver.py 存在；ADR ADR-0026-phase1-analytic-solver.md 存在 |
@@ -145,8 +146,8 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T02-01 | WP2 | Config Schema | 配置定义表 | not_started |
 | T03-01 | WP3 | 结算规则引擎 | `SettlementRule.evaluate(Q0, Q1, P0, ContractContext)` | not_started |
 | T03-05 | WP3 | 判定层测试矩阵 | 测试集 | not_started |
-| T03-06 | WP3 | 不可行诊断 | 诊断模块 | not_started |
 | T03-07 | WP3 | 状态机与低价处置状态 | 状态机规范 | not_started |
+| T04-02E | WP4 | 不可行诊断对接 | 诊断接口 | not_started |
 
 ---
 

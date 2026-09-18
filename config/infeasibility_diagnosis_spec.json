@@ -21,7 +21,7 @@
   "oracle": {
     "contract": "oracle(instance) -> FEASIBLE | INFEASIBLE | UNKNOWN；三态不得合并（ADR-0023 同族）",
     "phase1_builtin": "先 check_exactness 后 solve_phase1 的三态映射：全部 A 组 EC 通过⇒按 solve_phase1 状态（OPTIMAL⇒FEASIBLE；INFEASIBLE 已证空域⇒INFEASIBLE）；**仅 EC-7 被否定**（EC-1..EC-6 全过）⇒ INFEASIBLE——EC-7 FAIL = 已证空域（箱倒置 / B<P_min / B>P_max），但 solve_phase1 对它返回 BLOCKED，直接映射会把「已证不可行」吞成「可行性未知」；其余 EC 否定（EC-1..EC-6 任一）⇒ UNKNOWN（适用域外，不猜测）",
-    "lp_reserved": "LP/MILP 预言机由 T04-02E 接线（backend UNAVAILABLE⇒UNKNOWN，不是缺口补位）",
+    "milp_builtin": "T04-02E 接线：build_formulation→compile_model→solve_compiled 的归一状态映射——INFEASIBLE⇒INFEASIBLE；OPTIMAL/FEASIBLE⇒FEASIBLE；其余（UNBOUNDED/AMBIGUOUS/UNAVAILABLE/UNSUPPORTED 及后端异常）⇒UNKNOWN。**backend UNAVAILABLE⇒UNKNOWN，不是缺口补位**：没跑成 ≠ 不可行。chained_oracle(phase1, milp) 按序问、首个非 UNKNOWN 胜出、整链 UNKNOWN 就如实 UNKNOWN（unknown_semantics）",
     "unknown_semantics": "UNKNOWN 不参与「恢复可行」判定：关掉旋钮后从 UNKNOWN 变 FEASIBLE ⇒ blocking 成立；从 UNKNOWN 仍 UNKNOWN ⇒ 无结论"
   },
   "knobs": {

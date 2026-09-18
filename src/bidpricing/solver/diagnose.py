@@ -278,6 +278,78 @@ def phase1_oracle(
     return _oracle
 
 
+def milp_oracle(
+    resolved: ResolvedParameters,
+    *,
+    floor_by_id: Mapping[str, float] | None = None,
+    eps_abs: float = 0.01,
+    eps_price: float = 1e-9,
+    backend_spec: Mapping[str, Any] | None = None,
+    backend: Any = None,
+) -> Oracle:
+    """T04-02E 接线：编译链预言机（spec.oracle.milp_builtin）。
+
+    build_formulation → compile_model → solve_compiled，归一状态三态映射：
+    INFEASIBLE ⇒ INFEASIBLE（求解器已证空域）；OPTIMAL / FEASIBLE ⇒ FEASIBLE；
+    其余（UNBOUNDED / AMBIGUOUS / UNAVAILABLE / UNSUPPORTED）⇒ UNKNOWN——
+    **backend UNAVAILABLE ⇒ UNKNOWN，不是缺口补位**（spec.oracle.lp_reserved
+    的原语义）：没跑成 ≠ 不可行。
+
+    ``backend`` 参数是注入点（BB-06 同源）：零依赖环境的测试用替身后端
+    跑整条链路，不需要真求解器。
+    """
+    from .backend import load_backend_spec, solve_compiled
+    from .compiler import compile_model
+    from .formulation import build_formulation
+    from ..paths import config_dir
+
+    def _oracle(inst: Phase1Instance) -> str:
+        try:
+            fm = build_formulation(
+                inst, resolved, eps_abs=eps_abs, eps_price=eps_price,
+                floor_by_id=floor_by_id,
+            )
+            model = compile_model(fm, source="diagnose:milp_oracle")
+            spec = (
+                dict(backend_spec) if backend_spec is not None
+                else load_backend_spec(config_dir())
+            )
+            result = solve_compiled(
+                model, spec=spec, instance=inst, resolved=resolved,
+                backend=backend,
+            )
+        except Exception:  # noqa: BLE001 - 后端不可用/未装 ⇒ UNKNOWN
+            return UNKNOWN
+        normalized = result.status.normalized
+        if normalized == "INFEASIBLE":
+            return INFEASIBLE
+        if normalized in ("OPTIMAL", "FEASIBLE"):
+            return FEASIBLE
+        return UNKNOWN
+
+    return _oracle
+
+
+def chained_oracle(*oracles: Oracle) -> Oracle:
+    """链式预言机：按序问，**首个非 UNKNOWN 的结论胜出**；全 UNKNOWN ⇒ UNKNOWN。
+
+    典型用法：``chained_oracle(phase1_oracle(r), milp_oracle(r))``——
+    解析侧适用域外（EC-1..6 否定）时落到编译侧。UNKNOWN 在链上不合并结论
+    （spec.oracle.unknown_semantics）：整链 UNKNOWN 就如实 UNKNOWN。
+    """
+    if not oracles:
+        raise ValueError("chained_oracle 需要至少一个预言机")
+
+    def _oracle(inst: Phase1Instance) -> str:
+        for orc in oracles:
+            answer = orc(inst)
+            if answer != UNKNOWN:
+                return answer
+        return UNKNOWN
+
+    return _oracle
+
+
 def _soft_off(inst: Phase1Instance, remove: Iterable[str]) -> Phase1Instance:
     """关旋钮 = 从 active_soft_constraints 去掉对应 id（数据层语义）。"""
     drop = set(remove)

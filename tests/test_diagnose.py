@@ -14,6 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from bidpricing.contracts.pricing_card import ResolvedParameters  # noqa: E402
+from bidpricing.solver.backend import RawOutcome, load_backend_spec  # noqa: E402
+from bidpricing.solver.compiler import compile_model  # noqa: E402
 from bidpricing.solver.diagnose import (  # noqa: E402
     FEASIBLE,
     INFEASIBLE,
@@ -21,16 +23,20 @@ from bidpricing.solver.diagnose import (  # noqa: E402
     DiagnosisEntry,
     DiagnosisReport,
     StructuralConflict,
+    chained_oracle,
     deletion_filter,
     detect_structural_conflicts,
     diagnose,
     judge_diagnosis,
     load_diagnosis_spec,
     load_toggleable_ids,
+    milp_oracle,
     phase1_oracle,
 )
+from bidpricing.solver.formulation import build_formulation  # noqa: E402
 from bidpricing.solver.instance import Phase1Instance, Phase1Item  # noqa: E402
 from bidpricing.solver.phase1 import phase1_simple_probe_instance  # noqa: E402
+from bidpricing.paths import config_dir  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 手算夹具：A/B 两可优化项，数值可复算。
@@ -326,6 +332,132 @@ class TestDiagnoseEndToEnd(unittest.TestCase):
         )
         self.assertEqual(rep.baseline, FEASIBLE)
         self.assertEqual(rep.overall, "PASS")
+
+
+# ---------------------------------------------------------------------------
+# T04-02E：milp_oracle（编译链预言机）+ chained_oracle（链式）。
+# 零依赖纪律：用替身后端跑整条链路，不 import pulp。
+# ---------------------------------------------------------------------------
+
+class _FakeBackend:
+    """替身后端：给定 native 就如实回传（test_solver_backend 同款注入模式）。"""
+
+    name = "fake"
+    family = "PULP"
+    provides = ("LP", "MILP")
+
+    def __init__(self, native: str | None):
+        self.native = native
+        self.calls = 0
+
+    def available(self) -> bool:
+        return True
+
+    def solve(self, model, options):  # noqa: ARG002 - 接口固定
+        self.calls += 1
+        return RawOutcome(
+            family=self.family,
+            native_status=self.native,
+            x={},
+            reported_objective=None,
+            has_incumbent=False,
+            message="替身后端（T04-02E 注入）",
+        )
+
+
+class _RaisingBackend(_FakeBackend):
+    def solve(self, model, options):
+        self.calls += 1
+        raise RuntimeError("后端炸了（注入）")
+
+
+class TestMilpOracle(unittest.TestCase):
+    """编译链预言机的三态映射（spec.oracle.milp_builtin）。"""
+
+    def setUp(self):
+        self.resolved = _RESOLVED
+        self.spec = load_backend_spec(config_dir())
+
+    def _oracle(self, backend):
+        return milp_oracle(self.resolved, backend=backend, backend_spec=self.spec)
+
+    def test_optimal_maps_feasible(self):
+        orc = self._oracle(_FakeBackend("Optimal"))
+        self.assertEqual(orc(base_instance()), FEASIBLE)
+
+    def test_infeasible_maps_infeasible(self):
+        orc = self._oracle(_FakeBackend("Infeasible"))
+        self.assertEqual(orc(base_instance()), INFEASIBLE)
+
+    def test_none_native_maps_unknown(self):
+        # native=None = 「求解器根本没被调用到」——没跑成 ≠ 不可行。
+        orc = self._oracle(_FakeBackend(None))
+        self.assertEqual(orc(base_instance()), UNKNOWN)
+
+    def test_backend_exception_maps_unknown(self):
+        orc = self._oracle(_RaisingBackend("Optimal"))
+        self.assertEqual(orc(base_instance()), UNKNOWN)
+
+    def test_real_solver_env_end_to_end(self):
+        """装了真求解器的环境：低 B 实例由 HiGHS 实证 INFEASIBLE。
+
+        零依赖环境下 solve_compiled 返回 UNAVAILABLE ⇒ UNKNOWN（合法语义），
+        两种环境都不断言同一定值——各自钉住各自的纪律。
+        """
+        orc = milp_oracle(self.resolved)
+        answer = orc(replace(base_instance(), B=100_000.0))
+        self.assertIn(answer, (INFEASIBLE, UNKNOWN))
+
+
+class TestChainedOracle(unittest.TestCase):
+    """链式：首个非 UNKNOWN 胜出；整链 UNKNOWN ⇒ UNKNOWN。"""
+
+    def test_first_decisive_wins(self):
+        seq = []
+
+        def o1(_):
+            seq.append("o1")
+            return UNKNOWN
+
+        def o2(_):
+            seq.append("o2")
+            return INFEASIBLE
+
+        def o3(_):  # 不应被问到
+            seq.append("o3")
+            return FEASIBLE
+
+        self.assertEqual(chained_oracle(o1, o2, o3)(base_instance()), INFEASIBLE)
+        self.assertEqual(seq, ["o1", "o2"])
+
+    def test_all_unknown_stays_unknown(self):
+        self.assertEqual(
+            chained_oracle(lambda _: UNKNOWN, lambda _: UNKNOWN)(
+                base_instance()),
+            UNKNOWN,
+        )
+
+    def test_empty_raises(self):
+        with self.assertRaises(ValueError):
+            chained_oracle()
+
+    def test_chain_feeds_diagnose_conflict_set(self):
+        # phase1 侧 UNKNOWN（C9 激活适用域外）→ 链落到 MILP 侧：
+        # 关掉 C9 就 FEASIBLE ⇒ 删除过滤器应报出 ("C9",)。
+        def phase1_side(_):
+            return UNKNOWN
+
+        def milp_side(inst):
+            return FEASIBLE if "C9" not in inst.active_soft_constraints \
+                else INFEASIBLE
+
+        chain = chained_oracle(phase1_side, milp_side)
+        inst = replace(
+            base_instance(active=("C9",)),
+        )
+        rep = diagnose(inst, _RESOLVED, oracle=chain,
+                       spec=_SPEC, toggleable=_TOGGLE)
+        self.assertIn(("C9",), rep.min_conflict_sets)
 
 
 if __name__ == "__main__":

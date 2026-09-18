@@ -1039,6 +1039,11 @@ def build_parser() -> argparse.ArgumentParser:
                       help="JSON 文件：{'instance': {...}, 'floor': {...}}")
     p_dg.add_argument("--probe", default="simple", choices=("free-cap", "simple"),
                       help="无 --instance 时用哪个内置探针")
+    p_dg.add_argument("--oracle", default="phase1",
+                      choices=("phase1", "milp", "chain"),
+                      help="预言机：phase1=解析侧内置（T03-06）；milp=编译链"
+                           "（T04-02E，零依赖环境自动退 UNKNOWN）；"
+                           "chain=phase1 优先、MILP 兜底（首个非 UNKNOWN 胜出）")
     p_dg.add_argument("--json", action="store_true", help="输出 JSON")
     p_dg.set_defaults(func=cmd_diagnose)
 
@@ -1738,9 +1743,12 @@ def cmd_diagnose(args) -> int:
 
     from .contracts.pricing_card import load_pricing_card, resolve_parameters
     from .solver.diagnose import (
+        chained_oracle,
         diagnose,
         load_diagnosis_spec,
         load_toggleable_ids,
+        milp_oracle,
+        phase1_oracle,
     )
     from .solver.instance import Phase1Instance
     from .solver.phase1 import (
@@ -1772,12 +1780,24 @@ def cmd_diagnose(args) -> int:
 
     floor_by_id, floor_src = _resolve_floor_by_id(cfg, instance, resolved, floor_json)
 
+    wanted = str(getattr(args, "oracle", "phase1") or "phase1")
+    if wanted == "milp":
+        orc = milp_oracle(resolved, floor_by_id=floor_by_id)
+    elif wanted == "chain":
+        orc = chained_oracle(
+            phase1_oracle(resolved, floor_by_id=floor_by_id),
+            milp_oracle(resolved, floor_by_id=floor_by_id),
+        )
+    else:
+        orc = None  # diagnose 默认 = phase1 内置
+
     rep = diagnose(
         instance, resolved,
+        oracle=orc,
         floor_by_id=floor_by_id, spec=spec, toggleable=toggleable,
     )
 
-    print(f"== T03-06 不可行诊断 | {title}")
+    print(f"== T03-06 不可行诊断 | {title} ｜ 预言机：{wanted}")
     print(f"   floor 来源：{floor_src}")
     print(f"   基线：{rep.baseline}（FEASIBLE / INFEASIBLE=已证空域 / UNKNOWN=预言机不足）")
     if rep.structural_conflicts:

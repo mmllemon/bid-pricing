@@ -10,6 +10,12 @@
 
 ## [未发布]
 
+### T04-02E 完成：不可行诊断的预言机接线（ADR-0032）
+
+- `solver/diagnose.py` 新增 `milp_oracle`（build_formulation→compile_model→solve_compiled 归一映射：INFEASIBLE⇒INFEASIBLE、OPTIMAL/FEASIBLE⇒FEASIBLE、其余含 UNAVAILABLE/UNSUPPORTED⇒UNKNOWN——没跑成 ≠ 不可行）与 `chained_oracle`（首个非 UNKNOWN 胜出，整链 UNKNOWN⇒UNKNOWN）；backend 注入点透传（BB-06 同源）。
+- 规格 `lp_reserved` 替换为 `milp_builtin`（已接线语义）；CLI `diagnose --oracle phase1|milp|chain`（默认 phase1 行为不变）。
+- 零依赖环境用替身后端全链路测试；求解器环境低 B 实例由 HiGHS 实证 INFEASIBLE。测试 +9，全量 1037→1046 双环境绿。
+
 ### T03-06 完成：不可行诊断（ADR-0031）
 
 - `config/infeasibility_diagnosis_spec.json`：DG-01..DG-08 + 旋钮表（toggleable=C6..C13）+ §6.3 建议动作目录。

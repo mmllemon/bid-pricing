@@ -1131,9 +1131,24 @@
       ],
       "summary": "与 T03-06 打通，输出冲突集",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/diagnose.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_diagnose.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0032-oracle-wiring.md"
+        }
+      ],
+      "status": "done",
+      "note": "",
+      "status_note": "milp_oracle（build→compile→solve_compiled 归一映射：INFEASIBLE⇒INFEASIBLE、OPTIMAL/FEASIBLE⇒FEASIBLE、其余含 UNAVAILABLE/UNSUPPORTED⇒UNKNOWN）+ chained_oracle（首个非 UNKNOWN 胜出，整链 UNKNOWN⇒UNKNOWN）+ CLI diagnose --oracle phase1|milp|chain。测试 +9（39），全量 1037→1046 双环境绿。ADR-0032。",
+      "updated_at": "2026-09-18T15:20:00+08:00"
     },
     {
       "id": "T04-07",

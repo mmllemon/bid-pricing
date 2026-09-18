@@ -917,9 +917,26 @@
       ],
       "summary": "覆盖正常/缺失/越界/恰好等于边界/超边界 1 单位；含规则优先级测试：标准阈值与合同阈值并存时须证明合同阈值生效；含规则集切换测试：2013-规则集与 2024-规则集同一输入下输出必须可区分",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/judgment_test_matrix_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/validation/judgment_matrix.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_judgment_matrix.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0034-judgment-test-matrix.md"
+        }
+      ],
+      "status": "done",
+      "note": "config/judgment_test_matrix_spec.json（13 约束 × 6 边界类 = 78 格，12 格声明不适用；「缺失」拆 NOT_ACTIVE(SKIP)/MISSING_INPUT(BLOCKED) 两格；「1 单位」逐约束具名绑定——res 0.01 元 / tol_width / count / sigma_step 三种量纲）+ src/bidpricing/validation/judgment_matrix.py（枚举与覆盖审计：未声明空格⇒BLOCKED、零格⇒BLOCKED；参数化 judge_fn：真实实现与变异体同跑；25 条变异体注入审计，kills_by 按「声明 ⊆ 实际」对账，存活⇒FAIL；规则优先级 A1–A4；规则集切换两层判据 L1 数值/L2 元信息 + SEGMENT 退化登记为 WARN）+ tests/test_judgment_matrix.py 34 项元测试。实测：78 格零失配、25/25 变异体被杀、覆盖审计 PASS（66 覆盖 + 12 声明例外）、总结论 WARN（唯一来源＝SEGMENT 下数值指纹退化，已登记）。首轮 M-05/M-06 假存活（变异体依赖 reason 文案）已修正并加元测试钉住。CLI judgment-matrix。"
     },
     {
       "id": "T04-00",

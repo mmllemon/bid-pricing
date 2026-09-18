@@ -1013,6 +1013,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_cj.add_argument("--json", action="store_true", help="输出 JSON")
     p_cj.set_defaults(func=cmd_constraint_check)
 
+    # ---- T03-05 判定层测试矩阵 ------------------------------------------
+    p_jm = sub.add_parser(
+        "judgment-matrix",
+        help="T03-05 判定层测试矩阵：13 约束 × 6 边界类 = 78 格 + 变异体存活审计"
+             " + 规则优先级 / 规则集切换")
+    p_jm.add_argument("--json", action="store_true", help="输出 JSON")
+    p_jm.add_argument("--cases", action="store_true",
+                      help="列出全部 78 格的逐格结论（默认只列失配格）")
+    p_jm.add_argument("--no-mutants", action="store_true",
+                      help="跳过变异体审计（仅供快速自检；正式结论不得据此通过）")
+    p_jm.add_argument("--no-precedence", action="store_true", help="跳过规则优先级检查")
+    p_jm.add_argument("--no-switch", action="store_true", help="跳过规则集切换检查")
+    p_jm.set_defaults(func=cmd_judgment_matrix)
+
     # ---- T03-03 Phase 0 预检与可行性证书 ---------------------------------
     p_pc = sub.add_parser(
         "precheck",
@@ -1526,6 +1540,86 @@ def cmd_phase1_solve(args) -> int:
 
     _print_phase1(report, title)
     return 0 if report.verdict() == STATUS_PASS else 1
+
+
+def cmd_judgment_matrix(args) -> int:
+    """T03-05 判定层测试矩阵 —— 边界格枚举 + 变异体存活审计。
+
+    与相邻命令的分工：``constraint-check`` 判「给定候选 p，解合不合规」；
+    本命令判「**那套判据判得对不对**」——它不新增判据，只枚举判据的边界格，
+    再把 25 条变异体（坏实现）逐条喂进同一套用例。
+
+    **存活即盲区**：任何一条变异体没被探针杀掉 ⇒ 结论 FAIL，不得以
+    「大部分被杀」通过。这不是覆盖率数字游戏，而是「判据能否被错误值否定」
+    的可执行形式（规则⑧）。
+    """
+    from .validation.judgment_matrix import run_matrix
+
+    run = run_matrix(with_mutants=not args.no_mutants,
+                     with_precedence=not args.no_precedence,
+                     with_switch=not args.no_switch)
+
+    if args.json:
+        print(json.dumps(run.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if run.verdict in ("PASS", "WARN") else 1
+
+    cov = run.coverage
+    print("=== T03-05 判定层测试矩阵 ===")
+    print(f"用例格：{cov.total_cells} 格（覆盖 {cov.covered}／声明不适用 "
+          f"{cov.declared_not_applicable}）｜探针 {cov.probe_count} 个")
+    print(f"覆盖审计：{cov.status}"
+          + (f"  未声明空格：{list(cov.undeclared_gaps)}"
+             if cov.undeclared_gaps else ""))
+
+    print(f"\n-- 边界格（{len(run.cases)}）--")
+    if args.cases:
+        for c in run.cases:
+            tag = "N/A" if not c.applicable else ("OK" if c.matched else "**失配**")
+            print(f"  {c.case_id:<24}{tag}")
+    else:
+        bad = [c for c in run.failed_cases]
+        print("  全部通过" if not bad else "")
+        for c in bad:
+            print(f"  {c.case_id}：")
+            for r in c.results:
+                if not r.matched:
+                    print(f"    - {r.probe_id}：期望 {r.expected}，实测 {r.actual}")
+                    print(f"      {r.detail}")
+
+    bad_agg = [a for a in run.aggregates if not a.matched]
+    print(f"\n-- 聚合不变量探针（{len(run.aggregates)}）--")
+    print("  全部通过" if not bad_agg else "")
+    for a in bad_agg:
+        print(f"  {a.probe_id}：期望 {a.expected}，实测 {a.actual}｜{a.detail}")
+
+    if run.mutants:
+        print(f"\n-- 变异体存活审计（{len(run.mutants)}）--")
+        print(f"{'变异体':<9}{'结论':<10}{'被谁杀掉'}")
+        for m in run.mutants:
+            who = "、".join(m.killed_by[:3]) + (
+                f" 等 {len(m.killed_by)} 处" if len(m.killed_by) > 3 else "")
+            print(f"{m.mutant_id:<9}{'已否定' if m.killed else '**存活**':<10}"
+                  f"{who or m.note}")
+        if run.surviving_mutants:
+            print("■ 存活变异体 ⇒ 判据盲区："
+                  f"{list(run.surviving_mutants)}")
+    else:
+        print("\n-- 变异体审计：已跳过（--no-mutants）——结论不得据此通过 --")
+
+    if run.rule_precedence is not None:
+        print(f"\n-- 规则优先级（{run.rule_precedence.status}）--")
+        for c in run.rule_precedence.checks:
+            print(f"  [{'通过' if c.passed else '不通过'}] {c.check_id}")
+            print(f"        {c.detail}")
+
+    if run.ruleset_switch is not None:
+        print(f"\n-- 规则集切换（{run.ruleset_switch.status}）--")
+        for ly in run.ruleset_switch.layers:
+            print(f"  [{ly.status}] {ly.layer_id}")
+            print(f"        {ly.detail}")
+
+    print(f"\n整体结论：{run.verdict}")
+    return 0 if run.verdict in ("PASS", "WARN") else 1
 
 
 def cmd_constraint_check(args) -> int:

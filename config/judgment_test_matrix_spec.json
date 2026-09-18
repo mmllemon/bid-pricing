@@ -1,0 +1,236 @@
+{
+  "spec_id": "judgment_test_matrix_v1",
+  "task": "T03-05",
+  "title": "判定层测试矩阵：边界 × 约束笛卡尔积 + 变异体存活审计 + 规则优先级 / 规则集切换",
+  "source_of_truth": "实施路线 v3.2.1 T03-05；config/constraint_judge_spec.json（C1–C13 判定器 / 激活语义 / 容差注册）；config/pricing_rule_card.json（阈值分层互锁）；config/settlement_rule_spec.json（规则集注册表 / p1_source）；config/ruleset_selector_spec.json（优先级链）；config/precision_profile.json（eps_abs / eps_price / rounding.resolution）；ADR-0020 / 0029 / 0033",
+
+  "purpose": [
+    "把『正常 / 缺失 / 越界 / 恰好等于边界 / 超边界 1 单位』从一句话变成**可枚举、可审计、与具体实例取值无关**的用例集。",
+    "覆盖面由本制品声明（约束 × 边界类的笛卡尔积），**不得取决于被测数据**——被测数据换一批，覆盖格必须一格不少（规则⑧）。",
+    "每条判据必须**能被错误实现否定**：变异体目录里的每条坏实现都必须被至少一格用例杀掉；有变异体存活 ⇒ 判据存在盲区（不是『通过』）。",
+    "规则优先级：标准阈值与合同阈值并存时，证明**合同阈值生效**（覆盖只记参数、判定仍走常量 = SR-05 失败模式）。",
+    "规则集切换：2013 与 2024 同一输入下输出必须可区分；数值指纹退化时**不得**把『未区分』记成『已区分』（规则⑤）。"
+  ],
+
+  "boundary_classes": [
+    {
+      "class_id": "NOMINAL",
+      "label": "正常",
+      "meaning": "约束已激活且被测值在界内",
+      "expected_role": "PASS",
+      "offset_units": null,
+      "rationale": "判据的基线格：它若 FAIL，说明矩阵夹具本身坏了，而不是实现坏了。"
+    },
+    {
+      "class_id": "NOT_ACTIVE",
+      "label": "未激活",
+      "meaning": "该约束的激活前提（外生声明）缺失 ⇒ 不参与判定",
+      "expected_role": "SKIP",
+      "offset_units": null,
+      "rationale": "**本格是任务书『缺失』一格的强制拆分**：『用户没给 theta』（不激活 ⇒ SKIP）与『激活了但原始量缺失』（⇒ BLOCKED）期望状态相反，合成的单格会让实现把两者互换而矩阵毫无察觉——一个判据能被两类不同失败通过 ⇒ 必须拆（规则⑧）。"
+    },
+    {
+      "class_id": "MISSING_INPUT",
+      "label": "缺失",
+      "meaning": "约束已激活，但判定所需的原始量（p / q0 / c_i / 限值 / 容差）缺失",
+      "expected_role": "BLOCKED",
+      "offset_units": null,
+      "rationale": "缺数据不是通过，也不是 0（ADR-0004 / 0005）。本格专门杀死『缺失补 0 后继续判』与『取不到容差给 PASS』两类变异体。"
+    },
+    {
+      "class_id": "OUT_OF_RANGE",
+      "label": "越界",
+      "meaning": "被测值向不合法侧越过边界 10 个单位",
+      "expected_role": "FAIL",
+      "offset_units": 10,
+      "rationale": "量级格：证明判据不是只在极端偏离时才报警。"
+    },
+    {
+      "class_id": "EXACT_BOUNDARY",
+      "label": "恰好等于边界",
+      "meaning": "被测值恰好落在判据边界上（箱型为 p 与限值相等；容差类为偏差恰好等于容差宽度）",
+      "expected_role": "PASS",
+      "offset_units": 0,
+      "rationale": "**边界归属判据**（路线 §5.2 J2 同族）：恰好触界必须通过——触发条件是严格不等式 / 非严格不等式，写反了就多判一次违规。本格专门杀死『边界归属写反』的变异体。"
+    },
+    {
+      "class_id": "BOUNDARY_PLUS_1",
+      "label": "超边界 1 单位",
+      "meaning": "被测值向不合法侧越过边界**恰好 1 个单位**（单位见 unit_binding）",
+      "expected_role": "FAIL",
+      "offset_units": 1,
+      "rationale": "**本格是矩阵里最锋利的一格**：它杀死『容差被放宽到看不见小越界』的变异体。0.01 元的越界在提交报价表里同样是越界（constraint_judge_spec.tolerances.forbidden：箱型比较为金额精确比较，不用容差）。"
+    }
+  ],
+
+  "boundary_units": {
+    "_rule": "『1 个单位』是**多义**的：对金额箱型是 0.01 元、对项数是 1 项、对无量纲偏离度是另一个量。规则⑨（判决宽度必须具名）在此逐字适用——每个单位一个名字，禁止在用例里写裸数值。",
+    "res": {
+      "name": "报价分辨率",
+      "value_source": "config/precision_profile.json → rounding.resolution",
+      "value": 0.01,
+      "unit": "元",
+      "rationale": "提交报价表的最小可表示增量。『越界 1 分钱』与『越界 1 元』在合规性上等价——这正是箱型判据不许用容差的理由。"
+    },
+    "tol_width": {
+      "name": "该约束具名容差的宽度",
+      "value_source": "config/constraint_judge_spec.json → tolerances.entries（逐约束取：C1→eps_c1_abs；C6/C9/C10→eps_total；C12→eps_ratio）",
+      "value": null,
+      "unit": "与所引用容差同量纲",
+      "rationale": "用『容差宽度』当单位，EXACT_BOUNDARY 证明『恰好等于容差 ⇒ 通过』、BOUNDARY_PLUS_1 证明『超出一个容差宽度 ⇒ FAIL』——即容差比较方向没有写反。若用更小的单位（如 1e-12），本格会被浮点噪声淹没而失去鉴别力。"
+    },
+    "count": {
+      "name": "项数",
+      "value_source": "整数计数（C7 的亏损项数 / N_max 本身即整数量）",
+      "value": 1,
+      "unit": "项",
+      "rationale": "C7 的被测量是计数，其最小可辨变化就是 1 项——不存在更小的『1 个单位』。"
+    },
+    "sigma_step": {
+      "name": "偏离度步长",
+      "value_source": "本制品（σ 上的绝对步长，规格具名）",
+      "value": 1e-06,
+      "unit": "无量纲（标准偏差 σ 上）",
+      "rationale": "σ 无自然最小刻度，故显式声明一个步长；取值须远大于夹具的构造浮点误差（~1e-12）又远小于 sigma_max 的典型量级（~1e-2），使本格测的是判据方向而不是噪声。"
+    }
+  },
+
+  "unit_binding": {
+    "_rule": "每个约束绑定**一个**具名单位；未绑定 ⇒ 矩阵自身不完整（BLOCKED，不是 PASS）。C13 绑 null 是**已声明的例外**（恒 SKIP，无边界可触），不是漏登记。",
+    "C1": "tol_width",
+    "C2": "res",
+    "C3": "res",
+    "C4": "res",
+    "C5": "res",
+    "C6": "tol_width",
+    "C7": "count",
+    "C8": "res",
+    "C9": "tol_width",
+    "C10": "tol_width",
+    "C11": "sigma_step",
+    "C12": "tol_width",
+    "C13": null
+  },
+
+  "coverage_requirements": {
+    "constraints": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10", "C11", "C12", "C13"],
+    "required_classes": ["NOMINAL", "NOT_ACTIVE", "MISSING_INPUT", "OUT_OF_RANGE", "EXACT_BOUNDARY", "BOUNDARY_PLUS_1"],
+    "expected_cells": "13 × 6 = 78 格；每格必须二选一地处于 COVERED（有用例且带期望状态）或 NOT_APPLICABLE（在本制品 exceptions 里**显式声明**并给出理由）。",
+    "completeness_rule": "**未声明的空格 ⇒ 矩阵不完整 ⇒ 覆盖审计结论 BLOCKED**。就绪性判声明不判行数（规则③）：空格可以存在，但必须是被声明的空格——沉默不是断言（规则⑤）。",
+    "expected_total": 78,
+    "exceptions": [
+      {
+        "constraint_id": "C1",
+        "class_id": "NOT_ACTIVE",
+        "reason": "C1 恒激活（constraint_judge_spec.activation_semantics.table）——不存在『未激活』的 C1；为凑格而造一个会让『B 缺失』被误记为 SKIP（它必须是 BLOCKED）。"
+      },
+      {"constraint_id": "C2", "class_id": "NOT_ACTIVE", "reason": "C2 恒激活。"},
+      {"constraint_id": "C3", "class_id": "NOT_ACTIVE", "reason": "C3 恒激活。"},
+      {"constraint_id": "C4", "class_id": "NOT_ACTIVE", "reason": "C4 恒激活。"},
+      {"constraint_id": "C5", "class_id": "NOT_ACTIVE", "reason": "C5 恒激活。"},
+      {"constraint_id": "C6", "class_id": "OUT_OF_RANGE", "reason": "C6 的被测量是总量缺口、限值是 theta·P*；构造『越界 10 个单位』等价于构造『越界 1 个单位』的同一形态（同一 FAIL 分支），无独立鉴别力。保留 EXACT_BOUNDARY 与 BOUNDARY_PLUS_1 两格即已钉住方向。"},
+      {"constraint_id": "C8", "class_id": "OUT_OF_RANGE", "reason": "同 C6：C8 的下界是 c_i·(1−d_max)，越界 10 个单位与 1 个单位走同一 FAIL 分支。"},
+      {"constraint_id": "C13", "class_id": "NOT_ACTIVE", "reason": "C13 恒 SKIP，本格与 NOMINAL 期望状态相同（都是 SKIP），拆两格会让『恒 SKIP』与『未激活 ⇒ SKIP』不可区分。"},
+      {"constraint_id": "C13", "class_id": "MISSING_INPUT", "reason": "C13 无输入可缺（恒 SKIP，不读任何原始量）。"},
+      {"constraint_id": "C13", "class_id": "OUT_OF_RANGE", "reason": "C13 无边界可越（结算期条件修正，投标期不可知）。"},
+      {"constraint_id": "C13", "class_id": "EXACT_BOUNDARY", "reason": "同 OUT_OF_RANGE。"},
+      {"constraint_id": "C13", "class_id": "BOUNDARY_PLUS_1", "reason": "同 OUT_OF_RANGE。为凑满矩阵而给 C13 编造边界，会诱使实现把 SKIP 折叠进 PASS。"}
+    ]
+  },
+
+  "mutants": {
+    "_rule": "每条变异体是一条『能被错误值否定』的具体形式。存活（没有任何用例杀掉）⇒ 判据盲区 ⇒ 审计结论 FAIL。变异体**不改内层源码**：以替身函数替换被测判据，证明矩阵有鉴别力（复核层不复制内层逻辑，只替换它——ADR-0020 规则⑧）。\n\n  kills_by 的语义是**下界**：它声明『这些格必须真的杀掉该变异体』，实际杀掉它的格可以更多。审计按『声明的格 ⊆ 实际杀格』对账——声明与实际不符即判据漂移（不是宽松通过）。\n\n  变异体的判定条件**不得依赖被测实现的可解释性文案**（reason 字符串）：文案会变、行为不会；依赖文案会让变异体假存活（首轮实测 M-05/M-06 即因此假存活），既掩盖真盲区也伪造假盲区。正确的注入方式是用 dataclasses.replace 造出『那个 bug 会产生的输入』再喂给真实实现。",
+    "entries": [
+      {"mutant_id": "M-01", "target": "C1", "defect_family": "自证", "defect": "把限值写成候选 p 之和（右端随 p 变）——判据退化为恒真式", "kills_by": ["C1/OUT_OF_RANGE", "C1/BOUNDARY_PLUS_1"]},
+      {"mutant_id": "M-02", "target": "C2", "defect_family": "空 cap 折 0", "defect": "不限价项按上界 0 参与判定", "kills_by": ["C2/NOMINAL"]},
+      {"mutant_id": "M-03", "target": "C2", "defect_family": "边界归属", "defect": "上界比较写成 slack > 0 才算通过（恰好触界判 FAIL）", "kills_by": ["C2/EXACT_BOUNDARY"]},
+      {"mutant_id": "M-04", "target": "C2", "defect_family": "容差放宽", "defect": "给上界加 5 个分辨率单位的宽放", "kills_by": ["C2/BOUNDARY_PLUS_1"]},
+      {"mutant_id": "M-05", "target": "C3", "defect_family": "缺失补 0", "defect": "L 缺失时按 0 继续判（不 BLOCKED）", "kills_by": ["C3/MISSING_INPUT"]},
+      {"mutant_id": "M-06", "target": "C4", "defect_family": "缺失补 0", "defect": "floor 缺失时按 0 继续判（μ 挂账被吞）", "kills_by": ["C4/MISSING_INPUT"]},
+      {"mutant_id": "M-07", "target": "C5", "defect_family": "下界取错", "defect": "lb 用裸 eps_price·P*（不取 max 上抬到分辨率）", "kills_by": ["C5/BOUNDARY_PLUS_1"]},
+      {"mutant_id": "M-08", "target": "C6", "defect_family": "量纲混用", "defect": "缺口按 q0 加权（应用结算量 q1）", "kills_by": ["C6/NOMINAL"], "kill_note": "普通正常用例抓不到量纲混用——只有放在『q1 口径通过、q0 口径越界』的鉴别点上才抓得到（NOMINAL 格的第二子探针）"},
+      {"mutant_id": "M-09", "target": "C7", "defect_family": "单向核查", "defect": "z 一致性只查虚报、不查漏报", "kills_by": ["C7/OUT_OF_RANGE"]},
+      {"mutant_id": "M-10", "target": "C7", "defect_family": "未判定折叠", "defect": "未提供 z 向量时直接 PASS（不降 WARN）", "kills_by": ["C7/NOMINAL"]},
+      {"mutant_id": "M-11", "target": "C7", "defect_family": "边界归属", "defect": "亏损项数用 < N_max 才通过（恰好等于判 FAIL）", "kills_by": ["C7/EXACT_BOUNDARY"]},
+      {"mutant_id": "M-12", "target": "C8", "defect_family": "除零", "defect": "c_i=0 项直接参与下界计算（不 SKIP）", "kills_by": ["C8/NOMINAL"]},
+      {"mutant_id": "M-13", "target": "C9", "defect_family": "第二真相源", "defect": "Z 缺失时本层自行重算收入顶上（第二真相源：唯一收入实现被绕过）", "kills_by": ["C9/MISSING_INPUT"]},
+      {"mutant_id": "M-14", "target": "C10", "defect_family": "量纲混用", "defect": "前载项按 q1 加权（应用投标口径 q0）", "kills_by": ["C10/BOUNDARY_PLUS_1"], "kill_note": "鉴别点：q0 口径 actual=−0.011（FAIL）、q1 口径 −0.0099（PASS）"},
+      {"mutant_id": "M-15", "target": "C11", "defect_family": "静默替换判据", "defect": "仅给 kappa_max 时用 MAD 形式顶上（不 BLOCKED）", "kills_by": ["C11/MISSING_INPUT"]},
+      {"mutant_id": "M-16", "target": "C12", "defect_family": "DV-02 量纲", "defect": "容差用 eps_price×P* 代替 eps_ratio（比值上放大 ~10^6 倍）", "kills_by": ["C12/BOUNDARY_PLUS_1"]},
+      {"mutant_id": "M-17", "target": "聚合", "defect_family": "SKIP 参与竞争", "defect": "SKIP 参与最严竞争（带未激活项的报告永不到 PASS）", "kills_by": ["AP-02/skip-not-in-competition"]},
+      {"mutant_id": "M-18", "target": "聚合", "defect_family": "空集折叠", "defect": "空判据集返回 PASS（不是 BLOCKED）", "kills_by": ["AP-01/empty-set"]},
+      {"mutant_id": "M-19", "target": "容差解析", "defect_family": "DV-01", "defect": "容差名解析不出值时返回 PASS（而非 BLOCKED）", "kills_by": ["C1/MISSING_INPUT"]}
+    ]
+  },
+
+  "rule_precedence": {
+    "requirement": "标准阈值与合同阈值并存时须证明**合同阈值生效**（任务书原文）。",
+    "targets": ["contracts.rule_sets.base.RuleSet.classify_branch", "contracts.pricing_card.resolve_parameters", "settlement.SettlementRule.evaluate"],
+    "standard_thresholds": {"decrease": 0.85, "increase": 1.15, "source": "rule_sets.base.DECREASE_THRESHOLD / INCREASE_THRESHOLD"},
+    "contract_override": {"decrease_threshold": 0.9, "increase_threshold": 1.1, "source_label": "contract"},
+    "discriminating_inputs": [
+      {"r": 0.88, "standard_branch": "IN_RANGE", "contract_branch": "DECREASE", "meaning": "两版分支不同 ⇒ 该输入是『覆盖是否生效』的鉴别探针"},
+      {"r": 1.12, "standard_branch": "IN_RANGE", "contract_branch": "INCREASE", "meaning": "增值侧的同型探针"}
+    ],
+    "assertions": [
+      "A1（正确性）：合同覆盖后 classify_branch(0.88) 必须判 DECREASE —— 若判 IN_RANGE，说明覆盖只记参数、判定仍走常量（SR-05 失败模式）。",
+      "A2（可追溯性 INFO）：解析结果的 sources[threshold] 必须记到 contract 层。",
+      "A3（互锁不可绕过）：覆盖自带 Standard 层标签（standard / pricing_rule_card）且与实现常量不一致 ⇒ 仍必须 PricingCardError（分层互锁不因放行上层覆盖而失效）。",
+      "A4（沉默不是断言）：未登记 override 键 ⇒ PricingCardError，不得静默忽略。"
+    ],
+    "mutants": [
+      {"mutant_id": "MP-01", "defect": "覆盖只改参数、判定仍走实现常量（阈值注入失效）", "kills_by": ["A1/contract-threshold-effective(decrease)", "A1/contract-threshold-effective(increase)"]},
+      {"mutant_id": "MP-02", "defect": "Standard 层标签冒充合同层得以放行（分层互锁被绕过）", "kills_by": ["A3/standard-layer-interlock"]},
+      {"mutant_id": "MP-03", "defect": "未登记键静默忽略", "kills_by": ["A4/unregistered-key-blocked"]}
+    ]
+  },
+
+  "ruleset_switch": {
+    "requirement": "2013-规则集与 2024-规则集同一输入下输出必须可区分（任务书原文）。",
+    "same_input": {"q0": 1.0, "p0": 1.0, "rho_plus": 0.01, "rho_minus": 0.01, "r_probe": "1.15 ± 1e-9"},
+    "layers": [
+      {
+        "layer_id": "L1_NUMERIC",
+        "applies_when": "adjustment_scope = FULL",
+        "assertion": "|r_eff_2024 − r_eff_2013| ≥ 0.5·|1.15·ρ⁺|（2024 在阈值处跳降 ≈ −1.15·ρ⁺，2013 分段累加连续 ≈ 0）",
+        "catches": "两套实现的调价公式被复制 / 其中一套被另一套顶替"
+      },
+      {
+        "layer_id": "L2_META",
+        "applies_when": "任何作用域（含 SEGMENT）",
+        "assertion": "p1_source / supported_scopes / standard_code / legal_basis 四项必须各自非空且两版**逐项不同**",
+        "catches": "元信息被复制或未声明（数值可能同形，但『用哪版规范、按什么方式生成 P1』必须可区分）"
+      }
+    ],
+    "split_justification": "L1 与 L2 必须拆成两个判据：复制公式的变异体只被 L1 抓（量纲/公式重合），篡改或漏写元信息的变异体只被 L2 抓。一个判据能被两类不同失败通过 ⇒ 拆分（规则⑧）。",
+    "degenerate_branch": {
+      "condition": "adjustment_scope = SEGMENT",
+      "observed": "|r_eff_2024 − r_eff_2013| ≈ 0：SEGMENT 的结算曲线与 2013 同形",
+      "handling": "本格结论强制 **WARN**（不是 PASS、不是 FAIL），理由必须携带『数值指纹在此作用域下退化』；此时区分依据退回 L2 与两版代码路径独立性，**不得**以 L1 通过替代 L2 检查。",
+      "precedent": "contracts.selector.ruleset_self_test 的 advisories 已登记该退化；本矩阵把它从『建议』提升为**有状态的一格**。"
+    },
+    "mutants": [
+      {"mutant_id": "MR-01", "defect": "2024 的 settlement_amount 直接复用 2013 实现（公式被复制）", "kills_by": ["L1_NUMERIC@FULL"]},
+      {"mutant_id": "MR-02", "defect": "p1_source 两版声明相同（只动元信息、不动公式：L1 完全不变，只有 L2 抓得到）", "kills_by": ["L2_META"]},
+      {"mutant_id": "MR-03", "defect": "supported_scopes 两版相同（同上：专证两层判据必须拆开）", "kills_by": ["L2_META"]}
+    ]
+  },
+
+  "verdict_semantics": {
+    "aggregation_order": ["FAIL", "BLOCKED", "WARN", "SKIP", "PASS"],
+    "skip_not_in_competition": "SKIP 不参与最严竞争——否则任何带未激活项的实例永远到不了 PASS（ADR-0029 全量回归订正的不变量）。",
+    "empty_set": "BLOCKED（『没判过』不是 PASS）。",
+    "matrix_verdict_rule": "矩阵自身结论 = 最严（FAIL > BLOCKED > WARN > SKIP > PASS）：\n  * 任一变异体存活 / 任一格已被覆盖但实测与期望不符 ⇒ FAIL；\n  * 覆盖缺口未在 exceptions 里声明 ⇒ BLOCKED；\n  * 全部格通过且变异体全灭 ⇒ PASS。",
+    "matrix_empty_rule": "零用例 ⇒ BLOCKED（与判定器同一条不变量）。"
+  },
+
+  "interface_independence": {
+    "rule": "矩阵通过 `judge_fn(inputs, spec)` **参数化**被测判定器：真实实现与变异体替身走同一条用例生成路径。这样『矩阵有鉴别力』与『实现正确』是两个可独立否证的命题——否则矩阵只能验证『实现恰好对』（规则⑧）。",
+    "not_in_scope": [
+      "求解（phase1 / backend）",
+      "派生量重算（derived，T03-02）",
+      "MILP 最优性验收（T04-07）",
+      "解校验（verifier，T04-02D——它判『解对不对』，本矩阵判『判定器判得对不对』）"
+    ]
+  }
+}

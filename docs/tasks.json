@@ -761,9 +761,28 @@
       ],
       "summary": "输出 ① 结构化可行性证书：$P_{\\min}=\\sum L_iq_i^0$、$P_{\\max}=\\sum U_iq_i^0$、$P^*_{\\text{variable}}=P^*-P_{\\text{fixed}}$，并校验 $P^*_{\\text{variable}}\\in[P_{\\min},P_{\\max}]$，越…",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "config/phase0_precheck_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/precheck.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_precheck.py"
+        },
+        {
+          "kind": "adr",
+          "path": "ADR-0030-phase0-precheck.md"
+        }
+      ],
+      "status": "done",
+      "note": "",
+      "status_note": "PC-01..PC-08 预检判定器 + 结构化可行性证书（P_min/P_max/P*_var/P*_eff/ΔP）。P*_var 由 compute_P_competitive 闭式唯一提供（T00-06B ④）；P_min 用 merged_lower（ADR-0026 决策六）；P*_eff 三 term 任一不可算 ⇒ BLOCKED 不丢项；空 cap ⇒ P_max 不落值≠0、上界 SKIP；SKIP 不参与最严竞争。28 测试，全量 1007 双环境绿。CLI precheck。",
+      "updated_at": "2026-09-18T11:30:00+08:00"
     },
     {
       "id": "T03-06",

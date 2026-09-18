@@ -1,0 +1,182 @@
+{
+  "spec_id": "PHASE0-PRECHECK-001",
+  "task": "T03-03",
+  "title": "Phase 0 预检与可行性证书——判据规格",
+  "source_of_truth": [
+    "model_v0.3_R2 §6.1 结构化可行性证书（R8 新增）",
+    "model_v0.3_R2 §6.2 判定逻辑",
+    "impl_plan_v3.2.1 §3 T03-03 行",
+    "config/profit_bridge_spec.json（compute_P_competitive 为 P*_var 唯一提供者，T03-03 直接调用禁止重实现）",
+    "config/derived_quantities_spec.json（L_i/U_i/floor_i 唯一实现；P_min 须用 merged_lower 多源取大，ADR-0026 决策六）"
+  ],
+  "task_summary": "输出 ① 结构化可行性证书：P_min=Σ L_i·q_i^0、P_max=Σ U_i·q_i^0、P*_var（=可竞争部分预算，由 compute_P_competitive 闭式给出）并校验 P*_var ∈ [P_min, P_max]，越界即判 INFEASIBLE 且不进求解器；② P*_eff、ΔP、blocking 判据清单。",
+  "scope_boundary": "本层是**纯算术预检**（规则解析 + 求和 + 比较，O(n)），不调用求解器、不计算 r_eff、不做约束级判定（那是 T03-04）。预检 FAIL ⇒ 不进 Phase 1/2；这是结构性不可行与「求解失败」的分界线（§6.1 注）。核心原则：P* 越界必须判不可行，不得让优化器用不平衡报价「硬找解」。",
+  "p_star_var_provenance": "§6.1 写 P*_var = P* − P_fixed。含税总价结构下简单减法会漏掉税金联动（税基随可竞争部分变化），故实现按 T00-06B ④ 取唯一提供者 total_price.compute_P_competitive 的闭式解——这正是「同一约束跨层共用同一个名与同一个实现」（规则⑨）在 P*_var 上的落点。",
+  "six_tuple": {
+    "fields": ["check_id", "status", "actual", "limit", "detail", "severity"],
+    "status_domain": ["PASS", "WARN", "FAIL", "BLOCKED", "SKIP"],
+    "note": "与 constraint_judge_spec.six_tuple 同构；聚合 FAIL > BLOCKED > WARN > SKIP > PASS，空判据集 ⇒ BLOCKED。BLOCKED=数据或规则不足禁止继续计算（T03-07 状态机同口径）。"
+  },
+  "tolerances": {
+    "registry_note": "全部容差**具名**且只在此注册；解析入口复用 constraint_judge.resolve_tolerances（同一名字→数值的解析只有一个来源，DV-01）。eps_total 依赖 P_star：P_star 缺失 ⇒ 该名不写入解析表，依赖它的判据如实 BLOCKED。",
+    "entries": {
+      "eps_c1_abs": {
+        "source": "precision_profile.eps_abs",
+        "value": 0.01,
+        "unit": "元",
+        "used_by": ["PC-03", "PC-04", "PC-06", "PC-07"],
+        "note": "边界比较的绝对下限——「恰好落在边界上」必须判 PASS（§6.2 边界语义），缺口 ≤ 本容差视为贴边可行。"
+      },
+      "eps_price": {
+        "source": "precision_profile.eps_price",
+        "value": 1e-09,
+        "unit": "相对值（×P*）",
+        "used_by": ["eps_total 公式"],
+        "note": "仅作为 eps_total 公式的相对分量；本层无单价语境，禁止直接引用本名做比较。"
+      },
+      "resolution": {
+        "source": "precision_profile.rounding.resolution",
+        "value": 0.01,
+        "unit": "元",
+        "used_by": ["eps_total 公式"],
+        "note": "报价分辨率；本层不直接用于舍入（预检不做舍入决策），仅为 eps_total 解析提供成分。"
+      },
+      "eps_total": {
+        "formula": "max(eps_abs, eps_price * P_star)",
+        "unit": "元",
+        "used_by": ["PC-03", "PC-04", "PC-06", "PC-07"],
+        "note": "总价类比较的两层同口径（§8.2）：预检边界比较与后续 C1/判定层共用同一个 eps_total 名与公式，不得预检一套、判定一套。"
+      }
+    }
+  },
+  "certificate_fields": {
+    "P_min": "Σ_{i∈X_opt} L_i·q_i^0 —— L_i 取 derived 层单一实现（多源取大 merged_lower，含条款 cap·(1−tol_lo)）；任一 X_opt 项 L 缺 ⇒ 证书不可出，BLOCKED",
+    "P_max": "Σ_{i∈X_opt} U_i·q_i^0 —— 任一 X_opt 项 cap 空 ⇒ U 合法 None（ALLOW_EMPTY_NO_CAP）⇒ P_max **不落值**（非 0！），上界检查 SKIP；剩余有界项的和另存 p_max_capped 供诊断",
+    "p_star_var": "compute_P_competitive(P*, fixed_pretax, vat_rate, surtax_rate, supplied_material, env_tax) —— P*/vat/surtax 缺 ⇒ BLOCKED；甲供材/环保税未声明按 0 计并 WARN（取 0 是**收紧**方向：C 更小，不会静默放宽门槛）",
+    "p_star_eff": "max(模型下界之和, 成本线, 法定下浮底线)；三项**任一不可计算 ⇒ P*_eff 不落值并 BLOCKED**——丢项会让下界变弱（静默放宽可行性门槛），违反『宁可判死也不静默放宽』",
+    "eff_terms": {
+      "model_lower": "Σ_{i∈X_opt} max(L_i, floor_i)·q_i^0 —— floor 缺（如 μ 未落值 OI-DQ-A）⇒ 项不可算",
+      "cost_line": "(1+π_target)·Σ_{i∈X_opt} c_i·q_i^0 —— π_target 未声明或任一 c_i 缺 ⇒ 项不可算",
+      "cap_floor": "(1−α_cap)·Σ_{i∈X_opt} cap_i·q_i^0 —— α_cap 未声明或任一 cap 空 ⇒ 项不可算（α_cap 已声明而 cap 缺 = 声明与数据矛盾，BLOCKED）"
+    },
+    "delta_P": "max(0, P*_eff − P*) —— 缺口量；P*_eff 不落值 ⇒ 不落值"
+  },
+  "activation_semantics": [
+    "PC-01 rule_set_id 就绪：恒激活",
+    "PC-02 角色域完整：恒激活（角色域取自 competitiveness_classification.roles，机制制品）",
+    "PC-03 边界证书·下界：恒激活（P_min 可出即判；证书不可出 ⇒ BLOCKED）",
+    "PC-04 边界证书·上界：P_max 可出才激活；存在合法不限价项（cap 空）⇒ SKIP（上界由 P* 自身兜底，合法语义非数据缺口）",
+    "PC-05 P*_eff 输入就绪：恒激活",
+    "PC-06 有效下界：P*_eff 可出才激活",
+    "PC-07 模型自相矛盾：term1 与 P_max（全部项有界）同时可出才激活；任一 X_opt 项 U 缺 ⇒ SKIP",
+    "PC-08 合同类型降级：contract_type 已声明才激活；未声明 ⇒ SKIP（沉默不是断言）"
+  ],
+  "judges": [
+    {
+      "judge_id": "PC-01",
+      "constraint_id": "RULESET",
+      "severity": "P0",
+      "actual": "rule_set_id",
+      "limit": "非空标量",
+      "pass_when": "rule_set_id 已落值",
+      "block_when": ["rule_set_id 缺失或空"],
+      "anti_degeneracy": "规则集决定 R_i 结构与 adjustment_scope——不是参数差异，是结论差异（隐藏依赖 #11）。缺规则集继续算 = 在错口径上出结论。"
+    },
+    {
+      "judge_id": "PC-02",
+      "constraint_id": "ROLES",
+      "severity": "P0",
+      "actual": "∉ 角色域的 item_id 清单及计数",
+      "limit": "全部项 role ∈ competitiveness_classification.roles",
+      "pass_when": "未分类项清单为空",
+      "block_when": ["任一项 role 不在角色域"],
+      "anti_degeneracy": "X_opt 与 P_fixed 的划分不完整 ⇒ 恒等式无法闭合（competitiveness_classification.closure_requirement）。判据必须报出**具体清单**，不得只报总数。"
+    },
+    {
+      "judge_id": "PC-03",
+      "constraint_id": "CERT-LOW",
+      "severity": "P0",
+      "actual": "P*_var",
+      "limit": "P_min",
+      "slack": "P*_var − P_min（带号）",
+      "pass_when": "P*_var ≥ P_min − eps_total",
+      "fail_when": "P*_var < P_min − eps_total ⇒ INFEASIBLE（缺口 = P_min − P*_var）",
+      "block_when": ["P* 缺", "vat_rate/surtax_rate 缺", "任一 X_opt 项 L 或 q0 缺", "eps_total 未解析"],
+      "anti_degeneracy": "缺口量必须随注入的错误值变化——注入虚高 P_min 须使缺口变大，否则判据是摆设。"
+    },
+    {
+      "judge_id": "PC-04",
+      "constraint_id": "CERT-HIGH",
+      "severity": "P0",
+      "actual": "P*_var",
+      "limit": "P_max",
+      "slack": "P_max − P*_var（带号）",
+      "pass_when": "P*_var ≤ P_max + eps_total",
+      "fail_when": "P*_var > P_max + eps_total ⇒ INFEASIBLE（超界 = P*_var − P_max）",
+      "skip_when": "存在合法不限价项（cap 空 ⇒ U=None）——上界由 P* 自身兜底，跳过是合法语义",
+      "block_when": ["P* 缺", "vat_rate/surtax_rate 缺", "任一**有界** X_opt 项 U 或 q0 缺", "eps_total 未解析"],
+      "anti_degeneracy": "cap 空 ⇒ P_max 不落值（≠0）：把缺界记成 0 会把上界检查判成必然 FAIL，与「把缺失记成无」同根因（规则⑤）。"
+    },
+    {
+      "judge_id": "PC-05",
+      "constraint_id": "EFF-INPUTS",
+      "severity": "P0",
+      "actual": "三项下界的就绪清单与缺失键名",
+      "limit": "model_lower / cost_line / cap_floor 全部可计算",
+      "pass_when": "三项全部可计算",
+      "block_when": [
+        "μ 未落值（floor 缺，OI-DQ-A 传导）",
+        "π_target 未声明",
+        "α_cap 未声明",
+        "α_cap 已声明但任一 X_opt 项 cap 空（声明与数据矛盾）",
+        "任一 X_opt 项 c_i 或 q0 缺"
+      ],
+      "anti_degeneracy": "三缺一就 BLOCKED 而非按可用项取 max——丢项使下界变弱 = 静默放宽可行性门槛，方向性错误。缺失键必须具名报出。"
+    },
+    {
+      "judge_id": "PC-06",
+      "constraint_id": "EFF-BOUND",
+      "severity": "P0",
+      "actual": "P*",
+      "limit": "P*_eff",
+      "slack": "P* − P*_eff（带号）",
+      "pass_when": "P* ≥ P*_eff − eps_total",
+      "fail_when": "P* < P*_eff − eps_total ⇒ INFEASIBLE（ΔP = P*_eff − P* > 0，缺口报告）",
+      "block_when": ["P*_eff 不落值（PC-05 已报，此处连带 BLOCKED）", "P* 缺", "eps_total 未解析"],
+      "anti_degeneracy": "ΔP = max(0, P*_eff − P*) 必须精确等于 limit − actual 的正部；注入 ΔP=0 而实际缺口 > 0 须 FAIL。"
+    },
+    {
+      "judge_id": "PC-07",
+      "constraint_id": "SELF-CONFLICT",
+      "severity": "P0",
+      "actual": "model_lower = Σ max(L_i, floor_i)·q_i^0",
+      "limit": "P_max（全部项有界时）",
+      "slack": "P_max − model_lower（带号）",
+      "pass_when": "model_lower ≤ P_max + eps_total",
+      "fail_when": "model_lower > P_max + eps_total ⇒ 模型自相矛盾（μ_i 与 δ_i 设置冲突，数据校验失败）",
+      "skip_when": "任一 X_opt 项 U 缺（无完整上界可比）",
+      "block_when": ["term1 或 P_max 不可出"],
+      "anti_degeneracy": "这是**数据内在一致性**检查，不涉及 P*——注入互相矛盾的 L/U（与 μ 无关的单侧改动）必须能翻转结论。"
+    },
+    {
+      "judge_id": "PC-08",
+      "constraint_id": "CONTRACT",
+      "severity": "P1",
+      "actual": "contract_type",
+      "limit": "非 LUMP_SUM",
+      "pass_when": "contract_type 已声明且 ≠ LUMP_SUM",
+      "warn_when": "contract_type = LUMP_SUM ⇒ 降级：模型不给单价建议（§5.6），仅出预检与体检",
+      "skip_when": "contract_type 未声明（沉默不是断言，不得按非 LUMP_SUM 继续）"
+    }
+  ],
+  "aggregation": {
+    "order": ["FAIL", "BLOCKED", "WARN", "SKIP", "PASS"],
+    "rule": "整体 = 全部判据的最严状态；空判据集 ⇒ BLOCKED；SKIP 不参与最严竞争但保留在报告里",
+    "infeasible_gate": "PC-03/PC-04/PC-06/PC-07 任一 FAIL ⇒ overall INFEASIBLE 语义（证书里另立 feasibility 字段），不进求解器"
+  },
+  "interface_independence": "PrecheckInputs 只收原始量（instance + DerivedReport + 声明标量），不收任何上游结论对象；判定器 judge_precheck 只吃 inputs + certificate（可注入伪造证书验证区分度），与计算层 build_certificate 分离（ADR-0025/0029 同款）。",
+  "probes": {
+    "simple": "phase1_simple_probe_instance：全项有界、无固定项。声明 π=0.05/α=0.10/vat=0.09/surtax=0.03 ⇒ 全链 PASS（手算值见测试）。",
+    "free-cap": "phase1_probe_instance：含 P-FREE（cap 空）⇒ PC-04 SKIP；α_cap 声明后 term3 不可算 ⇒ PC-05 BLOCKED——演示『声明与数据矛盾』与空 cap≠0。"
+  }
+}

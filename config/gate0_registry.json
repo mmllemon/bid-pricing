@@ -8,7 +8,7 @@
       "artifact_path": "ruleset_selector_spec.json",
       "version": "sha256:0dd335b5a8ae",
       "hash": "sha256:0dd335b5a8ae",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-08 规格制品"
     },
     "field_schema_version": {
@@ -16,7 +16,7 @@
       "artifact_path": "field_schema.json",
       "version": "sha256:0745655aa4b6",
       "hash": "sha256:0745655aa4b6",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-02 字段字典"
     },
     "constraint_schema_version": {
@@ -24,7 +24,7 @@
       "artifact_path": "constraint_schema.json",
       "version": "sha256:bccb081ed800",
       "hash": "sha256:bccb081ed800",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-03 约束字典 C1–C12"
     },
     "precision_profile_version": {
@@ -32,7 +32,7 @@
       "artifact_path": "precision_profile.json",
       "version": "sha256:146e8e6ffbc4",
       "hash": "sha256:146e8e6ffbc4",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-04 精度与容差策略"
     },
     "architecture_decision_version": {
@@ -40,7 +40,7 @@
       "artifact_path": "architecture_decision.json",
       "version": "sha256:3601adeed46c",
       "hash": "sha256:3601adeed46c",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-05 三层分割架构地位"
     },
     "competitiveness_classification": {
@@ -48,7 +48,7 @@
       "artifact_path": "competitiveness_classification.json",
       "version": "sha256:2913378715d5",
       "hash": "sha256:2913378715d5",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-06 可竞争性**分类规则书**（角色集合 + 启发式 + 覆盖范围 + 外生常量）。本制品是跨项目复用的机制，不含任何具体项目的分类结果——逐项落值在 phase_0.project_classification_table"
     },
     "input_protocol_schema": {
@@ -56,7 +56,7 @@
       "artifact_path": "input_protocol_schema.json",
       "version": "sha256:1696175b90ff",
       "hash": "sha256:1696175b90ff",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T01-00A 输入协议 Schema（v3.2.1 由 WP1 移入 WP0 以解 Gate 0a 死锁）"
     },
     "canonical_schema_version": {
@@ -64,7 +64,7 @@
       "artifact_path": "canonical_schema.json",
       "version": "sha256:ff90d54cbb5e",
       "hash": "sha256:ff90d54cbb5e",
-      "frozen_at": "2026-09-18T01:54:40+00:00"
+      "frozen_at": "2026-09-18T02:42:38+00:00"
     },
     "pricing_rule_card_version": {
       "kind": "versioned",
@@ -72,7 +72,7 @@
       "note": "T00-01 计价规则卡：Q0/Q1/P0/P1 符号绑定、阈值与 ρ±、P1 五项澄清、作用域与 override 链。制品内的**项目级取值**（adjustment_scope / contract_type / rule_set_id）由 contract-check 第 12 判据与 project_selection / project_classification_table 交叉锁定——改落值不同步规则卡即判矛盾。",
       "version": "sha256:d88298683924",
       "hash": "sha256:d88298683924",
-      "frozen_at": "2026-09-18T01:54:40+00:00"
+      "frozen_at": "2026-09-18T02:42:38+00:00"
     },
     "adjustment_scope": {
       "kind": "enum",
@@ -143,7 +143,7 @@
       "artifact_path": "pricing_rule_card.json",
       "version": "sha256:d88298683924",
       "hash": "sha256:d88298683924",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-01《计价规则卡》经合同条款核对后的最终冻结版。★与 gate_0a.pricing_rule_card_version 为**同一制品的两阶段冻结**：v1 在 Gate 0a 冻结（机制层：符号/参数/公式/优先级链），最终版在 Gate 0b 冻结（业务层：contract_review 记录合同条款核对结论与责任人）。原声明 artifact_path=contract_ruleset_card.json 系路径笔误——路线 §2.1 原文『其 v1 已在 Gate 0a 前产出』表明不存在第二份文件。",
       "requires": {
         "contract_review": "本卡须含 contract_review 字段且 status 合法——只查 hash 不查核对结论，等于「文件没改」冒充「条款已核对」"
@@ -154,7 +154,7 @@
       "artifact_path": "cost_basis_spec.json",
       "version": "sha256:7b46f09f6022",
       "hash": "sha256:7b46f09f6022",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-09 成本口径证明包（八项分解）"
     },
     "cost_assumption_spec": {
@@ -162,7 +162,7 @@
       "artifact_path": "cost_assumption_spec.json",
       "version": "sha256:e72892bf68d9",
       "hash": "sha256:e72892bf68d9",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-11 成本 c_i 假设与来源声明（v3.2.1 新增）"
     },
     "q1_assumption_spec": {
@@ -170,7 +170,7 @@
       "artifact_path": "q1_assumption_spec.json",
       "version": "sha256:3181c6935394",
       "hash": "sha256:3181c6935394",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-10A/10B q^1 假设声明（格式篇 + 来源篇）"
     },
     "profit_bridge_spec": {
@@ -178,7 +178,7 @@
       "artifact_path": "profit_bridge_spec.json",
       "version": "sha256:295530cf91f7",
       "hash": "sha256:295530cf91f7",
-      "frozen_at": "2026-09-18T01:54:40+00:00",
+      "frozen_at": "2026-09-18T02:42:38+00:00",
       "note": "T00-12 利润口径桥接表（v3.2.1 新增，闭合隐藏依赖第 8 条的悬空）"
     },
     "approvals": {

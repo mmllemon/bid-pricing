@@ -10,6 +10,28 @@
 
 ## [未发布]
 
+### T03-03 完成：Phase 0 预检与可行性证书（ADR-0030）
+
+**新增**
+
+- `config/phase0_precheck_spec.json`：PC-01..PC-08 判据 + 证书字段语义 +
+  具名容差注册表（复用 `eps_total` 名与公式，解析入口单一）。
+- `src/bidpricing/solver/precheck.py`：`build_certificate`（P_min/P_max/
+  P*_var/P*_eff/ΔP）+ `judge_precheck`（计算/判定分离，判定器可注入验证）；
+  CLI `precheck`（`--instance` / `--probe` / `--json`）。
+- `tests/test_precheck.py`：28 项（全量 979 → **1007**，双环境全绿）。
+
+**关键裁定**
+
+- P*_var 唯一提供者 = `total_price.compute_P_competitive`（T00-06B ④）；
+  闭式 `∂C/∂A = −1`（固定项直接扣减）由测试钉住。
+- P_min 用派生层 L（merged_lower 多源取大，ADR-0026 决策六）——普通 L
+  求和会在条款下浮时虚低。
+- P*_eff 三 term **任一不可算 ⇒ 整体 BLOCKED**，不丢项取 max（丢项=静默
+  放宽下界）；「α_cap 已声明但存在空 cap 项」单列为声明与数据矛盾。
+- 空 cap ⇒ P_max 不落值（≠0），PC-04/PC-07 SKIP；SKIP 不参与最严竞争
+  （ADR-0029 裁定跨层沿用，全 SKIP ⇒ BLOCKED）。
+
 ### T03-04 完成：约束判定器（C1–C13 六元组，ADR-0029）
 
 **新增**

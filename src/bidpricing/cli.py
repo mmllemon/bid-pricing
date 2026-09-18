@@ -1013,6 +1013,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_cj.add_argument("--json", action="store_true", help="输出 JSON")
     p_cj.set_defaults(func=cmd_constraint_check)
 
+    # ---- T03-03 Phase 0 预检与可行性证书 ---------------------------------
+    p_pc = sub.add_parser(
+        "precheck",
+        help="T03-03 Phase 0 预检：可行性证书（P_min/P_max/P*_var/P*_eff/ΔP）"
+             " + PC-01..PC-08 判定；越界判 INFEASIBLE 且不进求解器")
+    p_pc.add_argument("--instance", default=None,
+                      help="JSON 文件：{'instance': {...}, 'rule_set_id': ...,"
+                           " 'contract_type': ..., 'pi_target': ..., "
+                           "'alpha_cap': ..., 'fixed_pretax': ..., "
+                           "'vat_rate': ..., 'surtax_rate': ..., "
+                           "'supplied_material': ..., 'env_tax': ...}")
+    p_pc.add_argument("--probe", default="simple", choices=("free-cap", "simple"),
+                      help="无 --instance 时用哪个内置探针（默认 simple：全项"
+                           "有界、全链可 PASS；free-cap 演示 SKIP 与声明矛盾）")
+    p_pc.add_argument("--json", action="store_true", help="输出 JSON")
+    p_pc.set_defaults(func=cmd_precheck)
+
     # ---- T04-07：MILP 独立验收协议 --------------------------------
     p_ma = sub.add_parser(
         "milp-check",
@@ -1574,6 +1591,129 @@ def cmd_constraint_check(args) -> int:
             if v.status in ("FAIL", "BLOCKED"):
                 print(f"  ■ {v.constraint_id}: {v.reason}")
     return 0 if report.verdict() in ("PASS", "WARN") else 1
+
+
+def cmd_precheck(args) -> int:
+    """T03-03 Phase 0 预检与可行性证书 —— 结构化证书 + PC-01..PC-08 判定。
+
+    §6.2 核心原则在这里落地：P* 越界必须判 INFEASIBLE 且**不进求解器**，
+    而不是让优化器用不平衡报价「硬找解」。探针模式的税率/π/α 是演示声明值，
+    真实项目须走 Phase 0 输入门声明（--instance JSON 传入）。
+    """
+    from pathlib import Path as _P
+
+    from .contracts.pricing_card import load_pricing_card, resolve_parameters
+    from .solver.instance import Phase1Instance
+    from .solver.phase1 import (
+        phase1_probe_instance,
+        phase1_simple_probe_instance,
+    )
+    from .solver.precheck import (
+        PrecheckInputs,
+        load_precheck_spec,
+        load_role_domain,
+        precheck_report,
+    )
+
+    cfg = config_dir()
+    resolved = resolve_parameters(load_pricing_card(cfg))
+    spec = load_precheck_spec(cfg)
+    role_domain = load_role_domain(cfg)
+
+    if args.instance:
+        path = _P(args.instance)
+        if not path.exists():
+            print(f"■ 实例文件不存在：{path}")
+            return 1
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        inst_doc = doc.get("instance", doc)
+        instance = Phase1Instance.from_dict(inst_doc, source=str(path))
+        decl = {k: doc.get(k) for k in (
+            "rule_set_id", "contract_type", "pi_target", "alpha_cap",
+            "fixed_pretax", "vat_rate", "surtax_rate",
+            "supplied_material", "env_tax") if k in doc}
+        title = str(path)
+    else:
+        instance = (
+            phase1_simple_probe_instance()
+            if args.probe == "simple" else phase1_probe_instance()
+        )
+        # 演示声明：真实项目由 Phase 0 输入门给出，缺失该 BLOCKED 的照样 BLOCKED
+        decl = {
+            "rule_set_id": "GB50500-2024",
+            "contract_type": "UNIT_PRICE",
+            "pi_target": 0.05,
+            "alpha_cap": 0.10,
+            "fixed_pretax": 0.0,
+            "vat_rate": 0.09,
+            "surtax_rate": 0.03,
+        }
+        title = f"内置探针（{args.probe}）· 演示声明值"
+
+    inputs = PrecheckInputs(
+        instance=instance,
+        derived=build_derived_for_cli(cfg, instance, resolved),
+        role_domain=role_domain,
+        **decl,
+    )
+    rep = precheck_report(inputs, spec=spec)
+
+    if args.json:
+        cert = rep.certificate
+        print(json.dumps({
+            "certificate": {
+                "p_min": cert.p_min,
+                "p_max": cert.p_max,
+                "p_max_capped_only": cert.p_max_capped_only,
+                "p_star_var": cert.p_star_var,
+                "p_star_eff": cert.p_star_eff,
+                "eff_terms": cert.eff_terms,
+                "delta_p": cert.delta_p,
+                "missing": list(cert.missing),
+                "notes": list(cert.notes),
+            },
+            "feasibility": rep.feasibility,
+            "overall": rep.overall,
+            "verdicts": [
+                {"check_id": v.check_id, "status": v.status,
+                 "actual": v.actual, "limit": v.limit,
+                 "severity": v.severity, "detail": v.detail}
+                for v in rep.verdicts
+            ],
+        }, ensure_ascii=False, indent=2))
+    else:
+        c = rep.certificate
+
+        def _m(x):
+            return "—（不落值）" if x is None else f"{x:,.2f}"
+
+        print(f"=== T03-03 Phase 0 预检 · {title}")
+        print(f"P_min = {_m(c.p_min)}    P_max = {_m(c.p_max)}"
+              + ("（cap 空，不落值≠0）" if c.p_max_capped_only else ""))
+        print(f"P*_var = {_m(c.p_star_var)}（compute_P_competitive 唯一提供者）")
+        print(f"P*_eff = {_m(c.p_star_eff)}  terms = "
+              + ", ".join(f"{k}={_m(v)}" for k, v in c.eff_terms.items()))
+        print(f"ΔP = {_m(c.delta_p)}")
+        for n in c.notes:
+            print(f"  ▲ {n}")
+        print(f"\n{'判据':<8}{'状态':<9}{'severity':<9}说明")
+        for v in rep.verdicts:
+            print(f"{v.check_id:<8}{v.status:<9}{v.severity:<9}{v.detail[:66]}")
+        print(f"\n可行性：{rep.feasibility}    整体结论：{rep.overall}")
+        if rep.feasibility == "FAIL":
+            print("■ INFEASIBLE：不进求解器（§6.2 核心原则）。"
+                  "处置见 §6.3 放弃投标判据表。")
+    return 0 if rep.feasibility in ("PASS", "WARN") else 1
+
+
+def build_derived_for_cli(cfg, instance, resolved):
+    """CLI 便捷：μ=0 / DECLINE / 无不平衡条款的派生量（探针与演示用）。
+
+    真实项目的派生量声明由 Phase 0 输入门传入，不得经由本函数静默补齐。
+    """
+    from .solver.precheck import build_derived
+
+    return build_derived(instance, resolved)
 
 
 def cmd_ref_check(args) -> int:

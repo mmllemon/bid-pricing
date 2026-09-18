@@ -5,17 +5,17 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-18 09:53:23** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-18 09:56:11** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
 
 ## 一、版本锚点
 
-- 提交：`0cfe5f6` ｜ 累计 62 次提交
-- 最新提交信息：chore(state): 重新生成状态快照（前一笔 T04-07）
+- 提交：`9bab795` ｜ 累计 63 次提交
+- 最新提交信息：feat(t03-04): 约束判定器——C1-C13 六元组判定 + 具名容差注册表 + ADR-0029
 - 最近里程碑标签：`cost-basis-v1`
-- 工作区：有 9 处未提交改动
+- 工作区：干净
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -43,15 +43,15 @@
 
 | 制品 key | 类型 | hash | 冻结时间 |
 |---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-18T01:49:27+00:00 |
-| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-18T01:49:27+00:00 |
-| `constraint_schema_version` | versioned | sha256:bccb081ed800 | 2026-09-18T01:49:27+00:00 |
-| `precision_profile_version` | versioned | sha256:146e8e6ffbc4 | 2026-09-18T01:49:27+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-18T01:49:27+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-18T01:49:27+00:00 |
-| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-18T01:49:27+00:00 |
-| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-18T01:49:27+00:00 |
-| `pricing_rule_card_version` | versioned | sha256:d88298683924 | 2026-09-18T01:49:27+00:00 |
+| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-18T01:54:40+00:00 |
+| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-18T01:54:40+00:00 |
+| `constraint_schema_version` | versioned | sha256:bccb081ed800 | 2026-09-18T01:54:40+00:00 |
+| `precision_profile_version` | versioned | sha256:146e8e6ffbc4 | 2026-09-18T01:54:40+00:00 |
+| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-18T01:54:40+00:00 |
+| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-18T01:54:40+00:00 |
+| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-18T01:54:40+00:00 |
+| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-18T01:54:40+00:00 |
+| `pricing_rule_card_version` | versioned | sha256:d88298683924 | 2026-09-18T01:54:40+00:00 |
 | `adjustment_scope` | enum | **未冻结** | — |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。

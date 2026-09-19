@@ -1,0 +1,12 @@
+{
+  "schema_id": "rerun_spec_v1",
+  "task": "T06-04",
+  "title": "一键复算验收协议",
+  "checks": [
+    {"id": "R1-A", "name": "可重复性", "rule": "同输入、同环境连续运行两次 result_hash 必须一致"},
+    {"id": "R1-B", "name": "正确性", "rule": "实际结果逐字段匹配绑定的 golden expected"},
+    {"id": "R1-C", "name": "环境记录", "rule": "记录 Python/PuLP/HiGHS/OS/arch/solver_options/random_seed"}
+  ],
+  "status_domain": ["PASS", "FAIL", "BLOCKED"],
+  "hash_policy": "result_hash 只对 canonical result 计算，不包含 run_id、timestamp 或 operator"
+}

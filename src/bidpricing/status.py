@@ -46,7 +46,7 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .artifact import load_registry, parse_records
@@ -68,6 +68,15 @@ BANNER = (
 
 DONE_STATES = {"done"}
 SATISFIED_FOR_DEPS = {"done", "partial"}
+#: 待定/跳过：因缺外部条件（如真实项目数据）而非「可开工」遗留，不出现在下一步建议里。
+DEFERRED_STATES = {"deferred"}
+
+#: 快照新鲜度判据扫描的权威源目录（相对 repo_root）。
+#: 不含 docs 顶层——STATE.md 自身、交接文档等不是快照来源。
+FRESHNESS_SCAN_DIRS = ("src", "config", "tests", "docs/adr")
+
+#: mtime 容差（秒）：同一秒内的写入不算「生成后改动」，避免同秒误报。
+FRESHNESS_MTIME_TOLERANCE = 1.0
 
 
 # --------------------------------------------------------------------- git
@@ -81,9 +90,11 @@ def _git(*args: str, timeout: int = 10) -> str:
             cwd=str(repo_root()),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
-        return out.stdout.strip() if out.returncode == 0 else ""
+        return (out.stdout or "").strip() if out.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError):
         return ""
 
@@ -230,7 +241,7 @@ def derive_next_steps(tasks: list[dict], limit: int = 6) -> list[dict]:
     by_id = {t["id"]: t for t in tasks}
     ready: list[dict] = []
     for t in tasks:
-        if effective_status(t) in DONE_STATES:
+        if effective_status(t) in DONE_STATES or effective_status(t) in DEFERRED_STATES:
             continue
         deps = t.get("deps") or []
         unsatisfied = [
@@ -395,6 +406,121 @@ def collect(
     }
 
 
+# ------------------------------------------------------------ 快照新鲜度
+
+
+def _parse_generated_at(text: str) -> datetime | None:
+    """从 STATE.md 头部解析 ``生成于 <timestr>``。"""
+    m = re.search(r"> 生成于 \*\*([0-9\- :]+)\*\*", text)
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _last_commit_times(root: Path) -> dict[str, datetime]:
+    """一次 git 调用构建 {相对路径: 最近提交时间} 表。
+
+    ``--pretty=format:%cI --name-only`` 输出形如：每个提交日期后跟一列文件名，
+    以空行分隔块。按「日期行正则 → 后续文件名行归属该日期」解析。空表（git
+    不可用）时退化为空 dict，由调用方改用 mtime。
+    """
+    out = _git("log", "--pretty=format:%cI", "--name-only")
+    table: dict[str, datetime] = {}
+    date: datetime | None = None
+    for line in out.splitlines():
+        if not line.strip():
+            date = None
+            continue
+        m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+        if m:
+            try:
+                date = datetime.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S")
+            except ValueError:
+                date = None
+            continue
+        if date is not None:
+            table.setdefault(line, date)
+    return table
+
+
+def _nondeterministic_mtime(path: Path, commit_times: dict[str, datetime]) -> datetime | None:
+    """权威源的确定性变更时间。
+
+    以「最近一次提交时间」优先（从一次批量调用所得的表里查），避免因 checkout /
+    构建刷新了 mtime 而误报；未纳入版本控制的文件（如本次未提交改动）在表中查
+    不到，退化为文件 mtime 即时探测。两者同作比较用，不需展示。
+    """
+    root = repo_root()
+    try:
+        rel = path.relative_to(root).as_posix()
+    except ValueError:
+        rel = None
+    if rel is not None and rel in commit_times:
+        return commit_times[rel]
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime)
+    except OSError:
+        return None
+
+
+def check_freshness(state_path: Path | None = None, root: Path | None = None,
+                    *, generated_at: datetime | None = None,
+                    source_dirs: Sequence[str] | None = None) -> dict:
+    """判 STATE.md 是否已过期（源比快照新）。
+
+    返回 dict（无 diff 时 ``fresh=True``，有 diff 时含 ``stale_files`` 列表）。
+    幂等、无副作用——`status --write` 不会因此报错，只在输出层提示。
+    ``state_path``/``root`` 供测试注入，默认取真实仓库。
+
+    生成时点以 ``generated_at`` 为基准（渲染当前这份快照的时点），
+    否则从 ``state_path`` 头部解析——后者仅用于「读旧文件」的路径。
+    """
+    root = root or repo_root()
+    state_path = state_path or root / "docs" / STATE_FILE
+    out: dict = {"fresh": True}
+
+    if generated_at is not None:
+        snap_generated = generated_at
+    elif state_path.exists():
+        snap_generated = _parse_generated_at(state_path.read_text(encoding="utf-8"))
+    else:
+        snap_generated = None
+
+    if snap_generated is None:
+        out["fresh"] = False
+        out["stale_files"] = [{
+            "path": str(state_path.relative_to(root)),
+            "reason": "无法解析生成时间，快照可信度未知" if state_path.exists()
+            else "快照不存在",
+        }]
+        return out
+
+    stale: list[dict] = []
+    commit_times = _last_commit_times(root)
+    for rel in source_dirs or FRESHNESS_SCAN_DIRS:
+        scan_dir = root / rel
+        if not scan_dir.exists():
+            continue
+        for p in sorted(scan_dir.rglob("*")):
+            if not p.is_file():
+                continue
+            src = _nondeterministic_mtime(p, commit_times)
+            # 生成时点之后被改动（容差内视为同刻写入，不报）
+            if src is not None and src > snap_generated + timedelta(seconds=FRESHNESS_MTIME_TOLERANCE):
+                stale.append({
+                    "path": str(p.relative_to(root)),
+                    "reason": "源较快照更新或提交晚于快照生成时点",
+                })
+
+    if stale:
+        out["fresh"] = False
+        out["stale_files"] = stale
+    return out
+
+
 # ----------------------------------------------------------------- 渲染
 
 
@@ -411,7 +537,7 @@ def _task_table(tasks: list[dict]) -> list[str]:
     return rows
 
 
-def render(snap: dict) -> str:
+def render(snap: dict, *, state_path: Path | None = None) -> str:
     L: list[str] = [BANNER, ""]
     git = snap["git"]
     t = snap["tests"]
@@ -434,6 +560,34 @@ def render(snap: dict) -> str:
         f"> 生成于 **{snap['generated_at']}** ｜ 合同基准日 `{snap['contract_date']}`",
         "> 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。",
         "",
+        "---",
+        "",
+        "## 〇、快照新鲜度",
+        "",
+    ]
+    # 传入了 state_path → 评估「磁盘上这份文档」是否过期（读旧文档）;
+    # 未传 → 评估「正在渲染的这份快照」（write 路径，其 generated_at=now，判新鲜）。
+    if state_path is not None:
+        fresh = check_freshness(state_path=state_path)
+    else:
+        try:
+            _snap_generated = datetime.strptime(snap["generated_at"], "%Y-%m-%d %H:%M:%S")
+        except (KeyError, ValueError):
+            _snap_generated = None
+        fresh = check_freshness(generated_at=_snap_generated)
+    if fresh["fresh"]:
+        L += ["> **快照较最新源为新鲜**：生成时点后未见 src/config/tests/docs 下的",
+              "> 变更晚于生成时点。若你刚刚改过代码，请运行 `status --write` 重新生成。", ""]
+    else:
+        L += ["> **快照已过期**——以下权威源比生成时点更新，本文件结论可能失真：", ""]
+        shown = fresh["stale_files"][:10]
+        for s in shown:
+            L.append(f"- `{s['path']}` — {s['reason']}")
+        if len(fresh["stale_files"]) > len(shown):
+            L.append(f"- …（另 {len(fresh['stale_files']) - len(shown)} 项）")
+        L += ["", "> 请运行 `python -m bidpricing.cli status --write` 重新生成后再交接。", ""]
+
+    L += [
         "---",
         "",
         "## 一、版本锚点",

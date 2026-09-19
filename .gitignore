@@ -1,3 +1,4 @@
+# ---- Python ----
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -8,4 +9,16 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# ---- 运行时产物与日志 ----
 *.log
+outputs/
+docs/parsed/
+
+# ---- 前端 ----
+node_modules/
+frontend/node_modules/
+
+# ---- 环境与本地文件 ----
+.env
+*.pdf

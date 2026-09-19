@@ -1,0 +1,993 @@
+(function(){
+/* ============================================================
+   CONFIG — 唯一需要定制的地方（与手机版结构一致）。
+   modules 里每个模块 = 一个功能页；type 决定它长什么样、记什么字段。
+   支持的 type：
+     todo     今日计划/待办（勾选 + 优先级）
+     checkin  习惯打卡（连续天数，每天清零）
+     progress 长期计划（进度条：当前/目标）
+     finance  记账（收入/支出 + 分类 + 金额）
+     note     内容记录/日记（标题 + 正文 + 心情标签）
+   图标用 icon 字段（取自下方 ICONS 图标库，全部为单色线性图标）。
+   ============================================================ */
+const CONFIG = {
+  storageKey: "gc-workbench-v2",        // 换 key 可强制重置
+  owner: "我的工作台",                  // 侧栏顶部标题
+  slogan: "工程智算 · 个人空间",
+
+  // 每日一句（一周七天各一句，按星期轮换：周一→周日）
+  quotes: [
+    "新的一周，从把最重要的一件事做好开始。",   // 周一
+    "保持节奏，稳一点也没关系。",                 // 周二
+    "把大目标拆小，今天只推进一步。",             // 周三
+    "坚持到一半时最难，也最值得。",               // 周四
+    "收个尾，给这一周一个交代。",                 // 周五
+    "允许自己慢下来，好好休息也是正事。",         // 周六
+    "复盘一下，为下一周留点方向。",               // 周日
+  ],
+
+  // 今日概览环形（value 为 0-100 的完成度，calc 返回 {value, sub}）
+  overview: [
+    { key:"todo", label:"今日计划", icon:"list", color:"var(--accent)",
+      calc: d => { const it=d.todo||[]; const done=it.filter(x=>x.done).length; return { value: it.length?Math.round(done/it.length*100):0, sub:`${done}/${it.length} 项` }; } },
+    { key:"checkin", label:"打卡", icon:"leaf", color:"var(--module-1)",
+      calc: d => { const it=d.checkin||[]; const t=today(); const done=it.filter(x=>x.log&&x.log[t]).length; return { value: it.length?Math.round(done/it.length*100):0, sub:`${done}/${it.length} 项` }; } },
+  ],
+
+  // 本周状态趋势（真实数据：读取用户填写的 __trend，7 个数字；没有就留空）
+  trend: {
+    title:"本周状态趋势", unit:"分",
+    series: d => (Array.isArray(d.__trend) && d.__trend.length===7) ? d.__trend : [],
+  },
+
+  // 快速记录按钮（点了直接给对应模块新建）
+  quickAdd: [
+    { label:"记打卡", icon:"check",    module:"checkin", tint:"#eef3ec", color:"var(--module-1)" },
+    { label:"记待办", icon:"list",     module:"todo",    tint:"#efeee8", color:"var(--accent)" },
+    { label:"记项目", icon:"chart",    module:"biz",     tint:"#e7eef7", color:"var(--module-2)" },
+  ],
+
+  // ============ 模块定义 ============
+  modules: [
+    { key:"biz", name:"项目经营概览", icon:"chart", tint:"#e7eef7", color:"var(--module-2)", type:"biz", desc:"从后端方案库读取项目报价与结算利润",
+      seed:[] },
+    { key:"todo", name:"今日计划", icon:"list", tint:"#efeee8", color:"var(--accent)", type:"todo", desc:"任务清单与进度追踪",
+      priorities:[ {key:"P0",label:"重要",color:"#f6ece9",text:"#c25d4f"}, {key:"P1",label:"一般",color:"#f6efe6",text:"#bd8a4e"}, {key:"P2",label:"随手",color:"#eef2ec",text:"#6f8f6a"} ],
+      seed:[ {id:11,title:"完成英语核心词汇 30min",priority:"P0",done:false,note:"积累词汇量，稳步提升英语能力"},
+             {id:12,title:"发布 1 篇笔记 / 视频",priority:"P1",done:false,note:""},
+             {id:13,title:"整理今日工作纪要",priority:"P2",done:true,note:""} ] },
+    { key:"checkin", name:"习惯打卡", icon:"leaf", tint:"#eef3ec", color:"var(--module-1)", type:"checkin", desc:"补品·护肤·早睡等每日打卡",
+      seed:[ {id:21,title:"喝够 8 杯水",log:{}}, {id:22,title:"23:30 前睡觉",log:{}}, {id:23,title:"维生素 / 补品",log:{}} ] },
+    { key:"record", name:"记录", icon:"pen", tint:"#f1eef4", color:"var(--module-5)", type:"note", desc:"文字·摘录·随手记",
+      moods:["灵感","收藏","备忘"],
+      seed:[ {id:71,title:"随手记录一条",content:"写下你的灵感、摘录或备忘。",mood:"备忘",date:isoToday()} ] },
+  ],
+};
+
+/* ============================================================
+   ICONS — 单色线性图标库（stroke 跟随 color）
+   ============================================================ */
+const ICONS = {
+  home:'<path d="M4 11.5 12 5l8 6.5"/><path d="M6 10.5V19h12v-8.5"/>',
+  grid:'<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/>',
+  chart:'<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16v-4"/><path d="M12 16v-7"/><path d="M16 16v-2"/>',
+  user:'<circle cx="12" cy="8" r="3.4"/><path d="M5.5 19c.7-3.2 3.2-5 6.5-5s5.8 1.8 6.5 5"/>',
+  plus:'<path d="M12 5v14"/><path d="M5 12h14"/>',
+  menu:'<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
+  calendar:'<rect x="4" y="5" width="16" height="16" rx="2.5"/><path d="M4 9.5h16"/><path d="M8 3v4"/><path d="M16 3v4"/>',
+  list:'<path d="M8.5 6h11"/><path d="M8.5 12h11"/><path d="M8.5 18h11"/><circle cx="4.5" cy="6" r=".9"/><circle cx="4.5" cy="12" r=".9"/><circle cx="4.5" cy="18" r=".9"/>',
+  leaf:'<path d="M20 4C10 4 4 9 4 17c0 1 .1 2 .5 3 5.5-9 9-9.5 15.5-16z"/><path d="M4.5 20c3-6 7-9.5 13-11.5"/>',
+  book:'<path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v14H7.5A2.5 2.5 0 0 0 5 19.5z"/><path d="M5 19.5A2.5 2.5 0 0 1 7.5 17H19v4H7.5A2.5 2.5 0 0 1 5 19.5z"/>',
+  activity:'<path d="M3 12h4l2.5 6L14 5l2.5 7H21"/>',
+  wallet:'<path d="M4 8a2 2 0 0 1 2-2h11a1.5 1.5 0 0 1 1.5 1.5V8"/><rect x="3.5" y="7.5" width="17" height="11.5" rx="2.5"/><circle cx="16.5" cy="13.2" r="1.3"/>',
+  pen:'<path d="M4 20l1.2-4L16 5.2l2.8 2.8L8 19z"/><path d="M14.2 7l2.8 2.8"/>',
+  camera:'<path d="M4 8.5h3l1.5-2h7L17 8.5h3v10H4z"/><circle cx="12" cy="13" r="3.2"/>',
+  flame:'<path d="M12 3c3 3 5 5.5 5 9a5 5 0 0 1-10 0c0-2 1-3.6 2.6-4.6C9 10.4 10.4 6.2 12 3z"/>',
+  target:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/>',
+  star:'<path d="M12 3.6l2.6 5.3 5.8.85-4.2 4.1 1 5.8L12 16.9l-5.2 2.75 1-5.8-4.2-4.1 5.8-.85z"/>',
+  quote:'<path d="M9.5 7C7.6 7.9 6.5 9.6 6.5 12v5h5v-6H8.5c0-1.7.7-2.7 2.2-3.4zM19 7c-1.9.9-3 2.6-3 5v5h5v-6h-3c0-1.7.7-2.7 2.2-3.4z"/>',
+  chevron:'<path d="M9 5l7 7-7 7"/>',
+  check:'<path d="M5 12.5 10 17 19 7"/>',
+  trash:'<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>',
+  close:'<path d="M6 6l12 12M18 6 6 18"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>',
+  bolt:'<path d="M13 3 5 13h5l-1 8 8-11h-5z"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>',
+  moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z"/>',
+};
+function icon(name, size=22, sw=1.7){
+  const path = ICONS[name] || ICONS.grid;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+}
+
+/* ============================================================
+   ENGINE — 一般无需改动
+   ============================================================ */
+function isoToday(){ return new Date().toISOString().slice(0,10); }
+function today(){ return isoToday(); }
+function avgProgress(list){
+  if(!list||!list.length) return { value:0, sub:"0" };
+  const v = Math.round(list.reduce((s,x)=>s+Math.min(100,(x.current/x.target)*100||0),0)/list.length);
+  return { value:v, sub:`${list.length} 项` };
+}
+const modOf = k => CONFIG.modules.find(m=>m.key===k);
+const $ = s => document.querySelector(s);
+
+const store = {
+  load(){
+    const raw = localStorage.getItem(CONFIG.storageKey);
+    if(raw){ try { return JSON.parse(raw); } catch(e){} }
+    const d={}; CONFIG.modules.forEach(m=>d[m.key]=structuredClone(m.seed||[])); return d;
+  },
+  save(){ localStorage.setItem(CONFIG.storageKey, JSON.stringify(data)); },
+};
+let data = store.load();
+let view = "home";
+let searchQ = "";
+let pomo = { running:false, remain:25*60, total:25*60 };   // 番茄钟状态（内存态，跨渲染保留）
+let clockTimer = null;                                       // 全局秒级心跳（时钟 + 番茄钟）
+function persist(){ store.save(); render(); }
+function pad2(n){ return String(n).padStart(2,"0"); }
+
+/* 本周（周一起）7 天的 ISO 日期 */
+function weekDates(){
+  const n=new Date(); const dow=(n.getDay()+6)%7; const mon=new Date(n); mon.setDate(n.getDate()-dow);
+  const arr=[]; for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); arr.push(d.toISOString().slice(0,10)); }
+  return arr;
+}
+function weekNum(){ const n=new Date(); const s=new Date(n.getFullYear(),0,1);
+  return Math.ceil(((n-s)/86400000 + s.getDay()+1)/7); }
+
+/* 秒级心跳：更新时钟；番茄钟运行时倒计时 */
+function startClock(){ if(clockTimer) return; clockTimer=setInterval(heartbeat,1000); heartbeat(); }
+function heartbeat(){
+  const el=$("#clk"); if(el){ const n=new Date(); el.textContent=`${pad2(n.getHours())}:${pad2(n.getMinutes())}:${pad2(n.getSeconds())}`; }
+  if(pomo.running){ pomo.remain--; if(pomo.remain<=0) completePomo(); pomoUpdate(); }
+}
+function pomoUpdate(){
+  const t=$("#pomo-time"); if(t){ t.textContent=`${pad2(Math.floor(pomo.remain/60))}:${pad2(pomo.remain%60)}`; }
+  const fg=$("#pomo-fg"); if(fg){ const r=64,c=2*Math.PI*r; fg.style.strokeDashoffset=c*(1-pomo.remain/pomo.total); }
+  const st=$("#pomo-status"); if(st) st.textContent=pomo.running?"专注中":"已暂停";
+  const b=$("#pomo-toggle"); if(b) b.textContent=pomo.running?"暂停":"开始";
+}
+function completePomo(){ pomo.running=false; pomo.remain=pomo.total;
+  data.__pomo=data.__pomo||{count:0,min:0}; data.__pomo.count++; data.__pomo.min+=Math.round(pomo.total/60); store.save();
+  const c=$("#pomo-count"); if(c) c.textContent=data.__pomo.count;
+  const mn=$("#pomo-min"); if(mn) mn.textContent=data.__pomo.min;
+}
+
+/* ---------- ring svg ---------- */
+function ringSVG(pct, color){
+  const r=25, c=2*Math.PI*r, off=c*(1-Math.min(100,pct)/100);
+  return `<svg class="gauge" viewBox="0 0 60 60"><circle cx="30" cy="30" r="${r}" fill="none" stroke="var(--border)" stroke-width="5.5"/>
+    <circle cx="30" cy="30" r="${r}" fill="none" stroke="${color}" stroke-width="5.5" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
+}
+function trendSVG(series){
+  const w=560, h=170, padX=12, padTop=16, padBot=22;
+  const max=Math.max(...series), min=Math.min(...series);
+  const rng=(max-min)||1;
+  const innerW=w-2*padX, innerH=h-padTop-padBot;
+  const pts=series.map((v,i)=>{
+    const x=padX+innerW*i/(series.length-1);
+    const y=padTop+innerH*(1-(v-min)/rng);
+    return [x,y];
+  });
+  const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const area=line+` L ${padX+innerW} ${h-padBot} L ${padX} ${h-padBot} Z`;
+  const dots=pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.2" fill="var(--surface-card)" stroke="var(--module-2)" stroke-width="2"/>`).join('');
+  return `<svg class="trend-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+    <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--module-2)" stop-opacity=".22"/><stop offset="1" stop-color="var(--module-2)" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#tg)"/><path d="${line}" fill="none" stroke="var(--module-2)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
+}
+
+/* ---------- HOME (Bento 复杂仪表盘) ---------- */
+function grp(zh,en){ return `<div class="sec-grp"><span class="bar"></span><span class="zh">${zh}</span><span class="en">${en}</span><span class="line"></span></div>`; }
+
+/* 今日聚焦：跨模块置顶任务（就地交互，不跳转） */
+function focusTileHTML(){
+  const pins=[]; CONFIG.modules.forEach(m=>(data[m.key]||[]).forEach(x=>{ if(x.pinned) pins.push({m,x}); }));
+  const chk=icon("check",13,2.6);
+  const sub=(m,x)=>{
+    if(m.type==="checkin") return `${m.name} · 连续 ${streak(x.log)} 天`;
+    if(m.type==="progress"){ const p=Math.min(100,Math.round((x.current/x.target)*100||0)); return `${m.name} · ${x.current}/${x.target} ${x.unit||m.unit||''} · ${p}%`; }
+    return m.name;
+  };
+  const ctl=(m,x)=>{
+    if(m.type==="checkin"){ const on=!!(x.log&&x.log[today()]); return `<div class="pin-chk js-pin-chk ${on?'on':''}" data-mkey="${m.key}" data-id="${x.id}">${chk}</div>`; }
+    if(m.type==="todo"){ return `<div class="pin-chk js-pin-chk ${x.done?'on':''}" data-mkey="${m.key}" data-id="${x.id}">${chk}</div>`; }
+    if(m.type==="progress"){ return `<div class="pin-step"><button class="js-pin-dec" data-mkey="${m.key}" data-id="${x.id}">−</button><button class="js-pin-inc" data-mkey="${m.key}" data-id="${x.id}">+</button></div>`; }
+    return `<span style="color:var(--text-tertiary)">${icon("chevron",16,2)}</span>`;
+  };
+  const rows = pins.length ? pins.map(({m,x})=>`<div class="focus-row">
+      <span class="fic" style="color:${m.color}">${icon(m.icon,16)}</span>
+      <div class="ft js-pin-open" data-mkey="${m.key}" data-id="${x.id}"><div class="fn ${(m.type==='todo'&&x.done)?'done':''}">${esc(x.title)}</div><div class="fm">${sub(m,x)}</div></div>
+      ${ctl(m,x)}</div>`).join("")
+    : `<div class="focus-empty">在任意模块点击 <span style="display:inline-flex;color:var(--module-3);vertical-align:-2px">${icon("star",13)}</span> 即可把要事置顶到这里。</div>`;
+  return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("star",16)}</span><div class="tt"><span class="en">TODAY'S FOCUS</span><span class="zh">今日聚焦</span></div><span class="r">${pins.length} 项</span></div>
+    <div class="focus-list">${rows}</div></div>`;
+}
+
+/* 快速记录 */
+function quickTileHTML(){
+  const quick = CONFIG.quickAdd.map(q=>`<button class="qbtn" data-quick="${q.module}"><span class="e" style="background:${q.tint};color:${q.color}">${icon(q.icon,20)}<i class="qplus">${icon("plus",10,3)}</i></span><span class="l">${q.label}</span></button>`).join("");
+  return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("plus",16,2.2)}</span><div class="tt"><span class="en">QUICK ADD</span><span class="zh">快速记录</span></div></div>
+    <div class="quick-grid" style="flex:1;align-content:start">${quick}</div></div>`;
+}
+
+/* 今日概览（环形 + 深色统计侧栏，合并原「整体情况」独有指标） */
+function overviewTileHTML(){
+  const rings = CONFIG.overview.map(o=>{ const r=o.calc(data);
+    return `<div class="ring" data-open="${o.key}"><div class="dial">${ringSVG(r.value,o.color)}<span class="mid" style="color:${o.color}">${icon(o.icon,26)}</span></div>
+      <div class="pct">${r.value}%</div><div class="lbl">${o.label}</div><div class="sub">${r.sub}</div></div>`; }).join("");
+  const recCount=CONFIG.modules.reduce((s,m)=>s+((data[m.key]||[]).length),0);
+  const pinCount=CONFIG.modules.reduce((s,m)=>s+((data[m.key]||[]).filter(x=>x.pinned).length),0);
+  const money=data.money||[];
+  const inc=money.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
+  const exp=money.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+  const bal=inc-exp, balCol=bal>=0?"var(--module-1)":"var(--danger)";
+  return `<div class="tile b12"><div class="tile-h"><span class="tic">${icon("target",16)}</span><div class="tt"><span class="en">DAILY VITALS</span><span class="zh">今日概览</span></div><span class="r">${dateStr()}</span></div>
+    <div class="ov2-body">
+      <div class="rings">${rings}</div>
+      <div class="ov2-side">
+        <div class="ov2-stat" data-open="note"><span class="s-ic" style="color:var(--module-2)">${icon("chart",17)}</span><div class="s-tx"><div class="s-v">${recCount}</div><div class="s-l">累计记录条数</div></div></div>
+        <div class="ov2-stat"><span class="s-ic" style="color:var(--module-3)">${icon("star",17)}</span><div class="s-tx"><div class="s-v">${pinCount}</div><div class="s-l">置顶要事</div></div></div>
+        <div class="ov2-stat" data-open="money"><span class="s-ic" style="color:${balCol}">${icon("wallet",17)}</span><div class="s-tx"><div class="s-v" style="color:${balCol}">¥${bal}</div><div class="s-l">本月结余 · 收¥${inc} 支¥${exp}</div></div></div>
+      </div>
+    </div></div>`;
+}
+
+/* 本周习惯追踪表：checkin.log × 本周 7 天 */
+function habitTileHTML(){
+  const items=data.checkin||[]; const wk=weekDates(); const t=today(); const tIdx=wk.indexOf(t);
+  const dnames=["一","二","三","四","五","六","日"];
+  const palette=["var(--module-1)","var(--module-2)","var(--module-3)","var(--module-4)","var(--module-5)","var(--accent)"];
+  const chk=icon("check",13,2.8);
+  const ths=dnames.map((d,i)=>`<th class="${i===tIdx?'tdcol':''}">${d}</th>`).join("");
+  const rows = items.length ? items.map((x,ri)=>{
+    let cnt=0;
+    const cells=wk.map((day,i)=>{ const on=!!(x.log&&x.log[day]); if(on)cnt++;
+      return `<td class="${i===tIdx?'tdcol':''}"><span class="hcell js-habit ${on?'on':'off'}" data-id="${x.id}" data-day="${day}">${chk}</span></td>`; }).join("");
+    const rate=Math.round(cnt/7*100);
+    return `<tr><td class="hn"><span class="hdot" style="background:${palette[ri%palette.length]}"></span>${esc(x.title)}</td>${cells}<td class="hrate" style="color:${palette[ri%palette.length]}">${rate}%</td></tr>`;
+  }).join("") : `<tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);font-size:12.5px;padding:18px 0">还没有习惯，去「习惯打卡」添加吧</td></tr>`;
+  return `<div class="tile b7"><div class="tile-h"><span class="tic">${icon("leaf",16)}</span><div class="tt"><span class="en">HABIT TRACKER</span><span class="zh">本周习惯追踪表</span></div><span class="r js-open" data-open="checkin">本周 · 周${dnames[((new Date().getDay())+6)%7]}</span></div>
+    <table class="habit-tb"><thead><tr><th class="hh">习惯</th>${ths}<th class="hr">完成率</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* 待办清单（仪表盘式，就地勾选） */
+function todoTileHTML(){
+  const it=data.todo||[]; const done=it.filter(x=>x.done).length; const pct=it.length?Math.round(done/it.length*100):0;
+  const chk=icon("check",12,2.8);
+  const list = it.length ? it.map(x=>{ const m=modOf("todo"); const p=(m.priorities||[]).find(p=>p.key===x.priority);
+    return `<div class="tk-row"><div class="tk-chk js-pin-chk ${x.done?'on':''}" data-mkey="todo" data-id="${x.id}">${chk}</div>
+      <span class="tk-name ${x.done?'done':''} js-pin-open" data-mkey="todo" data-id="${x.id}">${esc(x.title)}</span>
+      ${p?`<span class="badge" style="background:${p.color};color:${p.text}"><span class="dot"></span>${p.label}</span>`:''}</div>`; }).join("")
+    : `<div class="focus-empty">还没有待办，去「今日计划」添加吧</div>`;
+  return `<div class="tile b5"><div class="tile-h"><span class="tic">${icon("list",16)}</span><div class="tt"><span class="en">TODO LIST</span><span class="zh">待办清单</span></div><span class="r js-open" data-open="todo">查看全部</span></div>
+    <div class="tk-head"><span class="pct">${done}<span style="color:var(--text-secondary)">/${it.length}</span></span><span class="cnt">完成 ${pct}%</span><span class="bar"><i style="width:${pct}%"></i></span></div>
+    <div class="tk-list">${list}</div></div>`;
+}
+
+/* 专注番茄钟（暗色炫酷卡 · 实时倒计时） */
+function pomoTileHTML(){
+  const p=data.__pomo||{count:0,min:0};
+  const r=64,c=2*Math.PI*r,off=c*(1-pomo.remain/pomo.total);
+  return `<div class="pomo b4"><div><div class="pen">POMODORO · 25 / 5</div><div class="pzh">专注番茄钟</div></div>
+    <div class="ring-wrap"><svg width="150" height="150" viewBox="0 0 150 150">
+      <circle cx="75" cy="75" r="${r}" fill="none" stroke="rgba(244,243,240,.14)" stroke-width="7"/>
+      <circle id="pomo-fg" cx="75" cy="75" r="${r}" fill="none" stroke="#e6b877" stroke-width="7" stroke-linecap="round"
+        stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>
+      <div class="ptime"><span class="t" id="pomo-time">${pad2(Math.floor(pomo.remain/60))}:${pad2(pomo.remain%60)}</span><span class="s" id="pomo-status">${pomo.running?'专注中':'保持专注'}</span></div></div>
+    <div class="pctl"><button class="primary" id="pomo-toggle">${pomo.running?'暂停':'开始'}</button><button id="pomo-reset">重置</button></div>
+    <div class="pstats"><div class="ps"><div class="pv" id="pomo-count">${p.count}</div><div class="pl">今日番茄</div></div>
+      <div class="ps"><div class="pv" id="pomo-min">${p.min}</div><div class="pl">专注分钟</div></div>
+      <div class="ps"><div class="pv">${p.count+ (pomo.running?1:0)}</div><div class="pl">轮次</div></div></div></div>`;
+}
+
+/* 心情趋势折线（复用 trend） */
+function trendTileHTML(){
+  const series=CONFIG.trend.series(data); const has=series.length>0;
+  const avg=has?Math.round(series.reduce((a,b)=>a+b,0)/series.length):0;
+  const body=has?trendSVG(series):`<div class="trend-empty">${icon("chart",26)}<span>暂无本周数据 · 在洞察中记录每日状态</span></div>`;
+  return `<div class="tile b8"><div class="tile-h"><span class="tic">${icon("chart",16)}</span><div class="tt"><span class="en">MOOD TREND · 近 7 天</span><span class="zh">${CONFIG.trend.title}</span></div>${has?`<span class="r">均 ${avg}${CONFIG.trend.unit}</span>`:''}</div>
+    ${body}${has?`<div class="trend-x"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>`:''}</div>`;
+}
+
+/* 月度开销：finance 支出按分类占比 */
+function spendTileHTML(){
+  const all=data.money||[]; const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+  const palette=["var(--module-4)","var(--module-3)","var(--module-1)","var(--module-2)","var(--module-5)","var(--accent)","var(--danger)"];
+  const byCat={}; all.filter(x=>x.type==="expense").forEach(x=>{ const c=x.category||"其他"; byCat[c]=(byCat[c]||0)+ +x.amount; });
+  const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  const rows=cats.length? cats.map((c,i)=>{ const pc=exp?Math.round(c[1]/exp*100):0; const col=palette[i%palette.length];
+    return `<div class="book-row js-open" data-open="money"><span class="spine" style="background:${col}">${icon("wallet",16)}</span>
+      <div class="bmid"><div class="btt">${esc(c[0])}</div><div class="bsub">¥${c[1]}</div>
+        <div class="bbar"><i style="width:${pc}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pc}%</span></div>`; }).join("")
+    : `<div class="focus-empty">暂无支出记录</div>`;
+  return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("wallet",16)}</span><div class="tt"><span class="en">MONTHLY SPENDING</span><span class="zh">月度开销</span></div><span class="r js-open" data-open="money">明细</span></div>
+    <div class="spend-sum"><span class="spend-total">¥${exp}</span><span class="spend-cap">本月支出 · 共 ${all.filter(x=>x.type==='expense').length} 笔</span></div>
+    <div class="book-list">${rows}</div></div>`;
+}
+
+/* 在读好书：read (progress) 各书进度 */
+function booksTileHTML(){
+  const all=data.read||[]; const colors=["var(--module-2)","var(--module-1)","var(--module-3)","var(--module-4)","var(--module-5)"];
+  const rows=all.length? all.map((x,i)=>{ const pct=Math.min(100,Math.round((x.current/x.target)*100||0)); const col=colors[i%colors.length];
+    return `<div class="book-row js-open" data-open="read"><span class="spine" style="background:${col}">${icon("book",16)}</span>
+      <div class="bmid"><div class="btt">${esc(x.title)}</div><div class="bsub">${x.note?esc(x.note):`${x.current}/${x.target} ${x.unit||'页'}`}</div>
+        <div class="bbar"><i style="width:${pct}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pct}%</span></div>`; }).join("")
+    : `<div class="focus-empty">还没有在读书籍，去「阅读打卡」添加吧</div>`;
+  return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("book",16)}</span><div class="tt"><span class="en">CURRENTLY READING</span><span class="zh">在读好书</span></div><span class="r">${all.length} 本</span></div>
+    <div class="book-list">${rows}</div></div>`;
+}
+
+/* 本周目标：sport (progress) 各项进度条 */
+function goalsTileHTML(){
+  const all=data.sport||[]; const colors=["var(--module-3)","var(--module-1)","var(--module-2)","var(--module-4)","var(--module-5)"];
+  const rows=all.length? all.map((x,i)=>{ const pct=Math.min(100,Math.round((x.current/x.target)*100||0)); const col=colors[i%colors.length];
+    return `<div class="book-row"><span class="spine" style="background:${col}">${icon("activity",16)}</span>
+      <div class="bmid"><div class="btt">${pct>=100?`<span style="color:var(--module-1);display:inline-flex;vertical-align:-2px;margin-right:3px">${icon("check",13,2.6)}</span>`:''}${esc(x.title)}</div>
+        <div class="bsub">${x.current}/${x.target} ${x.unit||'次'}</div>
+        <div class="bbar"><i style="width:${pct}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pct}%</span></div>`; }).join("")
+    : `<div class="focus-empty">还没有锻炼目标，去「每日锻炼」添加吧</div>`;
+  return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("activity",16)}</span><div class="tt"><span class="en">WEEKLY GOALS</span><span class="zh">本周目标</span></div><span class="r js-open" data-open="sport">${all.length} 项</span></div>
+    <div class="book-list">${rows}</div></div>`;
+}
+
+function renderHome(){
+  const now = new Date();
+  const dow = (now.getDay()+6)%7;
+  const q = CONFIG.quotes[dow % CONFIG.quotes.length];
+  const hour = now.getHours();
+  const hi = hour<5?"夜深了":hour<11?"早上好":hour<13?"中午好":hour<18?"下午好":"晚上好";
+
+  // 时钟卡
+  const clockCard=`<div class="clock-card b4">
+    <div><div class="hi">${hi}，${esc(window.localStorage ? (localStorage.getItem("gc_user_name")||CONFIG.owner) : CONFIG.owner)}</div><div class="sub">${esc(q)}</div></div>
+    <div><div class="clk" id="clk">${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}</div>
+      <div class="cmeta"><span>${dateStr()}</span><span class="dot"></span><span>第 ${weekNum()} 周</span></div></div></div>`;
+
+  $("#screen").innerHTML = `
+    ${grp("今日节奏","TODAY&nbsp;&nbsp;·&nbsp;&nbsp;RHYTHM")}
+    <div class="bento">
+      ${clockCard}
+      ${focusTileHTML()}
+      ${quickTileHTML()}
+    </div>
+
+    ${grp("习惯与待办","HABITS&nbsp;&nbsp;&&nbsp;&nbsp;TASKS")}
+    <div class="bento">${habitTileHTML()}${todoTileHTML()}</div>
+
+    ${grp("专注与状态","FOCUS&nbsp;&nbsp;&&nbsp;&nbsp;MOOD")}
+    <div class="bento">${pomoTileHTML()}${trendTileHTML()}</div>`;
+  wireHome();
+  startClock();
+}
+
+function wireHome(){
+  $("#screen").querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>go(el.dataset.open));
+  $("#screen").querySelectorAll("[data-quick]").forEach(el=>el.onclick=()=>{
+    const mod=el.dataset.quick;
+    if(mod==="biz"){ go("biz"); bizEditModal(null, ()=>render()); }
+    else { go(mod); openEditor(mod,null); }
+  });
+  const find=el=>(data[el.dataset.mkey]||[]).find(i=>i.id==el.dataset.id);
+  // 就地打卡 / 完成
+  $("#screen").querySelectorAll(".js-pin-chk").forEach(el=>el.onclick=e=>{
+    e.stopPropagation(); const m=modOf(el.dataset.mkey), x=find(el); if(!x) return;
+    if(m.type==="todo"){ x.done=!x.done; }
+    else if(m.type==="checkin"){ x.log=x.log||{}; const t=today(); x.log[t]?delete x.log[t]:x.log[t]=true; }
+    persist();
+  });
+  $("#screen").querySelectorAll(".js-pin-inc").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const x=find(el); if(!x) return; x.current=(+x.current||0)+1; persist(); });
+  $("#screen").querySelectorAll(".js-pin-dec").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const x=find(el); if(!x) return; x.current=Math.max(0,(+x.current||0)-1); persist(); });
+  $("#screen").querySelectorAll(".js-pin-open").forEach(el=>el.onclick=e=>{ e.stopPropagation(); openEditor(el.dataset.mkey, find(el)); });
+  // 习惯追踪表：点方框直接给对应日期打卡 / 取消
+  $("#screen").querySelectorAll(".js-habit").forEach(el=>el.onclick=e=>{
+    e.stopPropagation(); const x=(data.checkin||[]).find(i=>i.id==el.dataset.id); if(!x) return;
+    const d=el.dataset.day; x.log=x.log||{}; x.log[d]?delete x.log[d]:x.log[d]=true; persist();
+  });
+  // 番茄钟控制
+  const tg=$("#pomo-toggle"); if(tg) tg.onclick=()=>{ pomo.running=!pomo.running; pomoUpdate(); };
+  const rs=$("#pomo-reset"); if(rs) rs.onclick=()=>{ pomo.running=false; pomo.remain=pomo.total; pomoUpdate(); };
+}
+
+/* ---------- INSIGHT ---------- */
+function renderInsight(){
+  const cards=CONFIG.modules.map(m=>{ const it=data[m.key]||[]; let main="", pct=0;
+    if(m.type==="todo"){ main=`${it.filter(x=>x.done).length}/${it.length} 已完成`; pct=it.length?Math.round(it.filter(x=>x.done).length/it.length*100):0; }
+    else if(m.type==="checkin"){ const t=today(); main=`今日 ${it.filter(x=>x.log&&x.log[t]).length}/${it.length} 打卡`; pct=it.length?Math.round(it.filter(x=>x.log&&x.log[t]).length/it.length*100):0; }
+    else if(m.type==="progress"){ pct=avgProgress(it).value; main=`平均进度 ${pct}%`; }
+    else if(m.type==="finance"){ const e=it.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0); const inc=it.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0); main=`收 ¥${inc} · 支 ¥${e}`; }
+    else main=`${it.length} 条记录`;
+    return `<div class="pin" data-open="${m.key}" style="cursor:pointer">
+      <span class="pin-ic" style="color:${m.color};background:${m.tint};border-color:transparent">${icon(m.icon,19)}</span>
+      <div class="pin-b"><div class="pin-t">${m.name}</div><div class="pin-m">${main}</div>
+      ${['progress','todo','checkin'].includes(m.type)?`<div class="hero-bar" style="margin-top:9px"><i style="width:${pct}%;background:${m.color}"></i></div>`:''}</div>
+      <span class="arw" style="color:var(--text-tertiary)">${icon("chevron",16,2)}</span></div>`; }).join("");
+  $("#screen").innerHTML=`<div class="header"><div><h2>洞察</h2><p>各模块进展一览 · 记录—执行—统计—反馈</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
+    <div class="sec-title">模块概况</div><div class="pin-list" style="grid-template-columns:repeat(3,1fr)">${cards}</div>`;
+  $("#screen").querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>go(el.dataset.open));
+}
+
+/* ---------- MODULE VIEW ---------- */
+function renderModule(key){
+  const m=modOf(key); if(m && m.type==="biz"){ renderBizPage(); return; }
+  const all=data[key]||[]; let it=all;
+  const t=today();
+  const q=searchQ.trim().toLowerCase();
+  if(q) it=all.filter(x=>(x.title||"").toLowerCase().includes(q)||(x.note||x.content||"").toLowerCase().includes(q));
+
+  let head="";
+  if(m.type==="finance"){
+    const inc=all.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
+    const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+    head=`<div class="mod-summary">
+      <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--module-1)">¥${inc}</div></div>
+      <div class="mini"><div class="l">支出</div><div class="v" style="color:var(--danger)">¥${exp}</div></div>
+      <div class="mini"><div class="l">结余</div><div class="v">¥${inc-exp}</div></div>
+      <div class="mini"><div class="l">笔数</div><div class="v">${all.length}</div></div></div>`;
+  } else if(m.type==="todo"){
+    const done=all.filter(x=>x.done).length;
+    head=headHero(m, `${done}/${all.length}`, "今日已完成");
+  } else if(m.type==="checkin"){
+    const done=all.filter(x=>x.log&&x.log[t]).length;
+    head=headHero(m, `${done}/${all.length}`, "今日已打卡");
+  } else if(m.type==="progress"){
+    const p=avgProgress(all);
+    head=headHero(m, `${p.value}%`, `平均进度 · ${all.length} 项`);
+  } else if(m.type==="note"){
+    const todayN=all.filter(x=>x.date===t).length;
+    head=headHero(m, `${all.length}`, `条记录 · 今日 ${todayN} 条`, null);
+  }
+
+  const body = it.length ? it.map(x=>recHTML(m,x)).join("")
+    : `<div class="empty"><span class="e">${icon(m.icon,28)}</span><div>${q?'没有匹配的记录':'还没有记录，点右上角「新建」添加第一条吧'}</div></div>`;
+
+  $("#screen").innerHTML=`<div class="header"><div><h2>${m.name}</h2><p>${m.desc}</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
+    <div class="toolbar">
+      <div class="search-box">${icon("search",15,2.2)}<input id="search" placeholder="搜索…" value="${attr(searchQ)}"/></div>
+      <div class="spacer"></div><button class="btn" id="btn-new">${icon("plus",16,2.2)}新建</button></div>
+    ${head}
+    <div class="mod-layout">
+      <div class="mod-main">
+        <div class="sec-title">全部记录 <span id="rec-count" style="margin-left:auto;font-weight:500;color:var(--text-secondary);font-size:12px">${it.length} 条</span></div>
+        <div class="rec-grid">${body}</div>
+      </div>
+      <aside class="mod-side">${sideStats(m,all)}</aside>
+    </div>`;
+  const s=$("#search");
+  let composing=false;
+  const refresh=()=>{ searchQ=s.value; renderModuleResults(key); };
+  s.addEventListener("compositionstart",()=>{ composing=true; });
+  s.addEventListener("compositionend",()=>{ composing=false; refresh(); });
+  s.addEventListener("input",()=>{ if(!composing) refresh(); });
+  $("#btn-new").onclick=()=>openEditor(key,null);
+  wireModule(key);
+}
+
+/* 仅刷新受搜索影响的记录列表与计数，不重建搜索框（避免打断中文输入法） */
+function renderModuleResults(key){
+  const m=modOf(key); const all=data[key]||[];
+  const q=searchQ.trim().toLowerCase();
+  const it=q?all.filter(x=>(x.title||"").toLowerCase().includes(q)||(x.note||x.content||"").toLowerCase().includes(q)):all;
+  const body = it.length ? it.map(x=>recHTML(m,x)).join("")
+    : `<div class="empty"><span class="e">${icon(m.icon,28)}</span><div>${q?'没有匹配的记录':'还没有记录，点右上角「新建」添加第一条吧'}</div></div>`;
+  const grid=$(".rec-grid"); if(grid) grid.innerHTML=body;
+  const cnt=$("#rec-count"); if(cnt) cnt.textContent=`${it.length} 条`;
+  wireModule(key);
+}
+
+/* 模块统计侧栏：按 type 生成多维数据，填满右侧空间 */
+function sideStats(m, all){
+  const t=today();
+  const palette=["var(--accent)","var(--module-1)","var(--module-2)","var(--module-3)","var(--module-4)","var(--module-5)","var(--danger)"];
+  const row=(k,v,dot)=>`<div class="stat-row"><span class="k">${dot?`<span class="kd" style="background:${dot}"></span>`:''}${k}</span><span class="val">${v}</span></div>`;
+
+  if(m.type==="finance"){
+    const inc=all.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
+    const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+    // 支出按分类聚合
+    const byCat={}; all.filter(x=>x.type==="expense").forEach(x=>{ const c=x.category||"其他"; byCat[c]=(byCat[c]||0)+ +x.amount; });
+    const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+    const maxC=cats.length?cats[0][1]:1;
+    const catBars=cats.length? cats.map((c,i)=>`<div class="cbrow"><span class="cbn">${esc(c[0])}</span><span class="cbt"><i style="width:${Math.round(c[1]/maxC*100)}%;background:${palette[i%palette.length]}"></i></span><span class="cbv">¥${c[1]}</span></div>`).join("")
+      : `<div style="color:var(--text-tertiary);font-size:12.5px;padding:6px 0">暂无支出记录</div>`;
+    const todayExp=all.filter(x=>x.type==="expense"&&x.date===t).reduce((a,x)=>a+ +x.amount,0);
+    return `<div class="side-card"><div class="sh">${icon("wallet",15)} 收支概况</div>
+        ${row("总收入",`<span style="color:var(--module-1)">¥${inc}</span>`)}
+        ${row("总支出",`<span style="color:var(--danger)">¥${exp}</span>`)}
+        ${row("净结余",`¥${inc-exp}`)}
+        ${row("今日支出",`¥${todayExp}`)}
+        ${row("总笔数",`${all.length} 笔`)}</div>
+      <div class="side-card"><div class="sh">${icon("chart",15)} 支出分类占比</div><div class="catbar">${catBars}</div></div>`;
+  }
+
+  if(m.type==="progress"){
+    const p=avgProgress(all);
+    const doneN=all.filter(x=>((x.current/x.target)*100||0)>=100).length;
+    const totalCur=all.reduce((a,x)=>a+ (+x.current||0),0);
+    const totalTgt=all.reduce((a,x)=>a+ (+x.target||0),0);
+    return `<div class="side-card"><div class="sh">${icon("target",15)} 总体进度</div>
+        <div class="side-ring"><div class="dial">${ringSVG(p.value,m.color)}<span class="mid"><span class="big" style="color:${m.color}">${p.value}%</span><span class="cap">平均进度</span></span></div></div></div>
+      <div class="side-card"><div class="sh">${icon("list",15)} 数据统计</div>
+        ${row("进行项目",`${all.length} 项`)}
+        ${row("已达成",`${doneN} 项`)}
+        ${row("累计完成",`${totalCur} ${all[0]?.unit||m.unit||''}`)}
+        ${row("总目标量",`${totalTgt} ${all[0]?.unit||m.unit||''}`)}</div>`;
+  }
+
+  if(m.type==="checkin"){
+    const done=all.filter(x=>x.log&&x.log[t]).length; const pct=all.length?Math.round(done/all.length*100):0;
+    const streaks=all.map(x=>({title:x.title,s:streak(x.log)})).sort((a,b)=>b.s-a.s);
+    const best=streaks[0]?streaks[0].s:0;
+    const list=streaks.slice(0,6).map(x=>`<div class="stat-row"><span class="k">${esc(x.title)}</span><span class="val" style="color:var(--module-3)">${x.s} 天</span></div>`).join("");
+    return `<div class="side-card"><div class="sh">${icon("leaf",15)} 今日打卡</div>
+        <div class="side-ring"><div class="dial">${ringSVG(pct,m.color)}<span class="mid"><span class="big" style="color:${m.color}">${done}/${all.length}</span><span class="cap">已完成</span></span></div></div></div>
+      <div class="side-card"><div class="sh">${icon("flame",15)} 连续天数</div>
+        ${row("最长连续",`<span style="color:var(--module-3)">${best} 天</span>`)}
+        ${row("习惯总数",`${all.length} 个`)}
+        <div style="margin-top:6px">${list}</div></div>`;
+  }
+
+  if(m.type==="todo"){
+    const done=all.filter(x=>x.done).length; const pct=all.length?Math.round(done/all.length*100):0;
+    const byP={}; (m.priorities||[]).forEach(p=>byP[p.key]=0); all.forEach(x=>{ if(byP[x.priority]!=null) byP[x.priority]++; });
+    const pRows=(m.priorities||[]).map(p=>`<div class="stat-row"><span class="k"><span class="kd" style="background:${p.text}"></span>${p.label}</span><span class="val">${byP[p.key]||0} 项</span></div>`).join("");
+    return `<div class="side-card"><div class="sh">${icon("list",15)} 完成情况</div>
+        <div class="side-ring"><div class="dial">${ringSVG(pct,m.color)}<span class="mid"><span class="big" style="color:${m.color}">${pct}%</span><span class="cap">${done}/${all.length} 完成</span></span></div></div></div>
+      <div class="side-card"><div class="sh">${icon("chart",15)} 优先级分布</div>
+        ${pRows}
+        ${row("剩余待办",`${all.length-done} 项`)}</div>`;
+  }
+
+  // note
+  const todayN=all.filter(x=>x.date===t).length;
+  const byMood={}; all.forEach(x=>{ const md=x.mood||"未分类"; byMood[md]=(byMood[md]||0)+1; });
+  const moods=Object.entries(byMood).sort((a,b)=>b[1]-a[1]);
+  const maxM=moods.length?moods[0][1]:1;
+  const moodBars=moods.length? moods.map((c,i)=>`<div class="cbrow"><span class="cbn">${esc(c[0])}</span><span class="cbt"><i style="width:${Math.round(c[1]/maxM*100)}%;background:${palette[i%palette.length]}"></i></span><span class="cbv">${c[1]} 条</span></div>`).join("")
+    : `<div style="color:var(--text-tertiary);font-size:12.5px;padding:6px 0">暂无记录</div>`;
+  return `<div class="side-card"><div class="sh">${icon("pen",15)} 记录统计</div>
+      ${row("累计记录",`${all.length} 条`)}
+      ${row("今日新增",`${todayN} 条`)}
+      ${row("标签种类",`${moods.length} 种`)}</div>
+    <div class="side-card"><div class="sh">${icon("chart",15)} 标签分布</div><div class="catbar">${moodBars}</div></div>`;
+}
+
+/* per-module hero header: icon + big number + label */
+function headHero(m, big, label){
+  const inner=`<div class="hero-ic" style="background:${m.tint};color:${m.color}">${icon(m.icon,24)}</div>
+    <div class="hero-tx"><div class="hero-row"><span class="hero-v">${big}</span><span class="hero-l">${label}</span></div></div>`;
+  if(m.cover) return `<div class="hero has-cover"><div class="hero-bg" style="background-image:url('${attr(m.cover)}')"></div><div class="hero-inner">${inner}</div></div>`;
+  return `<div class="hero">${inner}</div>`;
+}
+
+function recHTML(m,x){
+  const pin=`<button class="pin-btn js-pin ${x.pinned?'on':''}" data-id="${x.id}" title="置顶">${icon("star",15)}</button>`;
+  const del=`<button class="del js-del" data-id="${x.id}" title="删除">${icon("trash",15)}</button>`;
+  const acts=`<div class="acts">${pin}${del}</div>`;
+  const chkMark=icon("check",13,2.4);
+  const thumb=x.image?`<img class="thumb" src="${attr(x.image)}" alt="">`:'';
+  const customMeta=(m.fields||[]).filter(f=>x[f.key]).map(f=>`<span class="meta-tag">${esc(x[f.key])}</span>`).join("");
+  const customBlock=customMeta?`<div class="meta-line">${customMeta}</div>`:'';
+  const layout=x.layout||'default';
+  const layoutCls=`rec-layout-${layout}`;
+
+  // feature layout: 大图在上 + 标题 + 正文在下 (适合有图记录)
+  if(layout==='feature' && x.image){
+    const body=(x.content||x.note||'').trim();
+    return `<div class="rec ${layoutCls}">${acts}<div class="top" data-edit="${x.id}">
+      ${thumb}
+      <div class="feat-title">${esc(x.title||'无标题')}</div>
+      ${body?`<div class="feat-body">${esc(body)}</div>`:''}
+      ${customBlock?`<div style="padding:0 16px 14px">${customBlock}</div>`:''}</div></div>`;
+  }
+  // quote layout: 大字居中 (适合短文本/灵感/金句)
+  if(layout==='quote'){
+    const text=(x.content||x.title||'').trim();
+    return `<div class="rec ${layoutCls}">${acts}<div class="top" data-edit="${x.id}" style="flex-direction:column;align-items:center;text-align:center">
+      <div class="quote-text">${esc(text)}</div>
+      ${x.mood?`<div class="quote-meta">${esc(x.mood)}${x.date?` · ${esc(x.date)}`:''}</div>`:(x.date?`<div class="quote-meta">${esc(x.date)}</div>`:'')}
+      ${customBlock?`<div style="margin-top:8px">${customBlock}</div>`:''}</div></div>`;
+  }
+
+  // default layout
+  if(m.type==="todo"){ const p=(m.priorities||[]).find(p=>p.key===x.priority);
+    return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px"><div class="chk js-chk ${x.done?'on':''}" data-id="${x.id}">${chkMark}</div>
+      ${thumb}
+      <div class="body" data-edit="${x.id}"><span class="rname ${x.done?'done':''}">${esc(x.title)}</span>
+      ${p?`<span class="badge" style="background:${p.color};color:${p.text}"><span class="dot"></span>${p.label}</span>`:''}
+      ${x.note?`<span class="rdate" style="margin-left:0;color:var(--text-tertiary)">${esc(x.note).slice(0,40)}</span>`:''}${customBlock}</div></div></div>`; }
+  if(m.type==="checkin"){ const on=!!(x.log&&x.log[today()]); const st=streak(x.log);
+    return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px"><div class="chk js-chk ${on?'on':''}" data-id="${x.id}">${chkMark}</div>
+      ${thumb}
+      <div class="body" data-edit="${x.id}"><span class="rname">${esc(x.title)}</span>
+      <span class="streak">${icon("flame",13)} 连续 ${st} 天</span>${on?'<span class="badge" style="background:var(--accent-muted);color:var(--accent)">今日已打卡</span>':''}${customBlock}</div></div></div>`; }
+  if(m.type==="progress"){ const pct=Math.min(100,Math.round((x.current/x.target)*100||0));
+    return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
+      <span class="rname">${esc(x.title)}</span>
+      <div class="pbar"><i style="width:${pct}%;background:${m.color}"></i></div>
+      <span class="rdate" style="margin-left:0;color:var(--text-secondary)">${x.current}/${x.target} ${x.unit||m.unit||''} · ${pct}%</span>
+      ${x.note?`<div class="rnote">${esc(x.note)}</div>`:''}${customBlock}</div></div></div>`; }
+  if(m.type==="finance"){ const inc=x.type==="income";
+    return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
+      <span class="rname">${esc(x.title)}</span>
+      <span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">${esc(x.category||'其他')}</span>
+      <span class="rdate">${x.date||''}</span>${customBlock}</div>
+      <div class="amt ${inc?'inc':'exp'}">${inc?'+':'-'}¥${x.amount}</div></div></div>`; }
+  // note
+  return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
+    <span class="rname">${esc(x.title||'无标题')}</span>
+    ${x.mood?`<span class="badge" style="background:var(--accent-muted);color:var(--accent)">${esc(x.mood)}</span>`:''}
+    ${x.content?`<span class="rdate" style="margin-left:0;color:var(--text-tertiary)">${esc(x.content).slice(0,40)}</span>`:''}
+    <span class="rdate">${x.date||''}</span>${customBlock}</div></div></div>`;
+}
+
+function streak(log){ if(!log) return 0; let n=0; const d=new Date();
+  for(;;){ const k=d.toISOString().slice(0,10); if(log[k]){ n++; d.setDate(d.getDate()-1);} else break; } return n; }
+
+function wireModule(key){ const m=modOf(key);
+  $("#screen").querySelectorAll(".js-chk").forEach(el=>el.onclick=e=>{ e.stopPropagation();
+    const x=(data[key]).find(i=>i.id==el.dataset.id);
+    if(m.type==="todo") x.done=!x.done;
+    else if(m.type==="checkin"){ x.log=x.log||{}; const t=today(); x.log[t]?delete x.log[t]:x.log[t]=true; }
+    persist(); });
+  $("#screen").querySelectorAll("[data-edit]").forEach(el=>el.onclick=()=>openEditor(key,(data[key]).find(i=>i.id==el.dataset.edit)));
+  $("#screen").querySelectorAll(".js-del").forEach(el=>el.onclick=e=>{ e.stopPropagation(); confirmDelete(key, el.dataset.id); });
+  $("#screen").querySelectorAll(".js-pin").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const x=(data[key]).find(i=>i.id==el.dataset.id); x.pinned=!x.pinned; persist(); });
+}
+
+/* ---------- EDITOR MODAL (per type) ---------- */
+function openEditor(key,item){
+  const m=modOf(key); const editing=!!item; const d=item||newItem(m);
+  let fields="";
+  if(m.type==="todo"){
+    fields=`<div class="field"><label>任务</label><input id="f-title" value="${attr(d.title)}" placeholder="要做什么？"/></div>
+      <div class="field"><label>优先级</label><div class="seg" id="f-prio">${(m.priorities||[]).map(p=>`<div class="opt ${p.key===d.priority?'on':''}" data-v="${p.key}">${p.label}</div>`).join("")}</div></div>
+      <div class="field"><label>备注</label><textarea id="f-note" placeholder="补充说明">${esc(d.note||'')}</textarea></div>`;
+  } else if(m.type==="checkin"){
+    fields=`<div class="field"><label>打卡项</label><input id="f-title" value="${attr(d.title)}" placeholder="例如：喝够 8 杯水"/></div>
+      <p class="sub" style="margin:0">保存后可在卡片点击左侧方块打卡；连续天数自动统计，每天从零开始。</p>`;
+  } else if(m.type==="progress"){
+    fields=`<div class="field"><label>名称</label><input id="f-title" value="${attr(d.title)}" placeholder="书名 / 目标"/></div>
+      <div class="frow"><div class="field"><label>当前</label><input id="f-cur" type="number" value="${d.current??0}"/></div>
+      <div class="field"><label>目标</label><input id="f-tgt" type="number" value="${d.target??1}"/></div>
+      <div class="field"><label>单位</label><input id="f-unit" value="${attr(d.unit||m.unit||'')}"/></div></div>
+      <div class="field"><label>摘录 / 想法</label><textarea id="f-note" placeholder="随手记">${esc(d.note||'')}</textarea></div>`;
+  } else if(m.type==="finance"){
+    fields=`<div class="field"><label>类型</label><div class="seg" id="f-ftype">
+        <div class="opt ${d.type!=='income'?'on':''}" data-v="expense">支出</div><div class="opt ${d.type==='income'?'on':''}" data-v="income">收入</div></div></div>
+      <div class="frow"><div class="field"><label>项目</label><input id="f-title" value="${attr(d.title)}" placeholder="午餐 / 稿费"/></div>
+      <div class="field"><label>金额 ¥</label><input id="f-amt" type="number" value="${d.amount??''}" placeholder="0"/></div></div>
+      <div class="field"><label>分类</label><div class="seg" id="f-cat">${(m.categories||[]).map(c=>`<div class="opt ${c===d.category?'on':''}" data-v="${attr(c)}" style="flex:0 0 auto;min-width:auto">${esc(c)}</div>`).join("")}</div></div>
+      <div class="field"><label>日期</label><input id="f-date" type="date" value="${d.date||isoToday()}"/></div>`;
+  } else {
+    fields=`<div class="field"><label>标题</label><input id="f-title" value="${attr(d.title)}" placeholder="给这条起个名"/></div>
+      ${(m.moods&&m.moods.length)?`<div class="field"><label>标签 / 心情</label><div class="seg" id="f-mood">${m.moods.map(md=>`<div class="opt ${md===d.mood?'on':''}" data-v="${attr(md)}" style="flex:0 0 auto;min-width:auto">${md}</div>`).join("")}</div></div>`:''}
+      <div class="field"><label>内容</label><textarea id="f-content" placeholder="写点什么…">${esc(d.content||'')}</textarea></div>
+      <div class="field"><label>日期</label><input id="f-date" type="date" value="${d.date||isoToday()}"/></div>`;
+  }
+  // layout variant selector
+  const layoutOpts=[{v:'default',l:'标准'},{v:'feature',l:'大图'},{v:'quote',l:'引文'}];
+  fields=`<div class="field"><label>卡片样式</label><div class="seg" id="f-layout">${layoutOpts.map(o=>`<div class="opt ${o.v===(d.layout||'default')?'on':''}" data-v="${o.v}">${o.l}</div>`).join("")}</div></div>`+fields;
+  // custom fields (from m.fields config) — rendered after type-specific fields
+  (m.fields||[]).forEach(f=>{
+    const v=d[f.key]||"";
+    if(f.type==="select") fields+=`<div class="field"><label>${esc(f.label)}</label><div class="seg" id="f-cf-${f.key}">${(f.options||[]).map(o=>`<div class="opt ${o===v?'on':''}" data-v="${attr(o)}" style="flex:0 0 auto;min-width:auto">${esc(o)}</div>`).join("")}</div></div>`;
+    else if(f.type==="textarea") fields+=`<div class="field"><label>${esc(f.label)}</label><textarea id="f-cf-${f.key}" placeholder="${attr(f.placeholder||'')}">${esc(v)}</textarea></div>`;
+    else if(f.type==="number") fields+=`<div class="field"><label>${esc(f.label)}</label><input id="f-cf-${f.key}" type="number" value="${attr(v)}" placeholder="${attr(f.placeholder||'')}"/></div>`;
+    else fields+=`<div class="field"><label>${esc(f.label)}</label><input id="f-cf-${f.key}" value="${attr(v)}" placeholder="${attr(f.placeholder||'')}"/></div>`;
+  });
+  // shared image URL field (all types)
+  fields+=`<div class="field"><label>图片 URL（可选）</label><input id="f-image" value="${attr(d.image||'')}" placeholder="https://..."/></div>`;
+  const overlay=document.createElement("div"); overlay.className="overlay";
+  overlay.innerHTML=`<div class="modal"><h3>${editing?'编辑':'新建'} · ${m.name}</h3><div class="sub">${m.desc}</div>${fields}
+    <div class="modal-actions">${editing?'<button class="link-danger" id="m-del">删除</button>':''}<div class="spacer"></div>
+      <button class="btn ghost" id="m-cancel">取消</button><button class="btn" id="m-save">保存</button></div></div>`;
+  $("#workbenchView").appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  overlay.querySelector("#m-cancel").onclick=close;
+  overlay.querySelectorAll(".seg").forEach(seg=>seg.querySelectorAll(".opt").forEach(o=>o.onclick=()=>{ seg.querySelectorAll(".opt").forEach(x=>x.classList.remove("on")); o.classList.add("on"); }));
+  if(editing) overlay.querySelector("#m-del").onclick=()=>{ close(); confirmDelete(key,d.id); };
+  overlay.querySelector("#m-save").onclick=()=>{
+    const val=id=>{ const el=overlay.querySelector(id); return el?el.value:undefined; };
+    const seg=id=>{ const el=overlay.querySelector(id+" .on"); return el?el.dataset.v:undefined; };
+    d.title=(val("#f-title")||"").trim()||"未命名";
+    d.layout=seg("#f-layout")||'default';
+    if(m.type==="todo"){ d.priority=seg("#f-prio")||d.priority; d.note=(val("#f-note")||"").trim(); }
+    else if(m.type==="progress"){ d.current=Math.max(0,+val("#f-cur")||0); d.target=Math.max(1,+val("#f-tgt")||1); d.unit=(val("#f-unit")||"").trim(); d.note=(val("#f-note")||"").trim(); }
+    else if(m.type==="finance"){ d.type=seg("#f-ftype")||"expense"; d.amount=Math.max(0,+val("#f-amt")||0); d.category=seg("#f-cat")||(m.categories&&m.categories[0])||"其他"; d.date=val("#f-date"); }
+    else if(m.type==="note"){ d.mood=seg("#f-mood")||d.mood||""; d.content=(val("#f-content")||"").trim(); d.date=val("#f-date"); }
+    // save custom fields
+    (m.fields||[]).forEach(f=>{
+      if(f.type==="select") d[f.key]=seg("#f-cf-"+f.key)||d[f.key]||"";
+      else if(f.type==="number") d[f.key]=Math.max(0,+val("#f-cf-"+f.key)||0);
+      else d[f.key]=(val("#f-cf-"+f.key)||"").trim();
+    });
+    // save image
+    d.image=(val("#f-image")||"").trim();
+    if(!editing) (data[key]=data[key]||[]).unshift(d);
+    persist(); close();
+  };
+}
+
+function newItem(m){ const base={id:Date.now()}; let item;
+  if(m.type==="todo") item={...base,title:"",priority:(m.priorities&&m.priorities[1]?m.priorities[1].key:"P1"),done:false,note:""};
+  else if(m.type==="checkin") item={...base,title:"",log:{}};
+  else if(m.type==="progress") item={...base,title:"",current:0,target:(m.unit==="页"?100:20),unit:m.unit||"",note:""};
+  else if(m.type==="finance") item={...base,title:"",type:"expense",amount:"",category:(m.categories&&m.categories[0])||"其他",date:isoToday()};
+  else item={...base,title:"",content:"",mood:(m.moods&&m.moods[0])||"",date:isoToday()};
+  // initialize custom fields
+  (m.fields||[]).forEach(f=>{ if(!(f.key in item)) item[f.key]= f.type==="select"?(f.options&&f.options[0]||""):""; });
+  return item;
+}
+
+/* ---------- delete confirm ---------- */
+function confirmDelete(key,id){ const item=(data[key]||[]).find(i=>i.id==id); if(!item) return;
+  const overlay=document.createElement("div"); overlay.className="overlay";
+  overlay.innerHTML=`<div class="modal" style="width:400px"><h3>删除记录</h3><div class="sub">确定删除「${esc(item.title||'这条记录')}」？此操作不可撤销。</div>
+    <div class="modal-actions"><div class="spacer"></div><button class="btn ghost" id="c-cancel">取消</button><button class="btn danger" id="c-ok">删除</button></div></div>`;
+  $("#workbenchView").appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  overlay.querySelector("#c-cancel").onclick=close;
+  overlay.querySelector("#c-ok").onclick=()=>{ data[key]=data[key].filter(i=>i.id!=id); persist(); close(); };
+}
+
+/* ---------- router / sidebar ---------- */
+function dateStr(){ const n=new Date(); const wd="日一二三四五六"[n.getDay()]; return `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 周${wd}`; }
+function go(v){ view=v; searchQ=""; renderNavActive(); render(); window.scrollTo({top:0}); }
+function render(){ if(view==="home") renderHome(); else if(view==="insight") renderInsight(); else renderModule(view); }
+/* 供 app.js 通知：工作台重新可见时重渲染当前模块（经营概览会重新拉取数据） */
+window.__wbResurface = render;
+
+function buildNav(){
+  
+  const html=[`<div class="navi" data-go="home">${icon("home",19)}首页</div>`,
+    `<div class="nav-sep">功能模块</div>`]
+    .concat(CONFIG.modules.map(m=>`<div class="navi" data-go="${m.key}">${icon(m.icon,19)}${m.name}</div>`))
+    .concat([`<div class="nav-sep">统计</div>`, `<div class="navi" data-go="insight">${icon("chart",19)}洞察复盘</div>`]);
+  $("#wbNav").innerHTML=html.join("");
+  $("#wbNav").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>go(el.dataset.go));
+  renderNavActive();
+}
+function renderNavActive(){ $("#wbNav").querySelectorAll(".navi").forEach(el=>el.classList.toggle("active", el.dataset.go===view)); }
+
+/* ---------- utils ---------- */
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
+
+/* ===== 项目经营概览（独立子页 · 由顶部导航进入） ===== */
+/* 同阶段列内卡片「纸质归档堆叠」参数：折叠标签高 + 相邻错位下移步长(px) */
+const BIZ_TAB_H = 48, BIZ_CAS = 30;
+function renderBizPage(){
+  const head = '<div class="header"><div><h2>项目经营概览</h2><p>项目全生命周期看板 · 新建/编辑项目、报价定稿回写、阶段流转</p></div><div class="spacer"></div><span class="date-chip">'+icon("calendar",14)+' '+dateStr()+'</span></div>';
+  const fill = html => { $("#screen").innerHTML = '<section class="wb-biz">'+html+'</section>'; };
+  const cols = ["投标","中标在建","已竣工","已结算","售后"];
+  const sortOpts = [["default","默认"],["name","名称"],["date","开标日期"],["amount","报价金额"],["profit","总毛利"]];
+  let projects = [], bizQ = "", colSort = {};
+
+  const fetchAll = () => {
+    fill(head + '<div class="biz-loading">正在读取项目经营概览…</div>');
+    fetch("http://localhost:8000/api/project/overview/list").then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(json=>{
+      projects = (json && json.projects) || [];
+      window.__bizProjects = projects;
+      if(!projects.length){ fill(head + '<div class="toolbar"><div class="spacer"></div><button class="btn" onclick="window.__bizNew&amp;&amp;__bizNew()">'+icon("plus",16,2.2)+'新建项目</button></div><div class="biz-head"><span class="bt">暂无项目</span></div><div class="biz-empty">还没有项目，点右上角「新建项目」创建一个开始经营概览。</div>'); return; }
+      renderPage();
+    }).catch(err=>{ fill(head + '<div class="biz-error">暂无法连接后端服务（'+String(err.message||err)+'）。请先启动 8000 端口服务。</div>'); });
+  };
+
+  // 搜索过滤：按项目名称模糊匹配（与今日计划搜索栏一致）
+  const qList = list => bizQ ? list.filter(p=>(p.name||"").toLowerCase().includes(bizQ)) : list;
+  // 单列排序：默认 / 名称 / 开标日期 / 报价金额 / 总毛利
+  const sortList = (list,key) => {
+    if(!key||key==="default") return list;
+    const arr=list.slice();
+    arr.sort((a,b)=>{
+      if(key==="name") return (a.name||"").localeCompare(b.name||"","zh");
+      if(key==="date") return (a.bid_open_date||"").localeCompare(b.bid_open_date||"");
+      const f = key==="amount" ? "bid_amount" : "gross_profit";
+      return (toNum(a[f])||0)-(toNum(b[f])||0);
+    });
+    return arr;
+  };
+  // 分桶：五列 + 未中标归档；每列应用各自排序
+  const bucketsOf = () => {
+    const buckets={}; cols.forEach(s=>buckets[s]=[]); const archived=[];
+    qList(projects).forEach(p=>{ (cols.includes(p.stage)?buckets[p.stage]:archived).push(p); });
+    cols.forEach(s=>{ buckets[s]=sortList(buckets[s],colSort[s]); });
+    return {buckets,archived};
+  };
+  // 列头排序下拉：仅作用于本分类（阶段）列
+  const sortSelHTML = s => '<select class="biz-col-sort" data-stage="'+esc(s)+'" title="排序本列项目卡片">'+sortOpts.map(o=>'<option value="'+o[0]+'"'+(colSort[s]===o[0]?' selected':'')+'>'+o[1]+'</option>').join("")+'</select>';
+  const boardHTML = () => {
+    const {buckets,archived}=bucketsOf();
+    if(!qList(projects).length) return '<div class="biz-empty">没有匹配「'+esc(bizQ)+'」的项目。</div>';
+    const colHTML = cols.map(s=>{
+      const arr=buckets[s];
+      // 堆叠态：按卡片数量撑开列高，露出每张卡片的错位标签
+      const bodyStyle = arr.length ? ' style="height:'+(BIZ_TAB_H+(arr.length-1)*BIZ_CAS+8)+'px"' : '';
+      const list = arr.map((p,i)=>bizCardHTML(p,i)).join("") || '<div class="biz-col-empty">—</div>';
+      return '<div class="biz-col"><div class="biz-col-head"><span class="biz-stage-dot '+cls(s)+'"></span>'+esc(s)+'<span class="biz-col-count">'+arr.length+'</span>'+sortSelHTML(s)+'</div><div class="biz-col-body"'+bodyStyle+'>'+list+'</div></div>';
+    }).join("");
+    const arch = '<details class="biz-arch"><summary>未中标归档（'+archived.length+'）</summary>'+(archived.length?'<div class="biz-grid arch">'+archived.map(bizCardHTML).join("")+'</div>':'')+'</details>';
+    return '<div class="biz-cols">'+colHTML+'</div>'+arch;
+  };
+  const renderPage = () => {
+    fill(head + '<div class="toolbar"><div class="search-box">'+icon("search",15,2.2)+'<input id="bizSearch" placeholder="搜索项目…" value="'+attr(bizQ)+'"/></div><div class="spacer"></div><button class="btn" id="bizNewBtn">'+icon("plus",16,2.2)+'新建项目</button></div><div class="biz-board">' + boardHTML() + '</div><p class="biz-note">所有金额单位：元（保留 2 位小数）。是否废标以招标文件为准；低价确认仅记录留痕，不做废标判定。</p>');
+    wire();
+  };
+  // 仅刷新看板区，不重建搜索框（避免打断中文输入法）
+  const refreshBoard = () => {
+    const b=$("#screen .biz-board"); if(!b) return;
+    b.innerHTML=boardHTML();
+    wireSort();
+  };
+  const wireSort = () => {
+    $("#screen").querySelectorAll(".biz-col-sort").forEach(sel=>{
+      sel.addEventListener("change",()=>{ colSort[sel.dataset.stage]=sel.value; refreshBoard(); });
+    });
+  };
+  const wire = () => {
+    const nb=$("#bizNewBtn"); if(nb) nb.addEventListener("click",()=>bizEditModal(null, fetchAll));
+    const s=$("#bizSearch");
+    if(s){
+      let composing=false;
+      const refresh=()=>{ bizQ=s.value.trim().toLowerCase(); refreshBoard(); };
+      s.addEventListener("compositionstart",()=>{ composing=true; });
+      s.addEventListener("compositionend",()=>{ composing=false; refresh(); });
+      s.addEventListener("input",()=>{ if(!composing) refresh(); });
+    }
+    wireSort();
+  };
+  function bizCardHTML(p, i){
+    const clsV = p.gross_margin!=null ? (p.gross_margin<0 ? "neg" : "pos") : "";
+    // 堆叠态：卡片绝对定位错位下移(i*BIZ_CAS)；归档区调用时不传 i，保持平铺
+    const top = (typeof i==="number") ? ' top:'+(i*BIZ_CAS)+'px;' : '';
+    const short = (p.short_name||"").trim();
+    const disp = short || (p.name||"");
+    const tip = (short && p.name && short!==p.name) ? (short+' · '+p.name) : disp;
+    const dataShort = short ? ' data-short="'+esc(short)+'"' : '';
+    return '<div class="biz-card" data-id="'+esc(p.id)+'" data-stage="'+esc(p.stage||"—")+'" tabindex="0" aria-label="'+attr(disp)+' 项目卡片" style="'+top+'">'
+      +'<div class="biz-tab"'+dataShort+' title="'+esc(tip)+'"><b>'+esc(disp)+'</b><i>'+esc(p.stage||"—")+'</i></div>'
+      +'<div class="biz-main">'
+      +'<div class="biz-top"><span class="biz-name" title="'+esc(p.name)+'">'+esc(p.name)+'</span><span class="biz-badge">'+esc(p.stage||"—")+'</span></div>'
+      +'<div class="biz-metrics">'
+      +'<div class="biz-metric"><span class="l">总限价</span><span class="v">'+yf(p.limit_total)+'</span></div>'
+      +'<div class="biz-metric"><span class="l">开标日期</span><span class="v">'+esc(p.bid_open_date||"—")+'</span></div>'
+      +'<div class="biz-metric"><span class="l">投标报价金额</span><span class="v">'+yf(p.bid_amount)+'</span></div>'
+      +'<div class="biz-metric"><span class="l">投标成本测算</span><span class="v">'+yf(p.bid_cost)+'</span></div>'
+      +'<div class="biz-metric"><span class="l">总毛利</span><span class="v '+clsV+'">'+yf(p.gross_profit)+'</span></div>'
+      +'<div class="biz-metric"><span class="l">总毛利率</span><span class="v '+clsV+'">'+pct(p.gross_margin)+'</span></div>'
+      +'</div><div class="biz-foot">点击卡片编辑参数 · 阶段下拉为流转唯一入口</div>'
+      +'</div></div>';
+  }
+  // 卡片点击 → 编辑弹窗
+  $("#screen").addEventListener("click", e=>{
+    const card = e.target.closest(".biz-card"); if(!card) return;
+    const id = card.getAttribute("data-id");
+    const proj = (window.__bizProjects || []).find(x=>x.id===id);
+    if(proj) bizEditModal(proj, fetchAll);
+  });
+  // 键盘可访问：聚焦标签后按 Enter 打开编辑
+  $("#screen").addEventListener("keydown", e=>{
+    if(e.key==="Enter"){ const card = e.target.closest(".biz-card"); if(card) card.click(); }
+  });
+  window.__bizNew = ()=>bizEditModal(null, fetchAll);
+  fetchAll();
+}
+
+/* 元格式化：保留 2 位小数 */
+function yf(v){ return (v==null||v==="") ? "—" : Number(v).toFixed(2); }
+/* 百分比：内部存 0-1 小数，转百分比保留 2 位 */
+function pct(v){ return (v==null||v==="") ? "—" : (Number(v)*100).toFixed(2)+"%"; }
+function toNum(v){ if(v==null||v==="") return null; const n=Number(v); return isNaN(n)?null:n; }
+function deriveProj(f){
+  f = Object.assign({}, f);
+  const ba=toNum(f.bid_amount), bc=toNum(f.bid_cost);
+  if(ba!=null && bc!=null){ f.gross_profit = ba-bc; f.gross_margin = ba? (ba-bc)/ba : null; }
+  else { f.gross_profit=null; f.gross_margin=null; }
+  const ar=toNum(f.actual_revenue), ac=toNum(f.actual_cost);
+  f.actual_yield = (ar!=null && ac!=null && ac) ? (ar-ac)/ac : null;
+  return f;
+}
+
+/* 项目卡片阶段的颜色主题 */
+function cls(s){ return s==="投标"?"b-bid":s==="中标在建"?"b-run":s==="已竣工"?"b-done":s==="已结算"?"b-settle":s==="售后"?"b-svc":"b-arch"; }
+
+/* 新建 / 编辑 弹窗：阶段下拉是流转唯一入口；派生指标随输入实时重算 */
+function bizEditModal(proj, after){
+  const isNew = !proj;
+  const p = Object.assign({ id:"", name:"", short_name:"", limit_total:"", bid_open_date:"", stage:"投标", bid_amount:"", bid_cost:"", actual_cost:"", actual_revenue:"", settle_amount:"", completed_at:"" }, proj||{});
+  const stages = ["投标","中标在建","已竣工","已结算","售后","未中标"];
+  const stageSel = stages.map(s=>'<option value="'+s+'"'+ (s===p.stage?' selected':'') +'>'+s+'</option>').join("");
+  const nfv = k=>esc(p[k]!=null?p[k]:"");
+  const grid = (label,k,ph)=>'<label class="fld"><span>'+label+'</span><input type="number" step="0.01" id="bo-'+k+'" value="'+nfv(k)+'" placeholder="'+ph+'"/></label>';
+  const html =
+    '<div class="modal-mask" id="bizMask"><div class="modal biz-modal">'
+    +'<div class="biz-mhead"><h3>'+(isNew?'新建项目':'编辑项目')+'</h3><button type="button" class="biz-x" id="bizClose">✕</button></div>'
+    +'<div class="biz-mform">'
+    +'<label class="fld"><span>项目名称 *</span><input id="bo-name" value="'+esc(p.name)+'" placeholder="如：西永L分区项目"/></label>'
+    +'<label class="fld"><span>简称（选填，显示在便利贴上）</span><input id="bo-short_name" value="'+esc(p.short_name||"")+'" placeholder="如：西永L"/></label>'
+    +grid("项目总限价金额","limit_total","如：1500000")
+    +'<label class="fld"><span>开标日期</span><input type="date" id="bo-bid_open_date" value="'+esc(p.bid_open_date||"")+'"/></label>'
+    +grid("投标报价金额","bid_amount","定稿后由报价页回写")
+    +grid("投标成本测算","bid_cost","定稿后由报价页回写")
+    +'<label class="fld"><span>项目进行阶段</span><select id="bo-stage">'+stageSel+'</select></label>'
+    +grid("实际成本","actual_cost","")
+    +grid("实际营收","actual_revenue","")
+    +grid("结算金额","settle_amount","")
+    +'<label class="fld"><span>竣工时间</span><input type="date" id="bo-completed_at" value="'+esc(p.completed_at||"")+'"/></label>'
+    +'<div class="biz-derived wide"><div><span>总毛利（自动）</span><b id="prev-gross_profit">'+yf(deriveProj(p).gross_profit)+'</b></div>'
+    +'<div><span>总毛利率（自动）</span><b id="prev-gross_margin">'+pct(deriveProj(p).gross_margin)+'</b></div>'
+    +'<div><span>实际收益率（自动）</span><b id="prev-actual_yield">'+pct(deriveProj(p).actual_yield)+'</b></div></div>'
+    +'</div>'
+    +'<div class="biz-mactions">'
+    +(!isNew?'<button type="button" class="btn-danger" id="bizDel">删除</button>':'<span></span>')
+    +'<button type="button" class="btn-secondary" id="bizCancel">取消</button>'
+    +'<button type="button" class="btn-primary" id="bizSave">保存</button>'
+    +'</div></div></div>';
+  const mask = document.createElement("div");
+  mask.innerHTML = html;
+  $("#workbenchView").appendChild(mask);
+  const wrap = mask.querySelector("#bizMask");
+  const recalc = ()=>{
+    const f = collect();
+    $("#prev-gross_profit").textContent = yf(deriveProj(f).gross_profit);
+    $("#prev-gross_margin").textContent = pct(deriveProj(f).gross_margin);
+    $("#prev-actual_yield").textContent = pct(deriveProj(f).actual_yield);
+  };
+  ["bo-bid_amount","bo-bid_cost","bo-actual_revenue","bo-actual_cost"].forEach(id=>{
+    const el = wrap.querySelector("#"+id); el && el.addEventListener("input", recalc);
+  });
+  function collect(){
+    return { name: $("#bo-name").value.trim(),
+      short_name: $("#bo-short_name").value.trim(),
+      limit_total: $("#bo-limit_total").value.trim(), bid_open_date: $("#bo-bid_open_date").value,
+      stage: $("#bo-stage").value, bid_amount: $("#bo-bid_amount").value.trim(),
+      bid_cost: $("#bo-bid_cost").value.trim(), actual_cost: $("#bo-actual_cost").value.trim(),
+      actual_revenue: $("#bo-actual_revenue").value.trim(), settle_amount: $("#bo-settle_amount").value.trim(),
+      completed_at: $("#bo-completed_at").value };
+  }
+  function close(){ mask.remove(); }
+  $("#bizClose").addEventListener("click", close);
+  $("#bizCancel").addEventListener("click", close);
+  wrap.addEventListener("click", e=>{ if(e.target===wrap) close(); });
+  $("#bizSave").addEventListener("click", async ()=>{
+    const f = collect();
+    if(!f.name){ alert("请填写项目名称"); return; }
+    const data = new FormData();
+    for(const k in f){ data.append(k, f[k]); }
+    if(p.id) data.append("pid", p.id);
+    try{
+      const r = await fetch("http://localhost:8000/api/project/overview/save", {method:"POST", body:data});
+      const j = await r.json();
+      if(!r.ok || j.status!=="PASS") throw new Error(j.reason||"保存失败");
+      close(); after && after();
+    }catch(err){ alert("保存失败："+(err.message||err)); }
+  });
+  const del = wrap.querySelector("#bizDel");
+  if(del) del.addEventListener("click", async ()=>{
+    if(!confirm("确定删除项目「"+(p.name||"")+"」？此操作不可恢复。")) return;
+    const data = new FormData(); data.append("id", p.id);
+    try{
+      const r = await fetch("http://localhost:8000/api/project/overview/delete", {method:"POST", body:data});
+      const j = await r.json();
+      if(!r.ok || j.status!=="PASS") throw new Error(j.reason||"删除失败");
+      close(); after && after();
+    }catch(err){ alert("删除失败："+(err.message||err)); }
+  });
+}
+
+(function(){
+  const host = document.getElementById("workbenchView");
+  if(!host) return;
+  host.innerHTML = '<nav class="wb-nav" id="wbNav"></nav><div id="screen"></div>';
+  buildNav();
+  render();
+})();
+
+})();

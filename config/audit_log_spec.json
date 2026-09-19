@@ -1,0 +1,9 @@
+{
+  "schema_id": "audit_log_spec_v1",
+  "task": "T06-08",
+  "title": "不可变审计运行记录",
+  "chain": ["RunID", "Input", "Config", "RuleSet", "Model", "Solver", "Output", "Decision"],
+  "required_fields": ["run_id", "operator", "created_at", "event_type", "payload", "previous_hash", "event_hash"],
+  "rules": ["事件按 chain 顺序追加", "每个 event_hash 覆盖自身字段与 previous_hash", "链断裂、篡改或缺字段必须 BLOCKED"],
+  "status_domain": ["PASS", "BLOCKED"]
+}

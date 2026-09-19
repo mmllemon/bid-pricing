@@ -163,6 +163,7 @@ class Phase1Instance:
         except KeyError as exc:  # pragma: no cover - 结构错误应当立刻暴露
             raise Phase1InstanceError("实例缺 items 键") from exc
         items = tuple(_item_from_dict(raw) for raw in raw_items)
+        _raise_on_duplicate_item_ids(items)
         p = d.get("params") or {}
         params = Phase1Params(
             theta_dev=p.get("theta_dev"),
@@ -222,6 +223,7 @@ class Phase1Instance:
                     alpha=float(row.get("alpha") or 0.0),
                 )
             )
+        _raise_on_duplicate_item_ids(items)
         return cls(
             items=tuple(items),
             B=B,
@@ -385,6 +387,29 @@ def _as_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
     return float(value)
+
+
+def _raise_on_duplicate_item_ids(items: Iterable[Phase1Item]) -> None:
+    """防御：同一实例内 item_id 必须唯一，否则解以 item_id 为键必然覆盖。
+
+    canonical 主键是 ``(project_id, unit_work, item_id)``，而求解层/结果层
+    目前以 ``item_id`` 为唯一键。跨单位工程同编码时静默覆盖是最隐蔽的错误
+    形态（H-009），任何构造路径都不得把重复编码送进求解器——**重复即拒**，
+    由调用方（如 quote_pipeline 入口）给出可定位的 BLOCKED 说明。
+    """
+    seen: set[str] = set()
+    dup: set[str] = set()
+    for item in items:
+        if not item.item_id:
+            continue
+        if item.item_id in seen:
+            dup.add(item.item_id)
+        seen.add(item.item_id)
+    if dup:
+        raise Phase1InstanceError(
+            "实例内 item_id 重复，拒绝构造以防字典静默覆盖: "
+            + ", ".join(sorted(dup))
+        )
 
 
 def _item_from_dict(d: Mapping[str, Any]) -> Phase1Item:

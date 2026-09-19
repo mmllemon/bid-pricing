@@ -1,0 +1,14 @@
+{
+  "schema_id": "report_metadata_spec_v1",
+  "task": "T06-07",
+  "title": "报告元信息与 hash 分层",
+  "hash_layers": {
+    "calculation_hash": "只对计算结果和绑定指纹计算，不含 timestamp/run_id/operator",
+    "artifact_hash": "对最终报告制品字节计算",
+    "run_id": "每次运行唯一标识",
+    "created_at": "运行创建时间",
+    "operator": "运行操作者"
+  },
+  "required_bindings": ["model_version", "config_version", "input_hash", "rule_set_version"],
+  "status_domain": ["PASS", "BLOCKED"]
+}

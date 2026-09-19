@@ -1,10 +1,15 @@
 # bid-pricing
 
-**投标报价利润最大化测算模型 —— 实施路线 v3.2.1 的执行代码库**
+**投标报价利润最大化测算模型与网页平台** · 版本 `v0.1.0`
 
-本仓库是《投标报价模型 v0.3 实施路线与任务清单 v3.2.1》（68 任务 / 8 闸门）的代码落地。
-首个开发增量聚焦 **WP0 模型契约冻结**与**闸门机械判据**——因为按路线自身的死锁断言，
-WP1/WP2/WP3 的开工被 Gate 0a 门禁，而 Gate 0a 的起点是 T00-08（唯一无前置依赖的任务）。
+基于《投标报价模型 v0.3 实施路线与任务清单 v3.2.1》（68 任务 / 8 闸门）的代码落地，并完成网页化：**给定总报价，联合求解分部分项综合单价**，使结算调整后利润最大，输出可复核的 Excel 结果。
+
+核心能力：
+
+- **计算内核**：固定格式 Excel 解析（限价/成本清单）、复合主键匹配、Phase 1 普通优化、Phase 2 C13 结算调整 MILP、独立复算验证。
+- **网页平台**（FastAPI + 原生 JS）：导入预览、方案保存/打开/复制/重算/定稿、多方案对比、低价确认留痕（是否废标以招标文件为准）、Excel 导出。
+- **个人工作台**：项目经营概览看板（投标/中标在建/完工/结算/售后）、方案库、项目档案，多用户目录隔离。
+- **质量基线**：1393 项单元/契约/回归测试通过，ADR 决策记录 34 项。
 
 ## 快速开始
 
@@ -28,6 +33,36 @@ PYTHONPATH=src python -m bidpricing.cli ruleset-select --contract-date 2026-03-0
 ```
 
 或在仓库根目录执行 `pip install -e .` 后直接使用 `bidpricing` 命令。
+
+## 网页应用：安装与启动
+
+网页版报价优化（FastAPI 后端 8000 + 静态前端 8080）面向本机单机使用，无需鉴权，但按运行账号做目录级隔离：各账号的方案落在各自命名空间 `outputs/projects/<用户>/`，互不可见；访问与计算写入 `outputs/logs/access-<日期>.jsonl`（JSONL 审计日志，含时间/用户/端点和状态）。
+
+### 一键启动（Windows）
+
+```powershell
+# 在仓库根目录
+.\run.ps1
+```
+
+脚本会定位 Python、首次自动补装 `requirements-web.txt`，启动「后端 8000 + 前端 8080」，按 `Ctrl+C` 停止。缺 node 时 Excel 导出降级（JSON 结果仍可下载）。
+
+### 手动启动
+
+```bash
+# 终端 1：后端
+pip install -r requirements-web.txt
+PYTHONPATH=src python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
+
+# 终端 2：前端
+python -m http.server 8080 --directory frontend
+```
+
+随后打开 <http://localhost:8080>；健康检查 <http://localhost:8000/api/health>。
+
+### 多用户隔离说明
+
+不引入密码/会话鉴权，仅按 `USERNAME`/`USER` 环境变量把输出目录隔离到 `outputs/<projects|web-results>/<用户>/`，避免同一机器不同账号互相看到方案。若需更强隔离/多机部署，需引入真实登录与会话层（超出 H-012 范围）。
 
 ## 目录结构
 

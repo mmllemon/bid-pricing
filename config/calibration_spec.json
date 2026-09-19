@@ -1,0 +1,8 @@
+{
+  "schema_id": "calibration_spec_v1",
+  "task": "T07-04",
+  "title": "参数校准记录",
+  "prerequisites": ["replay_status=PASS", "quantity_comparison_status=PASS", "precision_promotion_status=READY"],
+  "rules": ["校准只生成版本化建议，不直接覆盖当前 config", "每项建议记录 old_value/new_value/reason", "缺少前置证据时 BLOCKED"],
+  "status_domain": ["PASS", "BLOCKED"]
+}

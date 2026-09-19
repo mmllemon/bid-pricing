@@ -1,0 +1,8 @@
+{
+  "schema_id": "quote_pipeline_spec_v1",
+  "title": "总报价到分部分项最优综合单价主流程",
+  "inputs": ["target_total", "items", "fixed_pretax", "vat_rate", "surtax_rate", "unbalanced_clause"],
+  "outputs": ["competitive_budget", "p_by_id", "line_amounts", "objective", "status", "warnings"],
+  "steps": ["compute_P_competitive", "validate_unbalanced_clause", "solve_phase1", "check_solution", "reconcile_total"],
+  "rule": "缺少工程量/成本或规则参数时 BLOCKED；空限价表示无最高限价并提示；c_i 可低于单价，除非项目政策另行声明硬下限；不平衡报价条款必须显式声明，有效性条款进入下界，结算调整条款在结算函数接入前 BLOCKED"
+}

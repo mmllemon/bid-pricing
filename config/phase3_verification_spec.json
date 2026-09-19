@@ -1,0 +1,17 @@
+{
+  "schema_id": "phase3_verification_spec_v1",
+  "task": "T04-05",
+  "status_domain": ["PASS", "WARN", "FAIL", "BLOCKED", "SKIP"],
+  "lp_required": ["primal_feasible", "dual_feasible", "stationarity_residual", "complementarity_residual", "objective_reported", "objective_recomputed"],
+  "milp_required": ["primal_feasible", "objective_reported", "objective_recomputed", "mip_gap", "mip_gap_tolerance"],
+  "checks": {
+    "lp": ["primal_feasibility", "dual_feasibility", "stationarity", "complementary_slackness", "objective_recomputation"],
+    "milp": ["primal_feasibility", "objective_recomputation", "mip_gap"]
+  },
+  "policy": {
+    "missing_input": "BLOCKED",
+    "residual_over_tolerance": "FAIL",
+    "milp_gap_over_tolerance": "WARN",
+    "milp_no_incumbent": "BLOCKED"
+  }
+}

@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>工程智算 · 投标报价</title>
+  <link rel="stylesheet" href="./styles.css?v=2026-09-20-wb14" />
+  <link rel="stylesheet" href="./results.css?v=2026-09-19-wb3" />
+  <link rel="stylesheet" href="./workbench.css?v=2026-09-20-wb12" />
+  <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
+  <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- 窄屏抽屉式侧栏：汉堡按钮 + 遮罩（宽屏隐藏） -->
+    <button class="sb-toggle" id="sbToggle" aria-label="打开导航菜单" aria-expanded="false">
+      <svg class="ic-burger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <svg class="ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div class="sb-backdrop" id="sbBackdrop"></div>
+    <!-- ===== 侧边栏：品牌 + 分组导航（可滚动） + 底部用户区 ===== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg>
+        </div>
+        <div class="brand-text">
+          <strong>工程智算</strong>
+          <small>工程项目智能决策平台</small>
+        </div>
+      </div>
+
+      <nav class="nav-scroll" aria-label="功能模块">
+        <div class="nav-group">
+          <div class="nav-group-title">工作台</div>
+          <button class="nav-item" data-module="workbench">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            <span>个人工作台</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">核心功能</div>
+          <button class="nav-item active" data-module="quote">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h5M8 17h8"/></svg>
+            <span>投标报价</span>
+          </button>
+          <button class="nav-item" data-module="cost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M5 9l7-7 7 7M5 15l7 7 7-7"/></svg>
+            <span>实施成本</span>
+          </button>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">项目管理</div>
+          <button class="nav-item" data-module="ledger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v12H4z"/><path d="M8 9h6M8 13h8M8 17h5"/></svg>
+            <span>项目台账</span>
+          </button>
+          <button class="nav-item" data-module="settlement">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>结算管理</span>
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="user-block">
+          <div class="avatar" id="userAvatar">U</div>
+          <div class="user-meta">
+            <span class="user-name" id="userName">本机用户</span>
+            <span class="user-scope">本地工作台</span>
+          </div>
+        </div>
+        <div class="version-line">v0.1 · 单机版</div>
+      </div>
+    </aside>
+
+    <!-- ===== 主内容区 ===== -->
+    <main class="main-content">
+      <div id="quoteView">
+        <div class="breadcrumb">投标报价 <span>/</span> 新建测算</div>
+
+        <header class="page-header">
+          <div>
+            <h1>投标报价优化</h1>
+            <p class="page-sub">从限价与成本清单出发，计算满足总价约束的最优综合单价。</p>
+          </div>
+        </header>
+
+        <!-- 参数区：三组卡片 -->
+        <section class="card">
+          <div class="card-head">
+            <h2>本次报价参数</h2>
+            <p>参数仅影响当前测算，不会修改原始 Excel。</p>
+          </div>
+
+          <div class="param-grid">
+            <div class="param-group">
+              <div class="param-group-title">基本信息</div>
+              <label class="field" data-tip="从「项目经营概览」选择处于投标阶段的项目，选中后自动带入项目名称与目标总报价（取该项目投标报价金额，元）。">
+                <span class="field-label">关联投标项目</span>
+                <select id="projectId"><option value="">— 手动填写 / 不关联 —</option></select>
+              </label>
+              <label class="field" data-tip="目标总报价 = 投标报价金额（含税，元），结算调整模型以此反推竞争性预算。">
+                <span class="field-label">目标总报价 <em>元</em></span>
+                <input id="targetTotal" type="number" placeholder="1260000" step="0.01" />
+              </label>
+              <label class="field" data-tip="措施项目费与规费等固定税前项，不参与单价优化。">
+                <span class="field-label">固定税前项 <em>元</em></span>
+                <input id="fixedPretax" type="number" placeholder="22381.74" />
+              </label>
+            </div>
+
+            <div class="param-group">
+              <div class="param-group-title">报价比率</div>
+              <label class="field" data-tip="单项报价 ÷ 单项最高限价 的下限；低于 50% 须人工确认。">
+                <span class="field-label">比率下限</span>
+                <input id="ratioMin" type="number" min="0" max="1" step="0.01" value="0.50" />
+              </label>
+              <label class="field" data-tip="单项报价 ÷ 单项最高限价 的上限，通常为 1.00。">
+                <span class="field-label">比率上限</span>
+                <input id="ratioMax" type="number" min="0" max="1" step="0.01" value="1.00" />
+              </label>
+              <label class="field check">
+                <input id="lowRatioConfirmed" type="checkbox" />
+                <span>确认允许低于 50% 报价</span>
+              </label>
+            </div>
+
+            <div class="param-group">
+              <div class="param-group-title">税费与条款</div>
+              <label class="field" data-tip="增值税率，采用小数口径：0.09 = 9%（建筑业常用 9%）。">
+                <span class="field-label">增值税率</span>
+                <input id="vatRate" type="number" step="0.01" min="0" max="1" value="0.09" />
+              </label>
+              <label class="field" data-tip="附加税率（城建+教育附加等），小数口径：0.12 = 12%。">
+                <span class="field-label">附加税率</span>
+                <input id="surtaxRate" type="number" step="0.01" min="0" max="1" value="0.12" />
+              </label>
+              <label class="field check">
+                <input id="clauseEnabled" type="checkbox" checked />
+                <span>启用严重不平衡报价结算修正条款</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card-corner">
+            <p class="corner-tip">报价比率 = 单项报价 ÷ 单项最高限价（默认 50%～100%）；低于 50% 可能触发严重低价或废标审查，须先确认招标文件条款。</p>
+            <label class="field" data-tip="填写后记入低价确认留痕记录（确认人/时间/条款依据）。">
+              <span class="field-label">确认人（可选）</span>
+              <input id="lowPriceConfirmedBy" type="text" placeholder="填写后记入留痕" />
+            </label>
+          </div>
+        </section>
+
+        <!-- 上传区 -->
+        <section class="card">
+          <div class="card-head">
+            <h2>上传报价资料</h2>
+            <p>系统自动识别固定格式 Excel，完成编码匹配与异常检查。</p>
+          </div>
+
+          <div class="upload-grid">
+            <label class="upload-card">
+              <div class="upload-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>
+              </div>
+              <strong>限价清单</strong>
+              <small>综合单价列作为不含税最高限价</small>
+              <input id="capFile" type="file" accept=".xlsx" />
+              <span class="file-name" data-for="capFile">选择 Excel 文件</span>
+            </label>
+            <label class="upload-card">
+              <div class="upload-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/></svg>
+              </div>
+              <strong>成本清单</strong>
+              <small>综合单价列作为含税成本单价</small>
+              <input id="costFile" type="file" accept=".xlsx" />
+              <span class="file-name" data-for="costFile">选择 Excel 文件</span>
+            </label>
+          </div>
+
+          <div class="action-row">
+            <button class="btn-secondary" id="previewBtn">预览导入资料</button>
+            <button class="btn-primary" id="calculateBtn">
+              识别文件并计算
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+
+          <div id="message" class="message" role="status" aria-live="polite">请先上传两份清单。</div>
+          <div id="previewPanel" class="result-panel hidden"></div>
+          <div id="resultPanel" class="result-panel hidden"></div>
+        </section>
+
+        <!-- 方案库 -->
+        <section class="card">
+          <div class="card-head">
+            <h2>方案库</h2>
+            <p>已保存方案可打开、复制或按当前参数重算（存于本机 outputs/projects）。</p>
+          </div>
+
+          <div class="plan-bar">
+            <select id="planSelect" class="plan-select"><option value="">— 选择项目 —</option></select>
+            <button class="btn-ghost" id="refreshPlansBtn">刷新</button>
+            <button class="btn-ghost" id="openPlanBtn">打开方案</button>
+            <button class="btn-ghost" id="copyPlanBtn">复制方案</button>
+            <button class="btn-primary" id="recomputeBtn">按当前参数重算</button>
+            <button class="btn-secondary" id="comparePlansBtn">对比方案</button>
+          </div>
+
+          <div id="planCards" class="plan-cards" aria-live="polite"></div>
+
+          <div id="compareBar" class="compare-bar hidden">
+            <p class="hint">勾选至少 2 个同项目方案并列对比；可指定基准方案计算单价差异。</p>
+            <div id="compareChecks" class="compare-checks"></div>
+            <div class="plan-bar">
+              <select id="baseSelect" class="plan-select"><option value="">— 基准方案（缺省首个）—</option></select>
+              <button class="btn-primary" id="runCompareBtn">开始对比</button>
+              <button class="btn-ghost" id="closeCompareBtn">收起</button>
+            </div>
+          </div>
+          <div id="compareResult" class="result-panel hidden"></div>
+          <p class="hint">方案在「识别文件并计算」成功后自动保存；打开后参数会填回上方输入框。</p>
+        </section>
+      </div>
+
+      <section id="moduleView" class="module-view hidden" aria-live="polite"></section>
+
+      <!-- ===== 个人工作台 · 深度集成视图（由 workbench.js 原生渲染于此容器） ===== -->
+      <section id="workbenchView" class="workbench-view hidden" aria-live="polite"></section>
+    </main>
+  </div>
+  <script src="./workbench.js?v=2026-09-20-wb17"></script>
+  <script src="./app.js?v=2026-09-20-wb31"></script>
+</body>
+</html>

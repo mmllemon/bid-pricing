@@ -173,7 +173,16 @@ def match_canonical_rows(cap_rows: list[CleanRow], cost_rows: list[CleanRow]) ->
     rep.duplicate_keys = cap_dup_keys + cost_dup_keys
     rep.blocked = bool(cap_dup_keys or cost_dup_keys)
 
-    master = sorted(set(cap_groups) | set(cost_groups))
+    # 保留输入清单顺序：限价清单是报价表的主展示顺序，成本侧仅有的新增项
+    # 按其在成本清单中的原始顺序追加。不要用 sorted(set(...))，否则项目编码
+    # 会被重新排序，导致输出表与用户原清单难以逐行对齐。
+    master: list[tuple[str, str, str]] = []
+    seen_master: set[tuple[str, str, str]] = set()
+    for row in [*cap_rows, *cost_rows]:
+        key = match_key(row)
+        if key not in seen_master:
+            seen_master.add(key)
+            master.append(key)
     rep.n_master = len(master)
 
     cov = {

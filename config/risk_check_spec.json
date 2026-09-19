@@ -1,0 +1,17 @@
+{
+  "schema_id": "risk_check_spec_v1",
+  "task": "T06-02",
+  "required_checks": [
+    "solution_status",
+    "phase3_verdict",
+    "budget_residual",
+    "cap_compliance",
+    "cost_evidence",
+    "loss_items",
+    "low_price_review",
+    "reference_parity",
+    "rounding_reconciliation"
+  ],
+  "status_domain": ["PASS", "WARN", "FAIL", "BLOCKED"],
+  "rule": "每项必须输出 status + actual + threshold + delta；缺失实际值不得默认为 0"
+}

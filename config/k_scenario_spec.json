@@ -1,0 +1,9 @@
+{
+  "schema_id": "k_scenario_spec_v1",
+  "task": "T05-04",
+  "levels": [0.0, 0.5, 1.0],
+  "scenario_pairs": [[0.0, 0.0], [0.5, 0.5], [1.0, 1.0]],
+  "meaning": "k+ 与 k- 同步缩放 rho_plus/rho_minus，用于合同调整敏感性比较",
+  "outputs": ["objective", "ranking", "ranking_change_vs_base"],
+  "missing_input": "BLOCKED"
+}

@@ -1,0 +1,15 @@
+{
+  "schema_id": "q1_perturbation_spec_v1",
+  "task": "T05-01",
+  "sample_size": 1000,
+  "seed": 20260915,
+  "confidence": 0.95,
+  "modes": {
+    "INDEPENDENT": {"kind": "stress_test", "relative_sigma": 0.1},
+    "GROUP_CONSERVING": {"kind": "stress_test", "relative_sigma": 0.1, "conserve_group_sum": true},
+    "GLOBAL比例": {"kind": "stress_test", "relative_sigma": 0.1},
+    "HISTORICAL_RESAMPLE": {"kind": "empirical_simulation", "requires": "historical_errors"}
+  },
+  "metrics": ["P5", "P50", "P95", "VaR95", "CVaR95"],
+  "missing_input": "BLOCKED"
+}

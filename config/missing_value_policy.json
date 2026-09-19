@@ -1,0 +1,41 @@
+{
+  "schema_id": "missing_value_policy_v1",
+  "task": "T01-03A",
+  "title": "缺失值与异常值规则表",
+  "source_of_truth": "config/field_schema.json + 实施路线 v3.2.1 T01-03A",
+  "policy_domain": [
+    "BLOCK",
+    "WARN",
+    "DEFAULT",
+    "IMPUTE",
+    "IGNORE",
+    "ALLOW_EMPTY_NO_CAP",
+    "DERIVED"
+  ],
+  "semantics": {
+    "missing": "字段 key 缺失或值为 null；空字符串在解析层先归一为 missing，除非字段声明了专用空值语义",
+    "required_missing": "nullable=false 且 missing_policy 非 DERIVED 时，缺失一律 BLOCKED",
+    "invalid_numeric": "数值字段无法解析、超出声明 range 或违反精度/单位约束时一律 BLOCKED；不得用 DEFAULT/IMPUTE 掩盖",
+    "inferred": "推断值必须保留 value_source=inferred 并进入人工复核清单，不得伪装为 explicit；derived 仅用于计算派生量",
+    "zero_is_value": "数值 0 与 missing 必须机器可区分；是否允许由字段 range、pricing_role 或专门判据决定",
+    "empty_cap": "cap 的空值按 ALLOW_EMPTY_NO_CAP 处理，保留 cap=null、no_cap=true；禁止折算为 0",
+    "no_silent_drop": "任何缺失或异常记录都必须进入报告；不得静默丢弃行或猜测字段映射"
+  },
+  "policy_actions": {
+    "BLOCK": {"status": "BLOCKED", "action": "拒绝下游计算并输出证据"},
+    "WARN": {"status": "WARN", "action": "保留值并输出告警证据"},
+    "DEFAULT": {"status": "PASS", "action": "仅按显式 default 取值并标记 value_source=defaulted"},
+    "IMPUTE": {"status": "PASS", "action": "仅按显式插补规则取值并标记 value_source=inferred"},
+    "IGNORE": {"status": "PASS", "action": "仅对明确声明的不参与计算字段忽略"},
+    "ALLOW_EMPTY_NO_CAP": {"status": "PASS", "action": "保留空值语义为 no_cap，不转成数值 0"},
+    "DERIVED": {"status": "BLOCKED", "action": "输入侧不得提供；必须由唯一派生量生产者计算"}
+  },
+  "invariants": [
+    "required+missing => BLOCKED",
+    "invalid_numeric => BLOCKED",
+    "forbidden_default_family => DEFAULT 禁止",
+    "derived_field_as_input => BLOCKED",
+    "cap_empty != cap_zero"
+  ],
+  "field_source": "字段级政策唯一取自 config/field_schema.json 的 missing_policy；本表只定义统一语义与跨字段不变量"
+}

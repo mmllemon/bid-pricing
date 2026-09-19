@@ -1,0 +1,30 @@
+{
+  "schema_id": "state_machine_spec_v1",
+  "task": "T03-07",
+  "title": "全局四态与低价处置状态机",
+  "global_status_domain": ["PASS", "WARN", "FAIL", "BLOCKED"],
+  "global_precedence": ["BLOCKED", "FAIL", "WARN", "PASS"],
+  "global_semantics": {
+    "PASS": "全部已激活判据通过",
+    "WARN": "存在告警但不阻断主流程，必须留痕",
+    "FAIL": "检测到风险或约束违反，不得当作可提交结果",
+    "BLOCKED": "数据或规则不足，禁止继续计算；不得用默认值或人工 override 绕过"
+  },
+  "low_price_status_domain": [
+    "LOW_PRICE_REVIEW_REQUIRED",
+    "COST_EVIDENCE_REQUIRED",
+    "POTENTIAL_INFEASIBILITY"
+  ],
+  "low_price_precedence": [
+    "POTENTIAL_INFEASIBILITY",
+    "COST_EVIDENCE_REQUIRED",
+    "LOW_PRICE_REVIEW_REQUIRED"
+  ],
+  "low_price_rules": {
+    "POTENTIAL_INFEASIBILITY": "约束或可行性状态为 FAIL/BLOCKED",
+    "COST_EVIDENCE_REQUIRED": "可行性未失败，但成本证据状态为 BLOCKED/MISSING/UNKNOWN",
+    "LOW_PRICE_REVIEW_REQUIRED": "可行且成本证据齐备，但 P* 低于显式 p_star_min",
+    "not_triggered": "未命中以上条件时不生成低价处置状态"
+  },
+  "override_policy": "BLOCKED 与 POTENTIAL_INFEASIBILITY 不允许 override；WARN 只允许在外部授权并写入审计记录后继续"
+}

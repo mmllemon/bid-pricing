@@ -1,0 +1,28 @@
+{
+  "schema_id": "phase12_parity_spec_v1",
+  "task": "T04-04",
+  "scope": "Phase 1/2 对拍（仅适用 T04-00 A 组子集）",
+  "verdict_domain": ["PASS", "WARN", "FAIL", "BLOCKED"],
+  "comparison_levels": {
+    "L1": "两条路径均产出可比较的状态",
+    "L2": "目标值与报价向量在声明容差内一致",
+    "L3": "逐项层归属与约束残差在声明容差内一致"
+  },
+  "tolerances": {
+    "objective_abs": 1e-7,
+    "price_abs": 1e-7,
+    "residual_abs": 1e-7
+  },
+  "independence": {
+    "required_task": "T04-08",
+    "signoff_file": "docs/reference_review_signoff.json",
+    "signed_value_required": true,
+    "non_pass_conclusion": "BLOCKED"
+  },
+  "groups": ["A", "B"],
+  "blocked_rules": [
+    "实例不在 T04-00 适用子集",
+    "T04-08 独立性签署状态非 PASS",
+    "任一路径缺少可比较结果或状态"
+  ]
+}

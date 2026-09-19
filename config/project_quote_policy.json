@@ -1,0 +1,85 @@
+{
+  "schema_id": "project_quote_policy_v1",
+  "project_id": "xiyong_l_district",
+  "target_total": 1260000.0,
+  "cost_policy": {
+    "mode": "OBJECTIVE_ONLY",
+    "hard_lower_bound": false,
+    "loss_allowed": true,
+    "statement": "分部分项单个清单综合单价可以低于 c_i；c_i 仅参与利润目标函数。"
+  },
+  "fixed_pretax_policy": {
+    "mode": "FIXED_CURRENT_VALUES",
+    "measure_fee": 15853.12,
+    "regulatory_fee": 6528.62,
+    "fixed_pretax": 22381.74,
+    "statement": "措施项目费和规费按当前固定金额处理。"
+  },
+  "tax_policy": {
+    "vat_rate": 0.09,
+    "surtax_rate": 0.12,
+    "env_tax": 0.0
+  },
+  "cost_input_tax_policy": {
+    "mode": "UNKNOWN",
+    "cost_input_vat_rate": null,
+    "input_vat_credit_mode": "UNKNOWN",
+    "credit_ratio": null,
+    "statement": "成本清单综合单价为含税成本单价（cost_input_incl_vat）；转入利润口径前须换算为不含税有效成本（cost_effective）。换算所需进项税率与抵扣方式未声明（H-002）——声明前系统不输出『最优利润』结论。",
+    "semantics": {
+      "cost_input_incl_vat": "成本清单综合单价原始口径：含进项增值税",
+      "cost_effective": "不含税有效成本，与不含税 p_i 比价/相减（GB/T 50500-2024 2.0.8）",
+      "FULL": "进项税可全额抵扣 → cost_effective = incl × (1 − rate/(1+rate)) = incl/(1+rate)",
+      "PARTIAL": "部分抵扣 → cost_effective = incl × (1 − rate×credit_ratio/(1+rate))",
+      "NONE": "不可抵扣（简易计税/无进项票）→ cost_effective = incl",
+      "UNKNOWN": "未声明 → 不可计算，阻断『最优利润』结论"
+    }
+  },
+  "hidden_cost_policy": {
+    "direct": {
+      "mode": "UNKNOWN",
+      "carrier": null,
+      "statement": "可直接归属某清单的隐形成本 → 加入该清单有效成本 c_i，影响单项最优分配。"
+    },
+    "allocable": {
+      "mode": "UNKNOWN",
+      "basis": null,
+      "rate": null,
+      "statement": "可按规则分摊到清单的隐形成本 → 按明确基数（DIRECT/LABOR/DIRECT_COST/OUTPUT）与费率分摊进 c_i，影响单项最优分配。"
+    },
+    "project_fixed": {
+      "mode": "UNKNOWN",
+      "amount": null,
+      "enters_fixed_pretax": null,
+      "statement": "项目整体固定费用（业务费、公司管理费、融资费等）→ enters_fixed_pretax=true 计入 FIXED_PRETAX 桶（减少总竞争预算）；=false 单列扣减（只影响利润，不改变清单间排序）。"
+    },
+    "statement": "隐形成本未声明（H-003）——当前利润为清单贡献利润（不含隐形成本），报告层必须列为『未纳入成本的风险』，不得称为项目净利润；不得默认为 0 后不提示。",
+    "semantics": {
+      "mode": "NONE=明确无此列成本；DECLARED=存在且声明完整（缺算式前提即 BLOCKED）；UNKNOWN=未声明（按『未纳入』口径解释，配 WARN）",
+      "basis": "分摊基数：DIRECT=直接成本 / LABOR=人工费 / DIRECT_COST=直接成本 / OUTPUT=产值",
+      "enters_fixed_pretax": "是否计入 FIXED_PRETAX 桶：true=影响总竞争预算；false=只影响利润"
+    }
+  },
+  "unbalanced_clause": {
+    "enabled": true,
+    "reference": "CAP",
+    "tol_lo": 0.5,
+    "tol_hi": 0.5,
+    "mechanism": "SETTLEMENT_ADJUSTMENT",
+    "status": "FORMULA_REQUIRED",
+    "statement": "存在以最高限价为基准、下浮/上浮幅度均为50%的不平衡报价结算调整条款；具体结算调整公式和适用条件待从招标文件确认。"
+  },
+  "low_price_policy": {
+    "mode": "UNKNOWN",
+    "low_price_threshold": 0.5,
+    "disposition": "CONFIRM_ONLY",
+    "clause_basis": null,
+    "confirmation_fields": ["confirmed_by", "confirmed_at", "clause_basis"],
+    "statement": "报价比率低于50%（报价/限价）时，系统先做『低价确认』（产品安全闸门，返回 NEEDS_CONFIRMATION），确认记录必须携带确认人、确认时间、条款依据；系统不作出『废标判定』——是否构成废标以招标文件为准（H-004：不替用户作法律判断）。条款依据未从招标文件确认（UNKNOWN），确认记录目前只能泛指招标文件低价条款。",
+    "semantics": {
+      "mode": "NONE=无低价确认义务（与 enabled 条款冲突，禁用）；DECLARED=条款依据已登记；UNKNOWN=未登记（配 WARN，确认记录标注『以招标文件为准』）",
+      "disposition": "CONFIRM_ONLY=系统仅记录低价确认，废标判定以招标文件为准（唯一合法值）",
+      "confirmation_fields": "低价确认记录必须携带的字段：confirmed_by（确认人）、confirmed_at（确认时间）、clause_basis（条款依据）"
+    }
+  }
+}

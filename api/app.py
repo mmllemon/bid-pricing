@@ -1,0 +1,411 @@
+"""网页前端的报价优化 API。"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+from pathlib import Path
+
+from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from bidpricing import project_overview, project_store
+from bidpricing.deployment import log_event, safe_user, user_scope
+from bidpricing.import_preview import build_listing_preview
+from bidpricing.io.boq import parse_listing
+from bidpricing.io.clean import clean_listing_rows
+from bidpricing.io.match import MatchReport, match_canonical_rows
+from bidpricing.plan_compare import compare_plans, same_project
+from bidpricing.project_store import save_plan, list_plans, load_plan, delete_plan, mark_finalized, _safe_folder
+from bidpricing.quote_resolve import run_resolve
+from bidpricing.validation.low_price_policy import DISPOSITION_NOTE
+
+# H-012 多用户隔离（不鉴权，仅目录级）：以运行账号作为命名空间，各用户方案互不相见。
+CURRENT_USER = safe_user(os.environ.get("USERNAME") or os.environ.get("USER") or "default")
+project_store.PROJECTS_DIR = user_scope(ROOT / "outputs" / "projects", CURRENT_USER)
+LOG_DIR = ROOT / "outputs" / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _parse_clean_match(cap_path: Path, cost_path: Path, project_id: str) -> tuple[str, MatchReport]:
+    """解析 → 清洗 → 匹配 三步，预览与优化共用（同一份数据源避免两侧口径漂移）。"""
+    pid = project_id.strip() or "当前项目"
+    cap_report, cost_report = parse_listing(cap_path, pid), parse_listing(cost_path, pid)
+    cap_rows, _ = clean_listing_rows(cap_report.rows, "cap")
+    cost_rows, _ = clean_listing_rows(cost_report.rows, "cost")
+    return pid, match_canonical_rows(cap_rows, cost_rows)
+
+
+def _load_low_policy() -> tuple[dict, float, str | None]:
+    """读取项目策略中的低价确认口径；未声明时回退 0.5 / 泛称。"""
+    try:
+        cfg = json.loads((ROOT / "config" / "project_quote_policy.json").read_text(encoding="utf-8"))
+        low_policy = cfg.get("low_price_policy") or {}
+    except (OSError, json.JSONDecodeError):
+        low_policy = {}
+    low_threshold = float(low_policy.get("low_price_threshold", 0.5)) if low_policy.get("low_price_threshold") is not None else 0.5
+    return low_policy, low_threshold, (low_policy.get("clause_basis") or None)
+
+
+def _run_resolve(all_items: list[dict], params: dict, low_policy: dict,
+                 matched: MatchReport | None) -> tuple:
+    """解析结果，委托给纯逻辑模块 run_resolve（可单测）；配置目录固化为本项目 config。"""
+    return run_resolve(all_items, params, low_policy, config_dir=ROOT / "config", matched=matched)
+
+
+def _low_price_guard(params: dict, low_policy: dict) -> JSONResponse | None:
+    """比率下限低于低价阈值且未确认时返回 NEEDS_CONFIRMATION；否则 None。"""
+    ratio_min = params["ratio_min"]
+    ratio_max = params["ratio_max"]
+    if ratio_min < float(low_policy.get("low_price_threshold", 0.5)) - 1e-9 and not params["low_ratio_confirmed"]:
+        low_threshold = float(low_policy.get("low_price_threshold", 0.5))
+        clause_basis = low_policy.get("clause_basis") or None
+        return JSONResponse(status_code=400, content={"status": "NEEDS_CONFIRMATION", "reason": f"报价比率下限低于 {low_threshold:.0%}。这可能触发招标文件中的严重低价/废标审查，请确认招标文件允许后再计算。", "confirmation_required": True, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_price_threshold": low_threshold, "clause_basis": clause_basis, "disposition_note": DISPOSITION_NOTE})
+    return None
+
+app = FastAPI(title="工程智算报价 API", version="0.1.0")
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"], allow_methods=["*"], allow_headers=["*"])
+WEB_OUTPUT_DIR = user_scope(ROOT / "outputs" / "web-results", CURRENT_USER)
+WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.middleware("http")
+async def _access_log(request, call_next):
+    """H-012 生产访问日志：每个请求记录 时间/用户/端点和结果状态 到 JSONL。"""
+    start = time.monotonic()
+    response = await call_next(request)
+    log_event(LOG_DIR, CURRENT_USER, f"{request.method} {request.url.path}",
+              response.status_code, duration_ms=round((time.monotonic() - start) * 1000, 2))
+    return response
+
+
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    return {"status": "ok", "service": "bidpricing"}
+
+
+@app.post("/api/quote/preview")
+async def preview_quote(limit_file: UploadFile = File(...), cost_file: UploadFile = File(...), project_id: str = Form("当前项目"), project_name: str = Form("")):
+    """导入预览（H-006）：上传后先核对行数/字段/匹配覆盖/异常/文件哈希，再进优化。"""
+    proj_name = project_name.strip() or project_id.strip() or "当前项目"
+    with tempfile.TemporaryDirectory(prefix="bidpricing-api-") as temp_dir:
+        cap_path, cost_path = Path(temp_dir) / "limit.xlsx", Path(temp_dir) / "cost.xlsx"
+        cap_path.write_bytes(await limit_file.read())
+        cost_path.write_bytes(await cost_file.read())
+        try:
+            pid, matched = _parse_clean_match(cap_path, cost_path, proj_name)
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"Excel 识别失败：{exc}"})
+        payload = build_listing_preview(matched, pid)
+        payload["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
+        payload["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
+        return JSONResponse(status_code=200, content=payload)
+
+
+@app.get("/api/quote/download/{job_id}")
+def download_quote(job_id: str):
+    fname = _excel_filename(job_id)
+    path = WEB_OUTPUT_DIR / f"{job_id}.xlsx"
+    if path.exists() and path.parent == WEB_OUTPUT_DIR:
+        return FileResponse(path, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=fname)
+    # 自愈：存盘方案有结算结果但 xlsx 缺失（副本/历史导出清理等）时，即时重建后再下发
+    rebuilt = _rebuild_xlsx(job_id)
+    if rebuilt is not None:
+        return FileResponse(rebuilt, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=fname)
+    return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "报价 Excel 不存在或已过期"})
+
+
+def _excel_filename(job_id: str) -> str:
+    """下载文件名规则：``<项目名称>-<报价金额>.xlsx``。"""
+    rec = load_plan(job_id)
+    if rec is None:
+        return "报价结果_结算调整版.xlsx"
+    name = _safe_folder(rec.get("project_name") or rec.get("project_id") or rec.get("name") or "方案")
+    amt = (rec.get("params") or {}).get("target_total")
+    try:
+        amt_str = str(int(round(float(amt))))
+    except (TypeError, ValueError):
+        amt_str = ""
+    return f"{name}-{amt_str}.xlsx" if amt_str else f"{name}.xlsx"
+
+
+def _rebuild_xlsx(job_id: str) -> Path | None:
+    """从方案库中该 id 的结算结果重建导出文件；非方案 id 则返回 None。"""
+    rec = load_plan(job_id)
+    if not rec or not rec.get("result"):
+        return None
+    json_path = WEB_OUTPUT_DIR / f"{job_id}.json"
+    xlsx_path = WEB_OUTPUT_DIR / f"{job_id}.xlsx"
+    try:
+        json_path.write_text(json.dumps(rec["result"], ensure_ascii=False, indent=2), encoding="utf-8")
+        subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(xlsx_path)], cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    return xlsx_path if xlsx_path.exists() else None
+
+
+@app.post("/api/quote/optimize")
+async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFile = File(...), project_id: str = Form("当前项目"), project_name: str = Form(""), target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), overview_id: str = Form("")):
+    if not clause_enabled:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "当前版本要求启用 C13 结算调整条款"})
+    if not (0.0 <= ratio_min <= ratio_max <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "单项报价比率区间非法：必须满足 0 ≤ 下限 ≤ 上限 ≤ 1.00"})
+    if not (0.0 <= vat_rate <= 1.0) or not (0.0 <= surtax_rate <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "税率非法：增值税率/附加税率须为 0～1 之间的小数（0.09 = 9%、0.12 = 12%），请勿输入百分数"})
+    # 项目凭证：project_id 必须为经营概览的真实项目 id（UUID）；project_name 仅用于展示/目录/文件名。
+    proj_uuid = project_id.strip()
+    proj_name = project_name.strip() or proj_uuid or "当前项目"
+    low_policy, _, _ = _load_low_policy()
+    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": overview_id}
+    guard = _low_price_guard(params, low_policy)
+    if guard is not None:
+        return guard
+    with tempfile.TemporaryDirectory(prefix="bidpricing-api-") as temp_dir:
+        cap_path, cost_path = Path(temp_dir) / "limit.xlsx", Path(temp_dir) / "cost.xlsx"
+        cap_path.write_bytes(await limit_file.read())
+        cost_path.write_bytes(await cost_file.read())
+        try:
+            pid, matched = _parse_clean_match(cap_path, cost_path, proj_name)
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"Excel 识别失败：{exc}"})
+        all_items = [{"item_id": row.item_id, "item_name": row.item_name, "unit": getattr(row, "unit", "") or "", "q0": row.q0, "q1_point": row.q1_point, "c_i": row.c_i, "cap": row.cap, "L": (float(row.cap) * ratio_min if row.cap is not None else 0.0), "U": (float(row.cap) * ratio_max if row.cap is not None else None)} for row in matched.items if row.q0 is not None or row.q1_point is not None]
+        result, payload, status_code = _run_resolve(all_items, params, low_policy, matched)
+        if status_code != 200:
+            # 非 PASS（如无可优化项或跨单位工程重复 item_id 导致 BLOCKED）直接返回，
+            # 不继续取空 p_by_id 建明细（防止 KeyError 吞掉报错文案）。
+            return JSONResponse(status_code=status_code, content=payload)
+        payload.update({"project_id": proj_uuid or pid, "project_name": proj_name, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate})
+        # H-007 方案持久化：PASS 后保存为可『打开 / 复制 / 重算』的本地方案。
+        job_id = uuid.uuid4().hex
+        preview = build_listing_preview(matched, pid)
+        preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
+        preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
+        payload["plan_id"] = job_id
+        # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
+        json_path, xlsx_path = WEB_OUTPUT_DIR / f"{job_id}.json", WEB_OUTPUT_DIR / f"{job_id}.xlsx"
+        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(xlsx_path)], cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
+            payload["excel_download_url"] = f"/api/quote/download/{job_id}"
+        except (subprocess.SubprocessError, OSError) as exc:
+            payload["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
+        save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
+        log_event(LOG_DIR, CURRENT_USER, "POST /api/quote/optimize", "PASS",
+                  project_id=proj_uuid or pid, plan_id=job_id, objective=payload.get("objective"))
+        return JSONResponse(status_code=200, content=payload)
+
+
+@app.get("/api/project/list")
+def project_list() -> JSONResponse:
+    """按项目分组返回方案摘要：前端用下拉选『项目』，下方列该项目下方案卡片。"""
+    plans = list_plans()
+    groups: dict[str, list[dict]] = {}
+    for p in plans:
+        proj = p.get("project_name") or p.get("project_id") or p.get("name") or "未命名项目"
+        groups.setdefault(proj, []).append(p)
+    projects = [
+        {"name": name, "plan_count": len(proj_plans), "plans": proj_plans}
+        for name, proj_plans in groups.items()
+    ]
+    projects.sort(key=lambda g: g["name"])
+    return JSONResponse(status_code=200, content={"status": "PASS", "projects": projects})
+
+
+@app.get("/api/project/get")
+def project_get(id: str) -> JSONResponse:
+    rec = load_plan(id)
+    if rec is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
+    return JSONResponse(status_code=200, content={"status": "PASS", "plan": {"id": rec["id"], "name": rec.get("name"), "project_id": rec.get("project_id") or rec.get("name"), "project_name": rec.get("project_name"), "params": rec.get("params"), "all_items": rec.get("all_items"), "preview": rec.get("preview"), "result": rec.get("result"), "saved_at": rec.get("saved_at")}})
+
+
+@app.post("/api/project/copy")
+def project_copy(id: str, name: str = "") -> JSONResponse:
+    rec = load_plan(id)
+    if rec is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
+    new_name = name.strip() or f"{rec.get('name') or id}（副本）"
+    new_id = uuid.uuid4().hex
+    copy = dict(rec)
+    copy["name"] = new_name
+    copy["params"] = dict(rec.get("params") or {})
+    copy["all_items"] = list(rec.get("all_items") or [])
+    copy["preview"] = rec.get("preview")
+    copy["result"] = None  # 副本先清空结果，用户可重算后生成新结果
+    copy["finalized"] = False  # 副本不继承定稿状态，避免同项目出现多份『已定稿』
+    copy.pop("finalized_at", None)
+    save_plan(copy, plan_id=new_id)
+    return JSONResponse(status_code=200, content={"status": "PASS", "plan_id": new_id, "name": new_name})
+
+
+@app.post("/api/project/recompute")
+def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True)) -> JSONResponse:
+    rec = load_plan(id)
+    if rec is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
+    if not clause_enabled:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "当前版本要求启用 C13 结算调整条款"})
+    if not (0.0 <= ratio_min <= ratio_max <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "单项报价比率区间非法：必须满足 0 ≤ 下限 ≤ 上限 ≤ 1.00"})
+    if not (0.0 <= vat_rate <= 1.0) or not (0.0 <= surtax_rate <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "税率非法：增值税率/附加税率须为 0～1 之间的小数（0.09 = 9%、0.12 = 12%），请勿输入百分数"})
+    low_policy, _, _ = _load_low_policy()
+    # 重算时保留方案原有的关联经营项目 id（前端重算表单不含该字段）
+    _keep_ov = (rec.get("params") or {}).get("overview_id", "")
+    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": _keep_ov}
+    guard = _low_price_guard(params, low_policy)
+    if guard is not None:
+        return guard
+    all_items = list(rec.get("all_items") or [])
+    result, payload, status_code = _run_resolve(all_items, params, low_policy, None)
+    if status_code != 200:
+        return JSONResponse(status_code=status_code, content=payload)
+    payload.update({"project_id": rec.get("name") or id, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate})
+    payload["plan_id"] = id
+    # 与 optimize 一致：先导出再落盘，保存的方案 result 须带 excel_download_url，否则打开方案时「下载 Excel」为 '#' 无反应
+    json_path, xlsx_path = WEB_OUTPUT_DIR / f"{id}.json", WEB_OUTPUT_DIR / f"{id}.xlsx"
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(xlsx_path)], cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
+        payload["excel_download_url"] = f"/api/quote/download/{id}"
+    except (subprocess.SubprocessError, OSError) as exc:
+        payload["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
+    merged = dict(rec)
+    merged["params"] = dict(params)
+    merged["result"] = payload
+    save_plan(merged, plan_id=id)
+    return JSONResponse(status_code=200, content=payload)
+
+
+@app.post("/api/project/delete")
+def project_delete(id: str) -> JSONResponse:
+    if not delete_plan(id):
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
+    return JSONResponse(status_code=200, content={"status": "PASS", "deleted": id})
+
+
+@app.post("/api/project/mark-finalized")
+def project_mark_finalized(id: str, finalized: int = 1, write: int = 1) -> JSONResponse:
+    """设定方案的『已定稿』状态（方案卡片手动开关，或手动定稿回写后置标）。
+    finalized=1 打上已定稿；0 取消定稿。同一项目只保留一份定稿方案。
+    write=1（默认，方案库卡片『标为定稿』时）会把该方案的目标总报价回写为关联
+    经营项目（方案保存的 overview_id 精确匹配，缺省按项目名归一匹配）的投标报价金额；
+    write=0（手动『定稿并回写项目』已写过，避免二次覆盖）只打标、不再回写。"""
+    rec = load_plan(id)
+    if rec is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在"})
+    if not mark_finalized(id, finalized=finalized == 1):
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在"})
+    wrote = False
+    if finalized == 1 and write == 1:
+        _params = rec.get("params") or {}
+        target = _params.get("target_total")
+        ov_id = (_params.get("overview_id") or "").strip()
+        proj_name = (rec.get("project_id") or rec.get("name") or "").strip()
+        matched = None
+        for proj in project_overview.list_projects():
+            if ov_id and proj.get("id") == ov_id:
+                matched = proj
+                break
+            if (proj.get("name") or "").strip() == proj_name:
+                matched = proj
+                break
+        if matched is not None and target not in (None, ""):
+            if project_overview.finalize(matched.get("id"), target, ""):
+                wrote = True
+    return JSONResponse(status_code=200, content={"status": "PASS", "finalized": id, "wrote_back": wrote})
+
+
+@app.post("/api/project/compare")
+def project_compare(id: str = Form(...), base: str = Form("")) -> JSONResponse:
+    """多方案对比（H-008）：id 支持逗号分隔多个方案，base 可选指定单价差异基准。"""
+    ids = [i for i in (s.strip() for s in id.split(",")) if i]
+    if not ids:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请至少指定一个方案进行对比（多个 id 用逗号分隔）"})
+    records, missing = [], []
+    for i in ids:
+        rec = load_plan(i)
+        if rec is None:
+            missing.append(i)
+        else:
+            records.append(rec)
+    if missing:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": f"以下方案不存在或已删除：{', '.join(missing)}"})
+    if len(records) < 2:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "多方案对比至少需要 2 个有效方案"})
+    ok, projects = same_project(records)
+    if not ok:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"多方案对比限定同一项目（单价差异与利润才有可比意义）：当前勾选涉及 {('、'.join(projects))}。请仅勾选同一项目的多个方案进行对比（可复制后改参数生成同项目的方案变体）。"})
+    base_id = base.strip() or None
+    if base_id is not None and base_id not in {r["id"] for r in records}:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"基准方案 {base_id} 不在本次对比列表中"})
+    return JSONResponse(status_code=200, content=compare_plans(records, base_id=base_id))
+
+
+# ============ 项目经营概览（H-013）：全生命周期看板数据集 ============
+def _overview_body(entries: list[tuple[str, Any]]) -> dict[str, Any]:
+    """从 FastAPI form/query 请求中取出非空的可编辑字段。"""
+    body = {}
+    for k, v in entries:
+        if v is None:
+            continue
+        s = str(v).strip()
+        body[k] = s if s else v
+    return body
+
+
+@app.get("/api/project/overview/list")
+def overview_list() -> JSONResponse:
+    projects = project_overview.list_projects()
+    return JSONResponse(status_code=200, content={"status": "PASS", "projects": projects})
+
+
+@app.post("/api/project/overview/save")
+def overview_save(pid: str = Form(""), name: str = Form(""), short_name: str = Form(""),
+                  limit_total: str = Form(""), bid_open_date: str = Form(""), stage: str = Form(""),
+                  bid_amount: str = Form(""), bid_cost: str = Form(""), actual_cost: str = Form(""),
+                  actual_revenue: str = Form(""), settle_amount: str = Form(""),
+                  completed_at: str = Form("")):
+    """新建或编辑项目。pid 为空=新建，非空=覆盖编辑（同 id，不会静默覆盖别的项目）。"""
+    form = _overview_body(locals().items())
+    try:
+        if pid.strip():
+            rec = project_overview.update_project(pid.strip(), form)
+            if rec is None:
+                return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在或已删除"})
+        else:
+            rec = project_overview.create_project(form)
+        log_event(LOG_DIR, CURRENT_USER, "POST /api/project/overview/save", "PASS", project_id=rec.get("id"))
+        return JSONResponse(status_code=200, content={"status": "PASS", "project": rec})
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+
+
+@app.post("/api/project/overview/delete")
+def overview_delete(id: str = Form(...)):
+    if not project_overview.delete_project(id.strip()):
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在或已删除"})
+    log_event(LOG_DIR, CURRENT_USER, "POST /api/project/overview/delete", "PASS", project_id=id.strip())
+    return JSONResponse(status_code=200, content={"status": "PASS"})
+
+
+@app.post("/api/project/overview/finalize")
+def overview_finalize(id: str = Form(...), bid_amount: str = Form(""), bid_cost: str = Form("")):
+    """报价定稿回写：把最终投标报价金额与投标成本测算写回对应项目，自动派生毛利/毛利率。"""
+    rec = project_overview.finalize(id.strip(), bid_amount, bid_cost)
+    if rec is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在或已删除"})
+    log_event(LOG_DIR, CURRENT_USER, "POST /api/project/overview/finalize", "PASS", project_id=id.strip(),
+              bid_amount=rec.get("bid_amount"))
+    return JSONResponse(status_code=200, content={"status": "PASS", "project": rec})

@@ -10,6 +10,27 @@
 
 ## [未发布]
 
+## v0.1.0 (2026-09-20)
+
+首个对外发布里程碑：报价优化计算内核 + 网页平台 + 个人工作台完成闭环，全量测试 1393 项通过。
+
+**新增**
+
+- 网页报价平台（FastAPI 后端 8000 + 原生 JS 前端 8080，`run.ps1` 一键启动）：上传导入预览（H-006 行数/字段/匹配覆盖/异常/哈希）、方案保存/打开/复制/重算/定稿回写、多方案对比、低价确认留痕（用户/时间/条款依据）、Excel 导出缺失自愈重建。
+- 项目经营概览工作台：投标/中标在建/完工/结算/售后看板、堆叠卡片 + 简称便利贴、搜索与按列排序、阶段流转、定稿方案回写投标报价金额。
+- 多用户目录隔离（H-012）：`outputs/<projects|web-results>/<用户>/`，默认目录调用时解析。
+- 前端细节：MiSans VF 可变字体本地化子集（56 切片按需加载）、窄屏抽屉式侧栏、`font-synthesis:none` 渲染优化、自定义毛玻璃下拉。
+
+**变更**
+
+- 项目凭证字段统一：`project_id` 只存经营概览真实项目 UUID（唯一凭证），新增 `project_name` 承载展示名；方案 JSON 命名 `<报价金额>_<id>.json`、Excel 命名 `<项目名称>-<报价金额>.xlsx`；旧方案打开时按 name→id 归一化兼容。
+- `_summary` 补充 `project_name`，方案列表分组显示项目名而非 UUID。
+
+**修正**
+
+- 副本方案（名称带「（副本）」）打开时自动关联经营项目，匹配优先级 overview_id → project_id → name → 去后缀 name。
+- 低价格式、定稿锁定、空限价、缺成本等既有校验保持，结果恒附「是否废标以招标文件为准」。
+
 ### T03-01 完成：结算规则引擎（ADR-0033）
 
 - `src/bidpricing/settlement.py`：`SettlementRule.evaluate(Q0, Q1, P0, ContractContext)` → `settlement_amount / effective_price / rule_id / rule_branch`；`rule_set_id` 严格分发（未注册 ⇒ BLOCKED 且不回填）；`p1_source` 随版本分发（2013=REDETERMINE / 2024=ADJUST_ON_CONTRACT_PRICE）；SR-01..SR-09 判据（含三类坏引擎否定用例）。

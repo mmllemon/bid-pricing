@@ -473,7 +473,19 @@ def cmd_status(args) -> int:
         print(json.dumps(snap, ensure_ascii=False, indent=2, default=str))
         return 0
 
-    text = render_status(snap)
+    if not args.write:
+        # 读路径：评估磁盘上已存在文档的新鲜度，过期则醒目拦截（机器判据）。
+        from .paths import docs_dir as _docs_dir
+        from .status import STATE_FILE, check_freshness
+        state_p = _docs_dir() / STATE_FILE
+        fresh = check_freshness(state_path=state_p)
+        if not fresh["fresh"]:
+            print(f"[H-005] 状态快照已过期：{len(fresh['stale_files'])} 个权威源比生成时点更新。")
+            print(f"[H-005] 请运行 `python -m bidpricing.cli status --write` 重新生成后再交接。")
+            print()
+        text = render_status(snap, state_path=state_p)
+    else:
+        text = render_status(snap)
 
     if args.write:
         path = write_state(args.contract_date)
@@ -944,7 +956,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ---- T00-09 / T00-11 成本口径 ----------------------------------------
     p_cc = sub.add_parser(
-        "cost-check", help="T00-09 成本口径证明包 + T00-11 c_i 假设声明书校验")
+        "cost-check", help="T00-09 成本口径证明包 + T00-11 c_i 假设声明书 + "
+                           "H-002 含税成本转换 + H-003 隐形成本分列 + "
+                           "H-004 低价确认留痕校验")
     p_cc.add_argument("--declare-source", default=None,
                       choices=["COST_DB", "HISTORICAL_SETTLEMENT",
                                "SUPPLIER_QUOTE", "EXPERT_ESTIMATE"],
@@ -3525,20 +3539,34 @@ def cmd_cost_check(args) -> int:
             encoding="utf-8")
         print(f" ✓ 已冻结：frozen_at = {spec['frozen_at']}")
 
+    from .validation.cost_basis import check_cost_input_tax
+    from .validation.hidden_cost import check_hidden_cost_policy
+    from .validation.low_price_policy import check_low_price_policy
+
     rep = check_cost_basis(cdir)
-    for r in rep.results:
+    tax_rep = check_cost_input_tax(cdir)
+    hidden_rep = check_hidden_cost_policy(cdir)
+    low_rep = check_low_price_policy(cdir)
+    combined = rep.results + tax_rep.results + hidden_rep.results + low_rep.results
+    for r in combined:
         mark = {"PASS": "✓", "WARN": "⚠", "BLOCKED": "■",
                 "FAIL": "■", "INFO": "ℹ", "SKIP": "–"}[r.status]
         print(f" {mark} [{r.status:>7}] {r.rule_id}  {r.detail}")
         for e in r.evidence:
             print(f"            · {e}")
-    s = rep.to_dict()["summary"]
-    print(f"\n 汇总：{rep.status}   （" +
+    s: dict[str, int] = {}
+    for r in combined:
+        s[r.status] = s.get(r.status, 0) + 1
+    blocking = [r for r in combined if r.status in ("BLOCKED", "FAIL")]
+    status = "BLOCKED" if blocking else "PASS"
+    print(f"\n 汇总：{status}   （" +
           " / ".join(f"{k} {v}" for k, v in sorted(s.items())) + "）")
-    if rep.status != "PASS":
-        print(" 阻断项（c_i 不得进入 C4/C6 约束直至解除）：" +
-              "、".join(r.rule_id for r in rep.blocking))
-    return 0 if rep.status == "PASS" else 1
+    if status != "PASS":
+        print(" 阻断项（c_i 不得进入 C4/C6 约束直至解除；含税成本未换算时"
+              "『最优利润』结论不输出；低价留痕阻断时不输出『已完成低价合规复核』"
+              "结论）：" +
+              "、".join(r.rule_id for r in blocking))
+    return 0 if status == "PASS" else 1
 
 
 def cmd_qty_check(args) -> int:

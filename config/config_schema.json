@@ -1,0 +1,55 @@
+{
+  "schema_id": "config_schema_v1",
+  "task": "T02-01",
+  "title": "项目配置定义表",
+  "source_of_truth": "实施路线 v3.2.1 T02-01 + config/field_schema.json",
+  "version": 1,
+  "conventions": {
+    "definition_required_keys": ["type", "required", "default", "min", "max", "enum", "description"],
+    "no_implicit_defaults": true,
+    "percentage": "统一小数（0.50 表示 50%）",
+    "missing_key": "required=true 且 key 缺失时 BLOCKED；required=false 不代表可静默猜测",
+    "source": "每个值必须可追溯到 explicit/defaulted/derived/inferred 之一"
+  },
+  "references": [
+    {"from": "project_selection.options.adjustment_scope.rule_set_id", "to": "project_classification_table.code_system", "reason": "选择项规则集必须与项目分类声明一致"},
+    {"from": "phase0_runtime.cap_tax_scope", "to": "phase0_runtime.cost_tax_scope", "reason": "两侧税口径必须一致"}
+  ],
+  "sheets": {
+    "project_selection": {
+      "description": "项目级选择项，未选择时 key 缺失，不写默认值",
+      "keys": {
+        "options.adjustment_scope.value": {"type": "enum", "required": true, "default": null, "min": null, "max": null, "enum": ["FULL", "SEGMENT"], "description": "工程量偏差调整作用域"},
+        "options.adjustment_scope.rule_set_id": {"type": "enum", "required": true, "default": null, "min": null, "max": null, "enum": ["GB50500-2013", "GB/T50500-2024"], "description": "作用域对应的规则集"},
+        "options.contract_type.value": {"type": "enum", "required": true, "default": null, "min": null, "max": null, "enum": ["UNIT_PRICE", "LUMP_SUM"], "description": "合同计价类型"},
+        "options.loss_acceptance.value": {"type": "enum", "required": true, "default": null, "min": null, "max": null, "enum": ["ACCEPT", "REJECT"], "description": "是否允许整体利润承接单项亏损"},
+        "source": {"type": "string", "required": true, "default": null, "min": null, "max": null, "enum": null, "description": "选择项来源"},
+        "actor": {"type": "string", "required": true, "default": null, "min": null, "max": null, "enum": null, "description": "作出选择的责任人"},
+        "selected_at": {"type": "datetime", "required": true, "default": null, "min": null, "max": null, "enum": null, "description": "选择时间"},
+        "rationale": {"type": "string", "required": true, "default": null, "min": null, "max": null, "enum": null, "description": "选择依据"}
+      }
+    },
+    "project_classification_table": {
+      "description": "项目级清单角色声明；空数组是合法结论，缺 key 才是未声明",
+      "keys": {
+        "project_id": {"type": "string", "required": true, "default": null, "min": null, "max": null, "enum": null, "description": "项目唯一标识"},
+        "code_system": {"type": "enum", "required": true, "default": null, "min": null, "max": null, "enum": ["GB50500-2013", "GB/T50500-2024"], "description": "清单编码体系"},
+        "covered_lists": {"type": "array", "required": true, "default": null, "min": 1, "max": null, "enum": null, "description": "已覆盖的清单角色声明"},
+        "exceptions": {"type": "array", "required": true, "default": null, "min": 0, "max": null, "enum": null, "description": "逐项角色例外；空数组表示已核查且无例外"},
+        "external_constants": {"type": "array", "required": true, "default": null, "min": 0, "max": null, "enum": null, "description": "不可竞争费等外生常量声明"},
+        "search_basis": {"type": "string", "required": true, "default": null, "min": null, "max": null, "enum": null, "description": "声明检索依据"}
+      }
+    },
+    "phase0_runtime": {
+      "description": "启动求解前必须显式提供的项目运行输入",
+      "keys": {
+        "p_star": {"type": "number", "required": true, "default": null, "min": 0, "max": null, "enum": null, "description": "目标报价总价"},
+        "p_star_max": {"type": "number", "required": true, "default": null, "min": 0, "max": null, "enum": null, "description": "总价上限"},
+        "cap_tax_scope": {"type": "enum", "required": true, "default": null, "min": null, "max": null, "enum": ["EXCL_VAT", "INCL_VAT"], "description": "限价税口径"},
+        "cost_tax_scope": {"type": "enum", "required": true, "default": null, "min": null, "max": null, "enum": ["EXCL_VAT", "INCL_VAT"], "description": "成本税口径"},
+        "mu": {"type": "number", "required": true, "default": null, "min": 0, "max": 1, "enum": null, "description": "允许亏损深度；不得静默默认为 0"},
+        "unbalanced_clause.enabled": {"type": "boolean", "required": true, "default": null, "min": null, "max": null, "enum": null, "description": "不平衡报价条款是否存在"}
+      }
+    }
+  }
+}

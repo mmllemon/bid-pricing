@@ -1,0 +1,9 @@
+{
+  "schema_id": "historical_replay_spec_v1",
+  "task": "T07-01",
+  "title": "历史项目回放",
+  "minimum_projects": 3,
+  "required_result_fields": ["project_id", "status", "result_hash", "error"],
+  "status_domain": ["PASS", "BLOCKED", "FAIL"],
+  "rule": "少于 3 个可完整复算的历史项目不得宣称 Gate 6 通过"
+}

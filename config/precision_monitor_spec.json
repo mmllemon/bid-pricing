@@ -1,0 +1,9 @@
+{
+  "schema_id": "precision_monitor_spec_v1",
+  "task": "T07-03",
+  "title": "Q1 精度监控",
+  "metrics": ["MAE", "WAPE", "sMAPE"],
+  "low_quantity_policy": "q1 < q_min 单独统计，不并入总体升级判据",
+  "promotion_inputs": ["sample_size", "confidence_interval", "segment", "project_type"],
+  "status_domain": ["PASS", "WARN", "BLOCKED"]
+}

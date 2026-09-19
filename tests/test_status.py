@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from bidpricing.artifact import load_registry
@@ -244,6 +245,59 @@ class RenderTest(unittest.TestCase):
     def test_states_no_blocker_when_gate_passes(self):
         out = render(self._snap())
         self.assertIn("无阻塞项", out)
+
+    def test_contains_freshness_section(self):
+        out = render(self._snap())
+        self.assertIn("快照新鲜度", out)
+
+
+class FreshnessTest(unittest.TestCase):
+    """H-005 加固：快照新鲜度机器判据。"""
+
+    def test_parses_generated_at_from_banner(self):
+        from bidpricing.status import _parse_generated_at
+        dt = _parse_generated_at("> 生成于 **2026-09-19 07:52:43** ｜ f")
+        self.assertIsNotNone(dt)
+        self.assertEqual(dt.strftime("%Y-%m-%d %H:%M:%S"), "2026-09-19 07:52:43")
+
+    def test_unparseable_header_returns_none(self):
+        from bidpricing.status import _parse_generated_at
+        self.assertIsNone(_parse_generated_at("没有生成时间"))
+
+    def test_now_generation_is_fresh(self):
+        """generated_at=now 时不可能有源比它新（容差内）——write 路径必为新鲜。"""
+        from bidpricing.status import check_freshness
+        from datetime import datetime
+        out = check_freshness(generated_at=datetime.now())
+        self.assertTrue(out["fresh"], out)
+
+    def test_missing_state_is_stale(self):
+        """快照不存在必须判为过期——不能把「没有快照」读成「快照新鲜」。"""
+        import tempfile
+        from bidpricing.status import check_freshness
+        with tempfile.TemporaryDirectory() as td:
+            out = check_freshness(root=Path(td), source_dirs=())
+        self.assertFalse(out["fresh"])
+        self.assertEqual(out["stale_files"][0]["reason"], "快照不存在")
+
+    def test_missing_later_than_generated_is_stale(self):
+        """源文件 mtime 晚于生成时点 → 判过期。"""
+        import tempfile
+        from datetime import timedelta
+        from bidpricing.status import check_freshness
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            sub = root / "src"
+            sub.mkdir()
+            f = sub / "x.py"
+            f.write_text("pass", encoding="utf-8")
+            # 用比 f 的 mtime 更早的生成时点，触发过期
+            older = datetime.fromtimestamp(f.stat().st_mtime) - timedelta(seconds=10)
+            out = check_freshness(root=root, generated_at=older, source_dirs=("src",))
+        self.assertFalse(out["fresh"])
+        self.assertTrue(
+            any(Path(s["path"]).as_posix() == "src/x.py" for s in out["stale_files"])
+        )
 
 
 class RealRepoStateTest(unittest.TestCase):

@@ -1,0 +1,10 @@
+{
+  "schema_id": "quantity_reconciliation_spec_v1",
+  "task": "T07-02",
+  "title": "Q0 到 Q1 实际结算量对照",
+  "required_fields": ["item", "q0", "predicted_q1", "actual_q1"],
+  "actual_settlement_binding": {"actual_q1": "cost.q1_point", "settlement_unit_price": "bid.p_bid", "settlement_amount": "actual_q1 * settlement_unit_price"},
+  "metrics": ["signed_error", "absolute_error", "relative_error"],
+  "status_domain": ["PASS", "BLOCKED"],
+  "rule": "actual_q1 缺失时不得用 predicted_q1 或 q0 代替"
+}

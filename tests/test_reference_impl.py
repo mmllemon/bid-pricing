@@ -317,19 +317,21 @@ class TestRI08Immutability(unittest.TestCase):
 class TestRI09Signoff(unittest.TestCase):
     def test_unsigned_blocks(self):
         """★ 未签署 ⇒ BLOCKED（不得伪造 PASS）。"""
-        res = I.check_signoff(REPO / "docs")
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "reference_review_signoff.json").write_text(
+                json.dumps({"signed": False, "reviewer": ""}), encoding="utf-8")
+            res = I.check_signoff(Path(tmp))
         self.assertEqual(res["status"], R.STATUS_BLOCKED)
 
     def test_agent_as_reviewer_still_blocks(self):
         """即便写了 reviewer，若仍是生产实现者（agent/auto）也不算数。"""
-        tmp = REPO / "docs" / "_tmp_signoff.json"
-        payload = {"signed": True, "reviewer": "agent", "date": "2026-09-17"}
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
-        try:
-            res = I.check_signoff(REPO / "docs")
-        finally:
-            tmp.unlink(missing_ok=True)
-        # 真实记录文件仍在且未签署 ⇒ 依然 BLOCKED（本用例只验证不误判为 PASS）
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "reference_review_signoff.json").write_text(
+                json.dumps({"signed": True, "reviewer": "agent", "date": "2026-09-17"}),
+                encoding="utf-8")
+            res = I.check_signoff(Path(tmp))
         self.assertEqual(res["status"], R.STATUS_BLOCKED)
 
 

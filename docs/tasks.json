@@ -526,9 +526,18 @@
       ],
       "summary": "每字段在字段字典中显式声明 `MISSING_POLICY ∈ {BLOCK, WARN, DEFAULT, IMPUTE, IGNORE}`；`required+missing→BLOCK`；`invalid numeric→BLOCK`；`inferred→标记 source=derived`；合同口径 / flo…",
       "gate": "Gate 1",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/missing_value_policy.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/validation/missing_values.py"
+        }
+      ],
+      "status": "done",
+      "note": "缺失值规则表与可执行判定器已落地：required+missing、invalid numeric、派生量误作输入均 BLOCKED；cap 空值保留 no_cap 语义；0 与缺失可区分；inferred 值保留来源并告警。tests/test_missing_values.py 7 项，全量测试 1128 项通过（9 项显式跳过）。"
     },
     {
       "id": "T01-04",
@@ -616,9 +625,18 @@
       ],
       "summary": "每 Sheet 每 key 含 type/required/default/min/max/enum/description",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/config_schema.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/config_schema.py"
+        }
+      ],
+      "status": "done",
+      "note": "已建立统一配置定义表，覆盖 project_selection、project_classification_table、phase0_runtime 三类配置；每个 key 均声明 type/required/default/min/max/enum/description，并提供 validate_config_schema 机械校验。tests/test_config_schema.py 4 项通过。"
     },
     {
       "id": "T02-02",
@@ -634,9 +652,14 @@
       ],
       "summary": "$\\text{Config}^{\\text{eff}}=\\text{Config}^{\\text{user}}\\oplus\\text{Defaults}$；每字段标记 value_source ∈ {explicit, defaulted, derived, inferred}；合同口径 / 成本 / 税 / 不可竞争…",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "src/bidpricing/config_merge.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现 Config_eff 合并器：用户显式值优先，随后为 inferred/derived/defaulted；每个叶子值记录 value_source。required 字段禁止 default，缺失 required、未注册键和非法 derived 来源均 BLOCKED；None 不算显式值。tests/test_config_merge.py 6 项通过。"
     },
     {
       "id": "T02-03",
@@ -652,9 +675,14 @@
       ],
       "summary": "缺失/空值/类型错/越界/未知 key/重复 key/版本不符 七类全部可机械检出",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "src/bidpricing/config_validator.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现运行时 Config Validator，机械检出缺失/空值、类型错误、枚举或数值越界、未知 key、重复 key、schema_id/schema_version 不符和非法 value_source。tests/test_config_validator.py 4 项通过。"
     },
     {
       "id": "T02-04",
@@ -670,9 +698,14 @@
       ],
       "summary": "统计 Sheet 数、字段总数、重复字段数、跨 Sheet 引用数、默认值数量",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "src/bidpricing/config_coupling.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现配置耦合度体检：统计 Sheet 数、字段总数、重复字段、跨 Sheet 引用和默认值数量；校验引用端点与配置定义一致。选择项统一 value 槽位重复被识别为合法结构复用，其余同名字段判为风险。tests/test_config_coupling.py 3 项通过。"
     },
     {
       "id": "T02-05",
@@ -688,9 +721,14 @@
       ],
       "summary": "参数版本与模型版本不兼容时拒绝运行",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "src/bidpricing/version_binding.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现版本绑定快照与校验：模型版本不符、制品未冻结、注册表 version/hash 不一致、制品文件漂移、运行绑定快照过期或引用未知制品均 BLOCKED。tests/test_version_binding.py 5 项通过。"
     },
     {
       "id": "T03-01",
@@ -899,9 +937,22 @@
       ],
       "summary": "全局四态：`FAIL`=检测到风险/不满足约束；`BLOCKED`=数据或规则不足禁止继续计算（如规则版本未知、$P_1$ 缺失、不可竞争费未识别、成本证明缺失、数据匹配失败）；低价输出三态：`LOW_PRICE_REVIEW_REQUIRED / COST_EVIDENCE_REQUIRED / POTENTIAL_…",
       "gate": "Gate 2",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/state_machine_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/state_machine.py"
+        },
+        {
+          "kind": "file",
+          "path": "tests/test_state_machine.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现全局四态聚合与三态低价处置状态：BLOCKED > FAIL > WARN > PASS；潜在不可行 > 成本证据不足 > 低价复核，未触发时不生成状态。6 项状态机测试通过。"
     },
     {
       "id": "T03-05",
@@ -1280,9 +1331,26 @@
       ],
       "summary": "见 §4.1 三级判定 + A/B 两组验收；仅在 T04-00 适用子集内要求一致性；实例集来自 `golden_dataset_v1`（分层 A–F）。v3.2.1 独立性前置（P2-⑩）：对拍报告首部必须声明 T04-08 独立性验收状态；状态非 PASS 时，报告结论栏强制标记 BLOCKED，禁止出现\"对拍通…",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/phase12_parity_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/parity.py"
+        },
+        {
+          "kind": "file",
+          "path": "docs/phase12_parity_report.json"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_parity.py"
+        }
+      ],
+      "status": "partial",
+      "note": "已实现 Phase 1/2 三级对拍器（L1 状态、L2 数值、L3 层归属）与 A/B 组约束；独立性签署已为 PASS。当前报告仍 BLOCKED，原因已收敛为尚未提供可比较的 Phase 1/2 objective 与 prices 结果，不能把独立性签署误当作数值对拍通过。5 项测试通过。"
     },
     {
       "id": "T04-05",
@@ -1299,9 +1367,22 @@
       ],
       "summary": "LP 模式：primal/dual feasibility + stationarity + complementary slackness + objective recomputation；MILP 模式：primal feasibility + objective recomputation + MIP gap …",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/phase3_verification_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/phase3.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_phase3.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现 Phase 3 LP/MILP 验证：LP 检查 primal/dual feasibility、stationarity、complementary slackness、objective recomputation；MILP 检查 primal feasibility、objective recomputation、MIP gap，缺少诊断量一律 BLOCKED，禁止用 KKT 伪证 MILP 最优性。6 项测试通过。"
     },
     {
       "id": "T04-06",
@@ -1317,9 +1398,22 @@
       ],
       "summary": "$\\varepsilon$ 截断、$\\varepsilon_r$ 容差、系数尺度归一、平台效应识别、$q^0=0$ 项的排除规则、P95 求解时延基线",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/numerical_stability_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/stability.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_stability.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现数值稳定性预处理/后处理：epsilon 截断、相对容差、最大绝对系数归一与恢复、平台效应识别（明确排除 q0=0）、P95 延迟基线；空样本/全零/非有限输入不伪造结论，按规范返回 BLOCKED/未知。6 项测试通过。"
     },
     {
       "id": "T04-06B",
@@ -1335,9 +1429,22 @@
       ],
       "summary": "识别并显式标记：边界对偶非唯一、$r^{\\text{eff}}$ 相等项、多最优解；定义 canonical tie-break（次级目标 $\\min\\sum w_i\\left|p_i-p_i^{\\text{canonical}}\\right|$）使变量比对可判定；输出边界对偶区间",
       "gate": "Gate 3",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/degeneracy_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/solver/degeneracy.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_degeneracy.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现退化处理：平台组检测、q0=0 排除、可分配平台的多最优告警、canonical item_id 顺序分配、加权 L1 次级目标与边界对偶区间输出。未知/缺失输入不静默降级。5 项测试通过。"
     },
     {
       "id": "T05-00",
@@ -1353,9 +1460,22 @@
       ],
       "summary": "明确 $Z_{\\text{baseline}}$ 的口径并版本化锁定，候选口径包括：① 统一报价（按招标控制价 × 统一下浮率）② 上一版人工报价 ③ 公司现行惯例报价；只能由 config 择一，一旦冻结不得中途更换；baseline 必须可复算",
       "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/baseline_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/baseline.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_baseline.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现 Baseline 三选一与冻结校验：UNIFORM_DISCOUNT / PREVIOUS_MANUAL / COMPANY_CONVENTION；要求显式 version+frozen=true，按指纹检测变更；Z_baseline 通过外部 contribution 函数复算，避免复制利润公式。5 项测试通过。"
     },
     {
       "id": "T05-01",
@@ -1371,9 +1491,22 @@
       ],
       "summary": "四类扰动齐备：① 逐项独立扰动 ② 分组相关扰动（同一分部/同一工程量守恒组）③ 全局比例扰动 ④ 历史误差重采样；明确标注哪个是 stress test、哪个是 empirical simulation；$N=1000$，`seed=20260915`，置信 95%；输出 P5/P50/P95/VaR/CVaR",
       "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/q1_perturbation_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/robustness.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_robustness.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现四类 q1 扰动：独立、分组守恒、全局比例、历史误差重采样；固定 N=1000/seed=20260915/95% 置信度，明确 stress_test 与 empirical_simulation，输出 P5/P50/P95/VaR95/CVaR95。缺失历史误差、非法 q1 均阻断。6 项测试通过。"
     },
     {
       "id": "T05-02",
@@ -1389,9 +1522,22 @@
       ],
       "summary": "输出 Optimization Gain（$Z_{\\text{opt}}-Z_{\\text{baseline}}$）、Prediction Risk（$Q_{95}-Q_5$）、Robustness Ratio",
       "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/value_metrics_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/value_metrics.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_value_metrics.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现三指标：Optimization Gain = Z_opt−Z_baseline；Prediction Risk = Q95−Q5；Robustness Ratio = Gain/Risk。最优性未证时标 WARN 并标注 Gain 为下界；分位数顺序非法 FAIL；Risk=0 时 Ratio 未定义并 BLOCKED。5 项测试通过。"
     },
     {
       "id": "T05-03",
@@ -1407,9 +1553,22 @@
       ],
       "summary": "大宗物资项 $c_i$ 上浮情景复算",
       "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/cost_interval_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/cost_scenarios.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_cost_scenarios.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现大宗物资 c_i 区间情景复算：默认 0.8/1.0/1.2 三档，显式限定 material_ids，非物资项保持不变，输出 objective 与相对基准 delta；缺失/负值成本阻断。4 项测试通过。"
     },
     {
       "id": "T05-04",
@@ -1425,9 +1584,22 @@
       ],
       "summary": "$k^+=0/0.5/1.0$ 三档分别求解并比较排序变化",
       "gate": "Gate 4",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/k_scenario_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/k_scenarios.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_k_scenarios.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现 k⁺/k⁻ 同步缩放三档情景（0/0、0.5/0.5、1/1），通过外部 evaluator 复算目标值与排序，并标记相对基准的排序变化；非法参数或空情景阻断。4 项测试通过。"
     },
     {
       "id": "T06-01",
@@ -1443,9 +1615,14 @@
       ],
       "summary": "含规格书 §8.1 全部列，$r_i^{\\text{eff}}$ 与层归属可见；不可竞争项与固定项单独分区展示",
       "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "tests/data/t06-01/报价表.xlsx"
+        }
+      ],
+      "status": "done",
+      "note": "已生成 Excel 报价表：报价表主表包含工程量、最高限价、c_i、投标单价、合价、成本合价、毛利、毛利率、r_eff、层归属、状态与说明列；不可竞争项、固定项、说明单独分区。投标单价与 Phase 1/2 输出保持为空，不伪造报价结论。已用 Artifact Tool 检查关键范围、公式错误（0 命中）并完成渲染复核。"
     },
     {
       "id": "T06-02",
@@ -1461,9 +1638,22 @@
       ],
       "summary": "9 项输出 `PASS/WARN/FAIL/BLOCKED + actual + threshold + delta`，禁止「经综合判断风险较低」式表述",
       "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/risk_check_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/risk_checklist.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_risk_checklist.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现 9 项风险体检单：每项输出 PASS/WARN/FAIL/BLOCKED、actual、threshold、delta；缺少 actual/threshold 明确 BLOCKED，数值差值保留方向，禁止用综合描述替代机械结果。4 项测试通过。"
     },
     {
       "id": "T06-03",
@@ -1479,9 +1669,22 @@
       ],
       "summary": "输出机器决策支持而非「投/不投」；含结构合理性、定价基准风险提示；低价项附可解释材料包（`item / bid_price / estimated_individual_cost / margin / reason / supporting_data`）并映射 T03-07 三态；最终决策保留人工审批字段",
       "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/decision_support_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/decision_support.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_decision_support.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现机器决策支持结论页：结构合理性与定价基准风险按四态机械聚合，输出 PROCEED_TO_HUMAN_REVIEW/HOLD_FOR_REVIEW/BLOCKED；低价项强制携带 item、bid_price、estimated_individual_cost、margin、reason、supporting_data，并映射 T03-07 三态；人工审批字段默认 PENDING，不生成投/不投结论。4 项测试通过。"
     },
     {
       "id": "T06-04",
@@ -1497,9 +1700,22 @@
       ],
       "summary": "拆三项：R1-A 可重复性（同输入同环境 → result hash 一致）｜R1-B 正确性（golden cases 比对）｜R1-C 环境记录（Python/PuLP/HiGHS/OS/arch/solver options/random seed）",
       "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/rerun_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/rerun.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_rerun.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现一键复算协议：R1-A 对同输入连续运行的 canonical result 计算稳定 hash 并比对；R1-B 支持绑定 golden expected 做正确性校验，未绑定时明确 BLOCKED；R1-C 记录 Python/PuLP/HiGHS/OS/arch/solver_options/random_seed。4 项测试通过。"
     },
     {
       "id": "T06-05",
@@ -1515,9 +1731,22 @@
       ],
       "summary": "形成 $\\text{Source}\\to\\text{Normalized}\\to\\text{Derived}\\to\\text{Constraint}\\to\\text{Solver}\\to\\text{Postprocess}\\to\\text{Report}$ 完整 lineage；每项含 `source_refs / d…",
       "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/calculation_trace_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/calculation_trace.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_calculation_trace.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现 Calculation Trace：强制覆盖 Source→Normalized→Derived→Constraint→Solver→Postprocess→Report 七阶段；每节点要求 source_refs、inputs、outputs、derivation、upstream_ids；阶段缺失、重复节点或断链均输出 BLOCKED。4 项测试通过。"
     },
     {
       "id": "T06-06",
@@ -1533,9 +1762,22 @@
       ],
       "summary": "独立环节负责：四舍五入 → 总价重算 → 差额修正 → 全部约束复验 → 输出最终可提交报价；防止 S2 通过但 Excel 舍入后总价不一致",
       "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/reconciliation_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/reconciliation.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_reconciliation.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现独立总价调和模块：分项金额舍入、总价重算、0.01 元差额修正、修正后约束复验；修正会产生负合价或约束复验失败时输出 BLOCKED，不生成可提交报价。4 项测试通过。"
     },
     {
       "id": "T06-07",
@@ -1551,9 +1793,22 @@
       ],
       "summary": "区分 `calculation_hash`（不含 timestamp / run_id / operator）/ `artifact_hash` / `run_id` / `created_at`；报告绑定 `model_version / config_version / input_hash / rule_set_…",
       "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/report_metadata_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/report_metadata.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_report_metadata.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现报告元信息分层：calculation_hash 排除 timestamp/run_id/operator，artifact_hash 对最终制品字节计算；每份报告强制绑定 model_version、config_version、input_hash、rule_set_version，并保留 run_id、created_at、operator。4 项测试通过。"
     },
     {
       "id": "T06-08",
@@ -1570,9 +1825,22 @@
       ],
       "summary": "每次运行产生不可变记录链：$\\text{RunID}\\to\\text{Input}\\to\\text{Config}\\to\\text{RuleSet}\\to\\text{Model}\\to\\text{Solver}\\to\\text{Output}\\to\\text{Decision}$；字段含 `run_id / opera…",
       "gate": "Gate 5A",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/audit_log_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/audit_log.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_audit_log.py"
+        }
+      ],
+      "status": "done",
+      "note": "已实现不可变审计运行记录链：RunID→Input→Config→RuleSet→Model→Solver→Output→Decision；每段包含 run_id、operator、created_at、payload、previous_hash、event_hash，篡改或断链校验为 BLOCKED。4 项测试通过。"
     },
     {
       "id": "T07-01",
@@ -1588,9 +1856,22 @@
       ],
       "summary": "≥3 个历史项目可完整复算",
       "gate": "Gate 6",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/historical_replay_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/historical_replay.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_historical_replay.py"
+        }
+      ],
+      "status": "deferred",
+      "note": "已实现历史项目回放框架：机制测试 4 项通过，但仅有 1 个真实历史项目样本，不足以达到『≥3 个历史项目完整复算』的 Gate 6 门槛。标记为【待定/跳过】：不误报完成，也不作为可开工遗留，待后续补充真实项目数据后恢复。"
     },
     {
       "id": "T07-02",
@@ -1606,9 +1887,22 @@
       ],
       "summary": "预测 $q^1$ 与实际结算量逐项比对",
       "gate": "Gate 6",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/quantity_reconciliation_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/quantity_reconciliation.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_quantity_reconciliation.py"
+        }
+      ],
+      "status": "partial",
+      "note": "已实现 Q0→Q1 逐项对照框架，并正式绑定实际结算口径：actual_q1=成本清单 q1_point，settlement_unit_price=报价 p_bid，settlement_amount=两者相乘；输出 signed_error、absolute_error、relative_error。当前样本尚未提供独立 predicted_q1，因此精度对照仍需补预测输出。5 项测试通过。"
     },
     {
       "id": "T07-03",
@@ -1624,9 +1918,22 @@
       ],
       "summary": "使用 MAE / WAPE / sMAPE 组合（MAPE 在 $q^1\\to0$ 时爆炸）；$q^1<q_{\\min}$ 的项目单独口径；升降级须基于 `sample_size + confidence interval + segment + project_type`，非单次指标",
       "gate": "Gate 6",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/precision_monitor_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/precision_monitor.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_precision_monitor.py"
+        }
+      ],
+      "status": "partial",
+      "note": "已实现 MAE/WAPE/sMAPE 监控、小工程量 q1<q_min 单独口径，以及基于 sample_size、confidence_interval、segment、project_type 的升级闸门；实际结算量可由成本 q1_point 与报价 p_bid 构造，但当前尚缺独立 predicted_q1，升级仍保持 HOLD。4 项测试通过。"
     },
     {
       "id": "T07-04",
@@ -1642,9 +1949,22 @@
       ],
       "summary": "依据回放结果调整 config 并形成新版本",
       "gate": "Gate 6",
-      "evidence": [],
-      "status": "not_started",
-      "note": ""
+      "evidence": [
+        {
+          "kind": "module",
+          "path": "config/calibration_spec.json"
+        },
+        {
+          "kind": "module",
+          "path": "src/bidpricing/calibration.py"
+        },
+        {
+          "kind": "module",
+          "path": "tests/test_calibration.py"
+        }
+      ],
+      "status": "partial",
+      "note": "已实现参数校准记录框架：只有 replay=PASS、实际对照=PASS、精度 promotion=READY 才生成版本化建议；建议记录 old_value/new_value/reason，永不直接覆盖当前 config，审批默认 PENDING。4 项测试通过，真实闭环证据不足时保持 BLOCKED。"
     }
   ]
 }

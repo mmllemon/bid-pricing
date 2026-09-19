@@ -1,0 +1,18 @@
+{
+  "schema_id": "baseline_spec_v1",
+  "task": "T05-00",
+  "methods": ["UNIFORM_DISCOUNT", "PREVIOUS_MANUAL", "COMPANY_CONVENTION"],
+  "selection_policy": "exactly_one",
+  "freeze_policy": {
+    "required": true,
+    "immutable_after_freeze": true,
+    "version_required": true
+  },
+  "inputs": {
+    "UNIFORM_DISCOUNT": ["cap_by_id", "discount"],
+    "PREVIOUS_MANUAL": ["price_by_id"],
+    "COMPANY_CONVENTION": ["price_by_id"]
+  },
+  "objective": "Z_baseline = sum(contribution_i(price_i))",
+  "missing_input": "BLOCKED"
+}

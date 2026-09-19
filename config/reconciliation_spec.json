@@ -1,0 +1,9 @@
+{
+  "schema_id": "reconciliation_spec_v1",
+  "task": "T06-06",
+  "title": "总价重算与舍入调和",
+  "rounding": {"resolution": 0.01, "rule": "分项四舍五入，汇总后再舍入；差额修正后重算"},
+  "steps": ["round_line_items", "recompute_total", "adjust_delta", "revalidate_constraints", "emit_submittable_quote"],
+  "status_domain": ["PASS", "BLOCKED", "FAIL"],
+  "safety": ["差额必须是 0.01 元的整数倍", "修正后不得出现负合价", "约束复验失败不得输出可提交报价"]
+}

@@ -244,3 +244,171 @@ def check_cost_basis(config_dir: Path) -> CostBasisReport:
             rep.results.append(_ok("AS-04", f"已冻结于 {assumption['frozen_at']}"))
 
     return rep
+
+
+# ======================================================================
+# H-002 成本含税 → 有效成本转换声明（CT-*）
+# ======================================================================
+#
+# 背景：成本清单综合单价是**含税成本单价**（cost_input_incl_vat），而比价/利润
+# 口径是不含增值税（basis_declarations.cost_tax_scope = EXCL_VAT）。二者直接
+# 相减无意义，必须先把含税成本换算为**不含税有效成本**（cost_effective）。
+# 换算所需的两项输入——进项税率、进项税抵扣模式——缺失会让利润算式**算错**，
+# 故按 ADR-0013 配 BLOCKED：声明缺失时阻断「最优利润」结论（H-002 验收标准）。
+
+CREDIT_MODE_VOCABULARY: tuple[str, ...] = ("FULL", "PARTIAL", "NONE", "UNKNOWN")
+
+
+def effective_cost_multiplier(
+    vat_rate: float | None,
+    credit_mode: str,
+    credit_ratio: float | None = None,
+) -> float | None:
+    """含税 → 有效成本换算系数 k，``cost_effective = cost_input_incl_vat × k``。
+
+    统一式：``k = 1 − vat_rate × credit_ratio / (1 + vat_rate)``
+      FULL    → credit_ratio 恒为 1 → ``k = 1/(1+vat_rate)``（进项税全额抵扣）
+      NONE    → 不可抵扣（简易计税/无进项票）→ ``k = 1``（含税即有效成本，**不需要税率**）
+      PARTIAL → ``credit_ratio`` 必须显式声明（0 < ratio < 1）
+      UNKNOWN → 返回 None：不可计算，调用方不得据此输出利润结论
+
+    模式不在词表内属程序错误 → ``ValueError``（不静默返回 None 掩盖 Bug）；
+    输入不足（税率/比例缺失）→ 返回 None（业务未声明，不是程序错误）。
+    """
+    if credit_mode not in CREDIT_MODE_VOCABULARY:
+        raise ValueError(
+            f"credit_mode 须在 {list(CREDIT_MODE_VOCABULARY)}，收到 {credit_mode!r}")
+    if credit_mode == "UNKNOWN":
+        return None
+    if credit_mode == "NONE":
+        return 1.0
+    if vat_rate is None:
+        return None
+    if credit_mode == "FULL":
+        ratio = 1.0
+    else:  # PARTIAL
+        if credit_ratio is None:
+            return None
+        ratio = credit_ratio
+    return 1.0 - vat_rate * ratio / (1.0 + vat_rate)
+
+
+def effective_cost(
+    cost_input_incl_vat: float | None,
+    vat_rate: float | None,
+    credit_mode: str,
+    credit_ratio: float | None = None,
+) -> float | None:
+    """含税成本单价 → 不含税有效成本（元，2 位）；不可计算时返回 None。"""
+    k = effective_cost_multiplier(vat_rate, credit_mode, credit_ratio)
+    if k is None or cost_input_incl_vat is None:
+        return None
+    return round(cost_input_incl_vat * k, 2)
+
+
+def check_cost_input_tax(config_dir: Path) -> CostBasisReport:
+    """H-002：成本含税 → 有效成本转换声明校验（CT-01~CT-05）。
+
+    判据基准（ADR-0013）：进项税率/抵扣模式缺失会让**利润算式算错**
+    （含税 c_i 与不含税 p_i 直接相减无意义）——配 BLOCKED；
+    说了但说错了（税率不在 (0,1]、模式不在词表）——FAIL；
+    模式未定时税率是否必需无从判定——SKIP（显式记录，不编造）。
+    任一项 BLOCKED/FAIL → 不输出「最优利润」结论。
+    """
+    rep = CostBasisReport()
+    policy = _read(config_dir, "project_quote_policy.json")
+    if policy is None:
+        rep.results.append(_bad(
+            "CT-01", STATUS_SKIP,
+            "项目报价策略缺失（project_quote_policy.json）——转换声明无从校验"))
+        return rep
+    sec = policy.get("cost_input_tax_policy") or {}
+    if not sec:
+        rep.results.append(_bad(
+            "CT-01", STATUS_BLOCKED,
+            "project_quote_policy.json 缺 cost_input_tax_policy——含税成本→有效成本"
+            "转换未声明，利润结论无定义（H-002）"))
+        return rep
+
+    rate = sec.get("cost_input_vat_rate")
+    mode = sec.get("input_vat_credit_mode")
+    ratio = sec.get("credit_ratio")
+
+    rep.results.append(_ok(
+        "CT-01", "成本清单综合单价声明为含税成本（cost_input_incl_vat），"
+                 "换算目标为不含税有效成本（cost_effective）"))
+
+    # ---- CT-02 进项税率 ----
+    if mode in ("FULL", "PARTIAL"):
+        if rate is None:
+            rep.results.append(_bad(
+                "CT-02", STATUS_BLOCKED,
+                f"抵扣模式 {mode} 下进项税率未声明——含税成本无法换算为不含税"
+                "有效成本，『最优利润』结论被阻断（H-002）"))
+        elif not (0 < rate <= 1):
+            rep.results.append(_bad(
+                "CT-02", STATUS_FAIL,
+                f"cost_input_vat_rate={rate!r} 须在 (0,1] 内"))
+        else:
+            rep.results.append(_ok("CT-02", f"进项税率已声明：{rate}"))
+    elif mode == "NONE":
+        if rate is None:
+            rep.results.append(_ok(
+                "CT-02", "抵扣模式 NONE：有效成本=含税成本，无需税率"))
+        elif 0 < rate <= 1:
+            rep.results.append(_ok(
+                "CT-02", f"进项税率已声明（NONE 下仅供留痕）：{rate}"))
+        else:
+            rep.results.append(_bad(
+                "CT-02", STATUS_FAIL,
+                f"cost_input_vat_rate={rate!r} 须在 (0,1] 内"))
+    else:  # UNKNOWN / 缺失
+        rep.results.append(_bad(
+            "CT-02", STATUS_SKIP,
+            "抵扣模式未定，税率是否必需无从判定——挂起（由 CT-03 阻断）"))
+
+    # ---- CT-03 抵扣模式 ----
+    if mode is None or mode == "UNKNOWN":
+        rep.results.append(_bad(
+            "CT-03", STATUS_BLOCKED,
+            "input_vat_credit_mode 未声明（UNKNOWN）——含税成本能否抵扣、抵扣多少"
+            "不可知，『最优利润』结论被阻断（H-002）"))
+    elif mode not in CREDIT_MODE_VOCABULARY:
+        rep.results.append(_bad(
+            "CT-03", STATUS_FAIL,
+            f"input_vat_credit_mode={mode!r} 不在词表 "
+            f"{list(CREDIT_MODE_VOCABULARY)}"))
+    else:
+        rep.results.append(_ok("CT-03", f"抵扣模式：{mode}"))
+
+    # ---- CT-04 部分抵扣比例 ----
+    if mode == "PARTIAL":
+        if ratio is None or not (0 < ratio < 1):
+            rep.results.append(_bad(
+                "CT-04", STATUS_BLOCKED,
+                "PARTIAL 模式必须显式声明 credit_ratio ∈ (0,1)——"
+                "否则有效成本不可计算"))
+        else:
+            rep.results.append(_ok("CT-04", f"抵扣比例：{ratio}"))
+    elif mode in ("FULL", "NONE"):
+        rep.results.append(_ok(
+            "CT-04", f"模式 {mode} 无需抵扣比例（FULL=1 / NONE=0）"))
+    else:
+        rep.results.append(_bad(
+            "CT-04", STATUS_SKIP, "模式未定，抵扣比例判定挂起"))
+
+    # ---- CT-05 换算可计算性兜底 ----
+    if mode not in CREDIT_MODE_VOCABULARY:
+        rep.results.append(_bad(
+            "CT-05", STATUS_SKIP, "模式非法（CT-03 已 FAIL），换算系数判定挂起"))
+    elif mode == "UNKNOWN" or mode is None:
+        rep.results.append(_bad(
+            "CT-05", STATUS_SKIP, "模式未定，换算系数挂起（由 CT-03 阻断）"))
+    elif effective_cost_multiplier(rate, mode, ratio) is None:
+        rep.results.append(_bad(
+            "CT-05", STATUS_BLOCKED,
+            "当前声明下换算系数不可计算——利润结论必须挂起"))
+    else:
+        rep.results.append(_ok("CT-05", "换算系数可计算"))
+
+    return rep

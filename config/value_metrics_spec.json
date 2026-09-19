@@ -1,0 +1,13 @@
+{
+  "schema_id": "value_metrics_spec_v1",
+  "task": "T05-02",
+  "metrics": {
+    "optimization_gain": "Z_opt - Z_baseline",
+    "prediction_risk": "Q95 - Q5",
+    "robustness_ratio": "optimization_gain / prediction_risk"
+  },
+  "optimality_unproven": "WARN_AND_LABEL_GAIN_AS_LOWER_BOUND",
+  "zero_prediction_risk": "BLOCKED_UNDEFINED_RATIO",
+  "invalid_quantile_order": "FAIL",
+  "missing_input": "BLOCKED"
+}

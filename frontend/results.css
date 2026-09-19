@@ -1,0 +1,37 @@
+/* ============ 结果面板与表格（Apple 系统风） ============ */
+.result-panel{
+  margin-top:18px;background:var(--surface-nested);
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  padding:18px;
+}
+.result-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:12px;flex-wrap:wrap}
+.result-head h3{margin:0;font-size:16px;font-weight:700;letter-spacing:-.01em}
+.result-head p{margin:3px 0 0;color:var(--text-secondary);font-size:12px}
+.download-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.table-wrap{
+  overflow:auto;max-height:460px;border-radius:var(--radius-tile);
+  border:1px solid var(--border);background:var(--surface-card);
+}
+table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+th,td{text-align:left;border-bottom:1px solid var(--border);padding:9px 10px}
+th{color:var(--text-secondary);font-weight:600;background:var(--surface-nested);position:sticky;top:0;z-index:1}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface-nested)}
+
+/* 数字列：右对齐 + 等宽数字，便于逐行对位 */
+.result-panel table th.num,.result-panel table td.num{text-align:right;padding-right:14px}
+.price-cell{color:var(--accent);font-weight:600}
+.result-panel table tr.loss-row td{background:var(--danger-soft);color:var(--danger)}
+.result-panel table tr.manual-row td{background:var(--warn-soft);color:var(--warn)}
+.result-panel table td:last-child{min-width:220px;white-space:normal;color:var(--text-secondary)}
+
+.plan-saved-pill{
+  display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;
+  background:var(--success-soft);color:var(--success);font-size:11px;font-weight:600;
+}
+
+/* 对比表单元格高亮 */
+.result-panel table td.loss-cell{background:var(--danger-soft);color:var(--danger)}
+.result-panel table td.warn-cell{background:var(--warn-soft);color:var(--warn)}
+.result-panel table td.gain-cell{color:var(--success);font-weight:600}

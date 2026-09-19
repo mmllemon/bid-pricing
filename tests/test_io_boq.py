@@ -145,6 +145,31 @@ class ParserMechanismTest(unittest.TestCase):
             self.assertNotIn("B.3", ids)
             self.assertTrue(any("分节标题行" in n for n in rep.notes))
 
+    def test_row_order_preserves_file_sequence(self):
+        """回归：输出行序必须保持源文件逐行顺序，绝不按项目编码重新排序。
+
+        触发源：早期在匹配层用 sorted(set(...)) 曾把清单重新排序，导致网页/导出表
+        与用户原清单「难以逐行对齐」（观测附言）。本用例数据编码刻意乱序（B/A/C 且
+        跨分节标题），若解析或后续清匹配层任何一处按编码排序都会必现失败。
+        """
+        ordered = [
+            ["表-09", "", "", "", "", "", "", "", "", "", "", ""],
+            ["分部分项工程项目清单计价表", "", "", "", "", "", "", "", "", "", "", ""],
+            ["序号", "项目编码", "", "项目名称", "", "项目特征", "", "计量单位", "工程量", "", "金额（元）", ""],
+            ["", "", "", "", "", "", "", "", "", "综合单价", "合价", ""],
+            ["1", "030402017002", "", "变压器A", "", "…", "", "台", "2", "", "200", ""],
+            ["", "C", "", "安装工程", "", "", "", "", "", "", "", ""],
+            ["2", "030402017001", "", "高压柜B", "", "…", "", "台", "1", "", "100", ""],
+            ["3", "03B001", "", "补项C", "", "…", "", "个", "1", "", "", ""],
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            rep = self._parse(Path(tmp), [("表-09 分部分项工程项目清单计价表【测试单位工程】", ordered)])
+            ids = [r.item_id for r in rep.rows]
+            # 文件顺序 = 变压器A → 高压柜B → 补项C；若按编码字典序则会被排成
+            # 030402017001 / 030402017002 / 03B001（'0'<...<'B'），二者不同 → 必现失败。
+            self.assertEqual(ids, ["030402017002", "030402017001", "03B001"])
+            self.assertEqual(len(rep.rows), 3)
+
     def test_quantity_gap_is_failure_not_silence(self):
         with tempfile.TemporaryDirectory() as tmp:
             rep = self._parse(Path(tmp), [("表-09 分部分项工程项目清单计价表【测试单位工程】", BOQ_ROWS)])
@@ -222,15 +247,21 @@ class RealFileSmokeTest(unittest.TestCase):
         self.assertEqual(self.bid.failures, [])
 
     def test_row_count_and_key_agreement(self):
-        self.assertEqual(len(self.cap.rows), 82)
+        # 82/83 行业务依据（H-001）：限价清单 83 行、报价清单 82 行。
+        # 「03B015 运行准备」是限价侧独有的 no_cap 补充项（单价空、疑似招标方
+        # 录入瑕疵但按 ADR-0006 空值≠缺行保留），报价侧未列项——两份源文件
+        # sha256 本就不同（限价 c32b4b709c2d / 报价 0ec27c099890 与固化证据同源）。
+        self.assertEqual(len(self.cap.rows), 83)
+        self.assertEqual(len(self.bid.rows), 82)
         ck = {(r.unit_work, r.item_id) for r in self.cap.rows}
         bk = {(r.unit_work, r.item_id) for r in self.bid.rows}
-        self.assertEqual(ck, bk)
+        self.assertEqual(ck - bk, {("电气设备安装工程", "03B015")})
+        self.assertEqual(bk - ck, set())
 
     def test_code_kind_distribution(self):
         kinds = [r.code_kind for r in self.cap.rows]
         self.assertEqual(kinds.count("STANDARD"), 68)
-        self.assertEqual(kinds.count("SUPPLEMENTARY"), 14)
+        self.assertEqual(kinds.count("SUPPLEMENTARY"), 15)  # 含限价独有 03B015
 
     def test_weighted_discount_reproduces_pair_json(self):
         """与 T01-02C 固化样本独立复算：加权下浮 8.0084% 应重现。"""
@@ -245,8 +276,11 @@ class RealFileSmokeTest(unittest.TestCase):
         cm = {(r.unit_work, r.item_id): r for r in self.cap.rows}
         bm = {(r.unit_work, r.item_id): r for r in self.bid.rows}
         for k, c in cm.items():
+            b = bm.get(k)
+            if b is None:
+                continue  # 限价独有 no_cap 项（03B015）无报价侧，不参与加权下浮
             q, pc = f(c.quantity), f(c.unit_price)
-            pb = f(bm[k].unit_price)
+            pb = f(b.unit_price)
             if q is None or pc is None or pb is None:
                 continue
             den += q * pc
@@ -254,9 +288,9 @@ class RealFileSmokeTest(unittest.TestCase):
         self.assertAlmostEqual(num / den, 0.080084, places=4)
 
     def test_cap_side_known_gap_is_scaffold_item(self):
-        """已知数据缺口：031301017001 脚手架搭拆 限价侧单价为空（空值≠缺行）。"""
+        """已知数据缺口：031301017001 脚手架搭拆、03B015 运行准备——限价侧单价均为空（空值≠缺行）。"""
         gaps = [r for r in self.cap.rows if not r.unit_price]
-        self.assertEqual([r.item_id for r in gaps], ["031301017001"])
+        self.assertEqual(sorted(r.item_id for r in gaps), ["031301017001", "03B015"])
 
 
 class AliasMirrorTest(unittest.TestCase):

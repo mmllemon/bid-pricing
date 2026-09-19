@@ -82,6 +82,15 @@ class MasterUnionTest(unittest.TestCase):
         y = next(i for i in rep.items if i.item_id == "Y")
         self.assertIn("missing_cost", y.missing)
 
+    def test_master_order_follows_cap_then_cost_input_order(self):
+        """输出顺序必须保持原清单顺序，不能按项目编码重新排序。"""
+        rep = match_canonical_rows(
+            [_mk("B", "cap", q=1, p=20), _mk("A", "cap", q=1, p=10)],
+            [_mk("B", "cost", q=1, p=15), _mk("A", "cost", q=1, p=8),
+             _mk("C", "cost", q=1, p=3)],
+        )
+        self.assertEqual([item.item_id for item in rep.items], ["B", "A", "C"])
+
 
 class CoverageTest(unittest.TestCase):
     def test_coverage_counters(self):

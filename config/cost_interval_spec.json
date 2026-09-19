@@ -1,0 +1,9 @@
+{
+  "schema_id": "cost_interval_spec_v1",
+  "task": "T05-03",
+  "scenario_factors": [0.8, 1.0, 1.2],
+  "default_material_scope": "explicit_material_ids",
+  "output": ["objective", "delta_vs_base", "rank_shift"],
+  "missing_input": "BLOCKED",
+  "negative_cost": "BLOCKED"
+}

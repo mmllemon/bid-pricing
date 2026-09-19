@@ -1,0 +1,17 @@
+{
+  "schema_id": "decision_support_spec_v1",
+  "task": "T06-03",
+  "title": "机器决策支持结论页",
+  "machine_conclusion_domain": ["PROCEED_TO_HUMAN_REVIEW", "HOLD_FOR_REVIEW", "BLOCKED"],
+  "status_domain": ["PASS", "WARN", "FAIL", "BLOCKED"],
+  "required_sections": ["structure_rationality", "pricing_benchmark_risk", "low_price_materials", "human_approval"],
+  "low_price_material_fields": ["item", "bid_price", "estimated_individual_cost", "margin", "reason", "supporting_data", "low_price_state"],
+  "low_price_state_domain": ["LOW_PRICE_REVIEW_REQUIRED", "COST_EVIDENCE_REQUIRED", "POTENTIAL_INFEASIBILITY"],
+  "human_approval_fields": ["approval_status", "approver", "approved_at", "decision", "comment"],
+  "decision_policy": {
+    "BLOCKED": "禁止形成可推进建议，必须补齐输入或规则",
+    "FAIL": "保留风险提示并 HOLD_FOR_REVIEW",
+    "WARN": "允许进入人工复核，但不得替代审批",
+    "PASS": "仅表示机械检查通过，仍需人工审批"
+  }
+}

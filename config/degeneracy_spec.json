@@ -1,0 +1,14 @@
+{
+  "schema_id": "degeneracy_spec_v1",
+  "task": "T04-06B",
+  "status_domain": ["PASS", "WARN", "FAIL", "BLOCKED"],
+  "triggers": ["equal_r_eff_platform", "boundary_dual_interval", "multiple_optima"],
+  "canonical_tie_break": {
+    "name": "MIN_WEIGHTED_L1_TO_CANONICAL",
+    "objective": "min sum(w_i * abs(p_i - p_i_canonical))",
+    "default_weight": 1.0,
+    "required": true
+  },
+  "zero_quantity_policy": "exclude q0=0 from platform and tie-break allocation",
+  "unknown_policy": "BLOCKED"
+}

@@ -1,0 +1,14 @@
+{
+  "schema_id": "calculation_trace_spec_v1",
+  "task": "T06-05",
+  "title": "Calculation Trace 全链追溯",
+  "stages": ["Source", "Normalized", "Derived", "Constraint", "Solver", "Postprocess", "Report"],
+  "required_node_fields": ["node_id", "source_refs", "inputs", "outputs", "derivation", "upstream_ids"],
+  "rules": [
+    "每个阶段至少一个节点",
+    "每个节点必须有非空 source_refs、inputs、outputs、derivation",
+    "非 Source 节点必须引用前一阶段 upstream_ids",
+    "node_id 必须全局唯一且不能形成环"
+  ],
+  "status_domain": ["PASS", "BLOCKED"]
+}

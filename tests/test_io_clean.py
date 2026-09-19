@@ -114,17 +114,18 @@ class CleanListingTest(unittest.TestCase):
             clean_listing_rows([], "bid")
 
     def test_real_file_smoke(self):
-        """真实文件冒烟：82 行全通过，脚手架搭拆 cap 空 → no_cap。"""
-        src = Path(r"E:/liam proj/work/2026-09-15-19-46-14/真实案件示例/中标限价/"
+        """真实文件冒烟：83 行全通过（含限价独有 no_cap 项 03B015），脚手架搭拆 cap 空 → no_cap。"""
+        src = Path(r"d:/Lee-proj/TRAE/bid-pricing-build/真实案件示例/中标限价/"
                    "西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx")
         if not src.exists():
             self.skipTest("真实样本文件不在本机")
         from bidpricing.io.boq import parse_listing
         report = parse_listing(str(src), "XIYONG-L")
         rows, rep = clean_listing_rows(report.rows, "cap")
-        self.assertEqual(rep.n_rows_out, 82)
+        self.assertEqual(rep.n_rows_out, 83)
         self.assertEqual(len(rep.numeric_errors), 0)
         self.assertIn("031301017001", rep.no_cap_items)
+        self.assertIn("03B015", rep.no_cap_items)
         scaffold = next(r for r in rows if r.item_id == "031301017001")
         self.assertTrue(scaffold.no_cap)
         self.assertIsNone(scaffold.cap)

@@ -247,21 +247,27 @@ class RealFileSmokeTest(unittest.TestCase):
         self.assertEqual(self.bid.failures, [])
 
     def test_row_count_and_key_agreement(self):
-        # 82/83 行业务依据（H-001）：限价清单 83 行、报价清单 82 行。
-        # 「03B015 运行准备」是限价侧独有的 no_cap 补充项（单价空、疑似招标方
-        # 录入瑕疵但按 ADR-0006 空值≠缺行保留），报价侧未列项——两份源文件
-        # sha256 本就不同（限价 c32b4b709c2d / 报价 0ec27c099890 与固化证据同源）。
-        self.assertEqual(len(self.cap.rows), 83)
+        # 84/82 行业务依据（H-001，2026-09-20 按新样本重新推导）：
+        # 限价清单 84 行、报价清单 82 行。限价侧独有的两项：03B015 运行准备
+        # （单价空）与 03B016 工具、钥匙柜（**有**限价 300 元，仍只在限价侧出现），
+        # 报价侧均未列项——「限价侧独有」≠「无最高限价」，两者分列不合并。
+        # 报价侧没有限价侧缺失的项。两份源文件 sha256 不同
+        # （限价 e45f691c294e / 报价 0ec27c099890）。
+        # ★ 限价文件于 2026-09-20 被更新（旧 sha256 c32b4b709c2d，83 行），
+        #   新增 03B016 一行；本次期望值系用项目自身解析器从新样本**重新推导**
+        #   （见 ADR-0035「遗留与后续」第 3 条），不是手改数字。
+        self.assertEqual(len(self.cap.rows), 84)
         self.assertEqual(len(self.bid.rows), 82)
         ck = {(r.unit_work, r.item_id) for r in self.cap.rows}
         bk = {(r.unit_work, r.item_id) for r in self.bid.rows}
-        self.assertEqual(ck - bk, {("电气设备安装工程", "03B015")})
+        self.assertEqual(ck - bk, {("电气设备安装工程", "03B015"),
+                                   ("电气设备安装工程", "03B016")})
         self.assertEqual(bk - ck, set())
 
     def test_code_kind_distribution(self):
         kinds = [r.code_kind for r in self.cap.rows]
         self.assertEqual(kinds.count("STANDARD"), 68)
-        self.assertEqual(kinds.count("SUPPLEMENTARY"), 15)  # 含限价独有 03B015
+        self.assertEqual(kinds.count("SUPPLEMENTARY"), 16)  # 含限价独有 03B015 / 03B016
 
     def test_weighted_discount_reproduces_pair_json(self):
         """与 T01-02C 固化样本独立复算：加权下浮 8.0084% 应重现。"""
@@ -278,7 +284,7 @@ class RealFileSmokeTest(unittest.TestCase):
         for k, c in cm.items():
             b = bm.get(k)
             if b is None:
-                continue  # 限价独有 no_cap 项（03B015）无报价侧，不参与加权下浮
+                continue  # 限价独有 no_cap 项（03B015 / 03B016）无报价侧，不参与加权下浮
             q, pc = f(c.quantity), f(c.unit_price)
             pb = f(b.unit_price)
             if q is None or pc is None or pb is None:
@@ -288,9 +294,18 @@ class RealFileSmokeTest(unittest.TestCase):
         self.assertAlmostEqual(num / den, 0.080084, places=4)
 
     def test_cap_side_known_gap_is_scaffold_item(self):
-        """已知数据缺口：031301017001 脚手架搭拆、03B015 运行准备——限价侧单价均为空（空值≠缺行）。"""
+        """已知数据缺口：限价侧单价为空的项（空值≠缺行，ADR-0006）。
+
+        仅 031301017001 脚手架搭拆（标准码）与 03B015 运行准备（补充码）单价为空。
+        ★ 03B016 工具、钥匙柜虽同样只在限价侧出现，但**有**最高限价 300 元——
+        「限价侧独有」与「无最高限价」是**两件事**，不可合并判（本用例即为该区分的守门）。
+        """
         gaps = [r for r in self.cap.rows if not r.unit_price]
         self.assertEqual(sorted(r.item_id for r in gaps), ["031301017001", "03B015"])
+        cap_only = {(r.unit_work, r.item_id) for r in self.cap.rows} - {(r.unit_work, r.item_id) for r in self.bid.rows}
+        with_cap = {r.item_id for r in self.cap.rows if r.unit_price}
+        self.assertIn(("电气设备安装工程", "03B016"), cap_only)
+        self.assertIn("03B016", with_cap)
 
 
 class AliasMirrorTest(unittest.TestCase):

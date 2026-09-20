@@ -6,6 +6,8 @@ build/
 dist/
 .venv/
 venv/
+.venv.broken-*/
+.python-path
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

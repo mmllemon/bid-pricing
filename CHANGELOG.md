@@ -10,6 +10,29 @@
 
 ## [未发布]
 
+### run.ps1 一键启动器加固（解释器能力探测 + 停止路径 + 编码）
+
+**修正**
+
+- **解释器判定由「存在性」改为「能力探测」**。`%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe` 是 0 字节的应用执行别名占位符，`Test-Path`/`Get-Command` 都会命中，执行时只打印 `Python was not found ... Microsoft Store` 并返回非 0——旧脚本据此判定「已找到 Python」，继续装依赖、启动服务，最后**假报成功**。现改为逐个候选真跑 `import ssl,venv`，跳过 `*\WindowsApps\*` 与 0 字节文件。
+- **探测的能力换成真正需要的能力**。只验 `--version` 会漏掉 `_ssl` DLL 加载失败的残缺安装：它打印得出版本号，pip 却走不了 HTTPS（本机 `python` 首个候选即为此种）。
+- **`Wait-Process -Id $a -Id $b` 参数绑定失败**。`-Id` 只能出现一次，多进程须传数组；旧写法使 `Ctrl+C` 停止路径直接抛错（用户实际遇到的报错）。
+- **原生命令 stderr 被 `$ErrorActionPreference="Stop"` 升级为终止错误**。pip 的 `Disabling truststore ...` 警告会让脚本在装依赖中途暴毙；新增 `Invoke-Native` 统一包装。
+- **脚本编码**：本文件含中文，必须保存为 UTF-8 **with BOM**。PowerShell 5.1 对无 BOM 的 `.ps1` 按系统 ANSI（GBK）解码，丢 BOM 会解码错乱、吃掉引号与大括号，报出一批离奇语法错误（实测同一份文件：有 BOM 解析 0 错、剥掉 BOM 解析出 6 个错）。
+
+**变更**
+
+- 依赖改在仓库内 `.venv` 隔离安装（不污染系统解释器）；`.venv` 存在但探测失败时**改名保留**为 `.venv.broken-<时间戳>` 后重建，不静默复用。
+- 新增解释器钉死方式：仓库根 `.python-path`（单行绝对路径，不入库）或环境变量 `BIDPRICING_PYTHON`；候选还覆盖 `%LOCALAPPDATA%\Programs\Python\Python3*` 等常见安装位置（本机即由此自动找到 3.14.6）。
+- 最低 Python 版本改从 `pyproject.toml` 的 `requires-python` 读取，不在脚本里重复硬编码。
+- **启动后必须探到 HTTP 200 才打印成功**（后端 `/api/health` 60s、前端首页 20s）；失败时报出子进程 `ExitCode` 与日志路径并非零退出。
+- 两个服务的 stdout/stderr 重定向到 `outputs/logs/*.log`（原先创建了 `outputs\logs` 却从未使用）。
+- README / PROJECT_HANDOFF 同步新口径；`.gitignore` 增 `.venv.broken-*/`、`.python-path`。
+
+**新增**
+
+- `tests/test_run_script.py`（15 项静态判据）：编码（含非 ASCII 必须带 BOM）、`-Id` 不得重复、能力探测须含 `ssl`、须剔除 `WindowsApps` 占位符、成功横幅须在探活之后、pip 须走容错包装、文档口径一致性。判据已做**变异检验**（把 `-Id` 改回重复写法 / 剥掉 BOM → 各自被杀）。
+
 ### T04-04 收口：对拍报告可复算 + 补齐五处「规格声明了但实现没有」（ADR-0036）
 
 **新增**

@@ -64,7 +64,7 @@ bid-pricing/
 │  └─ assets/fonts/misans/            MiSans VF 本地化子集（56 切片）
 ├─ app/streamlit_app.py               早期 Streamlit 入口，非当前主 UI
 ├─ build_t06_01.mjs / build_t07_quote.mjs / build_web_result.mjs  结果构建脚本
-├─ run.ps1                            Windows 一键启动（后端 8000 + 前端 8080）
+├─ run.ps1                            Windows 一键启动（能力探测解释器 + .venv 隔离依赖 + 探活；后端 8000 + 前端 8080）
 ├─ config/                            规则、字段、约束、精度、报告、项目报价策略等 JSON 制品
 ├─ src/bidpricing/
 │  ├─ io/                              Excel 读取、清洗、匹配、导入登记
@@ -122,7 +122,12 @@ bid-pricing/
 .\run.ps1
 ```
 
-脚本定位 Python、首次自动补装 `requirements-web.txt`，启动后端 8000 + 前端 8080。缺 node 时 Excel 导出降级（JSON 结果仍可下载）。浏览器打开 <http://localhost:8080>；健康检查 <http://localhost:8000/api/health>。
+脚本先对解释器做**能力探测**（真跑 `import ssl,venv`，逐个候选试，跳过 `WindowsApps` 应用执行别名占位符与 `_ssl` 缺失的残缺安装），首次运行在仓库内 `.venv` 建隔离环境并从 `requirements-web.txt` 装依赖，再启动后端 8000 + 前端 8080；**探到 `/api/health` 与首页均 200 才报成功**。缺 node 时 Excel 导出降级（JSON 结果仍可下载）。浏览器打开 <http://localhost:8080>；健康检查 <http://localhost:8000/api/health>。日志见 `outputs/logs/`。
+
+> 解释器钉死：仓库根 `.python-path`（单行绝对路径，已 gitignore）或环境变量 `BIDPRICING_PYTHON`。
+> 若报 `Python was not found ... Microsoft Store`，是 `WindowsApps` 下 0 字节别名占位符所致 ——
+> 关闭应用执行别名，或安装 Python >= 3.11 入 PATH。`tests/test_run_script.py` 守住启动器的
+> 编码（UTF-8 with BOM）与已知缺陷形态。
 
 手动启动：后端 `$env:PYTHONPATH="src"; python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`；前端 `python -m http.server 8080 --directory frontend`。
 

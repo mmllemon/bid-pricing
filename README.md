@@ -45,7 +45,13 @@ PYTHONPATH=src python -m bidpricing.cli ruleset-select --contract-date 2026-03-0
 .\run.ps1
 ```
 
-脚本会定位 Python、首次自动补装 `requirements-web.txt`，启动「后端 8000 + 前端 8080」，按 `Ctrl+C` 停止。缺 node 时 Excel 导出降级（JSON 结果仍可下载）。
+脚本先对解释器做**能力探测**：真跑一次 `import ssl,venv`，逐个候选试过去（跳过 `WindowsApps` 下的 0 字节应用执行别名占位符，以及 `_ssl` 加载失败的残缺安装），而不是只看文件是否存在。首次运行在仓库内 `.venv` 建隔离环境并从 `requirements-web.txt` 装依赖（不污染系统 Python）；随后启动「后端 8000 + 前端 8080」，**必须探到 `/api/health` 与首页都返回 200 才报成功**；按 `Ctrl+C` 停止。服务日志写入 `outputs/logs/`，缺 node 时 Excel 导出降级（JSON 结果仍可下载）。
+
+若机器上没有可用 Python（典型症状：报 `Python was not found ... Microsoft Store`），任选一种修法：
+
+1. 「设置 > 应用 > 高级应用设置 > 应用执行别名」里关闭 `python.exe` / `python3.exe`（那两个 0 字节占位符会顶掉真正的 Python）；
+2. 安装 Python >= 3.11 并把安装目录加入 PATH；
+3. 在仓库根建 `.python-path` 文件（单行绝对路径，已 gitignore），或设环境变量 `BIDPRICING_PYTHON`。
 
 ### 手动启动
 

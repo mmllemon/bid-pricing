@@ -1239,6 +1239,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_p12.add_argument("--json", action="store_true", help="输出 JSON")
     p_p12.set_defaults(func=cmd_parity_check)
 
+    p_suite = sub.add_parser(
+        "parity-suite",
+        help="T04-04：从 golden_dataset_v1 生成对拍 input bundle（两条路径结果留痕）")
+    p_suite.add_argument("--out", default="docs/phase12_parity_bundle.json",
+                         help="bundle 落盘路径（可复算输入，勿手改）")
+    p_suite.add_argument("--json", action="store_true", help="输出 JSON")
+    p_suite.set_defaults(func=cmd_parity_suite)
+
     return parser
 
 
@@ -3823,6 +3831,43 @@ def cmd_parity_check(args) -> int:
             print(f"   报告已写入 {args.out}")
 
     return 1 if report["conclusion"] in {"FAIL", "BLOCKED"} else 0
+
+
+def cmd_parity_suite(args) -> int:
+    """T04-04：从 golden_dataset_v1 生成对拍 input bundle（结果留痕）。
+
+    与 ``parity-check`` 分层：本命令**生产** bundle（两条路径的结果留痕），
+    ``parity-check --bundle`` **消费**它。生成器只收录适用子集内的正例；
+    不可用/不适用者显式写入 ``provenance.skipped`` 留痕，不静默冒充覆盖。
+    """
+    from pathlib import Path as _P
+
+    from .solver import parity_suite as ps
+
+    bundle = ps.build_bundle(config_dir=config_dir())
+    ps.write_bundle(bundle, _P(args.out))
+
+    if args.json:
+        import json as _json
+        print(_json.dumps(bundle, ensure_ascii=False, indent=2))
+    else:
+        cases = bundle["cases"]
+        produced = bundle["provenance"]["produced"]
+        gver = bundle["provenance"]["golden_version"]
+        print(f"■ golden{gver} 对拍 bundle 已生成：{len(cases)} case")
+        print(f"   两条路径均已产出：Phase1={produced['phase1']} "
+              f"Phase2={produced['phase2']}（可对拍 {len(cases)}）")
+        print(f"   floor 来源：{bundle['floor_source']}")
+        for c in cases:
+            print(f"     · {c['case_id']} [A]" 
+                  f" Z1={c['phase1']['objective']:.6f}"
+                  f" Z2={c['phase2']['objective']:.6f}")
+        if bundle["provenance"]["skipped"]:
+            print("   跳过留痕（不参与对拍）：")
+            for s in bundle["provenance"]["skipped"]:
+                print(f"     - {s}")
+        print(f"   bundle 已写入 {args.out}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

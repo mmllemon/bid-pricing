@@ -3,9 +3,9 @@
   "spec": "phase12_parity_spec_v1",
   "generated_by": "src/bidpricing/solver/parity_runner.py",
   "bundle_schema": "phase12_parity_input_v1",
-  "bundle_path": null,
-  "bundle_present": false,
-  "reproduce_command": "PYTHONPATH=src python -m bidpricing.cli parity-check",
+  "bundle_path": "docs\\phase12_parity_bundle.json",
+  "bundle_present": true,
+  "reproduce_command": "PYTHONPATH=src python -m bidpricing.cli parity-check --bundle docs\\phase12_parity_bundle.json",
   "independence": {
     "required_task": "T04-08",
     "signoff_file": "docs/reference_review_signoff.json",
@@ -18,11 +18,103 @@
     "residual_abs": 1e-07
   },
   "tolerances_unresolved": [],
-  "floor_source": null,
-  "cases": [],
-  "conclusion": "BLOCKED",
-  "level": null,
-  "reason": "未提供可复算输入 bundle：对拍需要两条路径**已产出**的结果留痕。本次未对拍任何实例——这不是「已通过」，也不是「不适用」。",
+  "floor_source": "golden_dataset_v1：p0=cap、U=cap、L=0、B=Σ(cap_i·q0_i)，tie_break=CANONICAL_ITEM_ID",
+  "cases": [
+    {
+      "case_id": "A_pos",
+      "group": "A",
+      "status": "PASS",
+      "level": "L3",
+      "reason": "三层对拍一致",
+      "objective_delta": 0.0,
+      "max_price_delta": 0.0,
+      "max_residual_delta": null,
+      "mismatches": [],
+      "obligations": [],
+      "independence": "PASS",
+      "floor_source": "golden_dataset_v1：p0=cap、U=cap、L=0、B=Σ(cap_i·q0_i)，tie_break=CANONICAL_ITEM_ID",
+      "tolerances": {
+        "objective_abs": 1e-07,
+        "price_abs": 1e-07,
+        "residual_abs": 1e-07
+      },
+      "phase1_status": "OPTIMAL",
+      "phase2_status": "OPTIMAL",
+      "details": {
+        "tolerance_unresolved": []
+      }
+    },
+    {
+      "case_id": "D_pos",
+      "group": "A",
+      "status": "PASS",
+      "level": "L3",
+      "reason": "三层对拍一致",
+      "objective_delta": 0.0,
+      "max_price_delta": 0.0,
+      "max_residual_delta": null,
+      "mismatches": [],
+      "obligations": [],
+      "independence": "PASS",
+      "floor_source": "golden_dataset_v1：p0=cap、U=cap、L=0、B=Σ(cap_i·q0_i)，tie_break=CANONICAL_ITEM_ID",
+      "tolerances": {
+        "objective_abs": 1e-07,
+        "price_abs": 1e-07,
+        "residual_abs": 1e-07
+      },
+      "phase1_status": "OPTIMAL",
+      "phase2_status": "OPTIMAL",
+      "details": {
+        "tolerance_unresolved": []
+      }
+    },
+    {
+      "case_id": "F_pos",
+      "group": "A",
+      "status": "PASS",
+      "level": "L3",
+      "reason": "三层对拍一致",
+      "objective_delta": 0.0,
+      "max_price_delta": 0.0,
+      "max_residual_delta": null,
+      "mismatches": [],
+      "obligations": [],
+      "independence": "PASS",
+      "floor_source": "golden_dataset_v1：p0=cap、U=cap、L=0、B=Σ(cap_i·q0_i)，tie_break=CANONICAL_ITEM_ID",
+      "tolerances": {
+        "objective_abs": 1e-07,
+        "price_abs": 1e-07,
+        "residual_abs": 1e-07
+      },
+      "phase1_status": "OPTIMAL",
+      "phase2_status": "OPTIMAL",
+      "details": {
+        "tolerance_unresolved": []
+      }
+    }
+  ],
+  "conclusion": "PASS",
+  "level": "L3",
+  "reason": "3 个实例的 Phase 1/2 结果在制品容差内一致",
   "obligations": [],
-  "owner": "T04-04（须给出两条路径的结果留痕：Phase 1 解析解 + Phase 2 LP/MILP）"
+  "provenance": {
+    "produced_by": "src/bidpricing/solver/parity_suite.py::build_bundle",
+    "golden_version": "golden-v1",
+    "tie_break_policy": "CANONICAL_ITEM_ID",
+    "skipped": [
+      "A_neg:negative 不参与对拍",
+      "B_pos:Phase2 非 OPTIMAL（INFEASIBLE）",
+      "B_neg:negative 不参与对拍",
+      "C_pos:无两侧齐备可优化项(n=0)",
+      "C_neg:negative 不参与对拍",
+      "D_neg:negative 不参与对拍",
+      "E_pos:Phase1 非 OPTIMAL（INFEASIBLE）",
+      "E_neg:negative 不参与对拍",
+      "F_neg:negative 不参与对拍"
+    ],
+    "produced": {
+      "phase1": 4,
+      "phase2": 3
+    }
+  }
 }

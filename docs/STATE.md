@@ -5,7 +5,7 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-20 19:31:11** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-20 20:53:57** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
@@ -19,10 +19,10 @@
 
 ## 一、版本锚点
 
-- 提交：`813aa5a` ｜ 累计 86 次提交 ｜ 未推送 1 次提交
-- 最新提交信息：docs(handoff): 同步交接手册至 ae7eac7（H-002 取值已声明 PARTIAL + 构成前端 + 四列布局）
+- 提交：`5e79e30` ｜ 累计 87 次提交 ｜ 未推送 0 次提交
+- 最新提交信息：chore(state): 重新生成状态快照（813aa5a 同步交接手册后）
 - 最近里程碑标签：`h002-cost-tax-basis-v1`
-- 工作区：有 1 处未提交改动
+- 工作区：有 8 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -67,7 +67,7 @@
 
 ## 四、质量门
 
-- 单元测试：**1534** 项，结果 **通过**（OK）
+- 单元测试：**1539** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -90,7 +90,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | WP1 | 11 | done 11 |
 | WP2 | 5 | done 5 |
 | WP3 | 7 | done 7 |
-| WP4 | 13 | done 12、partial 1 |
+| WP4 | 13 | done 13 |
 | WP5 | 5 | done 5 |
 | WP6 | 8 | done 8 |
 | WP7 | 4 | deferred 1、partial 3 |
@@ -139,7 +139,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T03-03 | Phase 0 预检与可行性证书 | done | ✓ 成立 | config/phase0_precheck_spec.json 存在（11910 字节）；src/bidpricing/solver/precheck.py 存在；tests/test_precheck.py 存在；ADR ADR-0030-phase0-precheck.md 存在 |
 | T03-06 | 不可行诊断 | done | ✓ 成立 | config/infeasibility_diagnosis_spec.json 存在（8357 字节）；src/bidpricing/solver/diagnose.py 存在；tests/test_diagnose.py 存在；ADR ADR-0031-infeasibility-diagnosis.md 存在 |
 | T03-04 | 约束判定器 | done | ✓ 成立 | config/constraint_judge_spec.json 存在（15213 字节）；src/bidpricing/solver/constraint_judge.py 存在；tests/test_constraint_judge.py 存在；ADR ADR-0029-constraint-judge.md 存在 |
-| T03-07 | 状态机与低价处置状态 | done | ✓ 成立 | 已实现全局四态聚合与三态低价处置状态：BLOCKED > FAIL > WARN > PASS；潜在不可行 > 成本证据不足 > 低价复核，未触发时不生成状态。6 项状态机测试通过。；config/state_machine_spec.json 存在；src/bidpricing/state_machine.py 存在；tests/test_state_machine.py 存在（1814 字节） |
+| T03-07 | 状态机与低价处置状态 | done | ✓ 成立 | 已实现全局四态聚合与三态低价处置状态：BLOCKED > FAIL > WARN > PASS；潜在不可行 > 成本证据不足 > 低价复核，未触发时不生成状态。6 项状态机测试通过。；config/state_machine_spec.json 存在；src/bidpricing/state_machine.py 存在；tests/test_state_machine.py 存在（1773 字节） |
 | T03-05 | 判定层测试矩阵 | done | ✓ 成立 | config/judgment_test_matrix_spec.json（13 约束 × 6 边界类 = 78 格，12 格声明不适用；「缺失」拆 NOT_ACTIVE(SKIP)/MISSING_INPUT(BLOCKED) 两格；「1 单位」逐约束具名绑定——res 0.01 元 / tol_width / count / sigma_step 三种量纲）+ src/bidpricing/validation/judgment_matrix.py（枚举与覆盖审计：未声明空格⇒BLOCKED、零格⇒BLOCKED；参数化 judge_fn：真实实现与变异体同跑；25 条变异体注入审计，kills_by 按「声明 ⊆ 实际」对账，存活⇒FAIL；规则优先级 A1–A4；规则集切换两层判据 L1 数值/L2 元信息 + SEGMENT 退化登记为 WARN）+ tests/test_judgment_matrix.py 34 项元测试。实测：78 格零失配、25/25 变异体被杀、覆盖审计 PASS（66 覆盖 + 12 声明例外）、总结论 WARN（唯一来源＝SEGMENT 下数值指纹退化，已登记）。首轮 M-05/M-06 假存活（变异体依赖 reason 文案）已修正并加元测试钉住。CLI judgment-matrix。；config/judgment_test_matrix_spec.json 存在（19787 字节）；src/bidpricing/validation/judgment_matrix.py 存在；tests/test_judgment_matrix.py 存在；ADR ADR-0034-judgment-test-matrix.md 存在 |
 | T04-00 | Phase 1 适用条件证明与反例集 | done | ✓ 成立 | 2026-09-17 完成《Phase 1 精确性条件》+ 反例集。**定理 T1（阈值分割）用交换论证证明**，刻意不走 KKT——KKT 是 T04-02A/D 的实现路线，两者共用会让「证明」与「实现」按同一个误解同时成立，T04-08 的独立性验收即失去对象（ADR-0019）。九条条件分两组：A 组（EC-1 作用域完备 / EC-2 排序键正确 / EC-3 权重正 / EC-4 系数非负 / EC-5 非退化 / EC-6 软约束不激活 / EC-7 可行域非空）违反则阈值分割解不再是 P_A 最优解；B 组（EC-8 舍入可调和 / EC-9 上界有限）违反只加实现性义务。**verdict 只看 A 组**——首版把 EC-8 放 A 组的结果是任何实例都判不出 EXACT（舍入上界 0.005·Σq0 几乎总超 eps_total），一个永远需要附注的 verdict 等于没有 verdict。反例集 CE-01..CE-09 每个都带「误用解 vs 正确解」数值见证，由 check_solution 代回原式复算；expected 做**双向**比对（实现判 FAIL 的条件不得漏声明——CE-07 首跑即踩到单向比对的漏洞）。正例 PE-01 = 附录 B 例 2R 的 SEGMENT 分支（本项目已落 SEGMENT），用 n=2 端点比较做**完整**最优性验证。副产品：修掉 compute_r_eff 的 SEGMENT 分支真 bug（increase_threshold 本身已是 1+θ_dev，原式再加 1.0 使越界段 r_eff 系统性高估）。本项目真实结论：EC-9 对西永L样本判 WARN（031301017001 cap 空），故 Phase 1 算法必须内建「空 cap 项固定为临界项」分支。测试 50 项；phase1-check 10/10 制品↔实现一致。；config/phase1_exactness_spec.json 存在（39093 字节）；src/bidpricing/solver/exactness.py 存在；src/bidpricing/solver/cases.py 存在；src/bidpricing/solver/instance.py 存在；tests/test_phase1_exactness.py 存在；ADR ADR-0019-phase1-exactness-by-exchange-argument.md 存在 |
 | T04-01 | Phase 1 解析解 | done | ✓ 成立 | 2026-09-17：排序+二分+贪心定容解析解落地。spec=config/phase1_solver_spec.json（PS-01..PS-11）；实现 src/bidpricing/solver/phase1.py（solve_phase1/judge_phase1/phase1_report/两个内置探针）；Z 一律由 instance.check_solution 复算（不重实现 R_i）；lb_i 复用 formulation.merged_lower（_merged_lower 提升为公开名，唯一实现不变）。两个探针（free-cap/simple）verdict=PASS。测试 48 项全绿（全量 838），含 PS-06 双向交换探针、r vs r_eff 逆序实例、空 cap 临界项、平台 tie-break、不支持政策 BLOCKED、INFEASIBLE≠BLOCKED。CLI 新增 phase1-solve（--probe/--instance/--json）。遗留：PS-11 曾抓到制品把三容差入参写成一条，已拆分制品（判据先于实现纠错）；PS-06 首版只做单向交换，补齐「先增后减」方向。；config/phase1_solver_spec.json 存在（22640 字节）；src/bidpricing/solver/phase1.py 存在；tests/test_phase1_solver.py 存在；ADR ADR-0026-phase1-analytic-solver.md 存在 |
@@ -150,7 +150,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T04-02E | 不可行诊断对接 | done | ✓ 成立 | src/bidpricing/solver/diagnose.py 存在；tests/test_diagnose.py 存在；ADR ADR-0032-oracle-wiring.md 存在 |
 | T04-07 | MILP 独立验收协议 | done | ✓ 成立 | 2026-09-18：MILP 独立验收协议落地。spec=config/milp_acceptance_spec.json（MA-01..MA-10 + 六字段 + 三容差具名）；实现 src/bidpricing/solver/milp_acceptance.py（build_acceptance 生产 / judge_milp 判定分离，只吃 MilpFacts 原始量）；适配层 backend._pulp_diagnostics 以 hasattr 能力探测取 best_bound/mip_gap/integrality_violation，取不到即留空（不用 Z 顶替）。最优性四项全满足才标 OPTIMAL，否则单向下坡降级 FEASIBLE（never_upgrade）；超时按有无 incumbent 分叉；禁 KKT 证 MILP 最优性。38 项测试（全量 877→915，双环境全绿），含注入『FEASIBLE 状态却给 OPTIMAL』必 FAIL、无 bound 却标 OPTIMAL 必 FAIL、制品漏声明容差必 BLOCKED、超时写成 INFEASIBLE 必 FAIL。CLI milp-check（--form LP|MILP|both / --time-limit / --json）。★ 接线首跑抓到真口径错误：HiGHS 的 mip_dual_bound 不含 objective_constant（探针常量 −2,270,000；只做 min→max 取反得 bound=2,730,000 对 Z=460,000，复算间隙 4.9 而自报 0.0），由 MA-06 跨来源对账抓出，补两步换算后一致。★ 实测能力差异：pulp_highs ⇒ OPTIMAL（已证）；pulp_cbc（命令行后端 solverModel=None）⇒ diagnostics 为空 ⇒ MA-05 WARN + MA-06 BLOCKED ⇒ 降级 FEASIBLE 未证（若硬编码『一定有诊断量』，CBC 上会静默宣称最优）。遗留 OI-MA-A：M_hi 对分支定界收敛的影响仍待量化（T04-02B 挂账项）。；config/milp_acceptance_spec.json 存在（16121 字节）；src/bidpricing/solver/milp_acceptance.py 存在；tests/test_milp_acceptance.py 存在；ADR ADR-0028-milp-acceptance-protocol.md 存在 |
 | T04-08 | 独立 Reference Implementation | done | ✓ 成立 | 2026-09-17：独立参考实现落地。spec=config/reference_impl_spec.json（RI-01..RI-11 + ISO-1/2/3）；实现 src/bidpricing/refimpl/{reference,isolation}.py，**不 import 任何生产模块**（连数据结构也不 import，靠冻结快照取属性），公式由路线 §5.3 S0 + 利润桥接表 + 规则卡推导；Z_total/Z_competitive 两个口径两个名字；ε_Z=eps_abs+eps_rel_price·max（缺项 BLOCKED）。39 项测试（全量 838→877），含手算钉死六分支组合、注入错 Z/篡改逐项必 FAIL、制品少声明分支必 BLOCKED、审计抓 settlement_revenue、ISO-2 运行时复读探针。CLI ref-check；verify-solution 默认向参考层取 Z_ref ⇒ **SV-13 挂账闭合**（LP/MILP 两变体均 PASS，Δ=0）。接线首跑即抓到真 bug：C7 二值 z_i 与 p_i 共用 item_id，映射被 0/1 覆盖（按 family=="p" 过滤修复）。遗留 OI-RI-A：ISO-3 作者分离需第二人签署（docs/reference_review_signoff.json，signed=false）⇒ 未签前 T04-04 对拍结论强制 BLOCKED。；config/reference_impl_spec.json 存在（11123 字节）；src/bidpricing/refimpl/reference.py 存在；tests/test_reference_impl.py 存在；ADR ADR-0027-reference-implementation.md 存在 |
-| T04-04 | Phase 1/2 对拍器 | partial | ✓ 成立 | 已实现三级对拍器（L1 状态 / L2 数值 / L3 层归属+残差）与 A/B 两组；独立性签署已 PASS。2026-09-20 收口（ADR-0036）：① 容差改由 phase12_parity_spec.json 唯一提供（修 DV-01 家族：原先读数器里的默认字面量，制品那节从未被读）；② 补齐 L1 状态可比性与 L3 约束残差（residual_abs 原先从未被读，单侧残差判「口径不可比」BLOCKED）；③ 补 B 组义务（只加义务不改判定）与 floor 来源声明（ADR-0026 要求）；④ 新增 CLI parity-check，报告由代码产出并自带复算命令——原报告无任何生成器，已按 ADR-0036 D1 搬为 docs/phase12_parity_prior_measurement.json（reproducible=false，含三条 caveats）。当前报告结论 BLOCKED 且**与任务板一致**：缺两条路径结果留痕（input bundle），owner=T04-04；实例集尚未覆盖 golden_dataset_v1 分层 A–F（求解层 p0/L/B 未落值，owner=T04-04/T01-02C）。65 项 parity 测试通过（含 10 条变异体注入，存活即 FAIL）。；config/phase12_parity_spec.json 存在；src/bidpricing/solver/parity.py 存在；src/bidpricing/solver/parity_runner.py 存在；docs/phase12_parity_report.json 存在（1029 字节）；docs/phase12_parity_prior_measurement.json 存在（1918 字节）；tests/test_parity.py 存在；tests/test_parity_runner.py 存在；ADR ADR-0036-parity-reproducibility.md 存在 |
+| T04-04 | Phase 1/2 对拍器 | done | ✓ 成立 | 已实现三级对拍器（L1 状态 / L2 数值 / L3 层归属+残差）与 A/B 两组；独立性签署已 PASS。2026-09-20 收口（ADR-0036）：① 容差改由 phase12_parity_spec.json 唯一提供（修 DV-01 家族）；② 补齐 L1 状态可比性与 L3 约束残差（residual_abs，单侧残差判「口径不可比」BLOCKED）；③ 补 B 组义务与 floor 来源声明；④ 新增 CLI parity-check，报告由代码产出并自带复算命令（原报告无生成器，搬为 prior_measurement.json）。2026-09-20 收口②（ADR-0036 遗留 1/2）：新增 bundle 生成器 src/bidpricing/solver/parity_suite.py，从 golden_dataset_v1 构造求解层实例（补 p0=cap/L=0/B=Σ(cap_i·q0_i) + tie_break=CANONICAL_ITEM_ID），分别跑 Phase 1 解析解与 Phase 2 编译 LP，两侧目标值取自同一独立裁判 check_solution.Z；新增 CLI parity-suite 生产 bundle（结果是留痕），parity-check --bundle 消费之。实例集覆盖：A/D/F 正例两路径均产出且三层对拍一致 ⇒ 报告结论 PASS（L3）；B_pos（可行域退化单点，LP INFEASIBLE）、E_pos（2000 行极端尺度）、C_pos（无两侧齐备项）及全部负例显式写入 provenance.skipped 留痕。复算：parity-suite → parity-check --bundle docs/phase12_parity_bundle.json（PASS L3，exit 0）。70 项 parity 测试通过（新增 test_parity_suite 5 项）。；config/phase12_parity_spec.json 存在；src/bidpricing/solver/parity.py 存在；src/bidpricing/solver/parity_runner.py 存在；docs/phase12_parity_report.json 存在（3752 字节）；docs/phase12_parity_prior_measurement.json 存在（1918 字节）；tests/test_parity.py 存在；tests/test_parity_runner.py 存在；ADR ADR-0036-parity-reproducibility.md 存在；src/bidpricing/solver/parity_suite.py 存在；docs/phase12_parity_bundle.json 存在（8088 字节）；tests/test_parity_suite.py 存在 |
 | T04-05 | Phase 3 验证 | done | ✓ 成立 | 已实现 Phase 3 LP/MILP 验证：LP 检查 primal/dual feasibility、stationarity、complementary slackness、objective recomputation；MILP 检查 primal feasibility、objective recomputation、MIP gap，缺少诊断量一律 BLOCKED，禁止用 KKT 伪证 MILP 最优性。6 项测试通过。；config/phase3_verification_spec.json 存在；src/bidpricing/solver/phase3.py 存在；tests/test_phase3.py 存在 |
 | T04-06 | 数值稳定性处理 | done | ✓ 成立 | 已实现数值稳定性预处理/后处理：epsilon 截断、相对容差、最大绝对系数归一与恢复、平台效应识别（明确排除 q0=0）、P95 延迟基线；空样本/全零/非有限输入不伪造结论，按规范返回 BLOCKED/未知。6 项测试通过。；config/numerical_stability_spec.json 存在；src/bidpricing/solver/stability.py 存在；tests/test_stability.py 存在 |
 | T04-06B | 退化与多最优解处理 | done | ✓ 成立 | 已实现退化处理：平台组检测、q0=0 排除、可分配平台的多最优告警、canonical item_id 顺序分配、加权 L1 次级目标与边界对偶区间输出。未知/缺失输入不静默降级。5 项测试通过。；config/degeneracy_spec.json 存在；src/bidpricing/solver/degeneracy.py 存在；tests/test_degeneracy.py 存在 |
@@ -180,7 +180,6 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 | 任务 | WP | 标题 | 产出物 | 状态 |
 |---|---|---|---|---|
-| T04-04 | WP4 | Phase 1/2 对拍器 | 对拍脚本 + 报告 | partial |
 | T07-03 | WP7 | 精度监控 | 监控模块 | partial |
 | T07-04 | WP7 | 参数校准 | 校准记录 | partial |
 

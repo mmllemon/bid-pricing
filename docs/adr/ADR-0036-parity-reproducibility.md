@@ -106,3 +106,24 @@ Phase 2 目标值更高 ⇒ 记「目标函数口径可能分歧」义务（这�
 3. 本次未改 `compare_phase12` 的三级判定**语义**（仅补 L1/L3 与容差来源），
    故 `ADR-0020` 的「复核层宽度比 ≥ 1e3」不适用于本模块——对拍器不是复核层，
    它是**同层横比**。若将来把对拍结果再喂给复核层，须另立宽度比判据。
+
+## 遗留 1/2 的收口（2026-09-20）
+
+两条挂账已由 `src/bidpricing/solver/parity_suite.py` 收口，结论**从 BLOCKED 升到 PASS（L3）**：
+
+- **新增 bundle 生成器** `parity_suite.build_bundle`：从
+  `golden_dataset_v1` 解析 cap/cost 双侧 → 构造求解层实例（补 `p0=cap`、`L=0`、
+  `B=Σ(cap_i·q0_i)`，并声明 `tie_break_policy=CANONICAL_ITEM_ID`）→ 分别跑 Phase 1
+  解析解（`solve_phase1`）与 Phase 2 编译 LP（`build_formulation` + `compile_model` +
+  `solve_compiled`）→ 序列化为 `phase12_parity_input_v1` bundle。**两条路径的结果留痕
+  由此由代码闭合成可复算输入**。目标值取自同一独立裁判 `check_solution(...).Z`，保证两侧
+  口径一致。
+- **实例集覆盖 A–F 的诚实取舍**：golden 正例 A/D/F 加 tie_break 后通过 Phase 1 EXACT
+  （EC-5 平台被 `_ec5` 的 tie-break 分支豁免），三条全部两条路径产出且**三层对拍一致**；
+  B_pos（B=UP，可行域退化为单点，LP 判 INFEASIBLE）、E_pos（2000 行极端尺度，
+  5.2e16 量级）、C_pos（无两侧齐备项）与全部负例被**显式写入 `provenance.skipped` 留痕**，
+  不静默冒充覆盖（ADR-0026/ADR-0004 精神）。
+- 新增 CLI `parity-suite --out`（生产 bundle）与 `test_parity_suite.py`（可复算 + 覆盖 +
+  跳过留痕三项断言，不 mock，跑真实求解）。
+- 复算命令：`PYTHONPATH=src python -m bidpricing.cli parity-suite` → 再
+  `parity-check --bundle docs/phase12_parity_bundle.json` ⇒ 结论 PASS（L3），exit 0。

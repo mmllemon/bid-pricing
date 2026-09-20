@@ -5,7 +5,7 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-20 11:38:41** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-20 13:58:21** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
@@ -19,10 +19,10 @@
 
 ## 一、版本锚点
 
-- 提交：`8134285` ｜ 累计 79 次提交 ｜ 未推送 2 次提交
-- 最新提交信息：feat(h002): 成本税口径闭环 + 目标函数口径跨层对账（ADR-0035）
-- 最近里程碑标签：`v0.1.0`
-- 工作区：有 1 处未提交改动
+- 提交：`e1802e3` ｜ 累计 81 次提交 ｜ 未推送 1 次提交
+- 最新提交信息：feat(t04-04): 对拍报告可复算 + 补齐五处「规格声明了但实现没有」（ADR-0036）
+- 最近里程碑标签：`h002-cost-tax-basis-v1`
+- 工作区：干净
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -67,7 +67,7 @@
 
 ## 四、质量门
 
-- 单元测试：**1445** 项，结果 **通过**（OK）
+- 单元测试：**1505** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -150,7 +150,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T04-02E | 不可行诊断对接 | done | ✓ 成立 | src/bidpricing/solver/diagnose.py 存在；tests/test_diagnose.py 存在；ADR ADR-0032-oracle-wiring.md 存在 |
 | T04-07 | MILP 独立验收协议 | done | ✓ 成立 | 2026-09-18：MILP 独立验收协议落地。spec=config/milp_acceptance_spec.json（MA-01..MA-10 + 六字段 + 三容差具名）；实现 src/bidpricing/solver/milp_acceptance.py（build_acceptance 生产 / judge_milp 判定分离，只吃 MilpFacts 原始量）；适配层 backend._pulp_diagnostics 以 hasattr 能力探测取 best_bound/mip_gap/integrality_violation，取不到即留空（不用 Z 顶替）。最优性四项全满足才标 OPTIMAL，否则单向下坡降级 FEASIBLE（never_upgrade）；超时按有无 incumbent 分叉；禁 KKT 证 MILP 最优性。38 项测试（全量 877→915，双环境全绿），含注入『FEASIBLE 状态却给 OPTIMAL』必 FAIL、无 bound 却标 OPTIMAL 必 FAIL、制品漏声明容差必 BLOCKED、超时写成 INFEASIBLE 必 FAIL。CLI milp-check（--form LP|MILP|both / --time-limit / --json）。★ 接线首跑抓到真口径错误：HiGHS 的 mip_dual_bound 不含 objective_constant（探针常量 −2,270,000；只做 min→max 取反得 bound=2,730,000 对 Z=460,000，复算间隙 4.9 而自报 0.0），由 MA-06 跨来源对账抓出，补两步换算后一致。★ 实测能力差异：pulp_highs ⇒ OPTIMAL（已证）；pulp_cbc（命令行后端 solverModel=None）⇒ diagnostics 为空 ⇒ MA-05 WARN + MA-06 BLOCKED ⇒ 降级 FEASIBLE 未证（若硬编码『一定有诊断量』，CBC 上会静默宣称最优）。遗留 OI-MA-A：M_hi 对分支定界收敛的影响仍待量化（T04-02B 挂账项）。；config/milp_acceptance_spec.json 存在（16121 字节）；src/bidpricing/solver/milp_acceptance.py 存在；tests/test_milp_acceptance.py 存在；ADR ADR-0028-milp-acceptance-protocol.md 存在 |
 | T04-08 | 独立 Reference Implementation | done | ✓ 成立 | 2026-09-17：独立参考实现落地。spec=config/reference_impl_spec.json（RI-01..RI-11 + ISO-1/2/3）；实现 src/bidpricing/refimpl/{reference,isolation}.py，**不 import 任何生产模块**（连数据结构也不 import，靠冻结快照取属性），公式由路线 §5.3 S0 + 利润桥接表 + 规则卡推导；Z_total/Z_competitive 两个口径两个名字；ε_Z=eps_abs+eps_rel_price·max（缺项 BLOCKED）。39 项测试（全量 838→877），含手算钉死六分支组合、注入错 Z/篡改逐项必 FAIL、制品少声明分支必 BLOCKED、审计抓 settlement_revenue、ISO-2 运行时复读探针。CLI ref-check；verify-solution 默认向参考层取 Z_ref ⇒ **SV-13 挂账闭合**（LP/MILP 两变体均 PASS，Δ=0）。接线首跑即抓到真 bug：C7 二值 z_i 与 p_i 共用 item_id，映射被 0/1 覆盖（按 family=="p" 过滤修复）。遗留 OI-RI-A：ISO-3 作者分离需第二人签署（docs/reference_review_signoff.json，signed=false）⇒ 未签前 T04-04 对拍结论强制 BLOCKED。；config/reference_impl_spec.json 存在（11123 字节）；src/bidpricing/refimpl/reference.py 存在；tests/test_reference_impl.py 存在；ADR ADR-0027-reference-implementation.md 存在 |
-| T04-04 | Phase 1/2 对拍器 | partial | ✓ 成立 | 已实现 Phase 1/2 三级对拍器（L1 状态、L2 数值、L3 层归属）与 A/B 组约束；独立性签署已为 PASS。当前报告仍 BLOCKED，原因已收敛为尚未提供可比较的 Phase 1/2 objective 与 prices 结果，不能把独立性签署误当作数值对拍通过。5 项测试通过。；config/phase12_parity_spec.json 存在；src/bidpricing/solver/parity.py 存在；docs/phase12_parity_report.json 存在（1156 字节）；tests/test_parity.py 存在 |
+| T04-04 | Phase 1/2 对拍器 | partial | ✓ 成立 | 已实现三级对拍器（L1 状态 / L2 数值 / L3 层归属+残差）与 A/B 两组；独立性签署已 PASS。2026-09-20 收口（ADR-0036）：① 容差改由 phase12_parity_spec.json 唯一提供（修 DV-01 家族：原先读数器里的默认字面量，制品那节从未被读）；② 补齐 L1 状态可比性与 L3 约束残差（residual_abs 原先从未被读，单侧残差判「口径不可比」BLOCKED）；③ 补 B 组义务（只加义务不改判定）与 floor 来源声明（ADR-0026 要求）；④ 新增 CLI parity-check，报告由代码产出并自带复算命令——原报告无任何生成器，已按 ADR-0036 D1 搬为 docs/phase12_parity_prior_measurement.json（reproducible=false，含三条 caveats）。当前报告结论 BLOCKED 且**与任务板一致**：缺两条路径结果留痕（input bundle），owner=T04-04；实例集尚未覆盖 golden_dataset_v1 分层 A–F（求解层 p0/L/B 未落值，owner=T04-04/T01-02C）。65 项 parity 测试通过（含 10 条变异体注入，存活即 FAIL）。；config/phase12_parity_spec.json 存在；src/bidpricing/solver/parity.py 存在；src/bidpricing/solver/parity_runner.py 存在；docs/phase12_parity_report.json 存在（1029 字节）；docs/phase12_parity_prior_measurement.json 存在（1918 字节）；tests/test_parity.py 存在；tests/test_parity_runner.py 存在；ADR ADR-0036-parity-reproducibility.md 存在 |
 | T04-05 | Phase 3 验证 | done | ✓ 成立 | 已实现 Phase 3 LP/MILP 验证：LP 检查 primal/dual feasibility、stationarity、complementary slackness、objective recomputation；MILP 检查 primal feasibility、objective recomputation、MIP gap，缺少诊断量一律 BLOCKED，禁止用 KKT 伪证 MILP 最优性。6 项测试通过。；config/phase3_verification_spec.json 存在；src/bidpricing/solver/phase3.py 存在；tests/test_phase3.py 存在 |
 | T04-06 | 数值稳定性处理 | done | ✓ 成立 | 已实现数值稳定性预处理/后处理：epsilon 截断、相对容差、最大绝对系数归一与恢复、平台效应识别（明确排除 q0=0）、P95 延迟基线；空样本/全零/非有限输入不伪造结论，按规范返回 BLOCKED/未知。6 项测试通过。；config/numerical_stability_spec.json 存在；src/bidpricing/solver/stability.py 存在；tests/test_stability.py 存在 |
 | T04-06B | 退化与多最优解处理 | done | ✓ 成立 | 已实现退化处理：平台组检测、q0=0 排除、可分配平台的多最优告警、canonical item_id 顺序分配、加权 L1 次级目标与边界对偶区间输出。未知/缺失输入不静默降级。5 项测试通过。；config/degeneracy_spec.json 存在；src/bidpricing/solver/degeneracy.py 存在；tests/test_degeneracy.py 存在 |

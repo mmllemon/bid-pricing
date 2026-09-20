@@ -13,6 +13,7 @@
     "price_abs": 1e-7,
     "residual_abs": 1e-7
   },
+  "tolerance_source_rule": "三个具名宽度是 L2/L3 判决宽度的**唯一来源**；比较器入参只可显式覆盖。制品缺项且本次判定用到该宽度 ⇒ BLOCKED，不得静默退回代码默认数（DV-01 家族）。",
   "independence": {
     "required_task": "T04-08",
     "signoff_file": "docs/reference_review_signoff.json",
@@ -20,9 +21,26 @@
     "non_pass_conclusion": "BLOCKED"
   },
   "groups": ["A", "B"],
+  "group_semantics": {
+    "A": "数值对拍（L1/L2/L3）决定结论",
+    "B": "在 A 组基础上**只加义务**、不改判定：Phase 1 已声明可行时，Phase 2 目标值不得优于 Phase 1 解析最优值；可行性未声明 ⇒ 记「B 组判据未走到」义务，不得读成已成立"
+  },
+  "report": {
+    "output": "docs/phase12_parity_report.json",
+    "generator": "src/bidpricing/solver/parity_runner.py",
+    "cli": "parity-check",
+    "bundle_schema": "phase12_parity_input_v1",
+    "floor_source_required": true,
+    "aggregation_order": ["FAIL", "BLOCKED", "WARN", "SKIP", "PASS"],
+    "skip_policy": "SKIP 不参与最严竞争：存在非 SKIP 判定时按 FAIL>BLOCKED>WARN>PASS 取最严；全 SKIP ⇒ SKIP（「本轮没判」不是通过）；空判据集 ⇒ BLOCKED",
+    "empty_judgement_set": "BLOCKED"
+  },
   "blocked_rules": [
     "实例不在 T04-00 适用子集",
     "T04-08 独立性签署状态非 PASS",
-    "任一路径缺少可比较结果或状态"
+    "任一路径缺少可比较结果或状态",
+    "未提供可复算输入 bundle（不得读成「已通过」或「不适用」）",
+    "L3 残差只有一侧提供（口径不可比）",
+    "本次判定所需的具名容差未被制品解析"
   ]
 }

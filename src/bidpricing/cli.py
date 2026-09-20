@@ -1223,6 +1223,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_dq.add_argument("--json", action="store_true", help="输出 JSON")
     p_dq.set_defaults(func=cmd_derive_check)
 
+    p_p12 = sub.add_parser(
+        "parity-check",
+        help="T04-04 Phase 1/2 对拍（L1 状态 / L2 数值 / L3 层归属+残差；A/B 两组）")
+    p_p12.add_argument("--bundle", default=None,
+                       help="两侧结果的留痕 JSON（schema_id=phase12_parity_input_v1）。"
+                            "不给 ⇒ 结论 BLOCKED 并具名 owner——**这不是「已通过」**，"
+                            "也不是「不适用」")
+    p_p12.add_argument("--out", default="docs/phase12_parity_report.json",
+                       help="报告落盘路径（生成物，勿手改）")
+    p_p12.add_argument("--signoff", default="docs/reference_review_signoff.json",
+                       help="T04-08 独立性签署文件")
+    p_p12.add_argument("--no-write", action="store_true",
+                       help="只打印结论，不落盘")
+    p_p12.add_argument("--json", action="store_true", help="输出 JSON")
+    p_p12.set_defaults(func=cmd_parity_check)
+
     return parser
 
 
@@ -3749,6 +3765,64 @@ def cmd_pricing_card(args) -> int:
     for b in res.basis:
         print(f"     · {b}")
     return 0
+
+
+def cmd_parity_check(args) -> int:
+    """T04-04：跑 Phase 1/2 对拍并产出**可复算**的报告。
+
+    ★ 本命令不替任一路径求解（同 ``parity.py`` 契约）：它比较的是两条路径
+    **已产出**的结果留痕。缺 ``--bundle`` 时结论为 BLOCKED 并具名 owner——
+    「没跑」不得被读成「通过」，也不得被读成「不适用」。
+
+    退出码：结论为 FAIL/BLOCKED ⇒ 1（与 ``verify-solution`` / ``derive-check``
+    同属**预期可能非零**的命令，不进「必须退 0」的常驻验证环）。
+    """
+    from pathlib import Path as _P
+
+    from .solver import parity_runner as pr
+
+    bundle_path = _P(args.bundle) if args.bundle else None
+    bundle = None
+    if bundle_path is not None:
+        try:
+            bundle = pr.load_bundle(bundle_path)
+        except pr.BundleError as exc:
+            print(f"■ [BLOCKED] {exc}")
+            return 1
+
+    report = pr.run_parity(
+        bundle,
+        config_dir=config_dir(),
+        signoff_path=args.signoff,
+        bundle_path=bundle_path,
+    )
+
+    if not args.no_write:
+        pr.write_report(report, _P(args.out))
+
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        concl = report["conclusion"]
+        print(f"■ [{concl}] T04-04 Phase 1/2 对拍")
+        print(f"   独立性签署（{(report['independence'] or {}).get('required_task')}）："
+              f"{(report['independence'] or {}).get('status')}")
+        print(f"   制品容差（唯一来源 phase12_parity_spec.json）：{report['tolerances_used']}")
+        print(f"   floor 来源：{report['floor_source'] or '未声明（ADR-0026 要求声明）'}")
+        for case in report["cases"]:
+            print(f"     · {case['case_id']} [{case['group']}组] {case['status']}"
+                  f"（{case['level'] or '-'}）{case['reason']}")
+        print(f"   结论：{concl} —— {report['reason']}")
+        if report.get("owner"):
+            print(f"   owner：{report['owner']}")
+        if report["obligations"]:
+            print("   义务（不参与 A 组判定）：")
+            for item in report["obligations"]:
+                print(f"     - {item}")
+        if not args.no_write:
+            print(f"   报告已写入 {args.out}")
+
+    return 1 if report["conclusion"] in {"FAIL", "BLOCKED"} else 0
 
 
 def main(argv: list[str] | None = None) -> int:

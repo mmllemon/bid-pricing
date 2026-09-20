@@ -10,6 +10,33 @@
 
 ## [未发布]
 
+### T04-04 收口：对拍报告可复算 + 补齐五处「规格声明了但实现没有」（ADR-0036）
+
+**新增**
+
+- `solver/parity_runner.py`：对拍**执行器**（校验 input bundle → 逐 case 比较 → 最严聚合 → 产报告）。与 `parity.py`（比较器，只吃两条路径已产出的结果）分层——本模块**不替任一路径求解**。
+- CLI `parity-check`（`--bundle / --out / --signoff / --no-write / --json`），报告自带 `reproduce_command`。与 `verify-solution`、`derive-check` 同属**预期可能非零**的命令，**不进常驻验证环**。
+- `docs/phase12_parity_prior_measurement.json`：把原先那份**不可复算**的 `PASS` 证据留档（`reproducible: false` + 三条 caveats），不再冒充「对拍已通过」。
+- `docs/adr/ADR-0036-parity-reproducibility.md`。
+- 测试 `tests/test_parity_runner.py`（含 4 条变异体）；`tests/test_parity.py` 由 5 项扩到 35 项（含 6 条变异体）。
+
+**修正**
+
+- **报告此前没有生成器**：全仓 `parity`/`golden` 在 `cli.py` 零命中，`docs/phase12_parity_report.json` 自称 `generated_by: parity.py` 却无任何代码写它。现由 `parity-check` 产出并写入输入路径与复算命令。
+- **判据宽度由代码字面量改为制品唯一提供**（DV-01 家族）：`tolerances.{objective_abs, price_abs, residual_abs}` 原先是函数默认值 `1e-7`，制品那节**从未被读取**；现改为从制品读、入参仅作显式覆盖，缺项且本次用到即 `BLOCKED`（不静默退回默认数）。三个键由 `TOLERANCE_KEYS` 与制品**双向对账**。
+- **补齐 L1**（原先从不比较状态）：两侧都必须给出可比较状态，缺任一侧即 `BLOCKED`——「数值恰好相等」不得替代状态可比。
+- **补齐 L3 残差**（原先只比 `layers`，`residual_abs` 从未被读）：残差按 `residual_abs` 判；**只有一侧提供 ⇒ `BLOCKED`（口径不可比）**，不判 PASS 也不判 FAIL。
+- **补 B 组义务**（原先 `group` 只做合法性校验）：Phase 1 已声明可行而 Phase 2 目标值更高 ⇒ 记「目标函数口径可能分歧」义务；可行性未声明 ⇒ 记「B 组判据未走到」义务。**只加义务，不改判定**。
+- **补 floor 来源声明**（ADR-0026 明文要求）：未声明记义务。
+- 聚合澄清三条边界：`SKIP` 不参与最严竞争；全 `SKIP` ⇒ `SKIP`；空判据集 ⇒ `BLOCKED`。
+- `config/phase12_parity_spec.json` 增补 `tolerance_source_rule / group_semantics / report / skip_policy`，`blocked_rules` 补三条新拒绝理由（该制品未注册 Gate 0、未冻结）。
+- 缺 input bundle 时结论 `BLOCKED` 并**具名 owner**，理由同时排除两种误读（非「已通过」、非「不适用」）。
+
+**变更**
+
+- `docs/phase12_parity_report.json` 结论由 `PASS` → `BLOCKED`，**与任务板 `docs/tasks.json` 原先的「仍 BLOCKED」说法对齐**（此前两处冲突）。这不是退步：一份不可复算的绿换成可复算且如实说明「本次未对拍任何实例」的结论。
+- `docs/tasks.json` T04-04 证据由 4 条扩到 8 条；`tools/extract_tasks.py` 的 `EVIDENCE` 字典**补登 `T04-04` 键**（此前该键不在字典里而 tasks.json 已有证据 ⇒ `--check` 一旦恢复可跑即报漂移）。
+
 ### H-002 完成：成本税口径闭环 + 目标口径跨层对账（ADR-0035）
 
 **新增**

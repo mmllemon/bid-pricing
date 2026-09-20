@@ -1,0 +1,38 @@
+{
+  "label": "不可复算的历史测量（T04-04 对拍唯一一次真实运行）",
+  "reproducible": false,
+  "why_unreproducible": "当时只留下了结果数字，没有留下**两条路径的结果留痕**（无 input bundle）；仓库内无任何脚本可重放该次运行。故本文件只是**证据留档**，不得作为「对拍已通过」的依据——权威结论以 docs/phase12_parity_report.json（由 parity-check 产出、含复算命令）为准。",
+  "recorded_at": "2026-09-16",
+  "recorded_by": "agent（自旧 docs/phase12_parity_report.json 原样搬移，未改任何数字）",
+  "owner_for_reproducibility": "T04-04（须补两条路径结果留痕：Phase 1 解析解 + Phase 2 LP/MILP）",
+  "measurement": {
+    "golden_dataset": "xiyong_l_district/t07-quote",
+    "conclusion_at_the_time": "PASS",
+    "level": "L2",
+    "reason": "目标值与报价向量一致",
+    "objective_delta": 4.656612873077393e-10,
+    "max_price_delta": 1.1368683772161603e-12,
+    "details": {
+      "phase1_solver": "closed-form Phase 1",
+      "phase2_solver": "PuLP 3.3.0 + HiGHS",
+      "item_count": 81,
+      "phase2_native_status": "Optimal",
+      "phase2_solution_check": {
+        "feasible": true,
+        "Z": 84271.9715425761,
+        "competitive_total": 1122240.3530232552,
+        "declared_total": 1122240.3530232552,
+        "c1_residual": -4.656612873077393e-10,
+        "violations": [],
+        "tolerance_name": "eps_price",
+        "tolerance_value": 0.00126,
+        "tolerance_resolved": true
+      }
+    },
+    "caveats": [
+      "该次运行**未声明 floor 来源**（ADR-0026 明文要求 T04-04 报告声明 floor 来源）。",
+      "该次运行**未覆盖 golden_dataset_v1 的分层 A–F**，只用了一个真实项目实例。",
+      "该次运行的 L1（状态可比）与 L3（残差）未见留痕，故当时判 PASS 的依据只有 L2。"
+    ]
+  }
+}

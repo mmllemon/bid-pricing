@@ -1,35 +1,28 @@
 {
   "task": "T04-04",
   "spec": "phase12_parity_spec_v1",
-  "golden_dataset": "xiyong_l_district/t07-quote",
+  "generated_by": "src/bidpricing/solver/parity_runner.py",
+  "bundle_schema": "phase12_parity_input_v1",
+  "bundle_path": null,
+  "bundle_present": false,
+  "reproduce_command": "PYTHONPATH=src python -m bidpricing.cli parity-check",
   "independence": {
     "required_task": "T04-08",
     "signoff_file": "docs/reference_review_signoff.json",
-    "status": "PASS"
+    "status": "PASS",
+    "non_pass_conclusion": "BLOCKED"
   },
-  "conclusion": "PASS",
-  "level": "L2",
-  "reason": "目标值与报价向量一致",
-  "objective_delta": 4.656612873077393e-10,
-  "max_price_delta": 1.1368683772161603e-12,
-  "mismatches": [],
-  "details": {
-    "phase1_solver": "closed-form Phase 1",
-    "phase2_solver": "PuLP 3.3.0 + HiGHS",
-    "item_count": 81,
-    "phase2_native_status": "Optimal",
-    "phase2_solution_check": {
-      "feasible": true,
-      "Z": 84271.9715425761,
-      "competitive_total": 1122240.3530232552,
-      "declared_total": 1122240.3530232552,
-      "c1_residual": -4.656612873077393e-10,
-      "violations": [],
-      "tolerance_name": "eps_price",
-      "tolerance_value": 0.00126,
-      "tolerance_resolved": true
-    }
+  "tolerances_used": {
+    "objective_abs": 1e-07,
+    "price_abs": 1e-07,
+    "residual_abs": 1e-07
   },
-  "conclusion_policy": "独立性签署状态 PASS 后，比较 objective 与 prices；超容差则 FAIL",
-  "generated_by": "src/bidpricing/solver/parity.py"
+  "tolerances_unresolved": [],
+  "floor_source": null,
+  "cases": [],
+  "conclusion": "BLOCKED",
+  "level": null,
+  "reason": "未提供可复算输入 bundle：对拍需要两条路径**已产出**的结果留痕。本次未对拍任何实例——这不是「已通过」，也不是「不适用」。",
+  "obligations": [],
+  "owner": "T04-04（须给出两条路径的结果留痕：Phase 1 解析解 + Phase 2 LP/MILP）"
 }

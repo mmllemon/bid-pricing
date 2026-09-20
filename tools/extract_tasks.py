@@ -134,6 +134,19 @@ EVIDENCE: dict[str, list[dict]] = {
         {"kind": "module", "path": "tests/test_reference_impl.py"},
         {"kind": "adr", "path": "ADR-0027-reference-implementation.md"},
     ],
+    # T04-04 系 2026-09-20 收口（ADR-0036）后补登：此前该键**不在字典里**，
+    # 而 tasks.json 已有 4 条证据 ⇒ 一旦 --check 恢复可跑就会报结构漂移。
+    # 方向仍是「tasks.json 的富 evidence → 字典」（存盘值比字典更全）。
+    "T04-04": [
+        {"kind": "module", "path": "config/phase12_parity_spec.json"},
+        {"kind": "module", "path": "src/bidpricing/solver/parity.py"},
+        {"kind": "module", "path": "src/bidpricing/solver/parity_runner.py"},
+        {"kind": "file", "path": "docs/phase12_parity_report.json"},
+        {"kind": "file", "path": "docs/phase12_parity_prior_measurement.json"},
+        {"kind": "module", "path": "tests/test_parity.py"},
+        {"kind": "module", "path": "tests/test_parity_runner.py"},
+        {"kind": "adr", "path": "ADR-0036-parity-reproducibility.md"},
+    ],
     "T04-01": [
         {"kind": "file", "path": "config/phase1_solver_spec.json"},
         {"kind": "module", "path": "src/bidpricing/solver/phase1.py"},

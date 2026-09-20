@@ -15,6 +15,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from bidpricing.paths import config_dir, repo_root
 from bidpricing.total_price import load_fixture, partition_from_fixture
@@ -306,6 +307,46 @@ class OpenItemsTest(BridgeCase):
         info = [r for r in rep.results if r.status == STATUS_INFO]
         self.assertTrue(info)
         self.assertEqual(rep.blocking, [])
+
+
+class ObjectiveCaliberCrossLayerTest(BridgeCase):
+    """PB-07：目标口径「声明（报告层）↔ 实现（求解层）」跨层对账（ADR-0035）。
+
+    为什么不是冗余判据：PB-04 只判**声明自身**自洽（spec ↔ basis_declarations）。
+    声明说 EXCL_VAT、而求解层偷偷把收入折算成含税，PB-04 依然全绿。PB-07 是唯一
+    把两层具名量拉到一起的判据——它对应的是「同约束多层各判 ⇒ 须跨层对账」。
+    """
+
+    def test_real_repo_passes(self):
+        self.assertEqual(self.status("PB-07"), STATUS_PASS)
+
+    def test_declared_caliber_mismatch_with_implementation_is_fail(self):
+        self.mutate(lambda d: d.__setitem__("tax_caliber_of_objective", "INCL_VAT"))
+        self.assertEqual(self.status("PB-07"), STATUS_FAIL)
+
+    def test_missing_declared_caliber_skips_not_passes(self):
+        # 声明缺失时 PB-04 阻断；PB-07 挂起——同一缺失不报两次，且绝不记 PASS
+        self.mutate(lambda d: d.pop("tax_caliber_of_objective", None))
+        self.assertEqual(self.status("PB-04"), STATUS_BLOCKED)
+        self.assertEqual(self.status("PB-07"), STATUS_SKIP)
+
+    def test_implementation_caliber_mismatch_is_fail(self):
+        from bidpricing.solver import settlement_milp as sm
+        with mock.patch.object(sm, "OBJECTIVE_CALIBER", "INCL_VAT"):
+            self.assertEqual(self.status("PB-07"), STATUS_FAIL)
+
+    def test_grossed_revenue_is_caught(self):
+        """★ 对 ADR-0035 的真实缺陷有区分度：常量标 EXCL_VAT 但收入侧仍乘 (1+v)。"""
+        from bidpricing.solver import settlement_milp as sm
+        with mock.patch.object(sm, "objective_revenue_factor",
+                               lambda v: 1.0 + float(v)):
+            self.assertEqual(self.status("PB-07"), STATUS_FAIL)
+
+    def test_unprobeable_implementation_is_blocked(self):
+        from bidpricing.solver import settlement_milp as sm
+        with mock.patch.object(sm, "objective_revenue_factor",
+                               mock.Mock(side_effect=RuntimeError("no impl"))):
+            self.assertEqual(self.status("PB-07"), STATUS_BLOCKED)
 
 
 if __name__ == "__main__":

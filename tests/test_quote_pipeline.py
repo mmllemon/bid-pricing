@@ -33,10 +33,13 @@ class QuotePipelineTest(unittest.TestCase):
 
     def test_probe_instance_runs_end_to_end(self):
         instance = phase1_probe_instance()
+        # cost_tax_scope=EXCL_VAT：本用例验证「主链路端到端跑通」，不耦合项目实时
+        # 税口径（H-002 由 config/project_quote_policy.json 声明；口径专属用例见
+        # tests/test_cost_basis_wiring.py）。标 EXCL_VAT ⇒ 本层跳过换算。
         rows = [{
             "item_id": item.item_id, "q0": item.q0, "q1_point": item.q1_point,
             "c_i": item.c_i, "cap": item.cap, "L": item.L, "U": item.U,
-            "p0": item.p0, "pricing_role": item.role,
+            "p0": item.p0, "pricing_role": item.role, "cost_tax_scope": "EXCL_VAT",
         } for item in instance.items]
         result = run_quote_pipeline(target_total=instance.B, items=rows, fixed_pretax=0, vat_rate=0, surtax_rate=0)
         self.assertEqual(result.status, "PASS")

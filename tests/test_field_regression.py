@@ -43,10 +43,16 @@ def _fake(prices, objective=500.0):
 
 
 def _item(item_id, *, cap, price, c_i=60.0, q0=100.0, q1=100.0, name="挖土方"):
-    """构造一个可优化项；price 为 mock 求解器给出的最优报价单价（嵌入 dict 用于取价）。"""
+    """构造一个可优化项；price 为 mock 求解器给出的最优报价单价（嵌入 dict 用于取价）。
+
+    ``cost_tax_scope="EXCL_VAT"`` 是**显式声明本夹具的 c_i 已是有效成本**，
+    从而把 H-002 成本税口径层旁路掉——本文件测的是字段/状态契约，不该被
+    「项目当前有没有声明进项税率」影响（测试不得耦合项目实时状态）。
+    成本税口径本身的双向验证在 tests/test_cost_input_tax.py。
+    """
     return {"item_id": item_id, "item_name": name, "unit": "m3", "q0": q0,
             "q1_point": q1, "c_i": c_i, "cap": cap, "L": cap * 0.5, "U": cap,
-            "mock_price": price}
+            "cost_tax_scope": "EXCL_VAT", "mock_price": price}
 
 
 def _manual_item(item_id="0109"):

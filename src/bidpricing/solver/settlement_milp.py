@@ -59,6 +59,29 @@ def low_price_big_m(upper: float, lower: float, threshold: float) -> float:
     return max(float(upper) - threshold, threshold - float(lower), 1e-9)
 
 
+#: 目标函数的税口径（实现侧常量）。**必须**等于 ``config/profit_bridge_spec.json``
+#: 的 ``tax_caliber_of_objective``；由 PB-07 跨层对账钉住（声明 ↔ 实现，禁各写一份）。
+OBJECTIVE_CALIBER = "EXCL_VAT"
+
+
+def objective_revenue_factor(vat_rate: float) -> float:
+    """目标函数**收入侧**的税口径折算系数——本口径的**唯一提供者**。
+
+    ``config/profit_bridge_spec.json`` 声明 ``tax_caliber_of_objective = EXCL_VAT``，
+    其 binding 原文：*「报价 p 与成本 c 两侧同为**不含增值税**口径……故目标函数本身
+    不含增值税」*。因此收入侧**不得**再乘 ``(1+vat_rate)`` 折算为含税口径——恒返回 1.0。
+
+    ★ 为什么单列一个函数而不是内联 ``1.0``：这样「声明口径（报告层）↔ 实现口径
+    （求解层）」才能被 PB-07 机械对账。内联常量无处可查，口径错层只能靠读代码发现。
+
+    ★ 历史缺陷（ADR-0035）：本函数返回 ``1.0 + vat_rate`` 的旧实现把结算收入折算为
+    含税，与 H-002 换算后的**不含税**成本相减 ⇒ 目标函数成为混合口径，报告利润
+    虚增 ``vat_rate × Σ结算收入``（= 应交增值税）。因收入侧 P 依赖项被同一正常数
+    因子缩放、而 ``c_i·q1`` 与 p 无关，**最优解（报价分配）不受影响**，只有报告值错。
+    """
+    return 1.0
+
+
 def build_settlement_adjustment_formulation(
     instance: Phase1Instance,
     *,
@@ -70,9 +93,10 @@ def build_settlement_adjustment_formulation(
 ) -> SettlementMilpBuild:
     """构造结算调整 MILP。当前只接受 VALIDITY 之外的结算调整条款。
 
-    目标为**含税口径**：求解器单价 ``p_i`` 与最高限价 ``cap`` 为不含税价格，
-    结算收入按含税报价折算（乘以 ``1+vat_rate``），成本 ``c_i·q1`` 保持含税
-    不变。因含税折算对全部收入项是同一正常数因子，不影响最优解，只统一口径。
+    目标口径为**不含增值税（EXCL_VAT）**，与 ``config/profit_bridge_spec.json``
+    的 ``tax_caliber_of_objective`` 声明一致：求解器单价 ``p_i``、最高限价 ``cap``
+    与成本 ``c_i`` **三者同为不含税口径**，收入与成本直接相减，不再做含税折算。
+    成本侧的不含税口径由 H-002（``validation.cost_basis``）在入口完成换算。
     """
     policy = parse_unbalanced_policy(clause)
     if policy is None or not policy.enabled:
@@ -88,7 +112,8 @@ def build_settlement_adjustment_formulation(
     lb_c5 = compute_lb_c5(P_ref, eps_price, resolution)
     if vat_rate < 0:
         raise UnbalancedPolicyError("结算调整 MILP 增值税率不得为负")
-    gross_factor = 1.0 + float(vat_rate)
+    # 收入侧税口径折算系数（唯一提供者，见 objective_revenue_factor 的说明）
+    revenue_factor = objective_revenue_factor(vat_rate)
     items = tuple(i for i in instance.items if i.role == ROLE_OPTIMIZABLE)
     variables: list[Column] = []
     rows: list[Row] = []
@@ -111,9 +136,9 @@ def build_settlement_adjustment_formulation(
             upper = cap
 
         # 基准收入系数：当前条款在非严重低价区间为 q1*p。
-        variables.append(Column("p", item.item_id, "CONTINUOUS", lower, upper, q1 * gross_factor,
+        variables.append(Column("p", item.item_id, "CONTINUOUS", lower, upper, q1 * revenue_factor,
                                 ("LP", "MILP"),
-                                note="结算调整 MILP 单价变量（收入按含税折算）"))
+                                note="结算调整 MILP 单价变量（收入侧税口径系数见 objective_revenue_factor）"))
         c1.append((f"p_{item.item_id}", q0))
         rows.append(Row("C3/C4/C5", "BOX_LOWER", ">=", lower,
                         ((f"p_{item.item_id}", 1.0),), "eps_price",
@@ -134,10 +159,10 @@ def build_settlement_adjustment_formulation(
         M = low_price_big_m(upper, lower, threshold)
         y = f"y_{item.item_id}"
         w = f"w_{item.item_id}"
-        variables.append(Column("y", item.item_id, "BINARY", 0.0, 1.0, -delta * cap * gross_factor,
+        variables.append(Column("y", item.item_id, "BINARY", 0.0, 1.0, -delta * cap * revenue_factor,
                                 ("MILP",), note="严重低价状态：1=报价低于50%最高限价"))
         variables.append(Column("w", item.item_id, "CONTINUOUS", 0.0, float(upper),
-                                delta * gross_factor, ("MILP",), note="w=y*p 线性化变量（收入按含税折算）"))
+                                delta * revenue_factor, ("MILP",), note="w=y*p 线性化变量（收入侧税口径系数同上）"))
         # y=1 => p <= 0.5 cap；y=0 => p >= 0.5 cap。
         rows.append(Row("C13", "MILP_BINARY", "<=", threshold + M,
                         ((f"p_{item.item_id}", 1.0), (y, M)), "0（整数）",
@@ -169,9 +194,10 @@ def build_settlement_adjustment_formulation(
             deferred=(DeferredConstraint("C13", "MILP_BINARY", "T04-05",
                                          "结算调整条款已进入 Phase 2 MILP"),),
             objective_sense="MAXIMIZE", objective_constant=objective_constant,
-            objective_expr="Z = Σ (1+vat)·settlement_revenue_adjusted(p_i) − Σ c_i·q1_i （含税口径）",
+            objective_expr="Z = Σ settlement_revenue_adjusted(p_i) − Σ c_i·q1_i （EXCL_VAT：p_i/cap/c_i 三者同口径，不含增值税）",
             solver_form="MILP", lb_c5=lb_c5, active=("C13",),
             box_notes=tuple(warnings), source=instance.source,
+            objective_caliber=OBJECTIVE_CALIBER,
         ),
         warnings=tuple(warnings),
     )
@@ -184,20 +210,22 @@ def settlement_adjusted_profit(
     clause: Mapping[str, Any],
     vat_rate: float,
 ) -> float:
-    """独立复算结算调整后的利润（**含税口径**）。
+    """独立复算结算调整后的利润（**不含增值税 / EXCL_VAT**）。
 
-    求解器单价 ``p_i`` 与最高限价 ``cap`` 同口径为**不含税**价格
-    （C1 竞争预算由含税总价剔税后得到，见 ``compute_P_competitive``），
-    而成本单价 ``c_i`` 为**含税**成本。为统一为含税毛利口径，结算收入需按
-    含税报价折算：``收入含税 = 税前收入 × (1 + vat_rate)``，成本项
-    ``c_i·q1`` 保持含税不变。
+    求解器单价 ``p_i``、最高限价 ``cap`` 与成本单价 ``c_i`` **三者同口径为不含税**：
+    ``cap``/``p`` 由 ``compute_P_competitive`` 剔税得到（GB/T 50500-2024 2.0.8），
+    ``c_i`` 由 H-002（``validation.cost_basis``）在入口换算为不含税有效成本。
+    收入与成本直接相减，不再乘 ``(1+vat_rate)``——见 ``objective_revenue_factor``。
+
+    本函数是 MILP 目标函数的**独立复算**（T04-08 纪律）：必须与构建器得到同一
+    口径与同一数值，否则 ``check_solution`` 的闭合检查会立刻暴露。
     """
     policy = parse_unbalanced_policy(clause)
     if policy is None or policy.mechanism != "SETTLEMENT_ADJUSTMENT" or policy.reference != "CAP":
         raise UnbalancedPolicyError("结算利润复算只支持 CAP + SETTLEMENT_ADJUSTMENT")
     if vat_rate < 0:
         raise UnbalancedPolicyError("结算利润复算的增值税率不得为负")
-    gross_factor = 1.0 + float(vat_rate)
+    revenue_factor = objective_revenue_factor(vat_rate)
     total = 0.0
     for item in instance.items:
         if item.role != ROLE_OPTIMIZABLE:
@@ -207,6 +235,6 @@ def settlement_adjusted_profit(
         revenue = settlement_revenue_adjusted(item.q0, item.q1_point,
                                                float(prices[item.item_id]),
                                                item.cap)
-        total += revenue * gross_factor - float(item.c_i) * float(item.q1_point)
+        total += revenue * revenue_factor - float(item.c_i) * float(item.q1_point)
     return total
 

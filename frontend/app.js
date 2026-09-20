@@ -137,7 +137,7 @@ function renderResult(result, { savedPlan = false } = {}) {
   const savedPill = savedPlan ? '<span class="plan-saved-pill">方案已保存</span>' : '';
   // 下载兜底：历史方案 result 可能未带 excel_download_url，按 plan_id 推导
   const dlUrl = result.excel_download_url || (result.plan_id ? '/api/quote/download/' + result.plan_id : '');
-  panel.innerHTML = `<div class="result-head"><div><h3>报价结果明细${savedPill}</h3><p>共 ${result.item_count ?? rows.length} 个优化项目${result.manual_item_count ? `，另有 ${result.manual_item_count} 个项目需人工报价` : ''}${result.low_ratio_review_required ? '，存在低于50%的报价比率' : ''}</p></div><div class="download-actions"><a class="download-button" href="${dlUrl ? 'http://localhost:8000' + esc(dlUrl) : '#'}" ${dlUrl ? `download="${esc(dlUrl.split('/').pop())}"` : ''}>下载 Excel</a><button class="btn-secondary" id="downloadResult">下载 JSON</button>${activeOverviewId ? '<button class="btn-primary" id="finalizeBid" title="将目标总报价写回为该项目投标报价金额，竞争性预算写回为投标成本测算">定稿并回写项目</button>' : ''}</div></div><div class="table-wrap"><table><thead><tr><th>项目编码</th><th>项目名称</th><th>单位</th><th class="num">工程量</th><th class="num">结算量</th><th class="num">含税成本单价</th><th class="num">最高限价</th><th class="num">最优报价单价</th><th class="num">报价比率</th><th class="num">报价合价</th><th class="num">单项毛利</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows.map(row => `<tr class="${row['报价状态'] === 'MANUAL_REVIEW' ? 'manual-row' : ((Number(row['单项毛利'] ?? 0) < 0 || Number(row['报价比率'] ?? 1) < 0.5) ? 'loss-row' : '')}"><td>${esc(row['项目编码'] ?? '')}</td><td title="${esc(row['项目名称'] ?? '')}">${esc(row['项目名称'] ?? '')}</td><td>${esc(row['单位'] ?? '—')}</td><td class="num">${fmt(row['工程量'],3)}</td><td class="num">${fmt(row['成本工程量'],3)}</td><td class="num">${fmt(row['含税成本单价'])}</td><td class="num">${fmt(row['最高限价'])}</td><td class="num price-cell">${fmt(row['最优报价单价'])}</td><td class="num">${row['报价比率'] == null ? '' : fmt(Number(row['报价比率'])*100,2) + '%'}</td><td class="num">${fmt(row['报价合价'])}</td><td class="num">${fmt(row['单项毛利'])}</td><td>${row['报价状态'] === 'MANUAL_REVIEW' ? '人工报价' : ((Number(row['单项毛利'] ?? 0) < 0 || Number(row['报价比率'] ?? 1) < 0.5) ? '需复核' : '通过')}</td><td>${esc(row['说明'] ?? '')}</td></tr>`).join('')}</tbody></table></div>`;
+  panel.innerHTML = `<div class="result-head"><div><h3>报价结果明细${savedPill}</h3><p>共 ${result.item_count ?? rows.length} 个优化项目${result.manual_item_count ? `，另有 ${result.manual_item_count} 个项目需人工报价` : ''}${result.low_ratio_review_required ? '，存在低于50%的报价比率' : ''}</p></div><div class="download-actions"><a class="download-button" href="${dlUrl ? 'http://localhost:8000' + esc(dlUrl) : '#'}" ${dlUrl ? `download="${esc(dlUrl.split('/').pop())}"` : ''}>下载 Excel</a><button class="btn-secondary" id="downloadResult">下载 JSON</button>${activeOverviewId ? '<button class="btn-primary" id="finalizeBid" title="将目标总报价写回为该项目投标报价金额，竞争性预算写回为投标成本测算">定稿并回写项目</button>' : ''}</div></div><div class="table-wrap"><table><thead><tr><th>项目编码</th><th>项目名称</th><th>单位</th><th class="num">工程量</th><th class="num">结算量</th><th class="num">含税成本单价</th><th>成本税口径</th><th class="num">有效成本单价</th><th class="num">最高限价</th><th class="num">最优报价单价</th><th class="num">报价比率</th><th class="num">报价合价</th><th class="num">单项毛利</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows.map(row => `<tr class="${row['报价状态'] === 'MANUAL_REVIEW' ? 'manual-row' : ((Number(row['单项毛利'] ?? 0) < 0 || Number(row['报价比率'] ?? 1) < 0.5) ? 'loss-row' : '')}"><td>${esc(row['项目编码'] ?? '')}</td><td title="${esc(row['项目名称'] ?? '')}">${esc(row['项目名称'] ?? '')}</td><td>${esc(row['单位'] ?? '—')}</td><td class="num">${fmt(row['工程量'],3)}</td><td class="num">${fmt(row['成本工程量'],3)}</td><td class="num">${fmt(row['含税成本单价'])}</td><td>${esc(row['成本税口径'] ?? '')}</td><td class="num">${fmt(row['有效成本单价'])}</td><td class="num">${fmt(row['最高限价'])}</td><td class="num price-cell">${fmt(row['最优报价单价'])}</td><td class="num">${row['报价比率'] == null ? '' : fmt(Number(row['报价比率'])*100,2) + '%'}</td><td class="num">${fmt(row['报价合价'])}</td><td class="num">${fmt(row['单项毛利'])}</td><td>${row['报价状态'] === 'MANUAL_REVIEW' ? '人工报价' : ((Number(row['单项毛利'] ?? 0) < 0 || Number(row['报价比率'] ?? 1) < 0.5) ? '需复核' : '通过')}</td><td>${esc(row['说明'] ?? '')}</td></tr>`).join('')}</tbody></table></div>`;
   document.querySelector('#downloadResult').addEventListener('click', () => { const blob = new Blob([JSON.stringify(result,null,2)], {type:'application/json'}); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = '报价结果_结算调整版.json'; link.click(); URL.revokeObjectURL(link.href); });
   const finBtn = document.querySelector('#finalizeBid');
   if (finBtn) finBtn.addEventListener('click', () => { finalizeToOverview(targetTotalVal(), result); });
@@ -220,6 +220,20 @@ function selectedOverviewProject() {
 }
 loadBidProjectOptions();
 
+// H-002：结果提示里必须交代「这个利润是按哪个成本口径算的」。
+// 成本清单综合单价是含税口径，限价与报价是不含税口径；不说明换算方式，
+// 读结果的人无法判断毛利是否被低估——这正是 H-002 要根除的口径含糊。
+function costBasisNote(result) {
+  const tax = result && result.cost_input_tax;
+  if (!tax) return '';
+  const parts = [];
+  if (tax.input_vat_credit_mode) parts.push(`抵扣方式 ${esc(String(tax.input_vat_credit_mode))}`);
+  if (tax.cost_input_vat_rate != null) parts.push(`进项税率 ${(Number(tax.cost_input_vat_rate) * 100).toFixed(2)}%`);
+  if (tax.credit_ratio != null) parts.push(`可抵扣占比 ${(Number(tax.credit_ratio) * 100).toFixed(2)}%`);
+  if (tax.multiplier != null) parts.push(`换算系数 k=${Number(tax.multiplier).toFixed(6)}`);
+  return `成本已由含税换算为不含税有效成本（${parts.join('，') || '见结果 JSON'}）。`;
+}
+
 function setMessage(text, kind = '') { message.className = kind ? `message ${kind}` : 'message'; message.innerHTML = text; }
 
 // 即时校验：比率区间非法在提交前拦截，并给对应输入框加错误态/焦点，避免空跑服务端再 422。
@@ -283,14 +297,21 @@ document.querySelector('#calculateBtn').addEventListener('click', async () => {
   try {
     const response = await fetch('http://localhost:8000/api/quote/optimize', {method:'POST', body:data});
     const result = await response.json();
-    if (!response.ok || result.status !== 'PASS') throw new Error(result.reason || '计算未通过');
+    if (!response.ok || result.status !== 'PASS') {
+      // H-002：成本税口径未声明时后端在**出数之前**阻断；把原因与「该怎么办」
+      // 一并展示，避免用户只看到一句无法行动的报错。
+      const hint = result.cost_input_tax && result.cost_input_tax.user_hint;
+      const err = new Error(result.reason || '计算未通过');
+      err.hint = hint || '';
+      throw err;
+    }
     currentPlanId = result.plan_id || null;
     lastResult = result;
-    setMessage(`计算完成：竞争性预算 <b>${Number(result.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元，结算调整后利润 <b>${Number(result.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元。${result.low_ratio_review_required ? '<br><strong>警告：存在低于50%的报价比率，请人工复核招标文件条款。系统未作出废标判定，以招标文件为准；已记录确认留痕（确认人/时间/条款依据，见结果 JSON）。</strong>' : ''}`, 'success');
+    setMessage(`计算完成：竞争性预算 <b>${Number(result.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元，结算调整后利润（不含增值税）<b>${Number(result.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元。${costBasisNote(result)}${result.low_ratio_review_required ? '<br><strong>警告：存在低于50%的报价比率，请人工复核招标文件条款。系统未作出废标判定，以招标文件为准；已记录确认留痕（确认人/时间/条款依据，见结果 JSON）。</strong>' : ''}`, 'success');
     renderResult(result, { savedPlan: Boolean(currentPlanId) });
     refreshPlans();
   } catch (error) {
-    setMessage(`计算失败：${error.message}`, 'error');
+    setMessage(`计算失败：${error.message}${error.hint ? `<br>${esc(error.hint)}` : ''}`, 'error');
   } finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = '重新计算 <span>→</span>'; }
 });
 
@@ -576,7 +597,7 @@ document.querySelector('#recomputeBtn').addEventListener('click', async () => {
     const response = await fetch(`http://localhost:8000/api/project/recompute?id=${encodeURIComponent(currentPlanId)}`, {method:'POST', body:data});
     const result = await response.json();
     if (!response.ok || result.status !== 'PASS') throw new Error(result.reason || '重算未通过');
-    setMessage(`重算完成：竞争性预算 <b>${Number(result.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元，结算调整后利润（含税口径）<b>${Number(result.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元。${result.low_ratio_review_required ? '<br><strong>警告：存在低于50%的报价比率，未作出废标判定，以招标文件为准。</strong>' : ''}`, 'success');
+    setMessage(`重算完成：竞争性预算 <b>${Number(result.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元，结算调整后利润（不含增值税）<b>${Number(result.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元。${costBasisNote(result)}${result.low_ratio_review_required ? '<br><strong>警告：存在低于50%的报价比率，未作出废标判定，以招标文件为准。</strong>' : ''}`, 'success');
     renderResult(result, { savedPlan: true });
     refreshPlans();
   } catch (error) { setMessage(`重算失败：${error.message}`, 'error'); }
@@ -625,7 +646,7 @@ function renderCompare(res) {
     <tr><td><b>参数（目标报价/比率区间）</b></td>${ids.map(id => `<td>${paramsCell(id)}</td>`).join('')}</tr>
     <tr><td><b>是否已计算</b></td>${ids.map(id => `<td>${get(id,'computed') ? '✓' : '<span style="color:var(--danger)">未计算</span>'}</td>`).join('')}</tr>
     <tr><td><b>优化项数</b></td>${ids.map(id => `<td>${get(id,'item_count') ?? '—'}</td>`).join('')}</tr>
-    <tr><td><b>总利润（结算调整后·含税口径）</b></td>${ids.map(id => `<td class="${(get(id,'objective') ?? 0) < 0 && get(id,'computed') ? 'loss-cell' : ''}">${get(id,'computed') ? fmt(get(id,'objective')) : '未计算'}</td>`).join('')}</tr>
+    <tr><td><b>总利润（结算调整后·不含增值税）</b></td>${ids.map(id => `<td class="${(get(id,'objective') ?? 0) < 0 && get(id,'computed') ? 'loss-cell' : ''}">${get(id,'computed') ? fmt(get(id,'objective')) : '未计算'}</td>`).join('')}</tr>
     <tr><td><b>亏损项（单项毛利<0）</b></td>${ids.map(id => `<td class="${get(id,'loss_items').length ? 'loss-cell' : ''}">${get(id,'loss_items').length ? lossCell(id) + `（${get(id,'loss_items').length}项）` : '—'}</td>`).join('')}</tr>
     <tr><td><b>风险项（报价比率<50%）</b></td>${ids.map(id => `<td class="${get(id,'risk_items').length ? 'warn-cell' : ''}">${get(id,'risk_items').length ? riskCell(id) + `（${get(id,'risk_items').length}项）` : '—'}</td>`).join('')}</tr>
     <tr><td><b>单价 vs 基准 |Δ| 平均</b></td>${ids.map(id => `<td>${get(id,'avg_abs_price_delta') == null ? '—' : fmt(get(id,'avg_abs_price_delta'))}</td>`).join('')}</tr>

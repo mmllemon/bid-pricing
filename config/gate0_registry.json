@@ -181,6 +181,14 @@
       "frozen_at": "2026-09-18T08:29:55+00:00",
       "note": "T00-12 利润口径桥接表（v3.2.1 新增，闭合隐藏依赖第 8 条的悬空）"
     },
+    "cost_input_tax_spec": {
+      "kind": "versioned",
+      "artifact_path": "cost_input_tax_spec.json",
+      "version": "sha256:49ae53bc4fa6",
+      "hash": "sha256:49ae53bc4fa6",
+      "frozen_at": "2026-09-20T03:25:34+00:00",
+      "note": "H-002 成本税口径机制（ADR-0035）：抵扣模式词表（FULL/PARTIAL/NONE/UNKNOWN）、唯一换算式 k = 1 − rate×ratio/(1+rate)、CT-01..CT-07 判据与阻断语义。★ 本制品只声明**机制**；项目取值（mode/税率/占比）在 project_quote_policy.cost_input_tax_policy，未声明即阻断利润结论。"
+    },
     "approvals": {
       "kind": "approvals",
       "roles": [

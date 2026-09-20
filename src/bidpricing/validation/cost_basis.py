@@ -18,6 +18,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+from ..money import money
 
 STATUS_PASS = "PASS"
 STATUS_FAIL = "FAIL"
@@ -411,4 +414,210 @@ def check_cost_input_tax(config_dir: Path) -> CostBasisReport:
     else:
         rep.results.append(_ok("CT-05", "换算系数可计算"))
 
+    # ---- CT-06 词表声明 ↔ 实现常量 跨来源对账（★ 双向）----
+    spec = load_cost_input_tax_spec(config_dir)
+    if spec is None:
+        rep.results.append(_bad(
+            "CT-06", STATUS_SKIP,
+            f"机制制品缺失（{COST_INPUT_TAX_SPEC_FILENAME}）——词表声明无从对账"))
+    else:
+        declared = declared_credit_modes(spec)
+        only_spec = sorted(set(declared) - set(CREDIT_MODE_VOCABULARY))
+        only_code = sorted(set(CREDIT_MODE_VOCABULARY) - set(declared))
+        if only_spec or only_code:
+            rep.results.append(_bad(
+                "CT-06", STATUS_FAIL,
+                f"抵扣模式词表两处不一致——制品声明独有 {only_spec or '无'}，"
+                f"实现常量独有 {only_code or '无'}。判定器读的是实现常量，"
+                "制品改了代码没改即静默失效（DV-01 同族）"))
+        else:
+            rep.results.append(_ok(
+                "CT-06", f"词表一致（{len(declared)} 项）：{list(declared)}"))
+
     return rep
+
+
+# ======================================================================
+# H-002 机制制品读取与**唯一换算入口**
+# ======================================================================
+#
+# 词表、换算式、判据已搬入 config/cost_input_tax_spec.json（机制住制品）。
+# 代码里保留 CREDIT_MODE_VOCABULARY 作**实现侧副本**：判定函数要保持纯
+# （不依赖 config_dir），词表是它的输入契约。副本由 CT-06 **双向**对账钉住
+# —— 单向比对会漏掉「实现多判一个模式而制品没声明」。
+
+COST_INPUT_TAX_SPEC_FILENAME = "cost_input_tax_spec.json"
+
+#: 税口径标签（制品 field_names.cost_tax_scope.vocabulary）
+INCL_VAT = "INCL_VAT"
+EXCL_VAT = "EXCL_VAT"
+
+
+def load_cost_input_tax_spec(config_dir: Path | str) -> dict | None:
+    """读 H-002 机制制品；不存在返回 None（由 CT-06 判 SKIP，不静默通过）。"""
+    return _read(Path(config_dir), COST_INPUT_TAX_SPEC_FILENAME)
+
+
+def declared_credit_modes(spec: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """制品声明的抵扣模式键集合（键序即声明序）。"""
+    return tuple(((spec or {}).get("credit_mode_vocabulary") or {}).keys())
+
+
+def read_cost_input_tax_policy(config_dir: Path | str) -> dict:
+    """读项目级取值段；文件或段落缺失均返回 ``{}``（调用方须视为未声明）。"""
+    policy = _read(Path(config_dir), "project_quote_policy.json")
+    if policy is None:
+        return {}
+    return dict(policy.get("cost_input_tax_policy") or {})
+
+
+@dataclass(frozen=True)
+class CostAdjustment:
+    """单项换算痕迹（制品 field_names.cost_adjustment_trace）。"""
+
+    item_id: str
+    cost_unit_price_input: float
+    multiplier: float
+    cost_unit_price_effective: float
+
+    def to_dict(self) -> dict:
+        return {"item_id": self.item_id,
+                "cost_unit_price_input": self.cost_unit_price_input,
+                "multiplier": self.multiplier,
+                "cost_unit_price_effective": self.cost_unit_price_effective}
+
+
+@dataclass(frozen=True)
+class EffectiveCostPlan:
+    """换算方案。
+
+    ``PASS`` ⇒ ``items`` 内 ``c_i`` 已是**不含税有效成本**，且每项带
+    ``cost_tax_scope=EXCL_VAT``（这正是二次换算防护的机械依据）。
+    ``BLOCKED`` ⇒ ``reason`` 必须点名**缺哪一项**以及缺了会让哪个数字失真。
+    """
+
+    status: str
+    reason: str
+    multiplier: float | None
+    items: tuple[dict, ...]
+    trace: tuple[CostAdjustment, ...] = ()
+
+    @property
+    def blocking(self) -> bool:
+        return self.status == STATUS_BLOCKED
+
+    def trace_dicts(self) -> list[dict]:
+        return [t.to_dict() for t in self.trace]
+
+
+def build_effective_costs(
+    items: Sequence[Mapping[str, Any]],
+    config_dir: Path | str | None = None,
+    *,
+    policy_section: Mapping[str, Any] | None = None,
+) -> EffectiveCostPlan:
+    """含税成本单价 → 不含税有效成本（H-002 的**唯一换算入口**）。
+
+    ``policy_section`` 显式给出时优先于从 ``config_dir`` 读（测试注入用）。
+    返回的 ``items`` 是**新建的 dict 序列**，不修改调用方传入的数据。
+
+    阻断条件（任一成立即 BLOCKED，理由点名缺哪一项）：
+      ① 策略段整体缺失；② 抵扣模式缺失或 UNKNOWN；③ 模式非法（词表外）；
+      ④ 模式需要税率而税率缺失/越界；⑤ PARTIAL 而比例缺失/越界；
+      ⑥ 换算系数不可计算（兜底）；⑦ 待换算项已标 EXCL_VAT（CT-07 二次换算防护）。
+    """
+    sec = (dict(policy_section) if policy_section is not None
+           else read_cost_input_tax_policy(config_dir))
+    if not sec:
+        return EffectiveCostPlan(
+            STATUS_BLOCKED,
+            "成本税口径未定：project_quote_policy.json 缺 cost_input_tax_policy 段——"
+            "成本清单综合单价为含税（INCL_VAT），换算为不含税有效成本所需的口径声明"
+            "完全缺失，毛利与目标函数无定义（H-002）",
+            None, tuple(dict(r) for r in items))
+
+    mode = sec.get("input_vat_credit_mode")
+    rate = sec.get("cost_input_vat_rate")
+    ratio = sec.get("credit_ratio")
+
+    if mode is None or mode == "UNKNOWN":
+        return EffectiveCostPlan(
+            STATUS_BLOCKED,
+            "成本税口径未定：input_vat_credit_mode 未声明（UNKNOWN）——含税成本能否抵扣、"
+            "能抵扣多少不可知，无法把含税 c_i 换算为不含税有效成本，"
+            "『最优利润』与『单项毛利』结论被阻断（H-002 / CT-03）",
+            None, tuple(dict(r) for r in items))
+    if mode not in CREDIT_MODE_VOCABULARY:
+        return EffectiveCostPlan(
+            STATUS_BLOCKED,
+            f"成本税口径声明非法：input_vat_credit_mode={mode!r} 不在词表 "
+            f"{list(CREDIT_MODE_VOCABULARY)}（CT-03 FAIL——说了但说错，不降级放行）",
+            None, tuple(dict(r) for r in items))
+    if mode in ("FULL", "PARTIAL") and rate is None:
+        return EffectiveCostPlan(
+            STATUS_BLOCKED,
+            f"成本税口径未定：抵扣模式 {mode} 下 cost_input_vat_rate（进项税率）未声明——"
+            "含税成本无法除税换算为不含税有效成本，毛利与目标函数被阻断（H-002 / CT-02）",
+            None, tuple(dict(r) for r in items))
+    if rate is not None and not (0 < float(rate) <= 1):
+        return EffectiveCostPlan(
+            STATUS_BLOCKED,
+            f"成本税口径声明非法：cost_input_vat_rate={rate!r} 须在 (0,1] 内，"
+            "如 0.13=13%（CT-02 FAIL）",
+            None, tuple(dict(r) for r in items))
+    if mode == "PARTIAL" and (ratio is None or not (0 < float(ratio) < 1)):
+        return EffectiveCostPlan(
+            STATUS_BLOCKED,
+            "成本税口径未定：PARTIAL 模式须显式声明 credit_ratio ∈ (0,1)"
+            f"（当前 {ratio!r}）——它表示『可抵扣成本（如货物）占含税成本的比重』，"
+            "缺了有效成本不可计算（CT-04）",
+            None, tuple(dict(r) for r in items))
+
+    k = effective_cost_multiplier(
+        float(rate) if rate is not None else None, str(mode),
+        float(ratio) if ratio is not None else None)
+    if k is None:
+        return EffectiveCostPlan(
+            STATUS_BLOCKED,
+            "成本税口径未定：当前声明组合下换算系数不可计算——利润结论必须挂起（CT-05）",
+            None, tuple(dict(r) for r in items))
+
+    # ---- CT-07 二次换算防护（★ 靠口径标记机械判定，不靠调用顺序的君子协定）----
+    # 无成本项（c_i is None）没有可换算的口径，不参与本判据。
+    already = sorted(str(r.get("item_id")) for r in items
+                     if r.get("cost_tax_scope") == EXCL_VAT and r.get("c_i") is not None)
+    if already:
+        shown = ", ".join(already[:8]) + ("…" if len(already) > 8 else "")
+        return EffectiveCostPlan(
+            STATUS_BLOCKED,
+            "拒绝二次换算：以下项的 cost_tax_scope 已是 EXCL_VAT（不含税口径），"
+            f"再乘一次换算系数会让成本静默偏小、毛利静默偏大：{shown}（CT-07）",
+            None, tuple(dict(r) for r in items))
+
+    out: list[dict] = []
+    trace: list[CostAdjustment] = []
+    for row in items:
+        new_row = dict(row)
+        new_row["cost_tax_scope"] = EXCL_VAT
+        raw = row.get("c_i")
+        if raw is None:
+            new_row["cost_unit_price_input"] = None
+            out.append(new_row)
+            continue
+        effective = money(float(raw) * k)
+        new_row["cost_unit_price_input"] = float(raw)
+        new_row["c_i"] = effective
+        out.append(new_row)
+        trace.append(CostAdjustment(str(row.get("item_id")), float(raw), k, effective))
+
+    if mode == "NONE":
+        basis = "（NONE 模式：含税即有效成本，不读进项税率）"
+    else:
+        basis = (f"(进项税率 {rate}"
+                 + (f"，可抵扣成本占比 {ratio}" if mode == "PARTIAL" else "")
+                 + ")")
+    return EffectiveCostPlan(
+        STATUS_PASS,
+        f"已按 {mode}{basis} 换算 {len(trace)} 项，系数 k={k:.8f}；"
+        "c_i 已由含税替换为不含税有效成本",
+        k, tuple(out), tuple(trace))

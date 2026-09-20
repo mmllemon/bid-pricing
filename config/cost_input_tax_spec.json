@@ -1,0 +1,190 @@
+{
+  "spec_id": "cost_input_tax_spec_v1",
+  "task": "H-002",
+  "title": "成本含税 → 有效成本转换（cost_unit_price_input → cost_unit_price_effective）",
+  "role": "机制层制品：跨项目复用的换算式、抵扣模式词表与判定集 CT-01..CT-07。项目级**取值**（进项税率、抵扣模式、抵扣比例）住 config/project_quote_policy.json 的 cost_input_tax_policy —— 那是 PROJECT_INPUT，不参与 hash 冻结；本文件是机制，改它=改判据集，须走 ADR。",
+  "revision_note": "H-002 的判据原先只活在 src/bidpricing/validation/cost_basis.py 的代码常量里（CREDIT_MODE_VOCABULARY 硬编码），且**没有任何报价入口消费它**。本制品把机制搬到制品层，并新增 CT-06（词表声明↔实现常量跨来源对账）与 CT-07（二次换算防护）。",
+
+  "problem": {
+    "statement": "成本清单综合单价是**含税**口径（cost_unit_price_input，INCL_VAT）；限价 cap 与报价 p 是**不含税**口径（GB/T 50500-2024 2.0.8『综合单价不包括增值税』）。二者直接相减无意义。",
+    "consequence": "毛利 = 不含税收入 − 含税成本 ⇒ **系统性低报**；求解目标 Z = Σ(结算收入 − c_i·q1) 同源失真。这不是精度问题，是口径错误——用户会拿这个数去投标。",
+    "why_blocked_not_info": "换算所需的两项输入（进项税率、抵扣模式）缺失时，算式**算不出**（PARTIAL 缺比例）或**算错**（把含税当不含税用）⇒ 按 ADR-0013 三档治理配 BLOCKED；不是『说不清出处』的 INFO 台账。",
+    "historical_defect": "修复前实况（2026-09-20 复核）：src/bidpricing/quote_resolve.py 第 68 行 `margin = revenue - q1 * c_i`，而同一函数第 65/72 行的输出列名自己写着『含税成本单价』——口径混用就写在代码里，且 CT-01..CT-05 从未被任何报价入口调用。与 §2.0.1 记载的 C13 未接线属同一类缺陷（判据建好、没接线）。"
+  },
+
+  "field_names": {
+    "cost_unit_price_input": {
+      "meaning": "成本清单综合单价的**原始输入口径**：含进项增值税。",
+      "unit": "元/计量单位",
+      "source": "成本清单 Excel 直读，不得除税后再存入本字段（保原始值）"
+    },
+    "cost_tax_scope": {
+      "meaning": "该项成本单价所处的税口径标签。转换前 = INCL_VAT，转换后 = EXCL_VAT。",
+      "vocabulary": ["INCL_VAT", "EXCL_VAT"],
+      "role": "★ 二次换算防护的机械依据（CT-07）：已标 EXCL_VAT 的项再走换算 ⇒ BLOCKED。"
+    },
+    "cost_unit_price_effective": {
+      "meaning": "不含税**有效成本**：模型唯一允许用于比价、毛利与目标函数的成本口径。",
+      "unit": "元/计量单位（2 位小数，走 money 舍入）"
+    },
+    "cost_adjustment_trace": {
+      "meaning": "逐项换算痕迹：输入值、换算系数 k、输出值、所用税率/模式/比例。用于审计『这个成本数字是怎么来的』。",
+      "fields": ["item_id", "cost_unit_price_input", "multiplier", "cost_unit_price_effective", "vat_rate", "credit_mode", "credit_ratio"]
+    }
+  },
+
+  "rate_names": {
+    "_why": "★ 同族于 DV-02：同一个词『税率』在两条链上是两个不同的物理量。两个名字，各自 used_by 显式登记，混用即静默失效。",
+    "vat_rate": {
+      "meaning": "**销项**税率（报价侧）：用于总价分解 P_competitive 与结算收入口径。",
+      "used_by": ["total_price.compute_P_competitive", "solver.settlement_milp", "quote_pipeline 入参 vat_rate"],
+      "forbidden_in": "成本换算——用它换算成本会把销项税率当进项税率，静默算错"
+    },
+    "cost_input_vat_rate": {
+      "meaning": "**进项**税率（成本侧）：仅用于 cost_unit_price_input → cost_unit_price_effective 换算。",
+      "used_by": ["validation.cost_basis.effective_cost_multiplier"],
+      "forbidden_in": "总价分解与结算收入——它会静默改变 P_competitive"
+    }
+  },
+
+  "credit_mode_vocabulary": {
+    "FULL": {
+      "meaning": "进项税可**足额**抵扣（一般计税），credit_ratio 恒为 1。",
+      "requires_rate": true,
+      "requires_ratio": false,
+      "multiplier": "1 / (1 + rate)"
+    },
+    "PARTIAL": {
+      "meaning": "**部分**可抵扣：成本中只有一部分（如货物，13% 进项税）可抵扣，另一部分（如人工费）无进项税可抵。credit_ratio 即『可抵扣成本占含税成本的比重』。",
+      "requires_rate": true,
+      "requires_ratio": true,
+      "multiplier": "1 − rate × ratio / (1 + rate)",
+      "exactness_note": "★ 与『分项精算』严格等价，不是近似：设含税成本 c = G(可抵扣部分) + L(不可抵扣部分)，可抵扣部分嵌入的进项税为 G·rate/(1+rate)，故 c_effective = c − G·rate/(1+rate)。取 ratio = G/c 代入本模式式子得 c·(1 − rate·(G/c)/(1+rate)) = c − G·rate/(1+rate)，与精算式**逐字相等**。故『一部分货物、一部分人工』不需要新机制，PARTIAL + ratio=货物占比 即精确表达。"
+    },
+    "NONE": {
+      "meaning": "**不可**抵扣（简易计税 / 无进项票）：含税即有效成本。",
+      "requires_rate": false,
+      "requires_ratio": false,
+      "multiplier": "1（恒等）",
+      "note": "★ 不需要税率。若同时给了税率，仅作留痕，不参与计算（给了也不许相乘）。"
+    },
+    "UNKNOWN": {
+      "meaning": "**未声明**：不可计算。",
+      "requires_rate": false,
+      "requires_ratio": false,
+      "multiplier": null,
+      "note": "★ 不是『按 0 抵扣』也不是『按全抵扣』——返回不可计算，由调用方判 BLOCKED。"
+    }
+  },
+
+  "conversion": {
+    "formula": "cost_unit_price_effective = money( cost_unit_price_input × k )，k = 1 − cost_input_vat_rate × credit_ratio / (1 + cost_input_vat_rate)",
+    "rounding": "唯一入口 src/bidpricing/money.py::money（四舍五入到分）。禁用内建 round()——它是银行家舍入，与 precision_profile 要求的四舍五入不同。",
+    "mode_specialization": {
+      "FULL": "credit_ratio 强制为 1，忽略调用方传入值",
+      "NONE": "k = 1；不读 cost_input_vat_rate",
+      "PARTIAL": "credit_ratio 必须由调用方显式给出",
+      "UNKNOWN": "k 未定义"
+    },
+    "invalid_program_input": "credit_mode 不在词表 ⇒ ValueError（程序错误，不得静默返回 None 掩盖 Bug）",
+    "insufficient_business_input": "税率/比例缺失 ⇒ 返回 None（业务未声明，不是程序错误）"
+  },
+
+  "criteria": [
+    {
+      "id": "CT-01",
+      "title": "口径前提已声明",
+      "subject": "project_quote_policy.cost_input_tax_policy 段存在",
+      "on_missing_policy_file": "SKIP（项目报价策略文件缺失，无从校验）",
+      "on_missing_section": "BLOCKED",
+      "blocking": true
+    },
+    {
+      "id": "CT-02",
+      "title": "进项税率已声明且合法",
+      "subject": "cost_input_vat_rate",
+      "applies_when": "credit_mode ∈ {FULL, PARTIAL}",
+      "on_missing": "BLOCKED（『算不出』）",
+      "on_out_of_range": "FAIL（说了但说错：须 ∈ (0,1]）",
+      "on_mode_none": "PASS，但若同时给了税率须合法（仅留痕）",
+      "on_mode_unknown": "SKIP——模式未定时『税率是否必需』无从判定，不编造"
+    },
+    {
+      "id": "CT-03",
+      "title": "抵扣模式已声明且合法",
+      "subject": "input_vat_credit_mode",
+      "on_missing_or_unknown": "BLOCKED（含税成本能否抵扣不可知 ⇒ 利润结论无定义）",
+      "on_out_of_vocabulary": "FAIL（说了但说错；词表以本制品 credit_mode_vocabulary 为准）",
+      "blocking": true
+    },
+    {
+      "id": "CT-04",
+      "title": "部分抵扣比例已声明",
+      "subject": "credit_ratio",
+      "applies_when": "credit_mode == PARTIAL",
+      "on_missing_or_out_of_range": "BLOCKED（须 ∈ (0,1) 开区间）",
+      "on_mode_full_or_none": "PASS（无需比例：FULL=1 / NONE=0）",
+      "on_mode_unknown": "SKIP"
+    },
+    {
+      "id": "CT-05",
+      "title": "换算系数可计算（兜底）",
+      "subject": "effective_cost_multiplier(rate, mode, ratio)",
+      "on_none_result_while_mode_known": "BLOCKED（当前声明组合下 k 不可计算 ⇒ 利润结论必须挂起）",
+      "on_mode_unresolved": "SKIP（由 CT-03 阻断）",
+      "note": "本判据是 CT-02/03/04 的**汇总兜底**：三项各自的缺口在计算层合成一个 None 时，必须仍有一条判据说出来。"
+    },
+    {
+      "id": "CT-06",
+      "title": "词表声明 ↔ 实现常量 跨来源对账",
+      "subject": "本制品 credit_mode_vocabulary 的键集合 vs src/bidpricing/validation/cost_basis.py::CREDIT_MODE_VOCABULARY",
+      "on_mismatch": "FAIL（两处说法不一致 ⇒ 口径漂移）",
+      "direction": "**双向**：制品多一个键 or 实现多一个键，两个方向都要报——单向比对会漏掉『实现多判一个模式而制品没声明』。",
+      "why": "把词表从代码搬进制品后，代码里的常量就成了**副本**。副本要么删掉、要么被对账钉住；否则下一个改制品的人不会改代码，而判定器读的仍是代码，制品静默失效（DV-01 同族）。"
+    },
+    {
+      "id": "CT-07",
+      "title": "二次换算防护",
+      "subject": "待换算项的 cost_tax_scope",
+      "on_scope_excl_vat": "BLOCKED（拒绝对已是不含税口径的项再乘一次 k）",
+      "on_scope_missing_or_incl_vat": "PASS（按 INCL_VAT 换算，输出标记 EXCL_VAT）",
+      "why": "★ 两条报价入口共用换算时，最危险的失败是**同一次换算执行两遍**：k 被乘两次，成本静默偏小、毛利静默偏大，不报任何错。以显式口径标记做机械闸门，比靠调用顺序的君子协定可靠。这与 DV-02『同一个量乘了两遍』同族。"
+    }
+  ],
+
+  "consumers": [
+    {
+      "path": "src/bidpricing/validation/cost_basis.py",
+      "role": "机制实现：effective_cost_multiplier / effective_cost / build_effective_costs / check_cost_input_tax"
+    },
+    {
+      "path": "src/bidpricing/quote_pipeline.py",
+      "role": "★ 入口一（CLI / 分析）：run_quote_pipeline 与 run_settlement_adjusted_quote_pipeline 均须在建模前完成换算，不可计算即 BLOCKED"
+    },
+    {
+      "path": "src/bidpricing/quote_resolve.py",
+      "role": "★ 入口二（网页平台）：run_resolve 必须在**产出任何毛利数字之前**完成换算或阻断"
+    },
+    {
+      "path": "config/project_quote_policy.json",
+      "role": "项目级取值（cost_input_tax_policy）——本制品的唯一数据来源"
+    },
+    {
+      "path": "build_web_result.mjs",
+      "role": "Excel 输出须同时列 含税成本单价 / 有效成本单价，不得只留一个"
+    }
+  ],
+
+  "blocking_semantics": {
+    "blocked_means": "不输出『最优利润』/『单项毛利』结论，只输出数据校验结果与阻断原因。",
+    "reason_must_name": "阻断理由必须点名**缺哪一项**（税率 / 抵扣模式 / 抵扣比例）以及缺了会让哪个数字失真——不得只写『成本税口径未定』。",
+    "not_a_gate_on_ledger": "本判据拦的是『算式前提』，不是台账完整性。缺的是算式前提才配阻断；只说不清出处配 INFO（ADR-0013）。"
+  },
+
+  "known_limits": [
+    "本机制只处理**单一等效换算**：把整项含税成本按一个 `(rate, ratio)` 折为有效成本。若需按成本科目（人工/材料/机械/分包）分别适用不同进项税率再求和，须等 T00-09 成本科目分解落地后扩展为分项精算——本制品的 PARTIAL 通路在『两段构成』下与分项精算严格等价（见 credit_mode_vocabulary.PARTIAL.exactness_note），三段及以上构成则只在加权意义下近似。",
+    "credit_ratio 是**项目级**声明。若不同清单的货物占比差异很大，单一 ratio 会产生项间偏差——本制品不提供逐项 ratio，逐项覆盖属后续扩展。",
+    "换算只作用于 c_i。结算收入侧的销项税口径（vat_rate）不在本制品范围内，见 rate_names.vat_rate 的 used_by。",
+    "隐形成本（业务费/公司管理费/融资费/风险储备）尚未进入 c_i（H-003，见 project_quote_policy.hidden_cost_policy）——本制品只保证**已进入 c_i 的那部分成本**口径正确，不保证 c_i 完整。二者是两件事，都解决之前利润仍是『清单贡献利润』口径。"
+  ]
+}

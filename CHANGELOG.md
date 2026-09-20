@@ -10,6 +10,35 @@
 
 ## [未发布]
 
+### H-002 完成：成本税口径闭环 + 目标口径跨层对账（ADR-0035）
+
+**新增**
+
+- `config/cost_input_tax_spec.json`：成本税口径**机制**制品（已入 Gate 0b 登记并冻结）——抵扣模式词表 `FULL/PARTIAL/NONE/UNKNOWN`、唯一换算式 `k = 1 − rate×ratio/(1+rate)`、判据 `CT-01..CT-07`、字段名与阻断语义。
+- `validation/cost_basis.py::build_effective_costs`：含税成本 → 不含税有效成本的**唯一换算入口**（`policy_section` 可注入，供测试；返回逐项 `CostAdjustment` 痕迹与 `EffectiveCostPlan`）。新增 `check_cost_input_tax` 的 **CT-06**：制品词表 ↔ 实现常量**双向**对账。
+- `quote_pipeline.resolve_cost_plan`：口径契约由**写在数据里的** `cost_tax_scope` 标记驱动——全标 `EXCL_VAT` ⇒ 幂等跳过；全未标 ⇒ 本层换算；**混合 ⇒ BLOCKED**（拒绝猜以哪侧为准）。
+- 判据 **PB-07**（`validation/profit_bridge.py`）：把**报告层声明** `tax_caliber_of_objective` 与**求解层实现** `settlement_milp.OBJECTIVE_CALIBER` + `objective_revenue_factor()` 跨层对账。
+- `Formulation.objective_caliber` 具名量（求解器无关形式化结果新增字段）。
+
+**变更**
+
+- 两条报价入口同时接线：`run_quote_pipeline` / `run_settlement_adjusted_quote_pipeline` / `quote_resolve.run_resolve` 均在**产出任何毛利数字之前**取得换算方案；不可计算即阻断（网页侧 400）。`QuotePipelineResult` 新增 `cost_multiplier` 与 `cost_adjustment_trace`；payload 新增 `cost_input_tax`（声明 + 系数 + 逐项痕迹）。
+- 网页结果表由 13 列扩到 15 列（新增「成本税口径」「有效成本单价」）；Excel 导出由 16 列扩到 18 列，**成本合价与单项毛利改按有效成本单价计算**；利润文案口径由「含税口径」更正为「不含增值税」。
+- `settlement_milp`：删除收入侧 `(1+vat_rate)` 折算（`objective_revenue_factor` 恒 1.0，口径 EXCL_VAT）。**推荐报价不变**（p 依赖项被同一常数缩放、`Σc_i·q1` 与 p 无关），仅报告值更正。
+
+**修正**
+
+- **成本税口径缺陷（H-002）**：成本清单综合单价为含税，而限价与报价不含税，旧实现 `margin = 不含税收入 − 含税成本` **系统性低估毛利**；CT-01..CT-05 判据虽已存在却**无任何入口消费**（与 C13 未接线同族）。现换算链路闭环，声明未定时阻断利润结论。
+- **目标口径缺陷（H-002b）**：`settlement_milp` 曾把结算收入乘 `(1+vat_rate)` 折算为含税，违反已冻结的 `profit_bridge_spec.tax_caliber_of_objective = EXCL_VAT` 声明，使报告利润**虚增「应交增值税」**（实测 9605 vs 6500，差额 3105 = 0.09×Σ结算收入）。因**最优解不变**，该错层无法被结果复核发现，故补 PB-07 机械拦截。
+- `run_quote_pipeline` 签名回归修复：`unbalanced_clause` 形参在改写中丢失，由 `tests.test_quote_pipeline.test_probe_instance_runs_end_to_end` 抓出（此前被 cost plan 阻断掩盖）。
+- 测试纪律：`test_field_regression` / `test_project_store` / `test_quote_pipeline` 夹具补 `cost_tax_scope="EXCL_VAT"`——测试针对管道机制，不耦合项目实时税口径。
+
+**测试**
+
+- 新增 `tests/test_cost_basis_wiring.py`（41 项）：内核数值手算钉死（`113 → 100.0`；`PARTIAL` 与分项精算逐位等价）、七类阻断矩阵、口径契约、两条入口接线、**4 条变体注入**（换算恒等 / 入口不阻断 / 入口不换算 / 毛利用含税成本，逐条被具名用例杀死）。
+- `tests/test_settlement_milp.py` 新增 `ObjectiveCaliberTest`（p 列系数须恰为 `q1`、复算手算可算、换税率目标不变）；`tests/test_profit_bridge.py` 新增 `ObjectiveCaliberCrossLayerTest`。
+- 全量 1393 → **1434** 项，双环境通过（3.13.12 零依赖 / solver 环境 PuLP 3.3.2 + HiGHS）。唯二失败为**独立数据漂移**：真实样本限价清单于 2026-09-20 被更新（83→84 行、15→16 项补充项），在改动前的 HEAD 上同样复现，与本次改动无关。
+
 ## v0.1.0 (2026-09-20)
 
 首个对外发布里程碑：报价优化计算内核 + 网页平台 + 个人工作台完成闭环，全量测试 1393 项通过。

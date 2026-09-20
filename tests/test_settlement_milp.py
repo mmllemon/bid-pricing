@@ -16,8 +16,11 @@ import unittest
 
 from bidpricing.solver.instance import Phase1Instance
 from bidpricing.solver.settlement_milp import (
+    OBJECTIVE_CALIBER,
     build_settlement_adjustment_formulation,
     low_price_big_m,
+    objective_revenue_factor,
+    settlement_adjusted_profit,
 )
 
 CLAUSE = {"enabled": True, "reference": "CAP", "tol_lo": 0.5, "tol_hi": 0.5,
@@ -68,6 +71,61 @@ class FormulationSmokeTest(unittest.TestCase):
         # 收紧后 M = upper - threshold = 100 - 50 = 50（收紧前为 100）
         self.assertAlmostEqual(m_coeff, 50.0)
         self.assertAlmostEqual(c13_le.rhs, 50.0 + m_coeff)
+
+
+class ObjectiveCaliberTest(unittest.TestCase):
+    """ADR-0035：目标函数税口径必须与 ``profit_bridge_spec.tax_caliber_of_objective``
+    声明一致（EXCL_VAT）。旧实现把结算收入乘 ``(1+vat_rate)`` 折算为含税，与 H-002
+    换算后的不含税成本相减 ⇒ 报告利润虚增 vat×Σ结算收入。
+
+    ★ 数值钉死用**手算**：p 列的目标系数必须恰为 ``q1``（而非 ``q1·(1+v)``）；
+    独立复算必须恰为 ``Σ 结算收入 − Σ c·q1``。任何一侧再折算都会立刻失配。
+    """
+
+    ROWS = [{"item_id": "A", "q0": 100.0, "q1_point": 130.0, "c_i": 100.0,
+             "cap": 200.0, "L": 100.0, "U": 200.0},
+            {"item_id": "B", "q0": 100.0, "q1_point": 100.0, "c_i": 150.0,
+             "cap": 300.0, "L": 150.0, "U": 300.0}]
+
+    def _instance(self):
+        return Phase1Instance.from_master(
+            [dict(r) for r in self.ROWS], price_column="cap", B=30000.0, P_star=30000.0,
+            source="test_objective_caliber")
+
+    def test_revenue_factor_is_independent_of_vat_rate(self):
+        # EXCL_VAT ⇒ 收入侧折算系数恒 1，与税率无关；含税实现会随税率漂移
+        for rate in (0.0, 0.09, 0.13, 0.06):
+            self.assertEqual(objective_revenue_factor(rate), 1.0, rate)
+
+    def test_price_column_coefficient_is_q1_not_grossed(self):
+        built = build_settlement_adjustment_formulation(
+            self._instance(), clause=CLAUSE, vat_rate=0.09)
+        coeff = {c.item_id: c.objective_coeff
+                 for c in built.formulation.variables if c.family == "p"}
+        self.assertAlmostEqual(coeff["A"], 130.0)      # q1_A，而非 130*1.09
+        self.assertAlmostEqual(coeff["B"], 100.0)      # q1_B，而非 100*1.09
+
+    def test_formulation_declares_caliber(self):
+        built = build_settlement_adjustment_formulation(
+            self._instance(), clause=CLAUSE, vat_rate=0.09)
+        self.assertEqual(built.formulation.objective_caliber, OBJECTIVE_CALIBER)
+        self.assertEqual(built.formulation.objective_caliber, "EXCL_VAT")
+
+    def test_recomputation_is_hand_computable(self):
+        # A: q1=130, p=150 ≥ 0.5·cap=100 ⇒ 收入 = 130·150 = 19500；成本 = 130·100 = 13000
+        # B: q1=100, p=150 ≥ 0.5·cap=150 ⇒ 收入 = 100·150 = 15000；成本 = 100·150 = 15000
+        # Z = (19500 − 13000) + (15000 − 15000) = 6500
+        z = settlement_adjusted_profit(self._instance(), {"A": 150.0, "B": 150.0},
+                                       clause=CLAUSE, vat_rate=0.09)
+        self.assertAlmostEqual(z, 6500.0, places=9)
+
+    def test_vat_rate_does_not_change_objective(self):
+        # 反证：含税实现下换税率会改变报告值；EXCL_VAT 下必须完全不变
+        inst = self._instance()
+        zs = [settlement_adjusted_profit(inst, {"A": 150.0, "B": 150.0},
+                                         clause=CLAUSE, vat_rate=v)
+              for v in (0.0, 0.09, 0.13)]
+        self.assertAlmostEqual(max(zs) - min(zs), 0.0, places=9)
 
 
 if __name__ == "__main__":

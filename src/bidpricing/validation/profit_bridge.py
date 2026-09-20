@@ -1,14 +1,19 @@
 """T00-12 利润口径桥接表的机器可执行校验。
 
-判据 PB-01～PB-06，语义沿用校验层六态（ADR-0008 五态 + ADR-0013 INFO）：
+判据 PB-01～PB-07，语义沿用校验层六态（ADR-0008 五态 + ADR-0013 INFO）：
 
 * **BLOCKED**：缺失会让**算式算错**——目标层级不唯一、税口径未定、
   单项亏损政策未声明。这三样任一不确定，求解出来的「最优」就没有定义。
 * **FAIL**：写了但与别处冲突——桥接恒等式与 T00-06B 的总价分解不符，
-  或差额项引用了不存在的层级。
+  或差额项引用了不存在的层级，或**目标口径声明与实现不一致**（PB-07）。
 * **WARN**：尚未冻结。
 * **INFO**：留痕项。
 * **SKIP**：判据所需制品/输入不存在——显式记录，不静默通过。
+
+PB-07（ADR-0035）是**跨层对账**：``tax_caliber_of_objective`` 是报告层声明，
+而目标函数由求解层（``solver.settlement_milp``）构造。只判声明时，
+实现侧把收入折算成含税也能全绿——这正是被实证抓到的真实缺陷
+（报告利润虚增「应交增值税」，且**不改变最优解**，故结果复核发现不了）。
 
 本模块**不读真实样本**：需要数值对账的部分（PB-03）要求调用方显式传入
 一个 :class:`~bidpricing.total_price.Partition`；不传则记 SKIP，
@@ -307,6 +312,46 @@ def check_profit_bridge(
             "PB-06", STATUS_WARN,
             "尚未冻结（冻结时点：Gate 0b 之前）——冻结前不得进入 WP4 求解层",
         ))
+
+    # ---------------- PB-07 目标口径：声明 ↔ 实现 跨层对账 ----------------
+    # ★ 为什么必须有这条：``tax_caliber_of_objective`` 是**报告层**的声明，而目标
+    #   函数由**求解层**（solver.settlement_milp）构造。同一条口径判据分居两层，
+    #   若只判声明，实现侧偷偷把收入折算成含税也能全绿——正是 ADR-0035 抓到的
+    #   真实缺陷（收入侧乘 1+vat、成本侧只扣进项，报告利润虚增「应交增值税」）。
+    #   故此处把两层的**具名量**拉在一起对账：声明口径 vs 实现常量 + 收入侧系数。
+    from ..solver import settlement_milp as _sm  # 局部导入：避免校验层↔求解层的顶层耦合
+    impl_caliber = getattr(_sm, "OBJECTIVE_CALIBER", None)
+    probe_rate = 0.13  # 任意非零税率即可辨真假：EXCL_VAT 下系数必须与税率无关
+    if not caliber:
+        # 声明缺失时 PB-04 已 BLOCK；此处挂起，不与 PB-04 争最严（避免同一缺失报两次）
+        rep.results.append(_bad(
+            "PB-07", STATUS_SKIP,
+            "声明口径缺失（PB-04 已阻断），跨层对账无从进行——挂起"))
+    else:
+        try:
+            impl_factor = float(_sm.objective_revenue_factor(probe_rate))
+        except Exception as exc:  # noqa: BLE001 - 实现侧不可调用即视为不可对账
+            rep.results.append(_bad(
+                "PB-07", STATUS_BLOCKED,
+                f"目标收入侧口径系数不可探测（objective_revenue_factor）：{exc}——"
+                "实现口径无法与声明对账，口径错层只能靠读代码发现"))
+        else:
+            if impl_caliber != caliber:
+                rep.results.append(_bad(
+                    "PB-07", STATUS_FAIL,
+                    f"目标口径跨层不一致：声明 tax_caliber_of_objective={caliber!r}，"
+                    f"实现 OBJECTIVE_CALIBER={impl_caliber!r}（求解层与报告层必须同名同义）"))
+            elif caliber == "EXCL_VAT" and abs(impl_factor - 1.0) > 1e-12:
+                rep.results.append(_bad(
+                    "PB-07", STATUS_FAIL,
+                    f"目标收入侧仍按含税折算：objective_revenue_factor({probe_rate})={impl_factor!r}，"
+                    "EXCL_VAT 口径下必须恒为 1.0——收入折算为含税、成本只扣进项，"
+                    "二者相减会让报告利润虚增 vat×Σ结算收入（ADR-0035）"))
+            else:
+                rep.results.append(_ok(
+                    "PB-07",
+                    f"目标口径跨层一致：声明 {caliber} ↔ 实现 {impl_caliber}，"
+                    f"收入侧系数 {impl_factor}（与税率无关）"))
 
     for item in spec.get("open_items") or []:
         rep.results.append(_bad("PB-INFO", STATUS_INFO, str(item)))

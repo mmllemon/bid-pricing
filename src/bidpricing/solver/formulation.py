@@ -260,6 +260,10 @@ class Formulation:
     active: tuple[str, ...]
     box_notes: tuple[str, ...] = ()
     source: str = ""
+    #: 目标函数的税口径（``EXCL_VAT`` / ``INCL_VAT``）。**必须**与
+    #: ``config/profit_bridge_spec.json`` 的 ``tax_caliber_of_objective`` 一致，
+    #: 由 PB-07 跨层对账（声明在报告层、实现在求解层，同约束两层各判 ⇒ 须对账）。
+    objective_caliber: str | None = None
 
     @property
     def price_columns(self) -> tuple[Column, ...]:
@@ -281,6 +285,7 @@ class Formulation:
             "objective_sense": self.objective_sense,
             "objective_expr": self.objective_expr,
             "objective_constant": self.objective_constant,
+            "objective_caliber": self.objective_caliber,
             "solver_form": self.solver_form,
             "lb_c5": self.lb_c5,
             "active_soft_constraints": list(self.active),

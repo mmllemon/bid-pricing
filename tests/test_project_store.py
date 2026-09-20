@@ -26,8 +26,10 @@ def _low_policy(**over) -> dict:
 
 
 def _item(item_id="0101", cap=100.0, **over) -> dict:
+    # cost_tax_scope=EXCL_VAT: 测试针对「管道机制/状态契约」，不耦合项目实时税口径
+    # （实时口径由 config/project_quote_policy.json 的 cost_input_tax_policy 决定，见 H-002）
     d = {"item_id": item_id, "item_name": "挖土方", "unit": "m3", "q0": 100.0,
-         "q1_point": 100.0, "c_i": 60.0, "cap": cap,
+         "q1_point": 100.0, "c_i": 60.0, "cap": cap, "cost_tax_scope": "EXCL_VAT",
          "L": (cap * 0.5 if cap is not None else 0.0), "U": cap}
     d.update(over)
     return d

@@ -64,6 +64,16 @@ c_i_effective = c_i_incl_vat - 可确认抵扣的进项税
 
 缺少上述声明时，系统应显示“成本税口径未定”，禁止输出“最优利润”结论，只能输出数据校验结果。
 
+> **落地状态（2026-09-20，H-002 / ADR-0035）**：已实现。换算为唯一入口
+> `src/bidpricing/validation/cost_basis.py::build_effective_costs`，两条报价入口
+> （CLI/分析侧 `quote_pipeline`、网页侧 `quote_resolve`）**共用同名同语义判据**；
+> 阻断发生在产出任何毛利数字之前（阻断时 payload 不含明细行）。
+> 另修复同类的**目标口径错层**：`solver/settlement_milp.py` 曾把结算收入乘
+> `(1+vat_rate)` 折算为含税，与已冻结的 `profit_bridge_spec.tax_caliber_of_objective
+> = EXCL_VAT` 声明相悖，使报告利润虚增「应交增值税」；现已去除，并由新增判据
+> **PB-07**（声明层 ↔ 实现层跨层对账）钉住。项目取值
+> （`project_quote_policy.cost_input_tax_policy.mode`）保持 `UNKNOWN`，须责任人声明。
+
 ### 2.2 空白限价的处理
 
 业务规则：限价清单“综合单价”为空，表示该项没有最高限价，由用户自行报价，只需备注提示。

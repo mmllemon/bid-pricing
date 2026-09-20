@@ -59,9 +59,33 @@ def _load_low_policy() -> tuple[dict, float, str | None]:
 
 
 def _run_resolve(all_items: list[dict], params: dict, low_policy: dict,
-                 matched: MatchReport | None) -> tuple:
+                 matched: MatchReport | None, tax_policy_override: dict | None = None) -> tuple:
     """解析结果，委托给纯逻辑模块 run_resolve（可单测）；配置目录固化为本项目 config。"""
-    return run_resolve(all_items, params, low_policy, config_dir=ROOT / "config", matched=matched)
+    return run_resolve(all_items, params, low_policy, config_dir=ROOT / "config",
+                       matched=matched, tax_policy_override=tax_policy_override)
+
+
+def _build_tax_override(input_vat_credit_mode: str, cost_input_vat_rate, credit_ratio,
+                        cost_composition) -> dict:
+    """把前端传来的税口径字段组装成覆盖段（优先于 config/project_quote_policy.json）。
+
+    cost_composition 可以是已解析的 list（来自已存方案的 params）或 JSON 字符串
+    （来自表单）；二者皆空则回退到旧单税率三元组。
+    """
+    comp = cost_composition
+    if isinstance(comp, str) and comp.strip():
+        try:
+            comp = json.loads(comp)
+        except (json.JSONDecodeError, TypeError):
+            comp = None
+    if isinstance(comp, list) and comp:
+        return {"input_vat_credit_mode": input_vat_credit_mode,
+                "cost_input_vat_rate": cost_input_vat_rate,
+                "credit_ratio": credit_ratio,
+                "cost_composition": comp}
+    return {"input_vat_credit_mode": input_vat_credit_mode,
+            "cost_input_vat_rate": cost_input_vat_rate,
+            "credit_ratio": credit_ratio}
 
 
 def _low_price_guard(params: dict, low_policy: dict) -> JSONResponse | None:
@@ -156,7 +180,7 @@ def _rebuild_xlsx(job_id: str) -> Path | None:
 
 
 @app.post("/api/quote/optimize")
-async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFile = File(...), project_id: str = Form("当前项目"), project_name: str = Form(""), target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), overview_id: str = Form("")):
+async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFile = File(...), project_id: str = Form("当前项目"), project_name: str = Form(""), target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), overview_id: str = Form(""), input_vat_credit_mode: str = Form("PARTIAL"), cost_input_vat_rate: float = Form(0.13), credit_ratio: float = Form(0.70), cost_composition: str = Form("")):
     if not clause_enabled:
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "当前版本要求启用 C13 结算调整条款"})
     if not (0.0 <= ratio_min <= ratio_max <= 1.0):
@@ -167,7 +191,8 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
     proj_uuid = project_id.strip()
     proj_name = project_name.strip() or proj_uuid or "当前项目"
     low_policy, _, _ = _load_low_policy()
-    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": overview_id}
+    tax_override = _build_tax_override(input_vat_credit_mode, cost_input_vat_rate, credit_ratio, cost_composition)
+    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": overview_id, "input_vat_credit_mode": input_vat_credit_mode, "cost_input_vat_rate": cost_input_vat_rate, "credit_ratio": credit_ratio, "cost_composition": tax_override.get("cost_composition")}
     guard = _low_price_guard(params, low_policy)
     if guard is not None:
         return guard
@@ -180,7 +205,7 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         except Exception as exc:  # noqa: BLE001
             return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"Excel 识别失败：{exc}"})
         all_items = [{"item_id": row.item_id, "item_name": row.item_name, "unit": getattr(row, "unit", "") or "", "q0": row.q0, "q1_point": row.q1_point, "c_i": row.c_i, "cap": row.cap, "L": (float(row.cap) * ratio_min if row.cap is not None else 0.0), "U": (float(row.cap) * ratio_max if row.cap is not None else None)} for row in matched.items if row.q0 is not None or row.q1_point is not None]
-        result, payload, status_code = _run_resolve(all_items, params, low_policy, matched)
+        result, payload, status_code = _run_resolve(all_items, params, low_policy, matched, tax_policy_override=tax_override)
         if status_code != 200:
             # 非 PASS（如无可优化项或跨单位工程重复 item_id 导致 BLOCKED）直接返回，
             # 不继续取空 p_by_id 建明细（防止 KeyError 吞掉报错文案）。
@@ -250,7 +275,7 @@ def project_copy(id: str, name: str = "") -> JSONResponse:
 
 
 @app.post("/api/project/recompute")
-def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True)) -> JSONResponse:
+def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), input_vat_credit_mode: str = Form(""), cost_input_vat_rate: float = Form(None), credit_ratio: float = Form(None), cost_composition: str = Form("")) -> JSONResponse:
     rec = load_plan(id)
     if rec is None:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
@@ -263,12 +288,19 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
     low_policy, _, _ = _load_low_policy()
     # 重算时保留方案原有的关联经营项目 id（前端重算表单不含该字段）
     _keep_ov = (rec.get("params") or {}).get("overview_id", "")
-    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": _keep_ov}
+    # 税口径：请求字段优先 → 方案已存 params → 默认值（兼容旧前端/未传场景）
+    rec_params = rec.get("params") or {}
+    mode = (input_vat_credit_mode or "").strip() or rec_params.get("input_vat_credit_mode") or "PARTIAL"
+    rate = cost_input_vat_rate if cost_input_vat_rate is not None else rec_params.get("cost_input_vat_rate", 0.13)
+    cr = credit_ratio if credit_ratio is not None else rec_params.get("credit_ratio", 0.70)
+    comp = cost_composition or rec_params.get("cost_composition") or ""
+    tax_override = _build_tax_override(mode, rate, cr, comp)
+    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": _keep_ov, "input_vat_credit_mode": mode, "cost_input_vat_rate": rate, "credit_ratio": cr, "cost_composition": tax_override.get("cost_composition")}
     guard = _low_price_guard(params, low_policy)
     if guard is not None:
         return guard
     all_items = list(rec.get("all_items") or [])
-    result, payload, status_code = _run_resolve(all_items, params, low_policy, None)
+    result, payload, status_code = _run_resolve(all_items, params, low_policy, None, tax_policy_override=tax_override)
     if status_code != 200:
         return JSONResponse(status_code=status_code, content=payload)
     payload.update({"project_id": rec.get("name") or id, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate})

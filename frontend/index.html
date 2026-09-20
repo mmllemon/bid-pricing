@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>工程智算 · 投标报价</title>
-  <link rel="stylesheet" href="./styles.css?v=2026-09-20-wb14" />
+  <link rel="stylesheet" href="./styles.css?v=2026-09-20-wb17" />
   <link rel="stylesheet" href="./results.css?v=2026-09-19-wb3" />
   <link rel="stylesheet" href="./workbench.css?v=2026-09-20-wb12" />
   <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
@@ -143,6 +143,29 @@
                 <span>启用严重不平衡报价结算修正条款</span>
               </label>
             </div>
+
+            <div class="param-group">
+              <div class="param-group-title">成本税口径（成本构成）</div>
+              <label class="field" data-tip="成本清单综合单价是含税口径，而限价/报价是不含税口径。必须先声明进项税抵扣方式，才能把含税成本换算为不含税有效成本，否则毛利会被系统性低估（H-002 闸门）。">
+                <span class="field-label">抵扣方式</span>
+                <select id="taxMode">
+                  <option value="PARTIAL" selected>部分抵扣（推荐）</option>
+                  <option value="FULL">全额抵扣</option>
+                  <option value="NONE">不可抵扣</option>
+                </select>
+              </label>
+              <div id="composeWrap">
+                <p class="corner-tip" style="margin:2px 0 8px">两类成本占比须合计 100%；系统按 k = 1 − Σ pⱼ·rⱼ/(1+rⱼ) 精确换算含税→不含税有效成本（不同项目可调整）。</p>
+                <div class="compose-table">
+                  <div class="compose-row compose-head"><span>构成项</span><span>占比%</span><span>进项税率%</span></div>
+                  <div id="composeRows"></div>
+                </div>
+                <div class="compose-foot">
+                  <span id="composeSum" class="compose-sum ok">占比合计：100.0%</span>
+                  <span id="composeK" class="compose-k">可抵扣占比 77.0% ｜ 换算系数 k = 0.916297</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="card-corner">
@@ -234,6 +257,6 @@
     </main>
   </div>
   <script src="./workbench.js?v=2026-09-20-wb17"></script>
-  <script src="./app.js?v=2026-09-20-wb31"></script>
+  <script src="./app.js?v=2026-09-20-wb32"></script>
 </body>
 </html>

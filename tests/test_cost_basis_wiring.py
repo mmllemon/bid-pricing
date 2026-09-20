@@ -304,10 +304,12 @@ class ResolveCostPlanContractTest(unittest.TestCase):
 # ======================================================================
 class QuotePipelineWiringTest(unittest.TestCase):
     def test_unknown_mode_blocks_before_numbers(self):
-        """真 config 的 mode=UNKNOWN ⇒ 阻断，且不泄露任何报价数字。"""
+        """mode=UNKNOWN ⇒ 阻断，且不泄露任何报价数字。"""
         inst, rows = _probe_rows()
-        r = run_quote_pipeline(target_total=inst.B, items=rows, fixed_pretax=0,
-                               vat_rate=0.09, surtax_rate=0.03, config_dir=CONFIG)
+        with _temp_config(input_vat_credit_mode="UNKNOWN", cost_input_vat_rate=None,
+                          credit_ratio=None) as cfg:
+            r = run_quote_pipeline(target_total=inst.B, items=rows, fixed_pretax=0,
+                                   vat_rate=0.09, surtax_rate=0.03, config_dir=cfg)
         self.assertEqual(r.status, "BLOCKED")
         self.assertIn("成本税口径", r.reason)
         self.assertEqual(r.p_by_id, {})
@@ -412,8 +414,10 @@ class ResolveEntryWiringTest(unittest.TestCase):
                                    solver_status="OPTIMAL", violations=(), reason="ok")
 
     def test_unknown_mode_blocks_without_margin_numbers(self):
-        result, payload, code = run_resolve([self._item()], _resolve_params(),
-                                            _low_policy(), config_dir=CONFIG)
+        with _temp_config(input_vat_credit_mode="UNKNOWN", cost_input_vat_rate=None,
+                          credit_ratio=None) as cfg:
+            result, payload, code = run_resolve([self._item()], _resolve_params(),
+                                                _low_policy(), config_dir=cfg)
         self.assertIsNone(result)
         self.assertEqual(code, 400)
         self.assertEqual(payload["status"], "BLOCKED")
@@ -545,7 +549,7 @@ class MutationDiscriminationTest(unittest.TestCase):
                 p.stop()
 
     @staticmethod
-    def _permissive(items, config_dir):
+    def _permissive(items, config_dir, **kwargs):
         """变体替身：假装换算已接线但实际什么都没做（成本保持含税）。"""
         return (EffectiveCostPlan("PASS", "mutant: 未接线", 1.0,
                                   tuple(dict(r) for r in items)), None)

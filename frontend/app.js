@@ -110,6 +110,13 @@ function fillParams(params) {
   if (params.low_ratio_confirmed !== undefined) conf.checked = Boolean(params.low_ratio_confirmed);
   const by = document.querySelector('#lowPriceConfirmedBy');
   if (params.low_price_confirmed_by !== undefined) by.value = params.low_price_confirmed_by || '';
+  // H-002：恢复成本税口径（抵扣方式 + 分项构成）
+  const m = document.querySelector('#taxMode');
+  if (m && params.input_vat_credit_mode) m.value = params.input_vat_credit_mode;
+  if (params.cost_composition) applyComposition(params.cost_composition);
+  else renderCompositionRows();
+  toggleComposeWrap();
+  updateCompositionLive();
 }
 
 function renderPreview(res) {
@@ -220,6 +227,8 @@ function selectedOverviewProject() {
 }
 loadBidProjectOptions();
 
+// H-002：成本构成面板初始化见文件末尾（须在所有 const 定义之后执行，避免 TDZ）。
+
 // H-002：结果提示里必须交代「这个利润是按哪个成本口径算的」。
 // 成本清单综合单价是含税口径，限价与报价是不含税口径；不说明换算方式，
 // 读结果的人无法判断毛利是否被低估——这正是 H-002 要根除的口径含糊。
@@ -228,10 +237,94 @@ function costBasisNote(result) {
   if (!tax) return '';
   const parts = [];
   if (tax.input_vat_credit_mode) parts.push(`抵扣方式 ${esc(String(tax.input_vat_credit_mode))}`);
-  if (tax.cost_input_vat_rate != null) parts.push(`进项税率 ${(Number(tax.cost_input_vat_rate) * 100).toFixed(2)}%`);
-  if (tax.credit_ratio != null) parts.push(`可抵扣占比 ${(Number(tax.credit_ratio) * 100).toFixed(2)}%`);
+  if (tax.cost_composition && tax.cost_composition.length) parts.push(`分项构成 ${tax.cost_composition.length} 项精算`);
+  if (tax.credit_ratio != null) parts.push(`可抵扣占比 ${(Number(tax.credit_ratio) * 100).toFixed(1)}%`);
   if (tax.multiplier != null) parts.push(`换算系数 k=${Number(tax.multiplier).toFixed(6)}`);
   return `成本已由含税换算为不含税有效成本（${parts.join('，') || '见结果 JSON'}）。`;
+}
+
+// ---- H-002：成本构成（分项多税率精算）前端 ----
+// 默认构成匹配 config/project_quote_policy.json 的 cost_composition；
+// 用户可在前端逐项目自定义，提交时作为覆盖优先于 config 默认。
+const COMP_DEFAULTS = [
+  {key:'goods', label:'材料设备', proportion:0.65, input_vat_rate:0.13},
+  {key:'service', label:'劳务及措施', proportion:0.35, input_vat_rate:0.09},
+];
+
+function _composeRowsHtml(comp) {
+  return comp.map(c => `
+    <div class="compose-row">
+      <span class="comp-label">${esc(c.label || c.key || '')}</span>
+      <input class="comp-prop" type="number" step="0.01" min="0" max="100" value="${(Number(c.proportion) * 100).toFixed(0)}" data-key="${esc(c.key || '')}" data-field="proportion" />
+      <input class="comp-rate" type="number" step="0.01" min="0" max="100" value="${(Number(c.input_vat_rate) * 100).toFixed(0)}" data-key="${esc(c.key || '')}" data-field="rate" />
+    </div>`).join('');
+}
+
+function renderCompositionRows() {
+  document.querySelector('#composeRows').innerHTML = _composeRowsHtml(COMP_DEFAULTS);
+  document.querySelectorAll('#composeRows input').forEach(el => el.addEventListener('input', updateCompositionLive));
+}
+
+function applyComposition(comp) {
+  if (!Array.isArray(comp) || !comp.length) { renderCompositionRows(); return; }
+  document.querySelector('#composeRows').innerHTML = _composeRowsHtml(comp);
+  document.querySelectorAll('#composeRows input').forEach(el => el.addEventListener('input', updateCompositionLive));
+}
+
+function toggleComposeWrap() {
+  const mode = document.querySelector('#taxMode').value;
+  const wrap = document.querySelector('#composeWrap');
+  if (mode === 'NONE') wrap.classList.add('hidden');
+  else wrap.classList.remove('hidden');
+}
+
+function updateCompositionLive() {
+  const mode = document.querySelector('#taxMode').value;
+  const sumEl = document.querySelector('#composeSum');
+  const kEl = document.querySelector('#composeK');
+  if (mode === 'NONE') {
+    sumEl.textContent = '占比合计：—（不可抵扣，不读构成）';
+    sumEl.className = 'compose-sum';
+    kEl.textContent = '换算系数 k = 1.000000（含税即有效成本）';
+    return;
+  }
+  let total = 0, credit = 0, k = 1.0;
+  document.querySelectorAll('#composeRows .compose-row').forEach(row => {
+    const p = Number(row.querySelector('[data-field="proportion"]').value) / 100;
+    const r = Number(row.querySelector('[data-field="rate"]').value) / 100;
+    if (!Number.isNaN(p)) total += p;
+    if (!Number.isNaN(p) && !Number.isNaN(r)) {
+      if (r > 0) credit += p;
+      k -= p * r / (1 + r);
+    }
+  });
+  const sumOk = Math.abs(total - 1) < 0.005;
+  const dev = ((total - 1) * 100);
+  sumEl.textContent = `占比合计：${(total * 100).toFixed(1)}%${sumOk ? '' : '（须=100%' + (Math.abs(dev) >= 0.05 ? `，偏差 ${dev > 0 ? '+' : ''}${dev.toFixed(1)}%` : '') + '）'}`;
+  sumEl.className = 'compose-sum ' + (sumOk ? 'ok' : 'bad');
+  kEl.textContent = `可抵扣占比 ${(credit * 100).toFixed(1)}% ｜ 换算系数 k = ${k.toFixed(6)}`;
+}
+
+// 汇总当前表单的税口径覆盖，返回注入 FormData 的字段。
+function readTaxOverride() {
+  const mode = document.querySelector('#taxMode').value;
+  if (mode === 'NONE') {
+    return {mode, creditRatio: 0, compositionJson: ''};
+  }
+  const comp = [];
+  document.querySelectorAll('#composeRows .compose-row').forEach(row => {
+    const p = Number(row.querySelector('[data-field="proportion"]').value) / 100;
+    const r = Number(row.querySelector('[data-field="rate"]').value) / 100;
+    comp.push({
+      key: row.querySelector('[data-field="proportion"]').dataset.key || row.querySelector('.comp-label').textContent,
+      label: row.querySelector('.comp-label').textContent,
+      proportion: Number.isNaN(p) ? 0 : p,
+      input_vat_rate: Number.isNaN(r) ? 0 : r,
+    });
+  });
+  let credit = 0;
+  comp.forEach(c => { if (c.input_vat_rate > 0) credit += c.proportion; });
+  return {mode, creditRatio: credit, compositionJson: JSON.stringify(comp)};
 }
 
 function setMessage(text, kind = '') { message.className = kind ? `message ${kind}` : 'message'; message.innerHTML = text; }
@@ -294,6 +387,12 @@ document.querySelector('#calculateBtn').addEventListener('click', async () => {
   data.append('low_ratio_confirmed', document.querySelector('#lowRatioConfirmed').checked ? 'true' : 'false');
   data.append('low_price_confirmed_by', (document.querySelector('#lowPriceConfirmedBy') || {}).value || '');
   data.append('clause_enabled', document.querySelector('#clauseEnabled').checked ? 'true' : 'false');
+  // H-002：成本税口径（分项构成）覆盖，优先于 config 默认
+  const taxCalc = readTaxOverride();
+  data.append('input_vat_credit_mode', taxCalc.mode);
+  data.append('cost_input_vat_rate', '0.13');
+  data.append('credit_ratio', taxCalc.creditRatio);
+  data.append('cost_composition', taxCalc.compositionJson);
   try {
     const response = await fetch('http://localhost:8000/api/quote/optimize', {method:'POST', body:data});
     const result = await response.json();
@@ -593,6 +692,12 @@ document.querySelector('#recomputeBtn').addEventListener('click', async () => {
   data.append('low_ratio_confirmed', document.querySelector('#lowRatioConfirmed').checked ? 'true' : 'false');
   data.append('low_price_confirmed_by', (document.querySelector('#lowPriceConfirmedBy') || {}).value || '');
   data.append('clause_enabled', document.querySelector('#clauseEnabled').checked ? 'true' : 'false');
+  // H-002：成本税口径（分项构成）覆盖，优先于 config 默认
+  const taxRec = readTaxOverride();
+  data.append('input_vat_credit_mode', taxRec.mode);
+  data.append('cost_input_vat_rate', '0.13');
+  data.append('credit_ratio', taxRec.creditRatio);
+  data.append('cost_composition', taxRec.compositionJson);
   try {
     const response = await fetch(`http://localhost:8000/api/project/recompute?id=${encodeURIComponent(currentPlanId)}`, {method:'POST', body:data});
     const result = await response.json();
@@ -687,3 +792,15 @@ document.querySelector('#runCompareBtn').addEventListener('click', async () => {
   } catch (error) { setMessage(`对比失败：${error.message}`, 'error'); }
   finally { button.disabled = false; button.innerHTML = '开始对比'; }
 });
+
+// H-002：成本构成面板初始化（置于文件末尾，保证 COMP_DEFAULTS 等 const 已定义，规避暂时性死区 ReferenceError）
+(function initCompositionPanel() {
+  // 抵扣方式下拉与页面其他下拉（项目选择/方案选择）统一为毛玻璃自定义组件，
+  // 原生 select 仅作 value 载体（cs-hidden），确保设计语言一致、不再出现浏览器原生框。
+  initCustomSelect('#taxMode');
+  renderCompositionRows();
+  toggleComposeWrap();
+  updateCompositionLive();
+  const taxModeEl = document.querySelector('#taxMode');
+  if (taxModeEl) taxModeEl.addEventListener('change', () => { toggleComposeWrap(); updateCompositionLive(); });
+})();

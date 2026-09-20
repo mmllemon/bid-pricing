@@ -21,16 +21,21 @@
     "env_tax": 0.0
   },
   "cost_input_tax_policy": {
-    "mode": "UNKNOWN",
-    "cost_input_vat_rate": null,
-    "input_vat_credit_mode": "UNKNOWN",
-    "credit_ratio": null,
-    "statement": "成本清单综合单价为含税成本单价（cost_input_incl_vat）；转入利润口径前须换算为不含税有效成本（cost_effective）。换算所需进项税率与抵扣方式未声明（H-002）——声明前系统不输出『最优利润』结论。",
+    "mode": "PARTIAL",
+    "cost_input_vat_rate": 0.13,
+    "input_vat_credit_mode": "PARTIAL",
+    "credit_ratio": 0.90,
+    "cost_composition": [
+      {"key": "goods", "label": "材料设备", "proportion": 0.65, "input_vat_rate": 0.13},
+      {"key": "service", "label": "劳务及措施", "proportion": 0.35, "input_vat_rate": 0.09}
+    ],
+    "statement": "成本清单综合单价为含税成本单价（cost_input_incl_vat）；转入利润口径前按分项多税率精算换算为不含税有效成本（cost_effective）：材料设备 13%、劳务及措施 9%，两类进项税率均>0（可抵扣占比=1.0，k≈0.8963）。前端可逐项目自定义成本构成覆盖本默认。声明后经 CT-01~CT-05 校验放行，系统可输出『最优利润』/『单项毛利』。",
     "semantics": {
       "cost_input_incl_vat": "成本清单综合单价原始口径：含进项增值税",
       "cost_effective": "不含税有效成本，与不含税 p_i 比价/相减（GB/T 50500-2024 2.0.8）",
+      "cost_composition": "分项多税率精算：k = 1 − Σ p_j·r_j/(1+r_j)，对任意段数/税率严格精确；人工 r=0 自然不抵扣",
       "FULL": "进项税可全额抵扣 → cost_effective = incl × (1 − rate/(1+rate)) = incl/(1+rate)",
-      "PARTIAL": "部分抵扣 → cost_effective = incl × (1 − rate×credit_ratio/(1+rate))",
+      "PARTIAL": "部分抵扣 → cost_effective = incl × (1 − rate×credit_ratio/(1+rate))（旧单税率近似；有构成时以构成为准）",
       "NONE": "不可抵扣（简易计税/无进项票）→ cost_effective = incl",
       "UNKNOWN": "未声明 → 不可计算，阻断『最优利润』结论"
     }

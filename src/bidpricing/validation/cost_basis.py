@@ -261,6 +261,18 @@ def check_cost_basis(config_dir: Path) -> CostBasisReport:
 
 CREDIT_MODE_VOCABULARY: tuple[str, ...] = ("FULL", "PARTIAL", "NONE", "UNKNOWN")
 
+#: 成本构成分解默认键（前端顺序即此）；人工进项税率为 0（无进项税可抵）。
+COMPOSITION_KEYS: tuple[str, ...] = ("material", "equipment", "subcontract", "labor", "measure")
+COMPOSITION_DEFAULT_LABELS: dict[str, str] = {
+    "material": "材料", "equipment": "设备", "subcontract": "分包",
+    "labor": "人工", "measure": "措施费",
+}
+#: 各构成默认进项税率（小数）：材料/设备 13%，分包/措施 9%，人工 0%。
+COMPOSITION_DEFAULT_RATES: dict[str, float] = {
+    "material": 0.13, "equipment": 0.13, "subcontract": 0.09,
+    "labor": 0.00, "measure": 0.09,
+}
+
 
 def effective_cost_multiplier(
     vat_rate: float | None,
@@ -294,6 +306,60 @@ def effective_cost_multiplier(
             return None
         ratio = credit_ratio
     return 1.0 - vat_rate * ratio / (1.0 + vat_rate)
+
+
+def validate_cost_composition(composition) -> tuple[bool, float | None, str]:
+    """校验成本构成分解（分项多税率精算的输入）。
+
+    返回 ``(ok, derived_credit_ratio, detail)``：
+    * ``ok`` —— 占比求和≈1、各项 ``proportion∈[0,1]`` 且 ``input_vat_rate∈[0,1]``；
+    * ``derived_credit_ratio`` —— 可抵扣进项税的成本占比（proportion 之和 where rate>0）；
+      即模型旧的 ``credit_ratio`` 在分项口径下的精确等价量；
+    * ``detail`` —— 不合法时的原因（供 BLOCKED 文案点名）。
+
+    无构成 / 空 → ``(False, None, "成本构成缺失")``（由调用方决定走旧单税率路径）。
+    """
+    if not composition:
+        return False, None, "成本构成缺失"
+    total = 0.0
+    credit = 0.0
+    for c in composition:
+        key = c.get("key") or c.get("label") or "?"
+        p = c.get("proportion")
+        r = c.get("input_vat_rate")
+        if p is None or r is None:
+            return False, None, f"{key} 须同时给出 proportion 与 input_vat_rate"
+        if not (0 <= float(p) <= 1):
+            return False, None, f"{key} 占比越界（须 0~1）：{p}"
+        if not (0 <= float(r) <= 1):
+            return False, None, f"{key} 进项税率越界（须 0~1）：{r}"
+        total += float(p)
+        if float(r) > 0:
+            credit += float(p)
+    if abs(total - 1.0) > 1e-6:
+        return False, None, f"各项占比之和须为 1.00，当前 {total:.4f}"
+    return True, round(credit, 6), ""
+
+
+def effective_cost_multiplier_from_composition(composition) -> float | None:
+    """分项多税率精确换算系数。
+
+    每个构成 j 带 ``proportion``（含税成本占比）与 ``input_vat_rate``（该构成进项税率），
+    则含税成本中嵌入的进项税 = ``Σ_j p_j × r_j/(1+r_j)``，故：
+
+        k = 1 − Σ_j p_j × r_j/(1+r_j)
+
+    对任意段数、任意税率**严格精确**（不再像旧单税率 PARTIAL 那样只在加权意义下近似）。
+    人工（r=0）自然不贡献抵扣；材料/设备/分包/措施按各自真实税率除税。
+    构成非法（见 ``validate_cost_composition``）→ 返回 None（业务未声明，非程序错误）。
+    """
+    ok, _, _ = validate_cost_composition(composition)
+    if not ok:
+        return None
+    k = 1.0 - sum(
+        float(c["proportion"]) * float(c["input_vat_rate"]) / (1.0 + float(c["input_vat_rate"]))
+        for c in composition)
+    return round(k, 12)
 
 
 def effective_cost(
@@ -336,6 +402,9 @@ def check_cost_input_tax(config_dir: Path) -> CostBasisReport:
     rate = sec.get("cost_input_vat_rate")
     mode = sec.get("input_vat_credit_mode")
     ratio = sec.get("credit_ratio")
+    composition = sec.get("cost_composition") or sec.get("cost_compose")
+    comp_ok, comp_cr, comp_detail = (
+        validate_cost_composition(composition) if composition else (False, None, ""))
 
     rep.results.append(_ok(
         "CT-01", "成本清单综合单价声明为含税成本（cost_input_incl_vat），"
@@ -343,7 +412,16 @@ def check_cost_input_tax(config_dir: Path) -> CostBasisReport:
 
     # ---- CT-02 进项税率 ----
     if mode in ("FULL", "PARTIAL"):
-        if rate is None:
+        if composition is not None:
+            if comp_ok:
+                rep.results.append(_ok(
+                    "CT-02", f"成本构成已分项声明进项税率（可抵扣占比 {comp_cr}），"
+                             "分项多税率精算覆盖 CT-02/CT-04"))
+            else:
+                rep.results.append(_bad(
+                    "CT-02", STATUS_BLOCKED,
+                    f"成本构成（cost_composition）不合法——{comp_detail}"))
+        elif rate is None:
             rep.results.append(_bad(
                 "CT-02", STATUS_BLOCKED,
                 f"抵扣模式 {mode} 下进项税率未声明——含税成本无法换算为不含税"
@@ -386,7 +464,16 @@ def check_cost_input_tax(config_dir: Path) -> CostBasisReport:
 
     # ---- CT-04 部分抵扣比例 ----
     if mode == "PARTIAL":
-        if ratio is None or not (0 < ratio < 1):
+        if composition is not None:
+            if comp_ok:
+                rep.results.append(_ok(
+                    "CT-04", f"成本构成已声明（可抵扣占比 {comp_cr}），"
+                             "分项多税率精算即精确表达『可抵扣成本占比』"))
+            else:
+                rep.results.append(_bad(
+                    "CT-04", STATUS_BLOCKED,
+                    f"成本构成（cost_composition）不合法——{comp_detail}"))
+        elif ratio is None or not (0 < ratio < 1):
             rep.results.append(_bad(
                 "CT-04", STATUS_BLOCKED,
                 "PARTIAL 模式必须显式声明 credit_ratio ∈ (0,1)——"
@@ -539,6 +626,7 @@ def build_effective_costs(
     mode = sec.get("input_vat_credit_mode")
     rate = sec.get("cost_input_vat_rate")
     ratio = sec.get("credit_ratio")
+    composition = sec.get("cost_composition") or sec.get("cost_compose")
 
     if mode is None or mode == "UNKNOWN":
         return EffectiveCostPlan(
@@ -553,29 +641,56 @@ def build_effective_costs(
             f"成本税口径声明非法：input_vat_credit_mode={mode!r} 不在词表 "
             f"{list(CREDIT_MODE_VOCABULARY)}（CT-03 FAIL——说了但说错，不降级放行）",
             None, tuple(dict(r) for r in items))
-    if mode in ("FULL", "PARTIAL") and rate is None:
-        return EffectiveCostPlan(
-            STATUS_BLOCKED,
-            f"成本税口径未定：抵扣模式 {mode} 下 cost_input_vat_rate（进项税率）未声明——"
-            "含税成本无法除税换算为不含税有效成本，毛利与目标函数被阻断（H-002 / CT-02）",
-            None, tuple(dict(r) for r in items))
-    if rate is not None and not (0 < float(rate) <= 1):
-        return EffectiveCostPlan(
-            STATUS_BLOCKED,
-            f"成本税口径声明非法：cost_input_vat_rate={rate!r} 须在 (0,1] 内，"
-            "如 0.13=13%（CT-02 FAIL）",
-            None, tuple(dict(r) for r in items))
-    if mode == "PARTIAL" and (ratio is None or not (0 < float(ratio) < 1)):
-        return EffectiveCostPlan(
-            STATUS_BLOCKED,
-            "成本税口径未定：PARTIAL 模式须显式声明 credit_ratio ∈ (0,1)"
-            f"（当前 {ratio!r}）——它表示『可抵扣成本（如货物）占含税成本的比重』，"
-            "缺了有效成本不可计算（CT-04）",
-            None, tuple(dict(r) for r in items))
 
-    k = effective_cost_multiplier(
-        float(rate) if rate is not None else None, str(mode),
-        float(ratio) if ratio is not None else None)
+    # ---- 换算系数 k：优先用成本构成（分项多税率精算），否则回退旧单税率 ----
+    derived_credit_ratio: float | None = None
+    basis_desc = ""
+    if mode == "NONE":
+        k = 1.0
+        basis_desc = "（NONE 模式：含税即有效成本，不读进项税率）"
+    else:
+        comp_ok, comp_cr, comp_detail = validate_cost_composition(composition)
+        if composition is not None:
+            if not comp_ok:
+                return EffectiveCostPlan(
+                    STATUS_BLOCKED,
+                    f"成本税口径未定：成本构成（cost_composition）不合法——{comp_detail}"
+                    "，无法做分项多税率换算（H-002 / CT-04）",
+                    None, tuple(dict(r) for r in items))
+            k = effective_cost_multiplier_from_composition(composition)
+            derived_credit_ratio = comp_cr
+            basis_desc = (f"（分项多税率精算：可抵扣占比 {comp_cr}；"
+                          f"材料/设备/分包/人工/措施按各自进项税率除税）")
+        else:
+            # 旧单税率路径（无构成时回退，保证向后兼容既有配置/CLI）
+            if rate is None:
+                return EffectiveCostPlan(
+                    STATUS_BLOCKED,
+                    f"成本税口径未定：抵扣模式 {mode} 下 cost_input_vat_rate（进项税率）未声明——"
+                    "含税成本无法除税换算为不含税有效成本，毛利与目标函数被阻断（H-002 / CT-02）",
+                    None, tuple(dict(r) for r in items))
+            if not (0 < float(rate) <= 1):
+                return EffectiveCostPlan(
+                    STATUS_BLOCKED,
+                    f"成本税口径声明非法：cost_input_vat_rate={rate!r} 须在 (0,1] 内，"
+                    "如 0.13=13%（CT-02 FAIL）",
+                    None, tuple(dict(r) for r in items))
+            eff_ratio = 1.0 if mode == "FULL" else ratio
+            if mode == "PARTIAL" and (eff_ratio is None or not (0 < float(eff_ratio) < 1)):
+                return EffectiveCostPlan(
+                    STATUS_BLOCKED,
+                    "成本税口径未定：PARTIAL 模式须显式声明 credit_ratio ∈ (0,1)"
+                    f"（当前 {ratio!r}）——它表示『可抵扣成本（如货物）占含税成本的比重』，"
+                    "缺了有效成本不可计算（CT-04）",
+                    None, tuple(dict(r) for r in items))
+            k = effective_cost_multiplier(
+                float(rate), str(mode),
+                float(eff_ratio) if eff_ratio is not None else None)
+            derived_credit_ratio = (1.0 if mode == "FULL"
+                                    else (float(ratio) if ratio is not None else None))
+            basis_desc = (f"(进项税率 {rate}"
+                          + (f"，可抵扣成本占比 {ratio}" if mode == "PARTIAL" else "")
+                          + ")")
     if k is None:
         return EffectiveCostPlan(
             STATUS_BLOCKED,
@@ -610,14 +725,8 @@ def build_effective_costs(
         out.append(new_row)
         trace.append(CostAdjustment(str(row.get("item_id")), float(raw), k, effective))
 
-    if mode == "NONE":
-        basis = "（NONE 模式：含税即有效成本，不读进项税率）"
-    else:
-        basis = (f"(进项税率 {rate}"
-                 + (f"，可抵扣成本占比 {ratio}" if mode == "PARTIAL" else "")
-                 + ")")
     return EffectiveCostPlan(
         STATUS_PASS,
-        f"已按 {mode}{basis} 换算 {len(trace)} 项，系数 k={k:.8f}；"
+        f"已按 {mode}{basis_desc} 换算 {len(trace)} 项，系数 k={k:.8f}；"
         "c_i 已由含税替换为不含税有效成本",
         k, tuple(out), tuple(trace))

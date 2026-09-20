@@ -139,10 +139,10 @@ button{font-family:var(--font)}
 .card{
   background:var(--surface-card);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:var(--shadow-card);
-  padding:24px;margin-bottom:18px;transition:box-shadow .2s,border-color .15s;
+  padding:20px;margin-bottom:16px;transition:box-shadow .2s,border-color .15s;
 }
 .card:hover{box-shadow:var(--shadow-overlay)}
-.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
 
 /* ---------- 个人工作台（深度集成，原生渲染于本页） ---------- */
 .workbench-view{min-height:60vh}
@@ -150,15 +150,15 @@ button{font-family:var(--font)}
 .card-head p{font-size:12.5px;color:var(--text-secondary);margin:3px 0 0;text-align:right}
 
 /* ---------- 参数区：三列分组（组标题带竖条） ---------- */
-.param-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-.param-group{display:flex;flex-direction:column;gap:13px}
+.param-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.param-group{display:flex;flex-direction:column;gap:10px}
 .param-group-title{
   display:flex;align-items:center;gap:8px;
   font-size:12px;font-weight:650;color:var(--text);letter-spacing:.02em;
-  padding-bottom:9px;border-bottom:1px solid var(--border);margin-bottom:2px;
+  padding-bottom:7px;border-bottom:1px solid var(--border);margin-bottom:0;
 }
 .param-group-title::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--accent)}
-.field{display:flex;flex-direction:column;gap:6px;position:relative}
+.field{display:flex;flex-direction:column;gap:5px;position:relative}
 .field-label{font-size:13px;font-weight:500;color:var(--text-secondary)}
 .field-label em{font-style:normal;color:var(--text-tertiary);font-weight:500;margin-left:4px;font-size:12px}
 .field input:not([type=checkbox]){
@@ -178,11 +178,65 @@ button{font-family:var(--font)}
 .field.check{flex-direction:row;align-items:center;gap:8px;margin-top:3px}
 .field.check input{accent-color:var(--accent);width:16px;height:16px;cursor:pointer}
 .field.check span{font-size:13px;color:var(--text-secondary);cursor:pointer}
+/* 成本构成（分项多税率精算）面板 —— 沿用 .field 控件语言与卡片分隔线风格 */
+/* 成本税口径已改为第 4 列，与各组并列，不再独占整行 */
+.compose-table{
+  display:flex;flex-direction:column;margin-top:4px;
+  border:1px solid var(--border);border-radius:var(--radius-tile);
+  background:var(--surface-nested);overflow:hidden;
+}
+.compose-row{
+  display:grid;grid-template-columns:1fr 56px 56px;align-items:center;gap:8px;
+  padding:7px 10px;
+}
+.compose-row + .compose-row{border-top:1px solid var(--border)}
+.compose-row.compose-head{
+  padding-top:9px;padding-bottom:9px;
+  background:var(--surface-card);
+  font-size:11px;font-weight:650;letter-spacing:.04em;color:var(--text-secondary);
+  border-bottom:1px solid var(--border);
+}
+.compose-row.compose-head span:nth-child(2),
+.compose-row.compose-head span:nth-child(3){text-align:right}
+.compose-row .comp-label{font-size:13.5px;font-weight:500;color:var(--text)}
+.compose-row input{
+  width:100%;padding:8px 6px;
+  border:1px solid var(--border-input);border-radius:var(--radius-tile);
+  font-size:14px;font-family:var(--font);
+  text-align:right;font-variant-numeric:tabular-nums;color:var(--text);
+  background:var(--surface-card);transition:border-color .15s,box-shadow .15s;
+}
+.compose-row input::placeholder{color:var(--text-tertiary)}
+.compose-row input:hover{border-color:var(--text-tertiary)}
+.compose-row input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-muted)}
+.compose-foot{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px}
+.compose-sum{font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:999px;background:var(--success-soft);color:var(--success)}
+.compose-sum.bad{background:var(--danger-soft);color:var(--danger)}
+.compose-k{font-size:12.5px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+#composeWrap.hidden{display:none}
+/* 构成块内说明文案：压缩占位，避免整块被长说明撑高 */
+#composeWrap .corner-tip{margin:2px 0 8px;font-size:11.5px;line-height:1.62;max-width:none}
+/* 兜底：.field 内任何原生 select（未接入自定义组件时）也与输入框同一控件语言，
+   不出现浏览器原生框；接入 initCustomSelect 后原生 select 会被 cs-hidden 隐藏，互不冲突。 */
+.field select{
+  width:100%;padding:9px 34px 9px 12px;
+  border:1px solid var(--border-input);border-radius:var(--radius-tile);
+  font-size:14px;font-family:var(--font);font-weight:400;color:var(--text);
+  background-color:var(--surface-card);
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M6 8l4 4 4-4' stroke='%238f8a80' stroke-width='1.7' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat;background-position:right 12px center;background-size:14px;
+  cursor:pointer;transition:border-color .15s,box-shadow .15s;
+}
+.field select:hover{border-color:var(--text-tertiary)}
+.field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-muted)}
+/* 自定义下拉组件位于 .field 内时，撤销其默认 flex:1（避免列布局下被纵向拉伸） */
+.field .cs{flex:0 0 auto;min-width:0;width:100%}
 
 /* 底部条：说明 + 确认人 */
-.card-corner{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.card-corner{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
 .corner-tip{font-size:12px;color:var(--text-secondary);line-height:1.7;margin:0;max-width:640px}
-.card-corner .field{width:240px;max-width:100%;flex-shrink:0}
+.card-corner .field{width:200px;max-width:100%;flex-shrink:0}
 
 /* 输入框悬停说明 tooltip */
 .field[data-tip]::after{
@@ -349,10 +403,15 @@ button{font-family:var(--font)}
 .module-cards em{font-style:normal;color:var(--text-tertiary);font-size:11px;margin-top:auto}
 
 /* ---------- 响应式 ---------- */
+@media (max-width:1180px){
+  .param-grid{grid-template-columns:repeat(2,1fr)}
+}
 @media (max-width:1100px){
-  .param-grid{grid-template-columns:1fr}
   .upload-grid{grid-template-columns:1fr}
   .module-cards{grid-template-columns:1fr}
+}
+@media (max-width:680px){
+  .param-grid{grid-template-columns:1fr}
 }
 /* ---------- 侧栏收起（宽屏隐藏控件，窄屏抽屉式） ---------- */
 .sb-toggle{display:none}

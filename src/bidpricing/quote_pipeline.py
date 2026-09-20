@@ -32,6 +32,7 @@ SPEC_FILENAME = "quote_pipeline_spec.json"
 def resolve_cost_plan(
     items: Sequence[Mapping[str, Any]],
     config_dir: Path | str,
+    policy_section: Mapping[str, Any] | None = None,
 ) -> tuple[EffectiveCostPlan | None, str | None]:
     """取得 H-002 换算方案；返回 ``(plan, error)``，``error`` 非 None 即归一为 BLOCKED。
 
@@ -65,7 +66,7 @@ def resolve_cost_plan(
         return None, ("成本税口径标记不一致：一部分项已标 EXCL_VAT（不含税）、另一部分未标"
                       f"——已换算项示例 {mixed[:5]}。一半换算一半没换算的清单必然算错，"
                       "拒绝猜测以哪一侧为准")
-    plan = build_effective_costs(items, config_dir)
+    plan = build_effective_costs(items, config_dir, policy_section=policy_section)
     if plan.blocking:
         return None, plan.reason
     return plan, None

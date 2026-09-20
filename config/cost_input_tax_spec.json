@@ -30,6 +30,14 @@
     "cost_adjustment_trace": {
       "meaning": "逐项换算痕迹：输入值、换算系数 k、输出值、所用税率/模式/比例。用于审计『这个成本数字是怎么来的』。",
       "fields": ["item_id", "cost_unit_price_input", "multiplier", "cost_unit_price_effective", "vat_rate", "credit_mode", "credit_ratio"]
+    },
+    "cost_composition": {
+      "meaning": "分项多税率精算输入：把含税成本按进项税率桶拆成若干段，每段带 proportion（含税成本占比）与 input_vat_rate（该段进项税率）。默认两桶：材料设备(13%) / 劳务及措施(9%)（人工与措施并入 9% 桶，因一般情况项目只分 13% 与 9% 进项）。前端可逐项目自定义覆盖 config 默认。",
+      "structure": "[{\"key\":\"goods\",\"label\":\"材料设备\",\"proportion\":0.65,\"input_vat_rate\":0.13}, {\"key\":\"service\",\"label\":\"劳务及措施\",\"proportion\":0.35,\"input_vat_rate\":0.09}]",
+      "invariants": ["Σ proportion = 1（校验容差 1e-6）", "每段 0 ≤ proportion,rate ≤ 1", "所有段 rate>0 ⇒ 可抵扣占比=1.0；若有 rate=0 段则其自然不可抵扣"],
+      "precedence": "★ 给定 composition 时**优先于**单税率 (cost_input_vat_rate, credit_ratio)，做逐项精确除税；不给定时回退旧单税率路径（向后兼容 CLI/既有配置）。",
+      "exactness": "k = 1 − Σ_j p_j·r_j/(1+r_j) 对任意段数/税率**严格精确**；旧单税率 PARTIAL 仅在加权意义下近似。",
+      "consumer_note": "网页平台：前端成本构成面板实时计算 Σ 占比与派生可抵扣占比/ k，提交时以 JSON 字符串注入 cost_composition，由 api 解析后覆盖 config 默认。"
     }
   },
 
@@ -78,12 +86,15 @@
   },
 
   "conversion": {
-    "formula": "cost_unit_price_effective = money( cost_unit_price_input × k )，k = 1 − cost_input_vat_rate × credit_ratio / (1 + cost_input_vat_rate)",
+    "formula": "cost_unit_price_effective = money( cost_unit_price_input × k )",
+    "k_single_rate": "单税率（旧路径/无构成时）：k = 1 − cost_input_vat_rate × credit_ratio / (1 + cost_input_vat_rate)",
+    "k_composition": "分项多税率精算（给定 cost_composition 时优先）：k = 1 − Σ_j ( p_j × r_j / (1 + r_j) )，p_j=该段含税成本占比、r_j=该段进项税率",
+    "composition_precedence": "build_effective_costs 先判 cost_composition 是否存在且合法；存在则用 k_composition（精确），否则回退 k_single_rate（兼容 CLI/旧配置）。NONE 模式恒 k=1，忽略构成。",
     "rounding": "唯一入口 src/bidpricing/money.py::money（四舍五入到分）。禁用内建 round()——它是银行家舍入，与 precision_profile 要求的四舍五入不同。",
     "mode_specialization": {
-      "FULL": "credit_ratio 强制为 1，忽略调用方传入值",
-      "NONE": "k = 1；不读 cost_input_vat_rate",
-      "PARTIAL": "credit_ratio 必须由调用方显式给出",
+      "FULL": "credit_ratio 强制为 1，忽略调用方传入值（构成路径下 FULL 与 PARTIAL 同 k，因构成已含各段真实税率）",
+      "NONE": "k = 1；不读 cost_input_vat_rate，也忽略构成",
+      "PARTIAL": "credit_ratio 必须由调用方显式给出（构成路径下由 Σ(p_j where r_j>0) 派生）",
       "UNKNOWN": "k 未定义"
     },
     "invalid_program_input": "credit_mode 不在词表 ⇒ ValueError（程序错误，不得静默返回 None 掩盖 Bug）",
@@ -182,8 +193,8 @@
   },
 
   "known_limits": [
-    "本机制只处理**单一等效换算**：把整项含税成本按一个 `(rate, ratio)` 折为有效成本。若需按成本科目（人工/材料/机械/分包）分别适用不同进项税率再求和，须等 T00-09 成本科目分解落地后扩展为分项精算——本制品的 PARTIAL 通路在『两段构成』下与分项精算严格等价（见 credit_mode_vocabulary.PARTIAL.exactness_note），三段及以上构成则只在加权意义下近似。",
-    "credit_ratio 是**项目级**声明。若不同清单的货物占比差异很大，单一 ratio 会产生项间偏差——本制品不提供逐项 ratio，逐项覆盖属后续扩展。",
+    "本机制现已支持**分项多税率精算**（cost_composition）：把含税成本按进项税率桶（默认：材料设备 13% / 劳务及措施 9%）拆段，每段带 proportion 与 input_vat_rate，k = 1 − Σ p_j·r_j/(1+r_j) 对任意段数/税率严格精确。给定 composition 时优先于单税率路径；不给定则回退旧单税率（兼容 CLI/旧配置）。FULL/PARTIAL 在构成路径下产生相同 k（构成已含各段真实税率）。",
+    "cost_composition 的 proportion 是**项目级单一分解**（前端可逐项目自定义）。若同一项目内不同清单的货物/劳务占比差异极大，项目级分解仍会产生项间近似——逐项覆盖（按清单覆盖 composition）属后续扩展，本制品当前不支持。",
     "换算只作用于 c_i。结算收入侧的销项税口径（vat_rate）不在本制品范围内，见 rate_names.vat_rate 的 used_by。",
     "隐形成本（业务费/公司管理费/融资费/风险储备）尚未进入 c_i（H-003，见 project_quote_policy.hidden_cost_policy）——本制品只保证**已进入 c_i 的那部分成本**口径正确，不保证 c_i 完整。二者是两件事，都解决之前利润仍是『清单贡献利润』口径。"
   ]

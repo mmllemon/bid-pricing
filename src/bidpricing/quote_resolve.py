@@ -21,7 +21,11 @@ from .quote_pipeline import (
     resolve_cost_plan,
     run_settlement_adjusted_quote_pipeline,
 )
-from .validation.cost_basis import EXCL_VAT, read_cost_input_tax_policy
+from .validation.cost_basis import (
+    EXCL_VAT,
+    read_cost_input_tax_policy,
+    validate_cost_composition,
+)
 from .validation.low_price_policy import (
     DISPOSITION_CONFIRM_ONLY,
     DISPOSITION_NOTE,
@@ -37,7 +41,8 @@ TAX_SCOPE_USER_HINT = (
 
 
 def run_resolve(all_items: list[dict], params: Mapping[str, Any], low_policy: Mapping[str, Any],
-                config_dir: Path | str = "config", matched: MatchReport | None = None) -> tuple:
+                config_dir: Path | str = "config", matched: MatchReport | None = None,
+                tax_policy_override: Mapping[str, Any] | None = None) -> tuple:
     """解析结果；返回 ``(result, payload, status_code)``，与 app.py 的错误码约定一致。
 
     - 成本税口径不可计算：result=None，payload 为 BLOCKED 说明，status_code=400；
@@ -59,13 +64,21 @@ def run_resolve(all_items: list[dict], params: Mapping[str, Any], low_policy: Ma
     # ---- H-002 换算/阻断：必须在任何毛利数字之前 ----
     # 复用 CLI 侧同一个决策函数（resolve_cost_plan），使两条入口共用**同名同语义**
     # 的口径判定——否则会出现「同一个约束两层各判一次、结论相反」的 DV-01 形态。
-    tax_policy = read_cost_input_tax_policy(config_dir)
-    plan, tax_error = resolve_cost_plan(all_items, config_dir)
+    cfg_policy = read_cost_input_tax_policy(config_dir)
+    tax_policy = tax_policy_override if tax_policy_override is not None else cfg_policy
+    plan, tax_error = resolve_cost_plan(
+        all_items, config_dir,
+        policy_section=(tax_policy_override if tax_policy_override is not None else None))
+    # 分项多税率精算：派生可抵扣占比 + 回显构成（前端据以展示与复算）
+    comp = tax_policy.get("cost_composition") or tax_policy.get("cost_compose")
+    comp_ok, comp_cr, _ = validate_cost_composition(comp) if comp else (False, None, "")
+    derived_credit_ratio = comp_cr if (comp and comp_ok) else tax_policy.get("credit_ratio")
     tax_payload = {
         "declaration_present": bool(tax_policy),
         "input_vat_credit_mode": tax_policy.get("input_vat_credit_mode"),
         "cost_input_vat_rate": tax_policy.get("cost_input_vat_rate"),
-        "credit_ratio": tax_policy.get("credit_ratio"),
+        "credit_ratio": derived_credit_ratio,
+        "cost_composition": comp if (comp and comp_ok) else None,
         "cost_tax_scope_input": "INCL_VAT",
         "cost_tax_scope_effective": EXCL_VAT,
         "status": "BLOCKED" if tax_error is not None else plan.status,

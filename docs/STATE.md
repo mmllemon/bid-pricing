@@ -5,7 +5,7 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-20 14:32:05** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-20 19:31:11** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
@@ -19,10 +19,10 @@
 
 ## 一、版本锚点
 
-- 提交：`44419be` ｜ 累计 82 次提交 ｜ 未推送 0 次提交
-- 最新提交信息：chore(state): 重新生成状态快照（e1802e3 落地 T04-04 收口后）
+- 提交：`813aa5a` ｜ 累计 86 次提交 ｜ 未推送 1 次提交
+- 最新提交信息：docs(handoff): 同步交接手册至 ae7eac7（H-002 取值已声明 PARTIAL + 构成前端 + 四列布局）
 - 最近里程碑标签：`h002-cost-tax-basis-v1`
-- 工作区：有 6 处未提交改动
+- 工作区：有 1 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -37,10 +37,10 @@
 | 闸门 | 状态 |
 |---|---|
 | Gate 0a — 技术接口与规则集冻结 | **PASS** |
-| Gate 0b — 商务口径与合规冻结 | **PASS** |
+| Gate 0b — 商务口径与合规冻结 | **BLOCKED** |
 | Phase 0 输入门 — 项目级数据/取值 | **PASS** |
 | Phase 0 准入（综合） | **RELEASED** |
-| WP4 求解层构建 | **ALLOWED** |
+| WP4 求解层构建 | **BLOCKED** |
 
 **Gate 0a 无阻塞项**，已放行 WP1 数据层 / WP2 配置层 / WP3 判定层。
 
@@ -67,7 +67,7 @@
 
 ## 四、质量门
 
-- 单元测试：**1520** 项，结果 **通过**（OK）
+- 单元测试：**1534** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -188,8 +188,8 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ## 七、遗留项与已知限制
 
-- cost_input_tax_spec.json → known_limits: 本机制只处理**单一等效换算**：把整项含税成本按一个 `(rate, ratio)` 折为有效成本。若需按成本科目（人工/材料/机械/分包）分别适用不同进项税率再求和，须等 T00-09 成本科目分解落地后扩展为分项精算——本制品的 PARTIAL 通路在『两段构成』下与分项精算严格等价（见 credit_mode_vocabulary.PARTIAL.exactness_note），三段及以上构成则只在加权意义下近似。
-- cost_input_tax_spec.json → known_limits: credit_ratio 是**项目级**声明。若不同清单的货物占比差异很大，单一 ratio 会产生项间偏差——本制品不提供逐项 ratio，逐项覆盖属后续扩展。
+- cost_input_tax_spec.json → known_limits: 本机制现已支持**分项多税率精算**（cost_composition）：把含税成本按进项税率桶（默认：材料设备 13% / 劳务及措施 9%）拆段，每段带 proportion 与 input_vat_rate，k = 1 − Σ p_j·r_j/(1+r_j) 对任意段数/税率严格精确。给定 composition 时优先于单税率路径；不给定则回退旧单税率（兼容 CLI/旧配置）。FULL/PARTIAL 在构成路径下产生相同 k（构成已含各段真实税率）。
+- cost_input_tax_spec.json → known_limits: cost_composition 的 proportion 是**项目级单一分解**（前端可逐项目自定义）。若同一项目内不同清单的货物/劳务占比差异极大，项目级分解仍会产生项间近似——逐项覆盖（按清单覆盖 composition）属后续扩展，本制品当前不支持。
 - cost_input_tax_spec.json → known_limits: 换算只作用于 c_i。结算收入侧的销项税口径（vat_rate）不在本制品范围内，见 rate_names.vat_rate 的 used_by。
 - cost_input_tax_spec.json → known_limits: 隐形成本（业务费/公司管理费/融资费/风险储备）尚未进入 c_i（H-003，见 project_quote_policy.hidden_cost_policy）——本制品只保证**已进入 c_i 的那部分成本**口径正确，不保证 c_i 完整。二者是两件事，都解决之前利润仍是『清单贡献利润』口径。
 - phase1_exactness_spec.json → known_limits: T1 的结论只覆盖 P_A（C1 + 箱型）。C6/C9/C10/C11/C12/C13 激活时的结构由 §7.3 三层分割描述，本制品不证明其最优性。

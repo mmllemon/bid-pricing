@@ -5,7 +5,7 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-20 04:02:25** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-20 11:38:41** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
@@ -19,10 +19,10 @@
 
 ## 一、版本锚点
 
-- 提交：`dd80fd0` ｜ 累计 74 次提交
-- 最新提交信息：chore(state): 重新生成状态快照（T03-05）
-- 最近里程碑标签：`cost-basis-v1`
-- 工作区：有 136 处未提交改动
+- 提交：`8134285` ｜ 累计 79 次提交 ｜ 未推送 2 次提交
+- 最新提交信息：feat(h002): 成本税口径闭环 + 目标函数口径跨层对账（ADR-0035）
+- 最近里程碑标签：`v0.1.0`
+- 工作区：有 1 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -67,7 +67,7 @@
 
 ## 四、质量门
 
-- 单元测试：**1393** 项，结果 **通过**（OK）
+- 单元测试：**1445** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -139,7 +139,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T03-03 | Phase 0 预检与可行性证书 | done | ✓ 成立 | config/phase0_precheck_spec.json 存在（11910 字节）；src/bidpricing/solver/precheck.py 存在；tests/test_precheck.py 存在；ADR ADR-0030-phase0-precheck.md 存在 |
 | T03-06 | 不可行诊断 | done | ✓ 成立 | config/infeasibility_diagnosis_spec.json 存在（8357 字节）；src/bidpricing/solver/diagnose.py 存在；tests/test_diagnose.py 存在；ADR ADR-0031-infeasibility-diagnosis.md 存在 |
 | T03-04 | 约束判定器 | done | ✓ 成立 | config/constraint_judge_spec.json 存在（15213 字节）；src/bidpricing/solver/constraint_judge.py 存在；tests/test_constraint_judge.py 存在；ADR ADR-0029-constraint-judge.md 存在 |
-| T03-07 | 状态机与低价处置状态 | done | ✓ 成立 | 已实现全局四态聚合与三态低价处置状态：BLOCKED > FAIL > WARN > PASS；潜在不可行 > 成本证据不足 > 低价复核，未触发时不生成状态。6 项状态机测试通过。；config/state_machine_spec.json 存在；src/bidpricing/state_machine.py 存在；tests/test_state_machine.py 存在（1773 字节） |
+| T03-07 | 状态机与低价处置状态 | done | ✓ 成立 | 已实现全局四态聚合与三态低价处置状态：BLOCKED > FAIL > WARN > PASS；潜在不可行 > 成本证据不足 > 低价复核，未触发时不生成状态。6 项状态机测试通过。；config/state_machine_spec.json 存在；src/bidpricing/state_machine.py 存在；tests/test_state_machine.py 存在（1814 字节） |
 | T03-05 | 判定层测试矩阵 | done | ✓ 成立 | config/judgment_test_matrix_spec.json（13 约束 × 6 边界类 = 78 格，12 格声明不适用；「缺失」拆 NOT_ACTIVE(SKIP)/MISSING_INPUT(BLOCKED) 两格；「1 单位」逐约束具名绑定——res 0.01 元 / tol_width / count / sigma_step 三种量纲）+ src/bidpricing/validation/judgment_matrix.py（枚举与覆盖审计：未声明空格⇒BLOCKED、零格⇒BLOCKED；参数化 judge_fn：真实实现与变异体同跑；25 条变异体注入审计，kills_by 按「声明 ⊆ 实际」对账，存活⇒FAIL；规则优先级 A1–A4；规则集切换两层判据 L1 数值/L2 元信息 + SEGMENT 退化登记为 WARN）+ tests/test_judgment_matrix.py 34 项元测试。实测：78 格零失配、25/25 变异体被杀、覆盖审计 PASS（66 覆盖 + 12 声明例外）、总结论 WARN（唯一来源＝SEGMENT 下数值指纹退化，已登记）。首轮 M-05/M-06 假存活（变异体依赖 reason 文案）已修正并加元测试钉住。CLI judgment-matrix。；config/judgment_test_matrix_spec.json 存在（19787 字节）；src/bidpricing/validation/judgment_matrix.py 存在；tests/test_judgment_matrix.py 存在；ADR ADR-0034-judgment-test-matrix.md 存在 |
 | T04-00 | Phase 1 适用条件证明与反例集 | done | ✓ 成立 | 2026-09-17 完成《Phase 1 精确性条件》+ 反例集。**定理 T1（阈值分割）用交换论证证明**，刻意不走 KKT——KKT 是 T04-02A/D 的实现路线，两者共用会让「证明」与「实现」按同一个误解同时成立，T04-08 的独立性验收即失去对象（ADR-0019）。九条条件分两组：A 组（EC-1 作用域完备 / EC-2 排序键正确 / EC-3 权重正 / EC-4 系数非负 / EC-5 非退化 / EC-6 软约束不激活 / EC-7 可行域非空）违反则阈值分割解不再是 P_A 最优解；B 组（EC-8 舍入可调和 / EC-9 上界有限）违反只加实现性义务。**verdict 只看 A 组**——首版把 EC-8 放 A 组的结果是任何实例都判不出 EXACT（舍入上界 0.005·Σq0 几乎总超 eps_total），一个永远需要附注的 verdict 等于没有 verdict。反例集 CE-01..CE-09 每个都带「误用解 vs 正确解」数值见证，由 check_solution 代回原式复算；expected 做**双向**比对（实现判 FAIL 的条件不得漏声明——CE-07 首跑即踩到单向比对的漏洞）。正例 PE-01 = 附录 B 例 2R 的 SEGMENT 分支（本项目已落 SEGMENT），用 n=2 端点比较做**完整**最优性验证。副产品：修掉 compute_r_eff 的 SEGMENT 分支真 bug（increase_threshold 本身已是 1+θ_dev，原式再加 1.0 使越界段 r_eff 系统性高估）。本项目真实结论：EC-9 对西永L样本判 WARN（031301017001 cap 空），故 Phase 1 算法必须内建「空 cap 项固定为临界项」分支。测试 50 项；phase1-check 10/10 制品↔实现一致。；config/phase1_exactness_spec.json 存在（39093 字节）；src/bidpricing/solver/exactness.py 存在；src/bidpricing/solver/cases.py 存在；src/bidpricing/solver/instance.py 存在；tests/test_phase1_exactness.py 存在；ADR ADR-0019-phase1-exactness-by-exchange-argument.md 存在 |
 | T04-01 | Phase 1 解析解 | done | ✓ 成立 | 2026-09-17：排序+二分+贪心定容解析解落地。spec=config/phase1_solver_spec.json（PS-01..PS-11）；实现 src/bidpricing/solver/phase1.py（solve_phase1/judge_phase1/phase1_report/两个内置探针）；Z 一律由 instance.check_solution 复算（不重实现 R_i）；lb_i 复用 formulation.merged_lower（_merged_lower 提升为公开名，唯一实现不变）。两个探针（free-cap/simple）verdict=PASS。测试 48 项全绿（全量 838），含 PS-06 双向交换探针、r vs r_eff 逆序实例、空 cap 临界项、平台 tie-break、不支持政策 BLOCKED、INFEASIBLE≠BLOCKED。CLI 新增 phase1-solve（--probe/--instance/--json）。遗留：PS-11 曾抓到制品把三容差入参写成一条，已拆分制品（判据先于实现纠错）；PS-06 首版只做单向交换，补齐「先增后减」方向。；config/phase1_solver_spec.json 存在（22640 字节）；src/bidpricing/solver/phase1.py 存在；tests/test_phase1_solver.py 存在；ADR ADR-0026-phase1-analytic-solver.md 存在 |
@@ -188,6 +188,10 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 
 ## 七、遗留项与已知限制
 
+- cost_input_tax_spec.json → known_limits: 本机制只处理**单一等效换算**：把整项含税成本按一个 `(rate, ratio)` 折为有效成本。若需按成本科目（人工/材料/机械/分包）分别适用不同进项税率再求和，须等 T00-09 成本科目分解落地后扩展为分项精算——本制品的 PARTIAL 通路在『两段构成』下与分项精算严格等价（见 credit_mode_vocabulary.PARTIAL.exactness_note），三段及以上构成则只在加权意义下近似。
+- cost_input_tax_spec.json → known_limits: credit_ratio 是**项目级**声明。若不同清单的货物占比差异很大，单一 ratio 会产生项间偏差——本制品不提供逐项 ratio，逐项覆盖属后续扩展。
+- cost_input_tax_spec.json → known_limits: 换算只作用于 c_i。结算收入侧的销项税口径（vat_rate）不在本制品范围内，见 rate_names.vat_rate 的 used_by。
+- cost_input_tax_spec.json → known_limits: 隐形成本（业务费/公司管理费/融资费/风险储备）尚未进入 c_i（H-003，见 project_quote_policy.hidden_cost_policy）——本制品只保证**已进入 c_i 的那部分成本**口径正确，不保证 c_i 完整。二者是两件事，都解决之前利润仍是『清单贡献利润』口径。
 - phase1_exactness_spec.json → known_limits: T1 的结论只覆盖 P_A（C1 + 箱型）。C6/C9/C10/C11/C12/C13 激活时的结构由 §7.3 三层分割描述，本制品不证明其最优性。
 - phase1_exactness_spec.json → known_limits: 交换论证假设 R_i(p_i) 对 p_i 线性——即 r_i 与 p_i 无关。这在本模型成立（q0/q1 均为外生预测），但对「单价影响结算量」的反向情形不成立。该情形不在本模型范围内。
 - phase1_exactness_spec.json → known_limits: EC-5 的机械判据只能给出「存在平台」的必要信号，不能枚举全部多最优解。完整处理见 T04-06B（退化与多最优解处理）。

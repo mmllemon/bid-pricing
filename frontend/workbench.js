@@ -10,6 +10,8 @@
      note     内容记录/日记（标题 + 正文 + 心情标签）
    图标用 icon 字段（取自下方 ICONS 图标库，全部为单色线性图标）。
    ============================================================ */
+/* 后端服务基址：单一配置点（与提案报价页 app.js 的 API_BASE 保持一致） */
+const API_BASE = 'http://localhost:8000';
 const CONFIG = {
   storageKey: "gc-workbench-v2",        // 换 key 可强制重置
   owner: "我的工作台",                  // 侧栏顶部标题
@@ -52,7 +54,7 @@ const CONFIG = {
     { key:"biz", name:"项目经营概览", icon:"chart", tint:"#e7eef7", color:"var(--module-2)", type:"biz", desc:"从后端方案库读取项目报价与结算利润",
       seed:[] },
     { key:"todo", name:"今日计划", icon:"list", tint:"#efeee8", color:"var(--accent)", type:"todo", desc:"任务清单与进度追踪",
-      priorities:[ {key:"P0",label:"重要",color:"#f6ece9",text:"#c25d4f"}, {key:"P1",label:"一般",color:"#f6efe6",text:"#bd8a4e"}, {key:"P2",label:"随手",color:"#eef2ec",text:"#6f8f6a"} ],
+      priorities:[ {key:"P0",label:"重要",color:"#f7ebe9",text:"#ba4a38"}, {key:"P1",label:"一般",color:"#f8f1e7",text:"#c97a2b"}, {key:"P2",label:"随手",color:"#e8efe9",text:"#4d7c59"} ],
       seed:[ {id:11,title:"完成英语核心词汇 30min",priority:"P0",done:false,note:"积累词汇量，稳步提升英语能力"},
              {id:12,title:"发布 1 篇笔记 / 视频",priority:"P1",done:false,note:""},
              {id:13,title:"整理今日工作纪要",priority:"P2",done:true,note:""} ] },
@@ -225,7 +227,7 @@ function overviewTileHTML(){
   const money=data.money||[];
   const inc=money.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
   const exp=money.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
-  const bal=inc-exp, balCol=bal>=0?"var(--module-1)":"var(--danger)";
+  const bal=inc-exp, balCol=bal>=0?"var(--success)":"var(--danger)";
   return `<div class="tile b12"><div class="tile-h"><span class="tic">${icon("target",16)}</span><div class="tt"><span class="en">DAILY VITALS</span><span class="zh">今日概览</span></div><span class="r">${dateStr()}</span></div>
     <div class="ov2-body">
       <div class="rings">${rings}</div>
@@ -327,7 +329,7 @@ function goalsTileHTML(){
   const all=data.sport||[]; const colors=["var(--module-3)","var(--module-1)","var(--module-2)","var(--module-4)","var(--module-5)"];
   const rows=all.length? all.map((x,i)=>{ const pct=Math.min(100,Math.round((x.current/x.target)*100||0)); const col=colors[i%colors.length];
     return `<div class="book-row"><span class="spine" style="background:${col}">${icon("activity",16)}</span>
-      <div class="bmid"><div class="btt">${pct>=100?`<span style="color:var(--module-1);display:inline-flex;vertical-align:-2px;margin-right:3px">${icon("check",13,2.6)}</span>`:''}${esc(x.title)}</div>
+      <div class="bmid"><div class="btt">${pct>=100?`<span style="color:var(--success);display:inline-flex;vertical-align:-2px;margin-right:3px">${icon("check",13,2.6)}</span>`:''}${esc(x.title)}</div>
         <div class="bsub">${x.current}/${x.target} ${x.unit||'次'}</div>
         <div class="bbar"><i style="width:${pct}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pct}%</span></div>`; }).join("")
     : `<div class="focus-empty">还没有锻炼目标，去「每日锻炼」添加吧</div>`;
@@ -424,7 +426,7 @@ function renderModule(key){
     const inc=all.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
     const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
     head=`<div class="mod-summary">
-      <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--module-1)">¥${inc}</div></div>
+      <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--success)">¥${inc}</div></div>
       <div class="mini"><div class="l">支出</div><div class="v" style="color:var(--danger)">¥${exp}</div></div>
       <div class="mini"><div class="l">结余</div><div class="v">¥${inc-exp}</div></div>
       <div class="mini"><div class="l">笔数</div><div class="v">${all.length}</div></div></div>`;
@@ -496,7 +498,7 @@ function sideStats(m, all){
       : `<div style="color:var(--text-tertiary);font-size:12.5px;padding:6px 0">暂无支出记录</div>`;
     const todayExp=all.filter(x=>x.type==="expense"&&x.date===t).reduce((a,x)=>a+ +x.amount,0);
     return `<div class="side-card"><div class="sh">${icon("wallet",15)} 收支概况</div>
-        ${row("总收入",`<span style="color:var(--module-1)">¥${inc}</span>`)}
+        ${row("总收入",`<span style="color:var(--success)">¥${inc}</span>`)}
         ${row("总支出",`<span style="color:var(--danger)">¥${exp}</span>`)}
         ${row("净结余",`¥${inc-exp}`)}
         ${row("今日支出",`¥${todayExp}`)}
@@ -772,7 +774,7 @@ function renderBizPage(){
 
   const fetchAll = () => {
     fill(head + '<div class="biz-loading">正在读取项目经营概览…</div>');
-    fetch("http://localhost:8000/api/project/overview/list").then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(json=>{
+    fetch(API_BASE + "/api/project/overview/list").then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(json=>{
       projects = (json && json.projects) || [];
       window.__bizProjects = projects;
       if(!projects.length){ fill(head + '<div class="toolbar"><div class="spacer"></div><button class="btn" onclick="window.__bizNew&amp;&amp;__bizNew()">'+icon("plus",16,2.2)+'新建项目</button></div><div class="biz-head"><span class="bt">暂无项目</span></div><div class="biz-empty">还没有项目，点右上角「新建项目」创建一个开始经营概览。</div>'); return; }
@@ -908,7 +910,7 @@ function bizEditModal(proj, after){
   const grid = (label,k,ph)=>'<label class="fld"><span>'+label+'</span><input type="number" step="0.01" id="bo-'+k+'" value="'+nfv(k)+'" placeholder="'+ph+'"/></label>';
   const html =
     '<div class="modal-mask" id="bizMask"><div class="modal biz-modal">'
-    +'<div class="biz-mhead"><h3>'+(isNew?'新建项目':'编辑项目')+'</h3><button type="button" class="biz-x" id="bizClose">✕</button></div>'
+    +'<div class="biz-mhead"><h3>'+(isNew?'新建项目':'编辑项目')+'</h3><button type="button" class="biz-x" id="bizClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>'
     +'<div class="biz-mform">'
     +'<label class="fld"><span>项目名称 *</span><input id="bo-name" value="'+esc(p.name)+'" placeholder="如：西永L分区项目"/></label>'
     +'<label class="fld"><span>简称（选填，显示在便利贴上）</span><input id="bo-short_name" value="'+esc(p.short_name||"")+'" placeholder="如：西永L"/></label>'
@@ -963,7 +965,7 @@ function bizEditModal(proj, after){
     for(const k in f){ data.append(k, f[k]); }
     if(p.id) data.append("pid", p.id);
     try{
-      const r = await fetch("http://localhost:8000/api/project/overview/save", {method:"POST", body:data});
+      const r = await fetch(API_BASE + "/api/project/overview/save", {method:"POST", body:data});
       const j = await r.json();
       if(!r.ok || j.status!=="PASS") throw new Error(j.reason||"保存失败");
       close(); after && after();
@@ -974,7 +976,7 @@ function bizEditModal(proj, after){
     if(!confirm("确定删除项目「"+(p.name||"")+"」？此操作不可恢复。")) return;
     const data = new FormData(); data.append("id", p.id);
     try{
-      const r = await fetch("http://localhost:8000/api/project/overview/delete", {method:"POST", body:data});
+      const r = await fetch(API_BASE + "/api/project/overview/delete", {method:"POST", body:data});
       const j = await r.json();
       if(!r.ok || j.status!=="PASS") throw new Error(j.reason||"删除失败");
       close(); after && after();

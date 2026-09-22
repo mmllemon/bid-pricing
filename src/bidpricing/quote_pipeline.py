@@ -180,6 +180,35 @@ def run_quote_pipeline(
     return QuotePipelineResult("PASS", target_total, budget, dict(solution.p_by_id), line_amounts, checked.Z, solution.status, (), "总报价已转换为可行分项综合单价并完成约束复验", warnings, plan.multiplier, tuple(plan.trace_dicts()))
 
 
+def _settlement_solve_user_reason(instance: Phase1Instance, status) -> str:
+    """求解非 OPTIMAL 时的用户侧文案：不透传求解器原生状态文本。
+
+    原生 reason 是内部诊断格式（如 ``'Infeasible' ⇒ INFEASIBLE``），直接展示给
+    报价人员既不说明「为什么无解」也不给「该怎么办」。此处按三态纪律区分：
+
+    - INFEASIBLE（已证空域）复用诊断 Pass A（纯算术），输出带数额的冲突与
+      放松建议；诊断本身失败仍给出结论文案，不让用户看到 500。
+    - 其余状态（UNKNOWN / UNBOUNDED / …）保留状态名与原生原因供排查。
+    """
+    if status.normalized == "INFEASIBLE":
+        from .solver.diagnose import detect_structural_conflicts
+
+        try:
+            conflicts = detect_structural_conflicts(instance)
+        except Exception:  # noqa: BLE001 - 诊断尽力而为，失败仍要给出结论
+            conflicts = ()
+        if conflicts:
+            parts = ["已证无可行解：以下参数冲突使报价不存在可行组合。"]
+            parts += [f"· {c.detail}；{c.suggested_relaxation}" for c in conflicts[:4]]
+            return " ".join(parts)
+        return (
+            "已证无可行解：目标报价金额与限价清单/报价比率区间自相矛盾，"
+            "求解器找不到满足全部约束的报价组合。请检查目标报价金额是否过低或过高、"
+            "报价比率下限/上限是否过窄，或限价清单是否含异常值。"
+        )
+    return f"求解未完成（{status.normalized}）：{status.reason}"
+
+
 def run_settlement_adjusted_quote_pipeline(
     *,
     target_total: float,
@@ -240,9 +269,11 @@ def run_settlement_adjusted_quote_pipeline(
     except Exception as exc:  # noqa: BLE001 - 业务入口统一归一为 BLOCKED
         return QuotePipelineResult("BLOCKED", target_total, None, {}, {}, None, None, (), f"结算调整 MILP 输入/求解失败: {exc}")
     if solved.status.normalized != "OPTIMAL":
+        # 用户侧文案：INFEASIBLE 出诊断建议，其余状态保留原生原因（见 _settlement_solve_user_reason）
+        reason = _settlement_solve_user_reason(instance, solved.status)
         return QuotePipelineResult(
             "BLOCKED", target_total, budget, {}, {}, None,
-            solved.status.normalized, (), solved.status.reason,
+            solved.status.normalized, (), reason,
             tuple(built.warnings), plan.multiplier, tuple(plan.trace_dicts()),
         )
     prices = {

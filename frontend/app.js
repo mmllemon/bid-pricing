@@ -1,4 +1,3 @@
-const message = document.querySelector('#message');
 const quoteView = document.querySelector('#quoteView');
 const moduleView = document.querySelector('#moduleView');
 const workbenchView = document.querySelector('#workbenchView');
@@ -25,6 +24,9 @@ function showModule(module) {
 }
 function selectModule(module) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.module === module));
+  // 操作坞只挂在「投标报价」页；其余页面隐藏（各模块后续接入各自专属操作坞）
+  const dock = document.querySelector('.floating-dock');
+  if (dock) dock.classList.toggle('hidden', module !== 'quote');
   if (module === 'quote') { location.hash = ''; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); }
   else showModule(module);
 }
@@ -84,20 +86,62 @@ else selectModule('workbench');
     input.focus();
   };
 })();
-document.querySelectorAll('.upload-card input').forEach(input => {
+// ---- 双通道资产舱：选择/拖拽/成功态/重新上传 ----
+document.querySelectorAll('.intake-slot input[type=file]').forEach(input => {
   input.addEventListener('change', () => {
-    const name = document.querySelector(`[data-for="${input.id}"]`);
-    name.textContent = input.files[0] ? input.files[0].name : '选择 Excel 文件';
-    name.classList.toggle('selected', Boolean(input.files[0]));
+    const slot = input.closest('.intake-slot');
+    const cta = slot.querySelector('[data-for="' + input.id + '"]');
+    const fn = input.files[0];
+    if (cta) cta.textContent = fn ? fn.name : '选择 Excel 文件';
+    slot.classList.toggle('loaded', Boolean(fn));
+    // 文件变化即清空旧解析摘要：预览重解析后再回填，避免「未解析却显示上轮数据」
+    slot.querySelectorAll('.intake-stat').forEach(s => { s.innerHTML = ''; });
+    refreshPrepare();
+  });
+});
+// 双通道资产舱：键盘可达 —— Enter/Space 打开文件选择（P1-5）
+document.querySelectorAll('.intake-slot[role="button"]').forEach(slot => {
+  slot.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      const input = slot.querySelector('input[type=file]');
+      if (input) input.click();
+    }
+  });
+});
+// 拖拽高亮脉冲
+document.querySelectorAll('.intake-slot').forEach(slot => {
+  ['dragenter', 'dragover'].forEach(ev => slot.addEventListener(ev, e => { e.preventDefault(); slot.classList.add('dragging'); }));
+  ['dragleave', 'drop'].forEach(ev => slot.addEventListener(ev, e => { e.preventDefault(); slot.classList.remove('dragging'); }));
+  slot.addEventListener('drop', e => {
+    const input = slot.querySelector('input[type=file]');
+    if (input && e.dataTransfer.files.length) { input.files = e.dataTransfer.files; input.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+});
+// 重新上传徽标：清空选择并重新打开文件框
+document.querySelectorAll('.intake-reup').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    const input = document.querySelector('#' + btn.dataset.reup);
+    if (input) { input.value = ''; const slot = slotFor(input); slot.classList.remove('loaded'); slot.querySelectorAll('.intake-stat').forEach(s => { s.innerHTML = ''; }); refreshPrepare(); input.click(); }
+    function slotFor(el) { return el.closest('.intake-slot'); }
   });
 });
 
 let currentPlanId = null;
 let plans = [];
 let lastResult = null;
+// 后端服务基址：单一配置点，换域名/环境只改这一处（下载与所有 API 调用共用）
+const API_BASE = 'http://localhost:8000';
 let overviewProjects = [];   // 项目经营概览数据集（用于关联与定稿回写）
 let activeOverviewId = '';    // 当前关联的经营项目 id（非空才显示定稿回写按钮）
-const fmt = (value, digits = 2) => value === null || value === undefined || value === '' ? '—' : Number(value).toFixed(digits);
+const fmt = (value, digits = 2) => {
+  if (value === null || value === undefined || value === '') return '—';
+  const n = Number(value);
+  if (Number.isNaN(n)) return '—';
+  // 千分位 + 固定小数位：金额/数量列小数点与位权对齐
+  return n.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+};
 // 安全转义：所有来自 Excel / 用户输入的字符串在进入 innerHTML 前必须过 esc，防止清单注入。
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const escList = (arr) => (arr || []).map(esc).join('、');
@@ -105,7 +149,7 @@ const escList = (arr) => (arr || []).map(esc).join('、');
 function fillParams(params) {
   if (!params) return;
   const map = { target_total:'targetTotal', fixed_pretax:'fixedPretax', vat_rate:'vatRate', surtax_rate:'surtaxRate', ratio_min:'ratioMin', ratio_max:'ratioMax' };
-  Object.entries(map).forEach(([key, id]) => { const el = document.querySelector(`#${id}`); if (params[key] !== undefined) el.value = params[key]; });
+  Object.entries(map).forEach(([key, id]) => { const el = document.querySelector(`#${id}`); if (params[key] !== undefined) el.value = (key === 'vat_rate' || key === 'surtax_rate') ? Math.round(Number(params[key]) * 100) : params[key]; });
   const conf = document.querySelector('#lowRatioConfirmed');
   if (params.low_ratio_confirmed !== undefined) conf.checked = Boolean(params.low_ratio_confirmed);
   const by = document.querySelector('#lowPriceConfirmedBy');
@@ -117,16 +161,22 @@ function fillParams(params) {
   else renderCompositionRows();
   toggleComposeWrap();
   updateCompositionLive();
+  const rlo = document.querySelector('#ratioLow'), rhi = document.querySelector('#ratioHigh');
+  if (rlo && params.ratio_min !== undefined) rlo.value = Math.round(Number(params.ratio_min) * 100);
+  if (rhi && params.ratio_max !== undefined) rhi.value = Math.round(Number(params.ratio_max) * 100);
+  refreshRatioUI();
 }
 
+// P0：预览渲染进右栏 #previewStage（唯一真相源）；就绪态 preparePanel 仍可见。
 function renderPreview(res) {
-  const panel = document.querySelector('#previewPanel');
-  document.querySelector('#resultPanel').classList.add('hidden');
+  const panel = document.querySelector('#previewStage');
+  if (!panel) return;
+  setDashboardVisible(false); // 回到就绪态：preparePanel 可见，KPI/明细表隐藏
   const uw = (ws) => Object.entries(ws).map(([k, v]) => `${k}(${v}行)`).join('、') || '—';
   const chip = (k, label) => `<span style="${res.fields[k] ? 'color:var(--success);font-weight:600' : 'color:var(--warn);font-weight:600'}">${label}${res.fields[k] ? '✓' : '−'}</span>`;
   const m = res.match;
   panel.innerHTML = `<div class="result-head"><div><h3>导入资料预览</h3><p>项目：${esc(res.project_id)} ｜ 优化前核对：行数 / 字段 / 匹配覆盖 / 异常 / 文件哈希</p></div></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-top:10px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;">
     <div style="padding:10px;background:var(--surface-nested);border:1px solid var(--border);border-radius:8px;"><b>限价清单</b><br>${res.cap.rows} 行 ｜ ${esc(uw(res.cap.unit_works))}<br><small style="color:var(--text-tertiary)">哈希 ${esc(res.cap.hash_sha256 || '—')}</small></div>
     <div style="padding:10px;background:var(--surface-nested);border:1px solid var(--border);border-radius:8px;"><b>成本清单</b><br>${res.cost.rows} 行 ｜ ${esc(uw(res.cost.unit_works))}<br><small style="color:var(--text-tertiary)">哈希 ${esc(res.cost.hash_sha256 || '—')}</small></div>
     <div style="padding:10px;background:var(--surface-nested);border:1px solid var(--border);border-radius:8px;"><b>匹配覆盖</b><br>master ${m.master_keys} 键：匹配 ${m.matched}、仅限价 ${m.only_cap}、仅成本 ${m.only_cost}${m.blocked ? '<br><strong style="color:var(--danger)">重复 key 已阻断，禁止自动合并</strong>' : ''}</div>
@@ -134,19 +184,56 @@ function renderPreview(res) {
     <div style="padding:10px;background:var(--surface-nested);border:1px solid var(--border);border-radius:8px;"><b>字段适配</b><br>${chip('item_id', '编码')} ${chip('item_name', '名称')} ${chip('unit', '单位')} ${chip('q0', '工程量')} ${chip('cap', '限价')} ${chip('q1_point', '结算量')} ${chip('c_i', '成本')}</div>
     <div style="padding:10px;background:var(--surface-nested);border:1px solid var(--border);border-radius:8px;"><b>异常</b> ${res.anomaly_count} 条${res.anomalies.length ? `：${res.anomalies.map(a => `${esc(a.kind)}@${esc(a.item_id)}`).join('、')}` : ''}<br><small style="color:var(--text-tertiary)">仅限价侧 ${res.match.only_cap_ids.length ? '：' + escList(res.match.only_cap_ids) : '—'}</small></div>
     </div>`;
+  applyIntakeSummary(res);
   panel.classList.remove('hidden');
 }
 
-function renderResult(result, { savedPlan = false } = {}) {
-  const panel = document.querySelector('#resultPanel'); panel.classList.remove('hidden');
-  document.querySelector('#previewPanel').classList.add('hidden');
-  const rows = result.items || [];
+// 上传资产舱即时摘要：预览解析后回填「已解析行数 / 匹配 / 未匹配」凭证
+function applyIntakeSummary(res) {
+  if (!res) return;
+  // 摘要只回填到「当前已加载文件」的槽位：打开已存方案时文件不可还原，槽位
+  // 未加载即不显示解析凭证（预览右栏仍展示全部解析明细，无信息损失）。
+  const capStat = document.querySelector('#capStat'), costStat = document.querySelector('#costStat');
+  const capLoaded = !!document.querySelector('#capSlot') && document.querySelector('#capSlot').classList.contains('loaded');
+  const costLoaded = !!document.querySelector('#costSlot') && document.querySelector('#costSlot').classList.contains('loaded');
+  if (capStat && res.cap && capLoaded) capStat.innerHTML = `已解析 <b class="tabular">${Number(res.cap.rows) || 0}</b> 行`;
+  if (costStat && res.cost && costLoaded) costStat.innerHTML = `已解析 <b class="tabular">${Number(res.cost.rows) || 0}</b> 行`;
+  const m = res.match;
+  if (m && capStat && capLoaded) {
+    const miss = (Number(m.only_cap) || 0) + (Number(m.only_cost) || 0);
+    capStat.innerHTML += ` ｜ 匹配 <b class="tabular">${Number(m.matched) || 0}</b>${miss ? ` · 未匹配 <b class="tabular">${miss}</b>` : ''}`;
+  }
+}
+
+// KPI 穿透清除徽标：毛利/风险钻取激活时显示，一键回到全部子目
+function syncDrillClear() {
+  const chip = document.querySelector('#clearDrillChip');
+  if (!chip) return;
+  chip.classList.toggle('hidden', !(dashSortMargin || dashFilter === 'risk'));
+}
+
+// P0：结果不再渲染 #resultPanel 大表，统一走 renderDashTable（KPI 联动明细表）。
+// 原来 #resultPanel 里的动作（下载 Excel / 下载 JSON / 定稿并回写）搬进 .table-toolbar 右侧小按钮组。
+function renderResult(result, { savedPlan = false, animate = true } = {}) {
+  fillResultToolbar(result, savedPlan);
+  renderDashboard(result, { animate });
+  refreshSchemeTabs();
+}
+
+// 结果动作工具栏：渲染进 .table-toolbar 右侧 #resultActions（下载 Excel / 下载 JSON / 定稿并回写）
+function fillResultToolbar(result, savedPlan) {
+  const box = document.querySelector('#resultActions');
+  if (!box) return;
   const savedPill = savedPlan ? '<span class="plan-saved-pill">方案已保存</span>' : '';
   // 下载兜底：历史方案 result 可能未带 excel_download_url，按 plan_id 推导
   const dlUrl = result.excel_download_url || (result.plan_id ? '/api/quote/download/' + result.plan_id : '');
-  panel.innerHTML = `<div class="result-head"><div><h3>报价结果明细${savedPill}</h3><p>共 ${result.item_count ?? rows.length} 个优化项目${result.manual_item_count ? `，另有 ${result.manual_item_count} 个项目需人工报价` : ''}${result.low_ratio_review_required ? '，存在低于50%的报价比率' : ''}</p></div><div class="download-actions"><a class="download-button" href="${dlUrl ? 'http://localhost:8000' + esc(dlUrl) : '#'}" ${dlUrl ? `download="${esc(dlUrl.split('/').pop())}"` : ''}>下载 Excel</a><button class="btn-secondary" id="downloadResult">下载 JSON</button>${activeOverviewId ? '<button class="btn-primary" id="finalizeBid" title="将目标总报价写回为该项目投标报价金额，竞争性预算写回为投标成本测算">定稿并回写项目</button>' : ''}</div></div><div class="table-wrap"><table><thead><tr><th>项目编码</th><th>项目名称</th><th>单位</th><th class="num">工程量</th><th class="num">结算量</th><th class="num">含税成本单价</th><th>成本税口径</th><th class="num">有效成本单价</th><th class="num">最高限价</th><th class="num">最优报价单价</th><th class="num">报价比率</th><th class="num">报价合价</th><th class="num">单项毛利</th><th>状态</th><th>说明</th></tr></thead><tbody>${rows.map(row => `<tr class="${row['报价状态'] === 'MANUAL_REVIEW' ? 'manual-row' : ((Number(row['单项毛利'] ?? 0) < 0 || Number(row['报价比率'] ?? 1) < 0.5) ? 'loss-row' : '')}"><td>${esc(row['项目编码'] ?? '')}</td><td title="${esc(row['项目名称'] ?? '')}">${esc(row['项目名称'] ?? '')}</td><td>${esc(row['单位'] ?? '—')}</td><td class="num">${fmt(row['工程量'],3)}</td><td class="num">${fmt(row['成本工程量'],3)}</td><td class="num">${fmt(row['含税成本单价'])}</td><td>${esc(row['成本税口径'] ?? '')}</td><td class="num">${fmt(row['有效成本单价'])}</td><td class="num">${fmt(row['最高限价'])}</td><td class="num price-cell">${fmt(row['最优报价单价'])}</td><td class="num">${row['报价比率'] == null ? '' : fmt(Number(row['报价比率'])*100,2) + '%'}</td><td class="num">${fmt(row['报价合价'])}</td><td class="num">${fmt(row['单项毛利'])}</td><td>${row['报价状态'] === 'MANUAL_REVIEW' ? '人工报价' : ((Number(row['单项毛利'] ?? 0) < 0 || Number(row['报价比率'] ?? 1) < 0.5) ? '需复核' : '通过')}</td><td>${esc(row['说明'] ?? '')}</td></tr>`).join('')}</tbody></table></div>`;
-  document.querySelector('#downloadResult').addEventListener('click', () => { const blob = new Blob([JSON.stringify(result,null,2)], {type:'application/json'}); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = '报价结果_结算调整版.json'; link.click(); URL.revokeObjectURL(link.href); });
-  const finBtn = document.querySelector('#finalizeBid');
+  box.innerHTML = savedPill +
+    (dlUrl ? `<a class="download-button" href="${API_BASE}${esc(dlUrl)}" ${`download="${esc(dlUrl.split('/').pop())}"`}>下载 Excel</a>` : '') +
+    '<button class="btn-secondary" id="downloadResult">下载 JSON</button>' +
+    (activeOverviewId ? '<button class="btn-primary" id="finalizeBid" title="将目标总报价写回为该项目投标报价金额，竞争性预算写回为投标成本测算">定稿并回写项目</button>' : '');
+  const jbtn = box.querySelector('#downloadResult');
+  if (jbtn) jbtn.addEventListener('click', () => { const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = '报价结果_结算调整版.json'; link.click(); URL.revokeObjectURL(link.href); });
+  const finBtn = box.querySelector('#finalizeBid');
   if (finBtn) finBtn.addEventListener('click', () => { finalizeToOverview(targetTotalVal(), result); });
 }
 
@@ -171,7 +258,7 @@ async function finalizeToOverview(bidAmount, result) {
     const data = new FormData();
     data.append('id', activeOverviewId);
     data.append('bid_amount', bidAmount);
-    const resp = await fetch('http://localhost:8000/api/project/overview/finalize', {method:'POST', body:data});
+    const resp = await fetch(API_BASE + '/api/project/overview/finalize', {method:'POST', body:data});
     const res = await resp.json();
     if (!resp.ok || res.status !== 'PASS') throw new Error(res.reason || '回写未通过');
     if (activeOverviewProjects[activeOverviewId]) activeOverviewProjects[activeOverviewId].bid_amount = bidAmount;
@@ -180,7 +267,7 @@ async function finalizeToOverview(bidAmount, result) {
     // write=0：投标报价金额刚已手动回写，避免 mark 再次按方案存储值二次覆盖（值不一致/跨项目污染）。
     if (currentPlanId) {
       try {
-        await fetch(`http://localhost:8000/api/project/mark-finalized?id=${encodeURIComponent(currentPlanId)}&write=0`, {method:'POST'});
+        await fetch(`${API_BASE}/api/project/mark-finalized?id=${encodeURIComponent(currentPlanId)}&write=0`, {method:'POST'});
         refreshPlans();
       } catch (e) { /* 标记失败不阻断回写 */ }
     }
@@ -195,7 +282,7 @@ let activeOverviewProjects = {};
 let nameToId = {};   // 项目名 → 真实 id，用于旧方案（project_id=名称）归一化
 async function loadBidProjectOptions() {
   try {
-    const resp = await fetch('http://localhost:8000/api/project/overview/list');
+    const resp = await fetch(API_BASE + '/api/project/overview/list');
     if (!resp.ok) return;
     const res = await resp.json();
     if (!res.projects) return;
@@ -214,8 +301,17 @@ async function loadBidProjectOptions() {
       if (hit && tEl && hit.bid_amount != null && hit.bid_amount !== '') tEl.value = Number(hit.bid_amount).toFixed(2);
     };
     sel.addEventListener('change', apply);
+    // 全局项目上下文：切换关联项目 → 右侧主舞台切换到该项目「最近方案组/槽位」并刷新方案中心
+    sel.addEventListener('change', onGlobalProjectChange);
     apply();
+    syncProjectGate();
+    refreshPrepare();
   } catch (e) { /* 后端未启动时静默降级为手动填写 */ }
+}
+// 关联项目门控：未选择关联项目时，报价页全部按钮/输入框/下拉框不可交互（唯一例外：项目选择本身）
+function syncProjectGate() {
+  const sel = document.querySelector('#projectId');
+  document.body.classList.toggle('project-locked', !(sel && sel.value));
 }
 // 当前选中的关联项目：{uuid, name}
 function selectedOverviewProject() {
@@ -262,13 +358,13 @@ function _composeRowsHtml(comp) {
 
 function renderCompositionRows() {
   document.querySelector('#composeRows').innerHTML = _composeRowsHtml(COMP_DEFAULTS);
-  document.querySelectorAll('#composeRows input').forEach(el => el.addEventListener('input', updateCompositionLive));
+  document.querySelectorAll('#composeRows input').forEach(el => el.addEventListener('input', () => { updateCompositionLive(); refreshPrepare(); }));
 }
 
 function applyComposition(comp) {
   if (!Array.isArray(comp) || !comp.length) { renderCompositionRows(); return; }
   document.querySelector('#composeRows').innerHTML = _composeRowsHtml(comp);
-  document.querySelectorAll('#composeRows input').forEach(el => el.addEventListener('input', updateCompositionLive));
+  document.querySelectorAll('#composeRows input').forEach(el => el.addEventListener('input', () => { updateCompositionLive(); refreshPrepare(); }));
 }
 
 function toggleComposeWrap() {
@@ -281,11 +377,22 @@ function toggleComposeWrap() {
 function updateCompositionLive() {
   const mode = document.querySelector('#taxMode').value;
   const sumEl = document.querySelector('#composeSum');
-  const kEl = document.querySelector('#composeK');
+  const creditPct = document.querySelector('#compCreditPct');
+  const ledgerPct = document.querySelector('#compLedgerPct');
+  const stkCredit = document.querySelector('#compStkCredit');
+  const stkLedger = document.querySelector('#compStkLedger');
+  const kBadgeVal = document.querySelector('#kInlineVal');
+  const setBarCredit = (c, k) => {
+    if (stkCredit) stkCredit.style.width = (c * 100).toFixed(1) + '%';
+    if (stkLedger) stkLedger.style.width = ((1 - c) * 100).toFixed(1) + '%';
+    if (creditPct) creditPct.textContent = (c * 100).toFixed(1) + '%';
+    if (ledgerPct) ledgerPct.textContent = ((1 - c) * 100).toFixed(1) + '%';
+    if (kBadgeVal) kBadgeVal.textContent = Number.isFinite(k) ? k.toFixed(6) : '—';
+  };
   if (mode === 'NONE') {
     sumEl.textContent = '占比合计：—（不可抵扣，不读构成）';
     sumEl.className = 'compose-sum';
-    kEl.textContent = '换算系数 k = 1.000000（含税即有效成本）';
+    setBarCredit(0, 1);
     return;
   }
   let total = 0, credit = 0, k = 1.0;
@@ -302,7 +409,7 @@ function updateCompositionLive() {
   const dev = ((total - 1) * 100);
   sumEl.textContent = `占比合计：${(total * 100).toFixed(1)}%${sumOk ? '' : '（须=100%' + (Math.abs(dev) >= 0.05 ? `，偏差 ${dev > 0 ? '+' : ''}${dev.toFixed(1)}%` : '') + '）'}`;
   sumEl.className = 'compose-sum ' + (sumOk ? 'ok' : 'bad');
-  kEl.textContent = `可抵扣占比 ${(credit * 100).toFixed(1)}% ｜ 换算系数 k = ${k.toFixed(6)}`;
+  setBarCredit(credit, k);
 }
 
 // 汇总当前表单的税口径覆盖，返回注入 FormData 的字段。
@@ -327,7 +434,22 @@ function readTaxOverride() {
   return {mode, creditRatio: credit, compositionJson: JSON.stringify(comp)};
 }
 
-function setMessage(text, kind = '') { message.className = kind ? `message ${kind}` : 'message'; message.innerHTML = text; }
+// ---- 提示 Toast（P0：消息从左栏内联提示改为顶部 Toast 气泡） ----
+// 保留 setMessage(text, kind) 签名（40+ 处调用点不动），内部实现为顶部 toast-pill。
+// kind ∈ {success,error,warn,''}：success=模块绿、error=赤陶、warn=赭石、默认墨灰；
+// 自动消失（success 3.5s / error 6s / 其他 4s）；内容可含 HTML（现有调用含 <b>）。
+let toastTimer = null;
+function setMessage(text, kind = '') {
+  const tp = document.querySelector('#toastPill');
+  const tm = document.querySelector('#toastMsg');
+  if (!tp || !tm) return;
+  tp.className = 'toast-pill' + (kind ? ' toast-' + kind : '');
+  tm.innerHTML = text;
+  tp.classList.add('show');
+  clearTimeout(toastTimer);
+  const ms = kind === 'success' ? 3500 : kind === 'error' ? 6000 : 4000;
+  toastTimer = setTimeout(() => tp.classList.remove('show'), ms);
+}
 
 // 即时校验：比率区间非法在提交前拦截，并给对应输入框加错误态/焦点，避免空跑服务端再 422。
 function clearInvalid() { document.querySelectorAll('.invalid').forEach(el => { el.classList.remove('invalid'); el.removeAttribute('aria-invalid'); }); }
@@ -338,11 +460,11 @@ function validateParams() {
   const lo = Number(loEl.value); const hi = Number(hiEl.value);
   if (Number.isNaN(lo) || lo < 0 || lo > 1) { markInvalid(loEl, '单项报价比率下限非法：须为 0～1 之间的数值。'); return false; }
   if (Number.isNaN(hi) || hi > 1 || hi < lo) { markInvalid(hiEl, `报价比率区间非法：上限须 ≥ 下限（${lo}）且 ≤ 1.00。`); return false; }
-  // 税率采用小数口径（0.09 = 9%），必须落在 (0, 1]，避免把 9 当作 9% 变成 900%
+  // 税率采用整数百分比口径（9 = 9%），提交时 /100 转小数（0.09）；须落在 (0, 100]
   const vtEl = document.querySelector('#vatRate'); const stEl = document.querySelector('#surtaxRate');
   const vt = Number(vtEl.value); const st = Number(stEl.value);
-  if (Number.isNaN(vt) || vt <= 0 || vt > 1) { markInvalid(vtEl, '增值税率须为 0～1 之间的小数（如 0.09 表示 9%）。'); return false; }
-  if (Number.isNaN(st) || st <= 0 || st > 1) { markInvalid(stEl, '附加税率须为 0～1 之间的小数（如 0.12 表示 12%）。'); return false; }
+  if (Number.isNaN(vt) || vt <= 0 || vt > 100) { markInvalid(vtEl, '增值税率须为 0～100 之间的百分比整数（如 9 表示 9%）。'); return false; }
+  if (Number.isNaN(st) || st <= 0 || st > 100) { markInvalid(stEl, '附加税率须为 0～100 之间的百分比整数（如 12 表示 12%）。'); return false; }
   return true;
 }
 // 比率输入实时校验：输完即标红，不必等提交
@@ -361,7 +483,7 @@ document.querySelector('#previewBtn').addEventListener('click', async () => {
   const ovp = selectedOverviewProject();
   data.append('project_id', ovp.uuid); data.append('project_name', ovp.name);
   try {
-    const response = await fetch('http://localhost:8000/api/quote/preview', {method:'POST', body:data});
+    const response = await fetch(API_BASE + '/api/quote/preview', {method:'POST', body:data});
     const res = await response.json();
     if (!response.ok || res.status !== 'PASS') throw new Error(res.reason || '预览未通过');
     renderPreview(res);
@@ -371,21 +493,19 @@ document.querySelector('#previewBtn').addEventListener('click', async () => {
   } finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = '预览导入资料'; }
 });
 
-document.querySelector('#calculateBtn').addEventListener('click', async () => {
-  const cap = document.querySelector('#capFile').files[0];
-  const cost = document.querySelector('#costFile').files[0];
-  if (!validateParams()) return;
-  if (!cap || !cost) { setMessage('请先上传限价清单和成本清单。'); return; }
-  const button = document.querySelector('#calculateBtn');
-  button.disabled = true; button.setAttribute('aria-busy', 'true'); button.innerHTML = '正在计算…'; setMessage('正在识别清单并运行 Phase 2 MILP，请稍候。');
+// 组装 /api/quote/optimize 的表单体；strategy ∈ {"optimal","uniform"}（后端并行开发中，未实现时忽略该字段 = 优雅降级）。
+function buildOptimizeForm(strategy) {
   const data = new FormData();
-  data.append('limit_file', cap); data.append('cost_file', cost);
+  data.append('limit_file', document.querySelector('#capFile').files[0]);
+  data.append('cost_file', document.querySelector('#costFile').files[0]);
   const fields = {project_id:'projectId', target_total:'targetTotal', fixed_pretax:'fixedPretax', vat_rate:'vatRate', surtax_rate:'surtaxRate', ratio_min:'ratioMin', ratio_max:'ratioMax'};
   Object.entries(fields).forEach(([name, id]) => data.append(name, numVal(id)));
+  // 增值税率/附加税率：页面按整数百分比录入（9 / 12），后端按小数接收（0.09 / 0.12）
+  ['vat_rate', 'surtax_rate'].forEach(k => data.set(k, String(Number(data.get(k)) / 100)));
   data.append('project_name', selectedOverviewProject().name);
   data.append('overview_id', activeOverviewId);
   data.append('low_ratio_confirmed', document.querySelector('#lowRatioConfirmed').checked ? 'true' : 'false');
-  data.append('low_price_confirmed_by', (document.querySelector('#lowPriceConfirmedBy') || {}).value || '');
+  data.append('low_price_confirmed_by', [ (document.querySelector('#lowPriceConfirmedBy') || {}).value, (document.querySelector('#lowPriceBasisBy') || {}).value ].filter(Boolean).join('；'));
   data.append('clause_enabled', document.querySelector('#clauseEnabled').checked ? 'true' : 'false');
   // H-002：成本税口径（分项构成）覆盖，优先于 config 默认
   const taxCalc = readTaxOverride();
@@ -393,25 +513,60 @@ document.querySelector('#calculateBtn').addEventListener('click', async () => {
   data.append('cost_input_vat_rate', '0.13');
   data.append('credit_ratio', taxCalc.creditRatio);
   data.append('cost_composition', taxCalc.compositionJson);
+  data.append('strategy', strategy);
+  // H-008 方案组：带当前组 id，后端归入该组对应策略槽位（可空，空则并入既有组或新建组）
+  data.append('group_id', activeGroupId || '');
+  return data;
+}
+// 单次 optimize 请求：返回 {result} 或抛 {message, hint}
+async function postOptimize(strategy) {
+  const response = await fetch(API_BASE + '/api/quote/optimize', {method:'POST', body: buildOptimizeForm(strategy)});
+  const result = await response.json();
+  if (!response.ok || result.status !== 'PASS') {
+    // H-002：成本税口径未声明时后端在**出数之前**阻断；把原因与「该怎么办」
+    // 一并展示，避免用户只看到一句无法行动的报错。
+    const hint = result.cost_input_tax && result.cost_input_tax.user_hint;
+    const err = new Error(result.reason || '计算未通过');
+    err.hint = hint || '';
+    throw err;
+  }
+  result.strategy = strategy; // 契约并行开发中：PASS 响应缺省按本次提交的策略回填
+  return result;
+}
+// P0：一键生成三方案——顺序执行两次：A=optimal（逐项最优，主舞台 A 视图）、B=uniform（等比下浮）。
+// 第二次失败不阻断第一次成功（Toast 提示「方案B生成失败，原因…」）；lastResult 存 A 结果。
+document.querySelector('#calculateBtn').addEventListener('click', async () => {
+  const cap = document.querySelector('#capFile').files[0];
+  const cost = document.querySelector('#costFile').files[0];
+  if (!validateParams()) return;
+  if (!cap || !cost) { setMessage('请先上传限价清单和成本清单。'); return; }
+  const button = document.querySelector('#calculateBtn');
+  button.disabled = true; button.setAttribute('aria-busy', 'true'); button.innerHTML = '正在计算…'; setMessage('正在识别清单并运行 Phase 2 MILP（方案 A：逐项最优），请稍候。'); setDockBusy(true);
   try {
-    const response = await fetch('http://localhost:8000/api/quote/optimize', {method:'POST', body:data});
-    const result = await response.json();
-    if (!response.ok || result.status !== 'PASS') {
-      // H-002：成本税口径未声明时后端在**出数之前**阻断；把原因与「该怎么办」
-      // 一并展示，避免用户只看到一句无法行动的报错。
-      const hint = result.cost_input_tax && result.cost_input_tax.user_hint;
-      const err = new Error(result.reason || '计算未通过');
-      err.hint = hint || '';
-      throw err;
+    const resultA = await postOptimize('optimal');
+    currentPlanId = resultA.plan_id || null;
+    lastResult = resultA;
+    if (resultA.plan_id) planStrategyOverride[resultA.plan_id] = 'optimal';
+    activeGroupId = resultA.group_id || activeGroupId;   // A/B 归入同一方案组
+    renderResult(resultA, { savedPlan: Boolean(currentPlanId) });
+    setMessage(`方案 A 计算完成：竞争性预算 <b>${Number(resultA.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元，结算调整后利润（不含增值税）<b>${Number(resultA.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元。${costBasisNote(resultA)}${resultA.low_ratio_review_required ? '<br><strong>警告：存在低于50%的报价比率，请人工复核招标文件条款。系统未作出废标判定，以招标文件为准；已记录确认留痕（确认人/时间/条款依据，见结果 JSON）。</strong>' : ''}`, 'success');
+    // 第二步：方案 B（uniform）——失败不阻断 A 的成功结果（同组 B 槽位）
+    try {
+      const resultB = await postOptimize('uniform');
+      planStrategyOverride[resultB.plan_id] = 'uniform';
+      setMessage(`方案 A/B 均已生成：A=逐项最优，B=等比下浮（利润 <b>${Number(resultB.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元）。${costBasisNote(resultB)}`, 'success');
+    } catch (errorB) {
+      setMessage(`方案 B（等比下浮）生成失败，原因：${errorB.message}${errorB.hint ? `（${esc(errorB.hint)}）` : ''}。方案 A 已可用。`, 'warn');
     }
-    currentPlanId = result.plan_id || null;
-    lastResult = result;
-    setMessage(`计算完成：竞争性预算 <b>${Number(result.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元，结算调整后利润（不含增值税）<b>${Number(result.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元。${costBasisNote(result)}${result.low_ratio_review_required ? '<br><strong>警告：存在低于50%的报价比率，请人工复核招标文件条款。系统未作出废标判定，以招标文件为准；已记录确认留痕（确认人/时间/条款依据，见结果 JSON）。</strong>' : ''}`, 'success');
-    renderResult(result, { savedPlan: Boolean(currentPlanId) });
-    refreshPlans();
+    await refreshPlans();
+    activeGroup = groups.find(g => g.group_id === activeGroupId) || activeGroup;
+    openGroupById(activeGroupId);
+    refreshSchemeTabs();
+    updateSchemeBalance();
+    syncDockCta();
   } catch (error) {
     setMessage(`计算失败：${error.message}${error.hint ? `<br>${esc(error.hint)}` : ''}`, 'error');
-  } finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = '重新计算 <span>→</span>'; }
+  } finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = '识别文件并计算 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'; setDockBusy(false); }
 });
 
 // ---- 自定义下拉：毛玻璃选项面板，替代原生 select ----
@@ -484,13 +639,16 @@ function initCustomSelect(selId) {
   };
   return sel;
 }
-initCustomSelect('#planSelect');
-initCustomSelect('#baseSelect');
+// 注：旧左栏 #planSelect/#baseSelect 已随 P1 重构移除（方案库迁移到底部方案条，使用原生 select）。
 
-// ---- 方案库：下拉选项目 → 下方列该项目方案卡片，卡片可打开/删除 ----
-let planGroups = [];       // [{name, plan_count, plans:[summary]}]
-let curProject = '';       // 当前选中的项目名（用 JS 变量持有，避免依赖脆弱的下拉值回读）
-let selectedPlanId = '';   // 当前选中的方案卡片 id
+// ---- 方案中心：方案组（当前关联项目）→ A/B/C 槽位 ----
+let groups = [];              // 当前关联项目的方案组列表
+let activeGroup = null;       // 右栏当前展示的方案组对象
+let activeGroupId = '';       // 右栏当前展示的方案组 id
+let dashActive = false;       // 右栏是否处于结果态（renderDashboard 之后）
+let expandedGroups = new Set(); // 方案中心已展开的组 id
+let hubSelected = new Set();   // 方案中心已勾选对比的槽位方案 id 集合
+let hubView = 'list';          // 方案中心视图：list=方案组卡片 / compare=对比结果
 
 // 应用内确认框：删除只在用户明确点「确认删除」后才执行。
 // 不依赖原生 confirm——某些环境下原生 confirm 会被浏览器静默拦截/自动放行，
@@ -517,121 +675,270 @@ function uiConfirm(message, options = {}) {
   });
 }
 
-async function refreshPlans() {
-  try {
-    const res = await (await fetch('http://localhost:8000/api/project/list')).json();
-    if (!res || res.status !== 'PASS') throw new Error('列表加载失败');
-    planGroups = res.projects || [];
-    // 对比功能仍需要全量扁平方案列表：[(group…) => flatten]
-    plans = planGroups.flatMap(g => (g.plans || []));
-    renderProjectOptions();
-    renderPlanCards();
-  } catch (error) { setMessage(`方案列表加载失败：${error.message}`, 'error'); }
-}
+// 当前「关联投标项目」的 id（#projectId 全局上下文）
+function curProjectIdUuid() { return selectedOverviewProject().uuid; }
 
-function renderProjectOptions() {
-  const select = document.querySelector('#planSelect');
-  if (!select || !select.__cs) return;
-  // 当前项目仍在方案库则保持选中；若其方案已被删空（从列表消失），
-  // 自动落到剩余第一个项目，而不是回到『未选择项目』占位符让用户重选。
-  if (!planGroups.some(g => g.name === curProject)) {
-    curProject = planGroups.length ? planGroups[0].name : '';
-  }
-  select.value = curProject;
-  select.__cs.setOptions([{ value: '', label: '— 选择项目 —' }].concat(planGroups.map(g => ({
-    value: g.name,
-    label: `${g.name}（${g.plan_count} 个方案）`
-  }))));
-}
-
+// 当前项目方案组 → 扁平槽位方案列表（对比/策略映射复用）
 function currentProjectPlans() {
-  const g = planGroups.find(x => x.name === curProject);
-  return g ? (g.plans || []) : [];
+  const out = [];
+  (groups || []).forEach(g => {
+    Object.entries(g.strategy_slots || {}).forEach(([letter, s]) => {
+      const sm = (s && s.summary) || {};
+      const planId = (s && (s.plan_id || sm.plan_id)) || sm.plan_id;
+      if (!planId) return;
+      out.push({
+        id: planId, group_id: g.group_id, strategy: sm.strategy || letter.toLowerCase(),
+        name: (g.group_name || g.group_id || '') + ' · ' + letter,
+        project_id: g.project_id || g.project_name || '',
+        finalized: !!(g.finalized), saved_at: sm.saved_at,
+        target_total: sm.target_total, objective: sm.objective,
+        item_count: sm.item_count, competitive_budget: sm.competitive_budget,
+      });
+    });
+  });
+  return out;
 }
 
-function renderPlanCards() {
-  const box = document.querySelector('#planCards');
-  if (!box) return;
-  if (!curProject) {
-    box.innerHTML = '<p class="hint">请在上方选择一个项目，查看其已保存的方案。</p>';
-    selectedPlanId = '';
-    return;
+// 拉取当前关联项目的方案组并渲染方案中心；无项目时清空并渲染空态。
+async function loadProjectGroups() {
+  const pid = curProjectIdUuid();
+  if (!pid) { groups = []; plans = []; renderHubCards(); return []; }
+  try {
+    const res = await (await fetch(API_BASE + '/api/group/list?project_id=' + encodeURIComponent(pid))).json();
+    groups = (res && res.groups) || [];
+    plans = currentProjectPlans();
+    renderHubCards();
+    return groups;
+  } catch (error) { setMessage(`方案组加载失败：${error.message}`, 'error'); return []; }
+}
+
+async function refreshPlans() {
+  await loadProjectGroups();
+  refreshSchemeTabs();
+  syncSchemeSwitcher();
+}
+
+/* ---- 方案中心（#planHub）方案组 → A/B/C 槽位渲染 ----
+   每组一张卡：组名 / 目标报价 / 已算槽数 / 定稿锁 + 操作（改名·复制整组·定稿·删除）+ 展开出槽位。
+   槽位：pending 灰置「未测算·点算」；computed 显示利润 + 竞争预算 + 量化，带「打开」「勾选对比」。 */
+const HUB_SLOT_DEFS = [
+  { key: 'A', label: '逐项最优', strategy: 'optimal' },
+  { key: 'B', label: '等比下浮', strategy: 'uniform' },
+  { key: 'C', label: '策略待定', strategy: null },
+];
+function _fmtMoney(v) { return v != null && v !== '' ? '¥' + Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2}) : '—'; }
+
+function renderPlanHub() {
+  const body = document.querySelector('#planHubBody');
+  if (!body) return;
+  if (hubView === 'compare') return;   // 对比结果视图不重渲染卡片
+  renderHubCards();
+}
+
+function renderHubCards() {
+  const body = document.querySelector('#planHubBody');
+  if (!body) return;
+  const cur = document.querySelector('#planHubCurrent');
+  const pid = curProjectIdUuid();
+  if (cur) cur.textContent = pid ? ('当前项目：' + (selectedOverviewProject().name || pid)) : '未选择项目';
+  if (!pid) { body.innerHTML = '<div class="ph-empty">请先在左侧选择关联投标项目</div>'; updateHubSelection(); return; }
+  if (!groups.length) { body.innerHTML = '<div class="ph-empty">该项目暂无方案组，请先在上方识别并计算</div>'; updateHubSelection(); return; }
+  body.innerHTML = groups.map(renderGroupCard).join('');
+  bindHubGroupEvents();
+}
+
+function renderGroupCard(g) {
+  const computed = Object.values(g.strategy_slots || {}).filter(s => s && (s.plan_id || (s.summary && s.summary.plan_id))).length;
+  const expanded = expandedGroups.has(g.group_id);
+  const slotsHtml = expanded ? HUB_SLOT_DEFS.map(def => renderSlotRow(g, def)).join('') : '';
+  const lock = g.finalized ? '<span class="phg-lock on" title="已定稿，整组锁定"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>已定稿</span>' : '<span class="phg-lock">未定稿</span>';
+  const finLabel = g.finalized ? '取消定稿' : '定稿锁定';
+  return `<div class="phg-card${g.finalized ? ' finalized' : ''}${expanded ? ' expanded' : ''}" data-gid="${esc(g.group_id)}">
+    <div class="phg-head">
+      <button type="button" class="phg-expand" data-gid="${esc(g.group_id)}" aria-expanded="${expanded}" title="${expanded ? '收起槽位' : '展开 A/B/C 槽位'}"><span class="arr">▸</span></button>
+      <span class="phg-name" title="${esc(g.group_name || '')}">${esc(g.group_name || g.group_id || '未命名组')}</span>
+      ${lock}
+    </div>
+    <div class="phg-meta">
+      <span>目标报价 <b class="tabular">${_fmtMoney(_groupTarget(g))}</b></span>
+      <span>已算 <b class="tabular">${computed}/3</b> 槽</span>
+    </div>
+    <div class="phg-ops">
+      <button type="button" class="phg-op" data-rename="${esc(g.group_id)}">改名</button>
+      <button type="button" class="phg-op" data-copy="${esc(g.group_id)}">复制整组</button>
+      <button type="button" class="phg-op fin${g.finalized ? ' is-on' : ''}" data-fin="${esc(g.group_id)}">${finLabel}</button>
+      <button type="button" class="phg-op${g.finalized ? ' is-disabled' : ''}" data-del="${esc(g.group_id)}"${g.finalized ? ' disabled' : ''}>删除</button>
+    </div>
+    ${slotsHtml ? '<div class="phg-slots">' + slotsHtml + '</div>' : ''}
+  </div>`;
+}
+
+function _groupTarget(g) {
+  for (const def of HUB_SLOT_DEFS) {
+    const t = (g.strategy_slots || {})[def.key] && (g.strategy_slots[def.key].summary || {}).target_total;
+    if (t != null) return t;
   }
-  const list = currentProjectPlans();
-  if (!list.length) {
-    box.innerHTML = '<p class="hint">该项目暂无已保存方案。执行「识别文件并计算」成功后会自动保存。</p>';
-    selectedPlanId = '';
-    return;
-  }
-  if (!list.some(p => p.id === selectedPlanId)) selectedPlanId = list[0].id;
-  box.innerHTML = list.map(p => {
-    const sel = p.id === selectedPlanId ? ' sel' : '';
-    const finalized = p.finalized ? ' finalized' : '';
-    const badge = p.finalized ? '<span class="plan-card-badge" title="此方案已定稿，删除功能已锁定，请先取消定稿">已定稿 · 锁定</span>' : '';
-    const budget = p.competitive_budget != null ? Number(p.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2}) : '—';
-    const profit = p.objective != null ? Number(p.objective).toLocaleString('zh-CN',{minimumFractionDigits:2}) : '—';
-    const quoteAmt = p.target_total != null ? Number(p.target_total).toLocaleString('zh-CN',{minimumFractionDigits:2}) : '—';
-    return `<div class="plan-card${sel}${finalized}" data-id="${esc(p.id)}" tabindex="0" role="button" aria-label="打开方案 ${esc(p.id)}">
-      <div class="plan-card-main">
-        <div class="plan-card-title">${esc(p.name || p.id)}${badge}<span class="plan-card-meta">项数 ${p.item_count}</span></div>
-        <div class="plan-card-info">投标报价 <b>${quoteAmt}</b> 元 ｜ 预算 ${budget} 元 ｜ 利润 ${profit} 元 ｜ 保存 ${esc((p.saved_at || '').slice(0, 16))}</div>
+  return null;
+}
+
+function renderSlotRow(g, def) {
+  const s = (g.strategy_slots || {})[def.key] || { plan_id: null, status: 'pending' };
+  const sm = s.summary || {};
+  const planId = s.plan_id || sm.plan_id;
+  const letter = def.key.toLowerCase();
+  if (!planId) {
+    return `<div class="phg-slot pending letter-${letter}">
+      <span class="letter">${def.key}</span>
+      <div class="phg-slot-info">
+        <div class="phg-slot-title">${def.key} · ${def.label}</div>
+        <div class="phg-slot-stat">未测算 · 可点算</div>
       </div>
-      <div class="plan-card-actions">
-        <button type="button" class="plan-card-fin${p.finalized ? ' is-on' : ''}" data-fin="${esc(p.id)}" aria-pressed="${p.finalized ? 'true' : 'false'}" aria-label="${p.finalized ? '取消方案定稿' : '标记方案为定稿'}">${p.finalized ? '取消定稿' : '标为定稿'}</button>
-        <button type="button" class="plan-card-del${p.finalized ? ' is-disabled' : ''}" data-del="${esc(p.id)}"${p.finalized ? ' disabled' : ''} title="${p.finalized ? '此方案已定稿，请先取消定稿后再删除' : '删除该方案'}" aria-label="删除方案 ${esc(p.id)}" ${p.finalized ? 'aria-disabled="true"' : ''}>删除</button>
-      </div>
+      ${def.strategy ? `<button type="button" class="slot-act" data-calc="${esc(g.group_id)}" data-strategy="${def.strategy}">点算</button>` : ''}
     </div>`;
-  }).join('');
-  box.querySelectorAll('.plan-card').forEach(card => {
-    card.addEventListener('click', () => {
-      selectedPlanId = card.dataset.id;
-      renderPlanCards();
-      openPlanById(selectedPlanId);
+  }
+  const checked = hubSelected.has(planId) ? ' checked' : '';
+  const stat = `利润 <b class="tabular">${_fmtMoney(sm.objective)}</b> ｜ 竞争预算 <b>${_fmtMoney(sm.competitive_budget)}</b> ｜ ${sm.item_count != null ? sm.item_count + ' 项' : '—'}`;
+  return `<div class="phg-slot letter-${letter}">
+    <span class="letter">${def.key}</span>
+    <div class="phg-slot-info">
+      <div class="phg-slot-title">${def.key} · ${def.label}</div>
+      <div class="phg-slot-stat">${stat}</div>
+    </div>
+    <button type="button" class="slot-act" data-open="${esc(planId)}" title="打开该槽位方案">打开</button>
+    <label class="slot-check" title="勾选对比"><input type="checkbox" value="${esc(planId)}"${checked}/></label>
+  </div>`;
+}
+
+function bindHubGroupEvents() {
+  const body = document.querySelector('#planHubBody');
+  if (!body) return;
+  body.querySelectorAll('.phg-expand').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gid = btn.dataset.gid;
+      expandedGroups.has(gid) ? expandedGroups.delete(gid) : expandedGroups.add(gid);
+      renderHubCards();
     });
-    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.click(); } });
   });
-  box.querySelectorAll('.plan-card-fin').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.fin;
-      const plan = list.find(x => x.id === id);
-      const nowOn = Boolean(plan && plan.finalized);
-      try {
-        const res = await (await fetch(`http://localhost:8000/api/project/mark-finalized?id=${encodeURIComponent(id)}&finalized=${nowOn ? 0 : 1}`, { method:'POST' })).json();
-        if (!res || res.status !== 'PASS') throw new Error(res.reason || '操作失败');
-        setMessage(nowOn ? '已取消该方案的定稿。' : (res.wrote_back ? `方案已标记为「已定稿」并回写经营概览的投标报价金额。` : `已标为「已定稿」，但该方案未关联可回写的经营项目或尚无目标报价，经营概览金额未更新。`), 'success');
-        refreshPlans();
-      } catch (error) { setMessage(`定稿状态切换失败：${error.message}`, 'error'); }
+  body.querySelectorAll('.phg-slot .slot-check input').forEach(cb => cb.addEventListener('change', () => updateHubSelection()));
+  body.querySelectorAll('.phg-slot .slot-act[data-open]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gid = btn.closest('.phg-slot').closest('.phg-card').dataset.gid;
+      closePlanHub();
+      openSlot(btn.dataset.open, groups.find(g => g.group_id === gid) || activeGroup);
     });
   });
-  box.querySelectorAll('.plan-card-del').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (btn.disabled || btn.classList.contains('is-disabled')) return; // 定稿锁定：取消定稿后此按钮才可点
-      const id = btn.dataset.del;
-      const plan = list.find(x => x.id === id);
-      const ok = await uiConfirm(`确定删除方案「${id}」？该操作不可撤销。`, { danger: Boolean(plan && plan.finalized) });
+  body.querySelectorAll('.phg-slot .slot-act[data-calc]').forEach(btn => {
+    btn.addEventListener('click', () => runSlotCalc(btn.dataset.calc, btn.dataset.strategy));
+  });
+  body.querySelectorAll('.phg-op[data-rename]').forEach(btn => {
+    btn.addEventListener('click', () => beginGroupRename(btn.dataset.rename));
+  });
+  body.querySelectorAll('.phg-op[data-copy]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const ok = await uiConfirm('复制整组为独立新组（深拷贝组内已算槽位方案，可独立改参）？');
       if (!ok) return;
       try {
-        const res = await (await fetch(`http://localhost:8000/api/project/delete?id=${encodeURIComponent(id)}`, { method:'POST' })).json();
+        const fd = new FormData(); fd.append('group_id', btn.dataset.copy);
+        const res = await (await fetch(API_BASE + '/api/group/copy', { method:'POST', body: fd })).json();
+        if (!res || res.status !== 'PASS') throw new Error(res.reason || '复制失败');
+        setMessage('已复制整组为「' + (((res.group || {}).group_name) || '') + '」。', 'success');
+        await refreshPlans();
+      } catch (error) { setMessage(`复制整组失败：${error.message}`, 'error'); }
+    });
+  });
+  body.querySelectorAll('.phg-op[data-fin]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const gid = btn.dataset.fin;
+      const nowOn = Boolean(groups.find(x => x.group_id === gid) && groups.find(x => x.group_id === gid).finalized);
+      try {
+        const fd = new FormData(); fd.append('group_id', gid); fd.append('finalized', nowOn ? '0' : '1');
+        const res = await (await fetch(API_BASE + '/api/group/finalize', { method:'POST', body: fd })).json();
+        if (!res || res.status !== 'PASS') throw new Error(res.reason || '操作失败');
+        setMessage(nowOn ? '已取消整组定稿。' : '已整组定稿锁定（组内槽位不可删改）。', 'success');
+        await refreshPlans();
+      } catch (error) { setMessage(`定稿切换失败：${error.message}`, 'error'); }
+    });
+  });
+  body.querySelectorAll('.phg-op[data-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (btn.disabled || btn.classList.contains('is-disabled')) return;   // 定稿整组锁定
+      const gid = btn.dataset.del;
+      const g = groups.find(x => x.group_id === gid);
+      const ok = await uiConfirm('删除该方案组？组内已算槽位方案将一并删除。', { danger: Boolean(g && g.finalized) });
+      if (!ok) return;
+      try {
+        const fd = new FormData(); fd.append('group_id', gid);
+        const res = await (await fetch(API_BASE + '/api/group/delete', { method:'POST', body: fd })).json();
         if (!res || res.status !== 'PASS') throw new Error(res.reason || '删除失败');
-        if (selectedPlanId === id) selectedPlanId = '';
-        setMessage('方案已删除。', 'success');
-        refreshPlans();
-      } catch (error) { setMessage(`删除方案失败：${error.message}`, 'error'); }
+        hubSelected.clear(); expandedGroups.delete(gid);
+        if (activeGroupId === gid) { activeGroupId = ''; activeGroup = null; syncSchemeSwitcher(); }
+        setMessage('方案组已删除。', 'success');
+        await refreshPlans();
+      } catch (error) { setMessage(`删除方案组失败：${error.message}`, 'error'); }
     });
   });
 }
 
-async function openPlanById(id) {
+function beginGroupRename(groupId) {
+  const card = document.querySelector('.phg-card[data-gid="' + CSS.escape(groupId) + '"] .phg-name');
+  if (!card) return;
+  const g = groups.find(x => x.group_id === groupId);
+  const input = document.createElement('input');
+  input.className = 'phg-rename-input'; input.maxLength = 60;
+  input.value = g ? (g.group_name || '') : '';
+  const render = () => { card.textContent = g ? (g.group_name || '') : ''; };
+  const commit = async (save) => {
+    const v = input.value.trim();
+    render(); input.replaceWith(card);
+    if (!save || !v || !g || v === g.group_name) return;
+    try {
+      const fd = new FormData(); fd.append('group_id', groupId); fd.append('name', v);
+      const res = await (await fetch(API_BASE + '/api/group/rename', { method:'POST', body: fd })).json();
+      if (!res || res.status !== 'PASS') throw new Error(res.reason || '改名失败');
+      setMessage('已重命名方案组。', 'success');
+      await refreshPlans();
+    } catch (error) { setMessage(`重命名失败：${error.message}`, 'error'); render(); }
+  };
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(true); else if (e.key === 'Escape') commit(false); });
+  input.addEventListener('blur', () => commit(true));
+  card.replaceWith(input);
+  input.focus(); input.select();
+}
+
+// 点算指定组 + 策略的暂未计算槽位（A/B）：带 group_id 提交 optimize。
+async function runSlotCalc(groupId, strategy) {
+  if (!curProjectIdUuid()) { setMessage('请先选择关联投标项目。', 'warn'); return; }
+  const cap = document.querySelector('#capFile').files[0];
+  const cost = document.querySelector('#costFile').files[0];
+  if (!cap || !cost) { setMessage('请先在左栏导入限价清单与成本清单后再点算该槽位。', 'warn'); return; }
+  const prev = activeGroupId;
+  activeGroupId = groupId;   // buildOptimizeForm 据此带上 group_id
+  setMessage('正在测算方案 ' + (strategy === 'optimal' ? 'A' : 'B') + ' 槽位，请稍候。', '');
   try {
-    const res = await (await fetch(`http://localhost:8000/api/project/get?id=${encodeURIComponent(id)}`)).json();
+    const result = await postOptimize(strategy);
+    activeGroupId = result.group_id || groupId;
+    if (result.plan_id) { currentPlanId = result.plan_id; planStrategyOverride[result.plan_id] = strategy; lastResult = result; }
+    renderResult(result, { savedPlan: Boolean(currentPlanId) });
+    await openSlot(result.plan_id, groups.find(g => g.group_id === activeGroupId) || activeGroup);
+    setMessage(`方案 ${strategy === 'optimal' ? 'A' : 'B'} 槽位测算完成。${costBasisNote(result)}`, 'success');
+    await refreshPlans();
+    openGroupById(activeGroupId);
+  } catch (error) {
+    setMessage(`测算失败：${error.message}${error.hint ? '<br>' + esc(error.hint) : ''}`, 'error');
+    activeGroupId = prev;
+  }
+}
+
+// 打开某槽位方案：/api/project/get 拉取后渲染右栏，并设定「当前组」上下文。
+async function openSlot(planId, group, opts = {}) {
+  try {
+    const res = await (await fetch(`${API_BASE}/api/project/get?id=${encodeURIComponent(planId)}`)).json();
     if (!res || res.status !== 'PASS') throw new Error(res.reason || '方案不存在');
     const plan = res.plan;
     currentPlanId = plan.id;
-    // 打开方案时按该方案自己的关联重建 activeOverviewId（精确 id 优先、项目名兜底），
-    // 避免沿用上一次下拉的旧值，导致『定稿并回写』按钮指向错误项目或不显示。
-    // 匹配优先级：overview_id 精确 → project_id（可能是真 id 或项目名，副本保留原值不变）→ name → 去「（副本）」后缀的 name
+    if (group) { activeGroup = group; activeGroupId = group.group_id || ''; }
+    else { activeGroupId = plan.group_id || findGroupIdByPlan(plan.id) || ''; activeGroup = groups.find(x => x.group_id === activeGroupId) || null; }
+    // 按该方案自身关联重建 activeOverviewId / #projectId（精确 id 优先、项目名兜底）
     const pidSel = document.querySelector('#projectId');
     if (pidSel) {
       const name = plan.name || plan.id || '';
@@ -642,55 +949,60 @@ async function openPlanById(id) {
                 (projId && overviewProjects.find(p => p.id === projId)) ||
                 (projId && overviewProjects.find(p => p.name === projId)) ||
                 overviewProjects.find(p => p.name === name) ||
-                (bareName !== name && overviewProjects.find(p => p.name === bareName)) ||
-                null;
+                (bareName !== name && overviewProjects.find(p => p.name === bareName)) || null;
       activeOverviewId = hit ? hit.id : '';
-      pidSel.value = hit ? hit.id : '';   // 下拉 value 为真实项目 id；label 自动显示项目名
+      pidSel.value = hit ? hit.id : '';
       if (pidSel.__cs) pidSel.__cs.refresh();
     }
     fillParams(plan.params || {});
     if (plan.preview) renderPreview(plan.preview);
-    if (plan.result) { setMessage(`已打开方案「${plan.name}」。${plan.result.low_ratio_review_required ? '该结果存在低于50%的报价比率，未作出废标判定，以招标文件为准。' : ''}`, 'success'); renderResult(plan.result); }
-    else { setMessage('已打开方案，但该方案尚未生成结果，可点击「按当前参数重算」。', 'success'); document.querySelector('#resultPanel').classList.add('hidden'); }
+    if (plan.result) {
+      setMessage(`已打开方案「${plan.name || plan.id}」。${plan.result.low_ratio_review_required ? '该结果存在低于50%的报价比率，未作出废标判定，以招标文件为准。' : ''}`, 'success');
+      renderResult(plan.result, { animate: opts.animate !== false });
+    } else {
+      setMessage('已打开方案，但该槽位尚未生成结果，可点击「按当前参数重算」。', 'success');
+      setDashboardVisible(false);
+      const ps = document.querySelector('#previewStage'); if (ps) ps.classList.add('hidden');
+    }
+    refreshSchemeTabs();
+    // 同步方案 Tab 高亮：以当前方案在槽位映射中的位置为准（缺省 A），避免 renderDashboard 重置导致点击态与数据脱节
+    const sidx = schemePlanIds.indexOf(planId);
+    document.querySelectorAll('.scheme-tab').forEach(t => {
+      const on = Number(t.dataset.scheme) === (sidx >= 0 ? sidx : 0);
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', String(on));
+    });
+    updateSchemeBalance();
   } catch (error) { setMessage(`打开方案失败：${error.message}`, 'error'); }
 }
 
-document.querySelector('#refreshPlansBtn').addEventListener('click', refreshPlans);
-refreshPlans(); // 页面加载即自动拉取方案库，避免首次下拉为空
+function findGroupIdByPlan(planId) {
+  const g = (groups || []).find(x => Object.values(x.strategy_slots || {}).some(s => (s && (s.plan_id || (s.summary && s.summary.plan_id))) === planId));
+  return g ? g.group_id : null;
+}
 
-document.querySelector('#planSelect').addEventListener('change', () => {
-  curProject = document.querySelector('#planSelect').value;
-  selectedPlanId = '';
-  renderPlanCards();
-});
+// 兼容旧调用：按方案 id 打开（自动定位其所属组）
+function openPlanById(id) {
+  const g = (groups || []).find(x => Object.values(x.strategy_slots || {}).some(s => (s && (s.plan_id || (s.summary && s.summary.plan_id))) === id)) || activeGroup;
+  return openSlot(id, g);
+}
+refreshPlans(); // 页面加载即自动拉取当前关联项目的方案组供方案中心使用
 
-document.querySelector('#openPlanBtn').addEventListener('click', () => {
-  if (!selectedPlanId) { setMessage('请先在下方选择一个方案卡片再打开。'); return; }
-  openPlanById(selectedPlanId);
-});
-
-document.querySelector('#copyPlanBtn').addEventListener('click', async () => {
-  if (!selectedPlanId) { setMessage('请先在下方选择一个方案卡片再复制。'); return; }
-  try {
-    const res = await (await fetch(`http://localhost:8000/api/project/copy?id=${encodeURIComponent(selectedPlanId)}`, {method:'POST'})).json();
-    if (!res || res.status !== 'PASS') throw new Error(res.reason || '复制失败');
-    currentPlanId = res.plan_id;
-    setMessage(`已复制方案「${res.name}」，并打开副本。副本结果已清空，可重算生成新结果。`, 'success');
-    refreshPlans();
-  } catch (error) { setMessage(`复制方案失败：${error.message}`, 'error'); }
-});
-
-document.querySelector('#recomputeBtn').addEventListener('click', async () => {
+/* P1：按当前参数重算（原左栏 #recomputeBtn 逻辑抽成独立函数）。
+   调用方：dockCalcBtn 情境「按当前参数重算」。
+   校验 currentPlanId → validateParams → POST /api/project/recompute → renderResult → refreshPlans。 */
+async function runRecompute() {
   if (!currentPlanId) { setMessage('请先打开或选择一个方案再重算。'); return; }
   if (!validateParams()) return;
-  const button = document.querySelector('#recomputeBtn');
-  button.disabled = true; button.setAttribute('aria-busy', 'true'); setMessage('正在按当前参数重算，请稍候。');
+  setDockBusy(true); setMessage('正在按当前参数重算，请稍候。');
   const data = new FormData();
   // id 走 query（后端 id: str 为查询参数），其余数值走表单体
   const fields = {target_total:'targetTotal', fixed_pretax:'fixedPretax', vat_rate:'vatRate', surtax_rate:'surtaxRate', ratio_min:'ratioMin', ratio_max:'ratioMax'};
   Object.entries(fields).forEach(([name, id]) => data.append(name, numVal(id)));
+  // 增值税率/附加税率：页面按整数百分比录入（9 / 12），后端按小数接收（0.09 / 0.12）
+  ['vat_rate', 'surtax_rate'].forEach(k => data.set(k, String(Number(data.get(k)) / 100)));
   data.append('low_ratio_confirmed', document.querySelector('#lowRatioConfirmed').checked ? 'true' : 'false');
-  data.append('low_price_confirmed_by', (document.querySelector('#lowPriceConfirmedBy') || {}).value || '');
+  data.append('low_price_confirmed_by', [ (document.querySelector('#lowPriceConfirmedBy') || {}).value, (document.querySelector('#lowPriceBasisBy') || {}).value ].filter(Boolean).join('；'));
   data.append('clause_enabled', document.querySelector('#clauseEnabled').checked ? 'true' : 'false');
   // H-002：成本税口径（分项构成）覆盖，优先于 config 默认
   const taxRec = readTaxOverride();
@@ -698,47 +1010,26 @@ document.querySelector('#recomputeBtn').addEventListener('click', async () => {
   data.append('cost_input_vat_rate', '0.13');
   data.append('credit_ratio', taxRec.creditRatio);
   data.append('cost_composition', taxRec.compositionJson);
+  // 重算保留该方案策略（A=optimal / B=uniform），后端缺省回退 optimal
+  const cur = currentProjectPlans().find(x => x.id === currentPlanId);
+  data.append('strategy', _planStrategy(cur));
   try {
-    const response = await fetch(`http://localhost:8000/api/project/recompute?id=${encodeURIComponent(currentPlanId)}`, {method:'POST', body:data});
+    const response = await fetch(`${API_BASE}/api/project/recompute?id=${encodeURIComponent(currentPlanId)}`, {method:'POST', body:data});
     const result = await response.json();
     if (!response.ok || result.status !== 'PASS') throw new Error(result.reason || '重算未通过');
+    planStrategyOverride[currentPlanId] = result.strategy || _planStrategy(cur);
     setMessage(`重算完成：竞争性预算 <b>${Number(result.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元，结算调整后利润（不含增值税）<b>${Number(result.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元。${costBasisNote(result)}${result.low_ratio_review_required ? '<br><strong>警告：存在低于50%的报价比率，未作出废标判定，以招标文件为准。</strong>' : ''}`, 'success');
     renderResult(result, { savedPlan: true });
     refreshPlans();
   } catch (error) { setMessage(`重算失败：${error.message}`, 'error'); }
-  finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = '按当前参数重算'; }
-});
+  finally { setDockBusy(false); }
+}
 
 // ---- H-008 多方案对比（限定同一项目的方案变体） ----
-function groupByProject() {
-  const g = {};
-  (plans || []).forEach(p => { const k = p.project_name || p.project_id || p.name || p.id; (g[k] = g[k] || []).push(p); });
-  return g;
-}
-
-function populateCompare() {
-  const checks = document.querySelector('#compareChecks');
-  const base = document.querySelector('#baseSelect');
-  const g = groupByProject();
-  const keys = Object.keys(g);
-  if (!keys.length) { checks.innerHTML = '<p class="hint">暂无方案可对比，请先执行『识别文件并计算』生成方案。</p>'; base.__cs.setOptions([{ value: '', label: '— 基准方案 —' }]); return; }
-  checks.innerHTML = keys.map(proj => `
-    <label class="compare-group-title">${proj}（${g[proj].length} 个方案）</label>
-    ${g[proj].map(p => `<label class="compare-check"><input type="checkbox" value="${p.id}" ${p.id === currentPlanId ? 'checked' : ''}/><span>${p.name || p.id}${p.objective != null ? ` ｜ 利润 ${Number(p.objective).toLocaleString('zh-CN',{maximumFractionDigits:0})}` : ''}</span></label>`).join('')}`).join('');
-  base.__cs.setOptions([{ value: '', label: '— 基准方案（缺省首个）—' }].concat(plans.map(p => ({ value: p.id, label: p.name || p.id }))));
-}
-
-document.querySelector('#comparePlansBtn').addEventListener('click', () => {
-  const bar = document.querySelector('#compareBar');
-  bar.classList.toggle('hidden');
-  if (!bar.classList.contains('hidden')) populateCompare();
-});
-document.querySelector('#closeCompareBtn').addEventListener('click', () => {
-  document.querySelector('#compareBar').classList.add('hidden');
-});
-
-function renderCompare(res) {
-  const panel = document.querySelector('#compareResult');
+/* ---- H-008 多方案对比（限定同一项目）：方案中心勾选槽位 →「开始对比」 ----
+   compareHtml(res) 构建指标矩阵 HTML；
+   renderCompare(res) 渲染进居中式对比结果弹层 #cmpModal（不占右栏主舞台）。 */
+function compareHtml(res) {
   const ids = res.plan_ids || [];
   const headers = ids.map(id => { const p = res.summary.find(s => s.plan_id === id); return (p && p.name) || id; });
   const get = (id, key) => { const p = res.summary.find(s => s.plan_id === id); return p ? p[key] : undefined; };
@@ -746,7 +1037,7 @@ function renderCompare(res) {
   const riskCell = (id) => { const p = get(id, 'risk_items') || []; return p.length ? p.map(x => `${esc(x['项目编码'])}(${fmt(Number(x['报价比率'])*100,2)}%)`).join('<br>') : '<span style="color:var(--text-tertiary)">—</span>'; };
   const paramsCell = (id) => { const pa = get(id, 'params'); if (!pa) return '<span style="color:var(--text-tertiary)">—</span>'; const f = (pa.target_total != null ? `目标 ${Number(pa.target_total).toLocaleString('zh-CN',{maximumFractionDigits:0})}` : '') + (pa.ratio_min != null ? ` ｜ 区间 ${Number(pa.ratio_min)*100}%~${Number(pa.ratio_max)*100}%` : ''); return f || '<span style="color:var(--text-tertiary)">—</span>'; };
   const baseMark = res.base_id ? `（基准：${esc(res.base_id)}）` : '';
-  panel.innerHTML = `<div class="result-head"><div><h3>同一项目方案对比：${esc(res.project || '')}${baseMark}</h3><p>共 ${ids.length} 个同项目方案并列：总利润、亏损项、风险项、单价差异${baseMark}；是否构成废标以招标文件为准。</p></div></div>
+  let html = `<div class="result-head"><div><h3>同一项目方案对比：${esc(res.project || '')}${baseMark}</h3><p>共 ${ids.length} 个同项目方案并列：总利润、亏损项、风险项、单价差异${baseMark}；是否构成废标以招标文件为准。</p></div></div>
     <div class="table-wrap"><table><thead><tr><th>指标</th>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>
     <tr><td><b>参数（目标报价/比率区间）</b></td>${ids.map(id => `<td>${paramsCell(id)}</td>`).join('')}</tr>
     <tr><td><b>是否已计算</b></td>${ids.map(id => `<td>${get(id,'computed') ? '✓' : '<span style="color:var(--danger)">未计算</span>'}</td>`).join('')}</tr>
@@ -759,39 +1050,17 @@ function renderCompare(res) {
   const diffs = res.price_diffs || {};
   const diffEntries = Object.entries(diffs).filter(([, e]) => ids.some(id => e.deltas[id] != null));
   if (diffEntries.length) {
-    panel.innerHTML += `<div class="result-head" style="margin-top:16px;"><div><h3>单价差异明细（相对基准）</h3><p>仅列出基准中存在报价的项目；空表示该方案未含此项目。</p></div></div><div class="table-wrap"><table><thead><tr><th>项目编码</th><th>项目名称</th><th class="num">基准单价</th>${ids.map(id => `<th>${esc(headers.find((_, i) => ids[i] === id))} 差异</th>`).join('')}</tr></thead><tbody>${diffEntries.map(([code, e]) => `<tr><td>${esc(code)}</td><td>${esc(e.item_name || '—')}</td><td class="num">${fmt(e.base_price, 4)}</td>${ids.map(id => { const d = e.deltas[id]; return `<td class="num ${d !== null && d < -1e-9 ? 'loss-cell' : (d !== null && d > 1e-9 ? 'gain-cell' : '')}">${d === null ? '—' : fmt(d, 4)}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
+    html += `<div class="result-head" style="margin-top:16px;"><div><h3>单价差异明细（相对基准）</h3><p>仅列出基准中存在报价的项目；空表示该方案未含此项目。</p></div></div><div class="table-wrap"><table><thead><tr><th>项目编码</th><th>项目名称</th><th class="num">基准单价</th>${ids.map(id => `<th>${esc(headers.find((_, i) => ids[i] === id))} 差异</th>`).join('')}</tr></thead><tbody>${diffEntries.map(([code, e]) => `<tr><td>${esc(code)}</td><td>${esc(e.item_name || '—')}</td><td class="num">${fmt(e.base_price, 4)}</td>${ids.map(id => { const d = e.deltas[id]; return `<td class="num ${d !== null && d < -1e-9 ? 'loss-cell' : (d !== null && d > 1e-9 ? 'gain-cell' : '')}">${d === null ? '—' : fmt(d, 4)}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
   }
-  panel.classList.remove('hidden');
+  return html;
 }
-
-document.querySelector('#runCompareBtn').addEventListener('click', async () => {
-  const selected = Array.from(document.querySelectorAll('#compareChecks input:checked')).map(cb => cb.value);
-  if (selected.length < 2) { setMessage('多方案对比至少需要勾选 2 个方案。'); return; }
-  // 限定同一项目：跨项目合并无可比意义（单价差异/利润不可比），前端先行拦截
-  const byId = Object.fromEntries((plans || []).map(p => [p.id, p]));
-  // 同一项目判定以真实项目 id（UUID）为准：project_name/project_id 先归一化到 overview 的 id，映射不到（项目已删）才回落原值。
-  const projs = new Set(selected.map(id => {
-    const rec = byId[id] || {};
-    const raw = rec.project_name || rec.project_id || rec.name || '';
-    return (nameToId[raw] || raw);
-  }));
-  const showProjs = Array.from(projs).map(k => (activeOverviewProjects[k] && activeOverviewProjects[k].name) || k);
-  if (projs.size > 1) { setMessage(`多方案对比限定同一项目（单价差异与利润才有可比意义）：当前勾选涉及 ${showProjs.join('、')}。请仅勾选同一项目的多个方案（可复制后改参数生成同项目的方案变体）。`, 'error'); return; }
-  const base = document.querySelector('#baseSelect').value;
-  const button = document.querySelector('#runCompareBtn');
-  button.disabled = true; setMessage('正在对比方案，请稍候。');
-  const data = new FormData();
-  data.append('id', selected.join(','));
-  if (base) data.append('base', base);
-  try {
-    const response = await fetch('http://localhost:8000/api/project/compare', {method:'POST', body:data});
-    const res = await response.json();
-    if (!response.ok || res.status !== 'PASS') throw new Error(res.reason || '对比失败');
-    renderCompare(res);
-    setMessage(`对比完成：${res.plan_ids.length} 个方案。低于 50% 报价比率的为风险项，是否构成废标以招标文件为准。`, 'success');
-  } catch (error) { setMessage(`对比失败：${error.message}`, 'error'); }
-  finally { button.disabled = false; button.innerHTML = '开始对比'; }
-});
+// H-008 多方案对比结果：方案中心「开始对比 →」→ 居中式弹层 #cmpModal（不占右栏主舞台）
+function renderCompare(res, { silent = false } = {}) {
+  const body = document.querySelector('#cmpModalBody');
+  if (!body) return;
+  body.innerHTML = compareHtml(res);
+  openCompareModal();
+}
 
 // H-002：成本构成面板初始化（置于文件末尾，保证 COMP_DEFAULTS 等 const 已定义，规避暂时性死区 ReferenceError）
 (function initCompositionPanel() {
@@ -802,5 +1071,704 @@ document.querySelector('#runCompareBtn').addEventListener('click', async () => {
   toggleComposeWrap();
   updateCompositionLive();
   const taxModeEl = document.querySelector('#taxMode');
-  if (taxModeEl) taxModeEl.addEventListener('change', () => { toggleComposeWrap(); updateCompositionLive(); });
+  if (taxModeEl) taxModeEl.addEventListener('change', () => { toggleComposeWrap(); updateCompositionLive(); refreshPrepare(); });
+})();
+
+/* =============================================================================
+   决策沙盘 · 报价页 KPI 看板 / A/B/C 方案切换 / 明细穿透表 / Diff 抽屉 / FAB
+   仅作用于报价视图，接入现有真实后端 renderResult(result)。
+   ============================================================================= */
+function triggerToast(text) {
+  const tp = document.querySelector('#toastPill');
+  const tm = document.querySelector('#toastMsg');
+  if (!tp) return;
+  tm.textContent = text;
+  tp.className = 'toast-pill';
+  tp.classList.add('show');
+  // 与 setMessage 共用 toastTimer，避免旧计时器提前隐藏新 Toast
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => tp.classList.remove('show'), 2200);
+}
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+
+// 派生合规评分：status / violations / anomalies / low_ratio_review_required → 评分+等级
+function computeCompliance(result) {
+  let score = 100, reasons = [];
+  if (!result || result.status !== 'PASS') { return { score: 0, grade: '—', audit: result && result.status || '未通过', badge: 'warn', maxDev: '—', safe:0, early:0, risk:100 }; }
+  const isRisk = (r) => (Number(r['报价比率'] ?? 1) < 0.5) || r['报价状态'] === 'MANUAL_REVIEW' || (Number(r['单项毛利'] ?? 0) < 0);
+  const riskRows = (result.items || []).filter(isRisk);
+  // 三桶互斥：有意提前回笼（≥92%）的项若已属风险桶则不重复计入 early
+  const earlyRows = (result.items || []).filter(r => Number(r['报价比率'] ?? 0) >= 0.92 && !isRisk(r));
+  const n = (result.items || []).length || 1;
+  const failCount = [].concat(result.violations || [], result.anomalies || [], result.low_ratio_items || []).length;
+  score -= Math.min(40, failCount * 8);
+  score -= Math.min(25, riskRows.length * 5);
+  if (result.low_ratio_review_required) { score -= 12; reasons.push('存在低价项'); }
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  let grade, badge;
+  if (score >= 90) { grade = 'AA+'; badge = 'gain'; }
+  else if (score >= 75) { grade = 'A'; badge = 'neutral'; }
+  else if (score >= 60) { grade = 'B'; badge = 'warn'; }
+  else { grade = 'C'; badge = 'warn'; }
+  const audit = result.status === 'PASS' ? (score >= 90 ? '合规闸门通过' : (score >= 60 ? '合规待关注' : '需人工复核')) : '闸门未通过';
+  const maxDev = (result.items || []).reduce((m, r) => Math.max(m, Math.abs((Number(r['报价比率'] ?? 1) || 0) - 1)), 0);
+  return {
+    score, grade, audit, badge, maxDev: (maxDev * 100).toFixed(1) + '%',
+    safe: Math.round(((n - (earlyRows.length + riskRows.length)) / n) * 100),
+    early: Math.round((earlyRows.length / n) * 100),
+    // risk 取余数，保证三段恒为 100%（避免分段各自四舍五入造成 >100% 溢出）
+    risk: Math.max(0, 100 - Math.round(((n - (earlyRows.length + riskRows.length)) / n) * 100) - Math.round((earlyRows.length / n) * 100)),
+  };
+}
+
+// 派生进项抵扣总额：与后端分项精算同一口径，直接消费 cost_input_tax.multiplier(k) 反推精确值
+//   k = 1 − Σpⱼrⱼ/(1+rⱼ)，抵扣占比 = 1 − k，则抵扣额 = Σ含税成本 × (1 − k)
+//   避免用单一 credit_ratio 加权近似（0% 人工行会被误判为全抵）。
+function computeInputVat(result) {
+  const tax = (result && result.cost_input_tax) || {};
+  const k = tax.multiplier != null && isFinite(Number(tax.multiplier)) ? Number(tax.multiplier) : null;
+  let credit;
+  if (k != null) {
+    credit = Math.max(0, 1 - k);               // 权威口径：精确抵扣占比
+  } else {
+    // 后端未给 k（如被 BLOCKED）时回退单一占比，仅作占位
+    credit = Math.max(0, Number(tax.credit_ratio == null ? 0 : tax.credit_ratio)) || 0;
+  }
+  const raw = (result.items || []).reduce((s, r) => s + (Number(r['含税成本单价'] ?? 0) * Number(r['工程量'] ?? 0)), 0);
+  const vat = Math.max(0, credit * raw);
+  return { vat, share: (credit * 100).toFixed(1) + '%', k: k != null ? k.toFixed(4) : '—', status: credit > 0 ? '抵扣达标' : '不可抵扣' };
+}
+
+// 明细表（收到真实 result.items，中文键）
+let dashItems = [];
+let dashFilter = 'all';
+let dashSortMargin = false;
+// 冻结列宽度同步：首列实测宽作为第二列 sticky left 偏移（列宽随内容变化，硬编码会错位）
+function syncFrozenCols() {
+  const wrap = document.querySelector('.table-scroll');
+  if (!wrap) return;
+  const first = wrap.querySelector('tbody tr td:nth-child(1):not([colspan])');
+  if (first) wrap.style.setProperty('--frozen-w', Math.ceil(first.getBoundingClientRect().width) + 'px');
+}
+
+function renderDashTable() {
+  const body = document.querySelector('#tableBody');
+  const count = document.querySelector('#tableCount');
+  if (!body) return;
+  let list = (dashItems || []).slice();
+  if (dashFilter === 'risk') {
+    list = list.filter(r => (Number(r['报价比率'] ?? 1) < 0.5) || r['报价状态'] === 'MANUAL_REVIEW' || (Number(r['单项毛利'] ?? 0) < 0));
+  } else if (dashFilter === 'early') {
+    list = list.filter(r => Number(r['报价比率'] ?? 0) >= 0.92 && r['报价状态'] !== 'MANUAL_REVIEW');
+  }
+  if (dashSortMargin) list = list.slice().sort((a, b) => (Number(b['单项毛利'] ?? 0)) - (Number(a['单项毛利'] ?? 0)));
+  if (count) count.textContent = `合计清单项: ${(dashItems || []).length} 项（显示 ${list.length}）`;
+  if (!list.length) { body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-tertiary);padding:24px">当前筛选无子目</td></tr>'; return; }
+  body.innerHTML = list.map(row => {
+    const ratio = Number(row['报价比率']);
+    const qty = Number(row['工程量'] ?? 0);
+    const quote = Number(row['最优报价单价'] ?? 0);
+    const total = qty * quote;
+    const ratioPercent = (ratio * 100).toFixed(1);
+    let tagClass = 'safe', tagLabel = '稳健平准';
+    const mss = row['报价状态'];
+    if (mss === 'MANUAL_REVIEW') { tagClass = 'risk'; tagLabel = '人工报价'; }
+    else if (Number(row['单项毛利'] ?? 0) < 0 || ratio < 0.5) { tagClass = 'risk'; tagLabel = '需复核'; }
+    else if (ratio >= 0.92) { tagClass = 'early'; tagLabel = '早结倾斜 ' + ratioPercent + '%'; }
+    else { tagClass = 'safe'; tagLabel = '平准 ' + ratioPercent + '%'; }
+    return `<tr>
+      <td class="tabular cell-code">${esc(row['项目编码'] ?? '')}</td>
+      <td><strong>${esc(row['项目名称'] ?? '')}</strong></td>
+      <td>${esc(row['单位'] ?? '—')}</td>
+      <td class="num tabular">${fmt(qty, 3)}</td>
+      <td class="cap num tabular">${fmt(row['最高限价'])}</td>
+      <td class="cost num tabular">${fmt(row['有效成本单价'] ?? row['含税成本单价'])}</td>
+      <td class="quote num tabular">${fmt(quote)}</td>
+      <td class="num tabular"><span class="ratio-pill-cell"><span class="mini-progress"><span class="mini-progress-fill" style="width:${Math.min(ratio * 100, 100)}%"></span></span><span>${ratioPercent}%</span></span></td>
+      <td class="num tabular cell-total">${fmt(total)}</td>
+      <td><span class="status-tag ${tagClass}">${tagLabel}</span><span class="note-cell">${esc(row['说明'] ?? '')}</span></td>
+    </tr>`;
+  }).join('');
+  requestAnimationFrame(syncFrozenCols);
+}
+
+// KPI 看板
+function renderKpi(result) {
+  if (!result) return;
+  const total = Number(result.target_total ?? 0);
+  const objective = Number(result.objective ?? 0);
+  const comp = computeCompliance(result);
+  const vatObj = computeInputVat(result);
+  const marginRate = total > 0 ? (objective / total) * 100 : 0;
+  setText('kpiTotalVal', total ? `¥${total.toLocaleString('zh-CN',{minimumFractionDigits:2})}` : '—');
+  setText('kpiTotalCap', result.competitive_budget ? `竞争预算 ${Number(result.competitive_budget).toLocaleString('zh-CN',{maximumFractionDigits:0})}` : '—');
+  setText('kpiTotalDelta', result.status === 'PASS' ? '锁定约束' : '未平衡');
+  setText('kpiMarginVal', objective ? `¥${objective.toLocaleString('zh-CN',{minimumFractionDigits:2})}` : '—');
+  setText('kpiMarginRate', `毛利率 ${marginRate.toFixed(1)}%`);
+  setText('kpiCashflowTag', result.status === 'PASS' ? '结算调整后利润 · 不含税' : '待计算');
+  // 评分格需让 grade 成为真元素（setText 用 textContent 会把 <span> 当字面文本显示），grade 为固定枚举非用户输入，安全用 innerHTML
+  const scoreEl = document.querySelector('#kpiScoreVal');
+  if (scoreEl) scoreEl.innerHTML = `${comp.score} <span style="font-size:13px;color:var(--module-3)">${comp.grade}</span>`;
+  setText('kpiAuditTag', comp.audit);
+  const auditBadge = document.querySelector('#kpiAuditTag');
+  if (auditBadge) auditBadge.className = 'delta-badge ' + comp.badge;
+  setText('kpiMaxDev', `最大偏离 ${comp.maxDev}`);
+  document.querySelector('#scaleSafe').style.width = comp.safe + '%';
+  document.querySelector('#scaleEarly').style.width = comp.early + '%';
+  document.querySelector('#scaleRisk').style.width = comp.risk + '%';
+  setText('kpiVatVal', `¥${vatObj.vat.toLocaleString('zh-CN',{minimumFractionDigits:2})}`);
+  setText('kpiVatK', `k: ${vatObj.k}`);
+  setText('kpiVatShare', `材料抵扣贡献 ${vatObj.share}`);
+  setText('kpiVatStatus', vatObj.status);
+  renderDashTable();
+}
+
+function renderDashboard(result, { animate = true } = {}) {
+  dashItems = (result && result.items) || [];
+  dashFilter = 'all';
+  dashSortMargin = false;
+  setDashboardVisible(true);
+  const stage = document.querySelector('.canvas-column');
+  if (stage) {
+    stage.classList.remove('dash-arrive', 'scheme-fade');
+    if (animate) { void stage.offsetWidth; stage.classList.add('dash-arrive'); }
+    else { stage.classList.add('scheme-fade'); }
+  }
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
+  document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active-drill'));
+  renderKpi(result);
+  if (!animate) pulseValues(); // 方案切换：卡片静止，仅 KPI 数值平滑淡入
+  refreshSchemeTabs();
+  alignDetailTable();
+  syncDrillClear();
+  triggerToast(result.status === 'PASS' ? '推演完成' : '计算完成（需复核）');
+}
+
+// 方案切换时 KPI 数值平滑淡入：.kpi-val 由 setText 原地更新（元素持久），需强制重启动画
+function pulseValues() {
+  const vals = document.querySelectorAll('#quoteView .kpi-val');
+  if (!vals.length) return;
+  vals.forEach(v => v.classList.remove('val-fade'));
+  const stage = document.querySelector('.canvas-column');
+  if (stage) void stage.offsetWidth;
+  vals.forEach(v => v.classList.add('val-fade'));
+}
+
+// 明细表底部与左栏「报价资料」卡底部对齐：按「报价卡底部 − 明细表顶部」动态限制明细表高度，
+// 行多时表内纵向滚动（grid 行高由左栏决定，右栏不再被明细表撑长）。
+function alignDetailTable() {
+  const ts = document.querySelector('.table-section');
+  if (!ts || ts.classList.contains('hidden')) return;
+  const qc = Array.from(document.querySelectorAll('.param-column > .card')).pop();
+  if (!qc) return;
+  const top = (el) => { let y = 0; while (el) { y += el.offsetTop; el = el.offsetParent; } return y; };
+  const avail = (top(qc) + qc.offsetHeight) - top(ts);
+  ts.style.maxHeight = Math.max(240, Math.round(avail)) + 'px';
+}
+
+// ---- A/B/C 方案切换（P0 策略语义）：槽位 A=当前项目 strategy=optimal、槽位 B=strategy=uniform、
+// 槽位 C=恒灰显「方案 C · 策略待定」（disabled）。历史方案缺省视为 optimal。
+let schemePlanIds = [];
+const planStrategyOverride = {}; // 会话内回填：后端尚未持久化 strategy 时，用本会话生成的 plan_id→strategy 兜底
+function _planStrategy(p) {
+  if (!p) return 'optimal';
+  if (p.strategy) return p.strategy;
+  if (planStrategyOverride[p.id]) return planStrategyOverride[p.id];
+  return (p.result || {}).strategy || 'optimal';
+}
+function _planByStrategy(strategy) {
+  return (currentProjectPlans() || []).find(p => _planStrategy(p) === strategy) || null;
+}
+// 方案切换条只在「右栏已加载某方案组结果」时显示（A/B/C 槽位轻量切换）
+function syncSchemeSwitcher() {
+  const bar = document.querySelector('.scheme-switcher-bar');
+  if (!bar) return;
+  const show = Boolean(dashActive && activeGroupId && activeGroup);
+  bar.classList.toggle('hidden', !show);
+}
+// 最近已算槽位方案：A → B → C 优先返回（按 saved_at 取最新）
+function recentSlotPlanId(group) {
+  const s = (group && group.strategy_slots) || {};
+  const computed = HUB_SLOT_DEFS.map(d => ({ d, slot: s[d.key] }))
+    .filter(x => x.slot && (x.slot.plan_id || (x.slot.summary && x.slot.summary.plan_id)));
+  if (!computed.length) return null;
+  computed.sort((a, b) => String((b.slot.summary || {}).saved_at || '').localeCompare(String((a.slot.summary || {}).saved_at || '')));
+  return (computed[0].slot.plan_id || computed[0].slot.summary.plan_id);
+}
+// 在方案中心定位并展开指定组
+function openGroupById(groupId) {
+  if (!groupId) return;
+  expandedGroups.add(groupId);
+  renderHubCards();
+}
+function refreshSchemeTabs() {
+  const tabs = Array.from(document.querySelectorAll('.scheme-tab'));
+  if (!tabs.length) return;
+  const slotDefs = [
+    { slot: 'A', strategy: 'optimal', label: '逐项最优' },
+    { slot: 'B', strategy: 'uniform', label: '等比下浮' },
+    { slot: 'C', strategy: null, label: '策略待定' },
+  ];
+  schemePlanIds = [null, null, null];
+  const slots = (activeGroup && activeGroup.strategy_slots) || {};
+  tabs.forEach((t, i) => {
+    const def = slotDefs[i];
+    const s = slots[def.slot] || {};
+    const pid = s.plan_id || (s.summary && s.summary.plan_id) || null;
+    schemePlanIds[i] = pid;
+    // 统一重建内容：左侧指示点 + 文字标签
+    t.textContent = '';
+    const dot = document.createElement('span');
+    dot.className = 'tab-indicator';
+    dot.setAttribute('aria-hidden', 'true');
+    t.appendChild(dot);
+    const label = document.createElement('span');
+    label.className = 'tab-label';
+    label.textContent = `方案 ${def.slot} · ${def.label}`;
+    label.title = pid ? String(((s.summary || {}).plan_id) || pid) : '';
+    t.appendChild(label);
+    t.title = pid ? String(((s.summary || {}).plan_id) || pid) : '';
+    if (i === 2) { // 槽位 C：恒灰显「策略待定」，不可点
+      t.disabled = true;
+      t.setAttribute('aria-disabled', 'true');
+      t.classList.remove('active');
+    } else {
+      t.disabled = false;
+      t.removeAttribute('aria-disabled');
+    }
+  });
+  syncSchemeSwitcher();
+}
+function bindSchemeTabs() {
+  const letters = ['A', 'B', 'C'];
+  document.querySelectorAll('.scheme-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const idx = Number(tab.dataset.scheme);
+      if (tab.disabled) return; // 槽位 C 恒灰显
+      document.querySelectorAll('.scheme-tab').forEach(t => { t.classList.toggle('active', t === tab); t.setAttribute('aria-selected', String(t === tab)); });
+      document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active-drill'));
+      const pid = schemePlanIds[idx];
+      const bal = document.querySelector('#schemeBalanceText');
+      if (pid) { if (bal) bal.textContent = '已映射方案 ' + letters[idx]; openSlot(pid, activeGroup, { animate: false }); triggerToast('已切换至方案 ' + letters[idx]); }
+      else { if (bal) bal.textContent = '该槽位暂无方案'; triggerToast('该方案槽位暂无方案'); }
+    });
+  });
+}
+function updateSchemeBalance() {
+  const bal = document.querySelector('#schemeBalanceText');
+  const pidN = (activeGroup && Object.values(activeGroup.strategy_slots || {}).filter(s => s && (s.plan_id || (s.summary && s.summary.plan_id))).length) || 0;
+  if (bal) bal.textContent = (activeGroup ? '当前组已算 ' + pidN + ' 槽' : '未加载方案组') + ' ｜ 槽位 A=逐项最优 / B=等比下浮';
+}
+
+// ---- 明细筛选 chips + KPI 穿透 ----
+function bindFilters() {
+  // KPI 穿透激活态与 aria-pressed 同步（P1-6）
+  const applyDrillAria = () => {
+    document.querySelectorAll('.kpi-card[aria-pressed]').forEach(c =>
+      c.setAttribute('aria-pressed', c.classList.contains('active-drill') ? 'true' : 'false'));
+  };
+  const resetDrill = () => {
+    dashFilter = 'all'; dashSortMargin = false;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
+    document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active-drill'));
+    applyDrillAria();
+    renderDashTable(); syncDrillClear();
+  };
+  document.querySelectorAll('.filter-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c === btn));
+      dashFilter = btn.dataset.filter;
+      renderDashTable(); syncDrillClear();
+    });
+  });
+  const clearChip = document.querySelector('#clearDrillChip');
+  if (clearChip) clearChip.addEventListener('click', resetDrill);
+  // KPI 卡即按 role="button"：补 Enter/Space 键盘触发（P1-6）
+  document.querySelectorAll('.kpi-card[role="button"]').forEach(card => {
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.click(); }
+    });
+  });
+  const total = document.querySelector('#kpiCardTotal');
+  if (total) total.addEventListener('click', resetDrill);
+  const margin = document.querySelector('#kpiCardMargin');
+  if (margin) margin.addEventListener('click', () => { dashSortMargin = !dashSortMargin; margin.classList.toggle('active-drill', dashSortMargin); applyDrillAria(); renderDashTable(); syncDrillClear(); });
+  const score = document.querySelector('#kpiCardScore');
+  if (score) score.addEventListener('click', () => { dashFilter = dashFilter === 'risk' ? 'all' : 'risk'; document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.filter === dashFilter)); score.classList.toggle('active-drill', dashFilter === 'risk'); applyDrillAria(); renderDashTable(); syncDrillClear(); });
+}
+
+// ---- 比率滑块：同步 ratioMin + 低价警报 ----
+// 安全防线双滑块：下限/上限共同驱动 ratio_min/ratio_max，区间值显示在右上角
+// 碰撞锁：仅吸附「被拖滑块」到对方边界（下限 ≤ 上限，且物理区间 ≥ 5%），
+// 不改写对方 min/max —— 避免改几何导致另一把 thumb 与刻度错位
+function refreshRatioUI(ev) {
+  const lo = document.querySelector('#ratioLow'), hi = document.querySelector('#ratioHigh');
+  if (!lo || !hi) return;
+  const t = ev && ev.target;
+  let L = +lo.value, H = +hi.value;
+  if (t === lo && L > H - 5) L = H - 5;   // 拖下限越界：钳到上限-5
+  if (t === hi && H < L + 5) H = L + 5;   // 拖上限越界：钳到下限+5
+  if (L > H) { L = H; lo.value = H; }     // 兜底（程序恢复等无拖动方场景）
+  if (H < L) { H = L; hi.value = L; }
+  L = Math.max(0, Math.min(100, L)); H = Math.max(0, Math.min(100, H));
+  lo.value = L; hi.value = H;
+  const rm = document.querySelector('#ratioMin'), rM = document.querySelector('#ratioMax');
+  if (rm) rm.value = (L / 100).toFixed(2);
+  if (rM) rM.value = (H / 100).toFixed(2);
+  lo.setAttribute('aria-valuetext', L + '%');
+  hi.setAttribute('aria-valuetext', H + '%');
+  const text = document.querySelector('#ratioRangeText');
+  if (text) text.textContent = `${L}% ~ ${H}%`;
+  // 激活区间填充块：紧跟双滑块位置
+  const fill = document.querySelector('#ratioFill');
+  if (fill) { fill.style.left = L + '%'; fill.style.width = (H - L) + '%'; }
+  // 风险反馈：上限逼近（<55%）或区间跌入废标区（<50%）→ 轨道赤赭呼吸态 + 紧凑警示条
+  // （不再自动展开大警告框打断操作；留痕表单由用户点击警示条手动展开）
+  const risk = L < 50 || H < 55;
+  const guard = document.querySelector('.guardrail');
+  if (guard) guard.classList.toggle('is-risk', risk);
+  const rb = document.querySelector('#riskAlertDrawer');
+  if (rb) rb.classList.toggle('active', risk);
+}
+// 双滑块 z 序提权：单一函数，统一读写（P2-11）。CSS 只留基础 z=2。
+function refreshRatioHover(x) {
+  const lo = document.querySelector('#ratioLow'), hi = document.querySelector('#ratioHigh');
+  if (!lo || !hi) return lo;
+  const track = lo.closest('.guardrail-track');
+  if (track && x != null) {
+    const rect = track.getBoundingClientRect();
+    if (rect.width) {
+      const p = ((x - rect.left) / rect.width) * 100;
+      const dLo = Math.abs(p - lo.value), dHi = Math.abs(p - hi.value);
+      lo.style.zIndex = dLo <= dHi ? '4' : '3';
+      hi.style.zIndex = dHi < dLo ? '4' : '3';
+    }
+  }
+  return lo;
+}
+function bindRatioSlider() {
+  const lo = document.querySelector('#ratioLow'), hi = document.querySelector('#ratioHigh');
+  if (!lo || !hi) return;
+  ['#ratioLow', '#ratioHigh'].forEach(s => { const el = document.querySelector(s); if (el) el.addEventListener('input', refreshRatioUI); });
+  // 重叠防死锁：pointer 靠近哪把 thumb 就动态提权（基础层 z 相等，由 refreshRatioHover 统一提权）
+  const track = lo.closest('.guardrail-track');
+  if (track) {
+    track.addEventListener('pointermove', (e) => { refreshRatioHover(e.clientX); });
+    track.addEventListener('pointerleave', () => { lo.style.zIndex = ''; hi.style.zIndex = ''; });
+  }
+  // 风险警示条：点击展开/收起留痕表单（aria-expanded 同步）
+  const riskBtn = document.querySelector('#riskSummaryBtn');
+  if (riskBtn) riskBtn.addEventListener('click', () => {
+    const open = riskBtn.closest('.risk-alert-box').classList.toggle('open');
+    riskBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  refreshRatioUI();
+}
+
+// ---- 测算准备就绪度检查清单（测算前空态）+ 主舞台可见性 ----
+function _taxDeclared() {
+  const mode = (document.querySelector('#taxMode') || {}).value;
+  if (mode === 'NONE') return false;
+  return document.querySelectorAll('#composeRows .compose-row').length > 0;
+}
+function _taxClosed() {
+  const mode = (document.querySelector('#taxMode') || {}).value;
+  if (mode === 'NONE') return true;
+  const rows = document.querySelectorAll('#composeRows .compose-row');
+  if (!rows.length) return false;
+  let total = 0;
+  rows.forEach(r => { const p = Number((r.querySelector('[data-field="proportion"]') || {}).value || 0) / 100; if (!Number.isNaN(p)) total += p; });
+  return Math.abs(total - 1) < 0.005;
+}
+function refreshPrepare() {
+  const panel = document.querySelector('#preparePanel');
+  if (!panel) return;
+  const kpi = document.querySelector('.kpi-row'), table = document.querySelector('.table-section');
+  const cs = document.querySelector('#compareStage');
+  if (kpi) kpi.classList.add('hidden');
+  if (table) table.classList.add('hidden');
+  if (cs) cs.classList.add('hidden');
+  const cap = document.querySelector('#statusCapsule');
+  if (cap) cap.classList.add('hidden');
+  panel.classList.remove('hidden');
+  const projSel = document.querySelector('#projectId');
+  // 门控规则：未选择关联项目即锁死全部控件（原「手动填写」路径需先选项目解锁）
+  const projOn = !!(projSel && projSel.value);
+  const capF = (document.querySelector('#capFile') || {}).files, costF = (document.querySelector('#costFile') || {}).files;
+  const filesOn = (capF && capF.length) && (costF && costF.length);
+  const declared = _taxDeclared(), closed = _taxClosed();
+  const tag = (s) => ({ ok: '<span class="prep-state ok">就绪</span>', pending: '<span class="prep-state">待就绪</span>', alert: '<span class="prep-state alert">待处理</span>' })[s];
+  const set = (id, state, label) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const prev = el.dataset.state;
+      el.dataset.state = state;
+      el.innerHTML = '<span class="prep-dot"></span><span class="prep-text">' + label + '</span>' + tag(state);
+      // 待就绪 → 就绪：打勾弹跳微动效（操作闭环即时反馈）
+      if (prev !== 'ok' && state === 'ok') {
+        const dot = el.querySelector('.prep-dot');
+        if (dot) dot.classList.add('pop');
+      }
+    }
+  };
+  set('prepProject', projOn ? 'ok' : 'pending', projOn ? '已完成：关联投标项目，目标总报价与固定税前项可配置' : '待完成：请先选择「关联投标项目」以解锁报价参数');
+  set('prepFiles', filesOn ? 'ok' : 'pending', filesOn ? '已完成：限价清单与成本清单均已导入（支持拖拽）' : '待完成：请导入限价清单与成本清单（支持拖拽）');
+  set('prepTax', closed ? 'ok' : (declared ? 'alert' : 'pending'), closed ? '已完成：成本进项抵扣已声明且占比合计 100%' : (declared ? '注意：已声明构成但占比合计须为 100%' : '待完成：请声明成本进项抵扣构成（或选不可抵扣）'));
+  // 三项全就绪 → 右栏主动作「识别文件并计算」呼吸光晕（视线接力）；Dock 主 CTA 空态置灰唯一化
+  const allReady = projOn && filesOn && closed;
+  const calc = document.querySelector('#calculateBtn');
+  if (calc) calc.classList.toggle('ready-pulse', allReady && !dashActive);
+  syncDockCta();
+}
+function setDashboardVisible(hasResult) {
+  dashActive = !!hasResult;
+  const panel = document.querySelector('#preparePanel'), ps = document.querySelector('#previewStage'), kpi = document.querySelector('.kpi-row'), table = document.querySelector('.table-section');
+  if (panel) panel.classList.toggle('hidden', hasResult);
+  if (ps) ps.classList.toggle('hidden', hasResult);
+  if (kpi) kpi.classList.toggle('hidden', !hasResult);
+  if (table) table.classList.toggle('hidden', !hasResult);
+  // 结果态：准备面板折叠为 38px 状态胶囊条（Status Capsule），释放垂直空间给明细表
+  const cap = document.querySelector('#statusCapsule');
+  if (cap) { cap.classList.toggle('hidden', !hasResult); if (hasResult) fillStatusCapsule(); }
+  syncDockCta();
+}
+// 状态胶囊条文案（口径与结果 toast 一致：PASS=方案就绪，否则需复核）
+function fillStatusCapsule() {
+  const t = document.querySelector('#statusCapsuleText');
+  if (!t) return;
+  t.textContent = (lastResult && lastResult.status === 'PASS')
+    ? '推演完成 · 方案组已就绪，可切换 A/B/C 或重新推演'
+    : '计算完成 · 结果需复核，可切换方案查看';
+}
+
+// ---- FAB 操作坞（P0 收敛为 3 键） ----
+function setDockBusy(busy) {
+  document.querySelectorAll('.floating-dock .dock-btn').forEach(b => b.classList.toggle('dock-busy', busy));
+  if (busy) document.querySelectorAll('.floating-dock .dock-btn').forEach(b => b.setAttribute('aria-busy', 'true'));
+  else document.querySelectorAll('.floating-dock .dock-btn').forEach(b => b.removeAttribute('aria-busy'));
+}
+// 主 CTA 文案固定为「一键重新推演」：无结果=识别计算，有结果=按当前参数重算，路由逻辑在 bindDock 中
+function syncDockCta() {
+  const btn = document.querySelector('#dockCalcBtn');
+  const label = document.querySelector('#dockCalcLabel');
+  if (!btn) return;
+  if (label) label.textContent = '一键重新推演';
+  btn.setAttribute('aria-label', '一键重新推演');
+  // 状态机主按钮唯一化：空态置灰（主动作聚焦 preparePanel 内「识别文件并计算」），结果态启用（重算）
+  btn.disabled = !dashActive;
+  btn.classList.remove('ready-pulse'); // 呼吸光晕已转移至 preparePanel 主动作
+  // 导出按钮同理：仅在存在可下载的 excel_download_url 时才启用，避免空态点出「暂无可导出」toast
+  const expBtn = document.querySelector('#dockExportBtn');
+  if (expBtn) {
+    expBtn.disabled = !(lastResult && lastResult.excel_download_url);
+    expBtn.setAttribute('aria-disabled', expBtn.disabled ? 'true' : 'false');
+  }
+}
+function bindDock() {
+  const calc = document.querySelector('#dockCalcBtn');
+  if (calc) calc.addEventListener('click', () => {
+    // 情境主 CTA：有结果=「按当前参数重算」（runRecompute），无结果=「识别并计算」
+    if (lastResult) runRecompute();
+    else { const t = document.querySelector('#calculateBtn'); if (t) t.click(); }
+  });
+  const exportBtn = document.querySelector('#dockExportBtn');
+  if (exportBtn) exportBtn.addEventListener('click', () => {
+    if (!lastResult) { triggerToast('暂无可导出的结果'); return; }
+    if (lastResult.excel_download_url) { window.location.href = API_BASE + lastResult.excel_download_url; triggerToast('已开始下载 Excel 报表'); }
+    else triggerToast('暂无可导出的结果');
+  });
+  // 「方案中心」：操作坞唯一入口，打开全屏方案管理 + 多方案对比覆盖层（空态在 Hub 内提示）
+  const diff = document.querySelector('#diffDrawerBtn');
+  if (diff) diff.addEventListener('click', () => {
+    // 打开状态下再次点击 → 收起弹层（toggle）
+    const hub = document.querySelector('#planHub');
+    if (hub && hub.classList.contains('open')) closePlanHub();
+    else openPlanHub();
+  });
+  syncDockCta();
+}
+
+/* ---- 方案中心（#planHub）右下角吸附弹层 ----
+   列表视图：当前关联项目的方案组 → 槽位（勾选对比）；
+   勾选 ≥2 个槽位 → POST /api/project/compare → 结果渲染右栏 #compareStage（弹层保持组列表）。 */
+function updateHubSelection() {
+  hubSelected = new Set(Array.from(document.querySelectorAll('#planHubBody .slot-check input:checked')).map(cb => cb.value));
+  const bar = document.querySelector('#planHubCompareBar');
+  const count = document.querySelector('#planHubCount');
+  const base = document.querySelector('#planHubBase');
+  if (count) count.textContent = `已选 ${hubSelected.size} 个槽位`;
+  if (base) {
+    const opts = currentProjectPlans().filter(p => hubSelected.has(p.id));
+    const prev = base.value;
+    base.innerHTML = [{ value: '', label: '— 基准（默认首个勾选）—' }].concat(opts.map(p => ({ value: p.id, label: p.name || p.id }))).map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
+    if (opts.some(p => p.id === prev)) base.value = prev;
+    else if (opts.length) base.value = opts[0].id;   // 默认首个勾选
+  }
+  if (bar) bar.classList.toggle('hidden', hubSelected.size < 2);
+}
+function openPlanHub() {
+  const hub = document.querySelector('#planHub');
+  if (!hub) return;
+  hubView = 'list';
+  hubSelected.clear();
+  applyHubWidth();
+  loadProjectGroups();
+  updateHubSelection();
+  hub.classList.add('open');
+  hub.setAttribute('aria-hidden', 'false');
+  const dock = document.querySelector('#diffDrawerBtn');
+  if (dock) dock.setAttribute('aria-expanded', 'true');
+  const close = document.querySelector('#planHubCloseBtn');
+  if (close) close.focus();
+}
+function closePlanHub() {
+  const hub = document.querySelector('#planHub');
+  if (hub) { hub.classList.remove('open'); hub.setAttribute('aria-hidden', 'true'); }
+  hubView = 'list';
+  hubSelected.clear();
+  const dock = document.querySelector('#diffDrawerBtn');
+  if (dock) dock.setAttribute('aria-expanded', 'false');
+  if (dock) dock.focus();
+}
+// —— 对比结果弹层（#cmpModal）：方案中心「开始对比」结果的居中式呈现 ——
+function openCompareModal() {
+  const modal = document.querySelector('#cmpModal');
+  if (!modal) return;
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  const closeBtn = document.querySelector('#cmpModalCloseBtn');
+  if (closeBtn) closeBtn.focus();
+}
+function closeCompareModal() {
+  const modal = document.querySelector('#cmpModal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+}
+// 宽度：默认 = 操作坞宽；可拖至 260~490 并存 localStorage(planHubWidth)
+const HUB_W_KEY = 'planHubWidth';
+function applyHubWidth() {
+  const hub = document.querySelector('#planHub');
+  if (!hub) return;
+  const saved = localStorage.getItem(HUB_W_KEY);
+  let w = saved ? parseInt(saved, 10) : estimateDockWidth();
+  if (!w || isNaN(w)) w = 340;
+  hub.style.width = Math.min(490, Math.max(260, w)) + 'px';
+}
+function estimateDockWidth() {
+  const d = document.querySelector('.floating-dock');
+  return d ? d.offsetWidth : 340;
+}
+function bindHubResize() {
+  const hub = document.querySelector('#planHub');
+  const handle = document.querySelector('#planHubResize');
+  if (!hub || !handle) return;
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX, startW = hub.offsetWidth;
+    const onMove = (ev) => {
+      // 手柄在左缘、右缘锚定：左拖(dx<0)应加宽 → startW - dx
+      const w = Math.min(490, Math.max(260, startW - (ev.clientX - startX)));
+      hub.style.width = w + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      localStorage.setItem(HUB_W_KEY, String(hub.offsetWidth));
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+async function runHubCompare() {
+  const selected = Array.from(hubSelected);
+  if (selected.length < 2) { setMessage('多方案对比至少需要勾选 2 个槽位。'); return; }
+  // 限定同一项目：槽位均来自当前方案组（同一关联项目），天然同项目；按真实项目 id 兜底
+  const byId = Object.fromEntries(currentProjectPlans().map(p => [p.id, p]));
+  const projs = new Set(selected.map(id => { const rec = byId[id] || {}; const raw = rec.project_name || rec.project_id || rec.name || ''; return nameToId[raw] || raw; }));
+  if (projs.size > 1) { setMessage('多方案对比限定同一项目（单价差异与利润才有可比意义），请仅勾选同一项目的多个槽位。', 'error'); return; }
+  const base = document.querySelector('#planHubBase').value;
+  const btn = document.querySelector('#planHubRunBtn');
+  if (btn) btn.disabled = true;
+  setMessage('正在对比方案，请稍候。');
+  const data = new FormData();
+  data.append('id', selected.join(','));
+  if (base) data.append('base', base);
+  try {
+    const response = await fetch(API_BASE + '/api/project/compare', {method:'POST', body:data});
+    const res = await response.json();
+    if (!response.ok || res.status !== 'PASS') throw new Error(res.reason || '对比失败');
+    renderCompare(res);                         // 右栏 #compareStage 结果落点
+    setMessage(`对比完成：${res.plan_ids.length} 个方案。低于 50% 报价比率的为风险项，是否构成废标以招标文件为准。`, 'success');
+  } catch (error) { setMessage(`对比失败：${error.message}`, 'error'); }
+  finally { if (btn) btn.disabled = false; }
+}
+function bindPlanHub() {
+  const closeBtn = document.querySelector('#planHubCloseBtn');
+  if (closeBtn) closeBtn.addEventListener('click', closePlanHub);
+  const run = document.querySelector('#planHubRunBtn');
+  if (run) run.addEventListener('click', runHubCompare);
+  const cmpClose = document.querySelector('#cmpModalCloseBtn');
+  if (cmpClose) cmpClose.addEventListener('click', closeCompareModal);
+  const cmpMask = document.querySelector('#cmpModalMask');
+  if (cmpMask) cmpMask.addEventListener('click', closeCompareModal);
+  const hub = document.querySelector('#planHub');
+  if (hub) { bindHubResize(); hub.addEventListener('click', e => { if (e.target === hub) closePlanHub(); }); }
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const modal = document.querySelector('#cmpModal');
+    if (modal && modal.classList.contains('open')) { closeCompareModal(); return; }
+    const hub = document.querySelector('#planHub');
+    if (hub && hub.classList.contains('open')) closePlanHub();
+  });
+}
+
+// —— 全局项目上下文：#projectId 切换 → 加载该项目「定稿组(无则最近组)」最近槽位到右栏，或回到空态 ——
+async function onGlobalProjectChange() {
+  syncProjectGate();
+  activeGroupId = ''; activeGroup = null; dashActive = false; lastResult = null;
+  expandedGroups.clear(); hubSelected.clear();
+  closeCompareModal(); // 切换项目后旧对比结果失效，一并收起弹层
+  const ps = document.querySelector('#previewStage'); if (ps) { ps.classList.add('hidden'); ps.innerHTML = ''; }
+  if (!curProjectIdUuid()) {
+    // 未选项目 → 右栏回就绪空态，左栏参数/统计恢复默认
+    const kpi = document.querySelector('.kpi-row'); if (kpi) kpi.classList.add('hidden');
+    const table = document.querySelector('.table-section'); if (table) table.classList.add('hidden');
+    const cs = document.querySelector('#compareStage'); if (cs) cs.classList.add('hidden');
+    const pd = document.querySelector('#preparePanel'); if (pd) pd.classList.remove('hidden');
+    ['targetTotal', 'fixedPretax'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    renderHubCards();
+    syncSchemeSwitcher();
+    refreshPrepare();
+    syncDockCta();
+    return;
+  }
+  await loadProjectGroups();
+  // 优先加载「已定稿组」；无定稿组时回退最近保存的组
+  const target = groups.find(g => g.finalized) || groups[0];
+  const slotPid = target ? recentSlotPlanId(target) : null;
+  if (target && slotPid) await openSlot(slotPid, target);
+  else {
+    // 项目已选但暂无可用槽位 → 仅显示就绪空态，不显示空预览卡
+    const ps = document.querySelector('#previewStage'); if (ps) ps.classList.add('hidden');
+    setDashboardVisible(false);
+    renderHubCards(); syncSchemeSwitcher();
+  }
+}
+
+// 初始化：绑定沙盘交互（元素只在 index.html 报价视图存在，缺失时静默跳过）
+(function initDashboard() {
+  bindSchemeTabs();
+  bindFilters();
+  bindRatioSlider();
+  // 目标总报价 / 固定税前项手动输入 → 实时刷新就绪清单（结果态改参不切回空态）
+  ['#targetTotal', '#fixedPretax'].forEach(s => { const el = document.querySelector(s); if (el) el.addEventListener('input', () => { if (!dashActive) refreshPrepare(); }); });
+  bindDock();
+  bindPlanHub();
+  updateSchemeBalance();
+  refreshSchemeTabs();
+  refreshPrepare();
+  // 窗口尺寸变化时重算明细表高度，保持与左栏底部对齐
+  let alignT = 0;
+  window.addEventListener('resize', () => { clearTimeout(alignT); alignT = setTimeout(alignDetailTable, 120); });
 })();

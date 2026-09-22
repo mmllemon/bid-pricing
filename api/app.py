@@ -21,14 +21,20 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from bidpricing import project_overview, project_store
+from bidpricing import group_store
 from bidpricing.deployment import log_event, safe_user, user_scope
 from bidpricing.import_preview import build_listing_preview
 from bidpricing.io.boq import parse_listing
 from bidpricing.io.clean import clean_listing_rows
 from bidpricing.io.match import MatchReport, match_canonical_rows
 from bidpricing.plan_compare import compare_plans, same_project
-from bidpricing.project_store import save_plan, list_plans, load_plan, delete_plan, mark_finalized, _safe_folder
+from bidpricing.project_store import save_plan, list_plans, load_plan, delete_plan, mark_finalized, _safe_folder, find_plan_by_strategy
+from bidpricing.group_store import (
+    find_group_by_plan_id, group_finalize, create_group, rename_group,
+    list_groups, copy_group, delete_group, find_group_by_id, list_groups_for_project,
+)
 from bidpricing.quote_resolve import run_resolve
+from bidpricing.quote_strategies import STRATEGIES
 from bidpricing.validation.low_price_policy import DISPOSITION_NOTE
 
 # H-012 多用户隔离（不鉴权，仅目录级）：以运行账号作为命名空间，各用户方案互不相见。
@@ -59,10 +65,15 @@ def _load_low_policy() -> tuple[dict, float, str | None]:
 
 
 def _run_resolve(all_items: list[dict], params: dict, low_policy: dict,
-                 matched: MatchReport | None, tax_policy_override: dict | None = None) -> tuple:
-    """解析结果，委托给纯逻辑模块 run_resolve（可单测）；配置目录固化为本项目 config。"""
-    return run_resolve(all_items, params, low_policy, config_dir=ROOT / "config",
-                       matched=matched, tax_policy_override=tax_policy_override)
+                 matched: MatchReport | None, tax_policy_override: dict | None = None,
+                 strategy: str = "optimal") -> tuple:
+    """解析结果，按 STRATEGIES 注册表分发（optimal=MILP / uniform=等比下浮解析解）。
+
+    两个策略函数签名一致，可单测；配置目录固化为本项目 config。
+    strategy 非法值在调用前由 API 层 400 拒绝，此处直接取注册表。"""
+    fn = STRATEGIES[strategy]
+    return fn(all_items, params, low_policy, config_dir=ROOT / "config",
+              matched=matched, tax_policy_override=tax_policy_override)
 
 
 def _build_tax_override(input_vat_credit_mode: str, cost_input_vat_rate, credit_ratio,
@@ -180,7 +191,10 @@ def _rebuild_xlsx(job_id: str) -> Path | None:
 
 
 @app.post("/api/quote/optimize")
-async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFile = File(...), project_id: str = Form("当前项目"), project_name: str = Form(""), target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), overview_id: str = Form(""), input_vat_credit_mode: str = Form("PARTIAL"), cost_input_vat_rate: float = Form(0.13), credit_ratio: float = Form(0.70), cost_composition: str = Form("")):
+async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFile = File(...), project_id: str = Form("当前项目"), project_name: str = Form(""), target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), overview_id: str = Form(""), input_vat_credit_mode: str = Form("PARTIAL"), cost_input_vat_rate: float = Form(0.13), credit_ratio: float = Form(0.70), cost_composition: str = Form(""), strategy: str = Form("optimal"), group_id: str = Form("")):
+    strategy = strategy.strip() or "optimal"
+    if strategy not in STRATEGIES:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"未知报价策略：{strategy}（可选：{'、'.join(sorted(STRATEGIES))}）"})
     if not clause_enabled:
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "当前版本要求启用 C13 结算调整条款"})
     if not (0.0 <= ratio_min <= ratio_max <= 1.0):
@@ -205,18 +219,33 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         except Exception as exc:  # noqa: BLE001
             return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"Excel 识别失败：{exc}"})
         all_items = [{"item_id": row.item_id, "item_name": row.item_name, "unit": getattr(row, "unit", "") or "", "q0": row.q0, "q1_point": row.q1_point, "c_i": row.c_i, "cap": row.cap, "L": (float(row.cap) * ratio_min if row.cap is not None else 0.0), "U": (float(row.cap) * ratio_max if row.cap is not None else None)} for row in matched.items if row.q0 is not None or row.q1_point is not None]
-        result, payload, status_code = _run_resolve(all_items, params, low_policy, matched, tax_policy_override=tax_override)
+        result, payload, status_code = _run_resolve(all_items, params, low_policy, matched, tax_policy_override=tax_override, strategy=strategy)
         if status_code != 200:
             # 非 PASS（如无可优化项或跨单位工程重复 item_id 导致 BLOCKED）直接返回，
             # 不继续取空 p_by_id 建明细（防止 KeyError 吞掉报错文案）。
             return JSONResponse(status_code=status_code, content=payload)
-        payload.update({"project_id": proj_uuid or pid, "project_name": proj_name, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate})
+        payload.update({"project_id": proj_uuid or pid, "project_name": proj_name, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "strategy": strategy})
         # H-007 方案持久化：PASS 后保存为可『打开 / 复制 / 重算』的本地方案。
-        job_id = uuid.uuid4().hex
+        # H-008 方案组：一次测算=一组。命中同组同策略槽位复用其 plan_id 覆盖更新。
+        #   未传 group_id 时回退该策略槽位覆盖（同项目同策略）并归入该项目的方案组。
+        slot_key = proj_uuid or pid
+        effective_group_id = (group_id or "").strip()
+        # 未指定组：若能定位到既有同项目方案，则并入其组（同组同策略槽位覆盖）；
+        # 否则为本次测算新建一组。
+        if not effective_group_id:
+            existing = find_plan_by_strategy(slot_key, strategy)
+            if existing and find_group_by_plan_id(existing):
+                effective_group_id = find_group_by_plan_id(existing)
+        if not effective_group_id:
+            effective_group_id = group_store.create_group(
+                proj_uuid or pid, proj_name, target_total=target_total)["group_id"]
+        # 同组同策略槽位复用；未命中则新建 plan_id
+        job_id = group_store.find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
         preview = build_listing_preview(matched, pid)
         preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
         preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
         payload["plan_id"] = job_id
+        payload["group_id"] = effective_group_id
         # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
         json_path, xlsx_path = WEB_OUTPUT_DIR / f"{job_id}.json", WEB_OUTPUT_DIR / f"{job_id}.xlsx"
         json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -225,26 +254,88 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
             payload["excel_download_url"] = f"/api/quote/download/{job_id}"
         except (subprocess.SubprocessError, OSError) as exc:
             payload["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
-        save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
+        save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
+        group_store.upsert_slot(effective_group_id, strategy, job_id)
         log_event(LOG_DIR, CURRENT_USER, "POST /api/quote/optimize", "PASS",
-                  project_id=proj_uuid or pid, plan_id=job_id, objective=payload.get("objective"))
+                  project_id=proj_uuid or pid, plan_id=job_id, group_id=effective_group_id, objective=payload.get("objective"))
         return JSONResponse(status_code=200, content=payload)
 
 
 @app.get("/api/project/list")
 def project_list() -> JSONResponse:
-    """按项目分组返回方案摘要：前端用下拉选『项目』，下方列该项目下方案卡片。"""
-    plans = list_plans()
-    groups: dict[str, list[dict]] = {}
-    for p in plans:
-        proj = p.get("project_name") or p.get("project_id") or p.get("name") or "未命名项目"
-        groups.setdefault(proj, []).append(p)
-    projects = [
-        {"name": name, "plan_count": len(proj_plans), "plans": proj_plans}
-        for name, proj_plans in groups.items()
-    ]
+    """按项目分组返回方案组摘要：前端右栏用关联项目定位，方案中心按项目列组。"""
+    groups = list_groups()
+    per_project: dict[str, dict] = {}
+    for g in groups:
+        pid = g.get("project_id") or g.get("project_name") or "未命名项目"
+        entry = per_project.setdefault(pid, {"name": pid, "group_count": 0, "plans": [], "groups": []})
+        entry["group_count"] += 1
+        entry["groups"].append(g)
+        for slot_key, s in (g.get("strategy_slots") or {}).items():
+            sm = (s or {}).get("summary") or {}
+            if s and s.get("plan_id"):
+                entry["plans"].append({
+                    "id": s["plan_id"], "slot": slot_key, "group_id": g.get("group_id"),
+                    "name": f"{g.get('group_name')} · {slot_key}", "project_id": pid,
+                    "project_name": g.get("project_name") or pid,
+                    "saved_at": sm.get("saved_at"),
+                    "strategy": sm.get("strategy") or slot_key.lower(),
+                    "target_total": sm.get("target_total"),
+                    "competitive_budget": sm.get("competitive_budget"),
+                    "finalized": bool(g.get("finalized")),
+                    "finalized_at": g.get("finalized_at"),
+                })
+    projects = list(per_project.values())
     projects.sort(key=lambda g: g["name"])
     return JSONResponse(status_code=200, content={"status": "PASS", "projects": projects})
+
+
+# ============ 方案组（H-008）端点 ============
+@app.get("/api/group/list")
+def group_list(project_id: str = "") -> JSONResponse:
+    """按项目（归一键）返回方案组列表；未传 project_id 返回全部组。"""
+    if project_id and project_id.strip():
+        data = list_groups_for_project(project_id.strip())
+    else:
+        data = list_groups()
+    return JSONResponse(status_code=200, content={"status": "PASS", "groups": data})
+
+
+@app.post("/api/group/create")
+def group_create(project_id: str = Form(""), project_name: str = Form(""),
+                 name: str = Form(""), target_total: float = Form(None)) -> JSONResponse:
+    g = create_group(project_id.strip() or None, project_name.strip() or None,
+                     group_name=name.strip() or None, target_total=target_total)
+    return JSONResponse(status_code=200, content={"status": "PASS", "group": g})
+
+
+@app.post("/api/group/rename")
+def group_rename(group_id: str = Form(...), name: str = Form("")) -> JSONResponse:
+    if not rename_group(group_id.strip(), name.strip()):
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
+    return JSONResponse(status_code=200, content={"status": "PASS", "group_id": group_id.strip()})
+
+
+@app.post("/api/group/finalize")
+def group_set_finalized(group_id: str = Form(...), finalized: int = Form(1)) -> JSONResponse:
+    if not group_finalize(group_id.strip(), finalized=finalized == 1):
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
+    return JSONResponse(status_code=200, content={"status": "PASS", "group_id": group_id.strip(), "finalized": finalized == 1})
+
+
+@app.post("/api/group/copy")
+def group_copy(group_id: str = Form(...), name: str = Form("")) -> JSONResponse:
+    new = copy_group(group_id.strip(), group_name=name.strip() or None)
+    if new is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
+    return JSONResponse(status_code=200, content={"status": "PASS", "group": new})
+
+
+@app.post("/api/group/delete")
+def group_delete(group_id: str = Form(...), keep_plans: int = Form(0)) -> JSONResponse:
+    if not delete_group(group_id.strip(), keep_plans=keep_plans == 1):
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
+    return JSONResponse(status_code=200, content={"status": "PASS", "deleted": group_id.strip()})
 
 
 @app.get("/api/project/get")
@@ -275,10 +366,14 @@ def project_copy(id: str, name: str = "") -> JSONResponse:
 
 
 @app.post("/api/project/recompute")
-def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), input_vat_credit_mode: str = Form(""), cost_input_vat_rate: float = Form(None), credit_ratio: float = Form(None), cost_composition: str = Form("")) -> JSONResponse:
+def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), input_vat_credit_mode: str = Form(""), cost_input_vat_rate: float = Form(None), credit_ratio: float = Form(None), cost_composition: str = Form(""), strategy: str = Form("")) -> JSONResponse:
     rec = load_plan(id)
     if rec is None:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
+    # 重算时的策略：请求字段优先 → 方案已存 strategy → 默认 optimal（兼容旧前端不传）
+    strategy = (strategy or "").strip() or rec.get("strategy") or "optimal"
+    if strategy not in STRATEGIES:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"未知报价策略：{strategy}（可选：{'、'.join(sorted(STRATEGIES))}）"})
     if not clause_enabled:
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "当前版本要求启用 C13 结算调整条款"})
     if not (0.0 <= ratio_min <= ratio_max <= 1.0):
@@ -300,10 +395,10 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
     if guard is not None:
         return guard
     all_items = list(rec.get("all_items") or [])
-    result, payload, status_code = _run_resolve(all_items, params, low_policy, None, tax_policy_override=tax_override)
+    result, payload, status_code = _run_resolve(all_items, params, low_policy, None, tax_policy_override=tax_override, strategy=strategy)
     if status_code != 200:
         return JSONResponse(status_code=status_code, content=payload)
-    payload.update({"project_id": rec.get("name") or id, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate})
+    payload.update({"project_id": rec.get("name") or id, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "strategy": strategy})
     payload["plan_id"] = id
     # 与 optimize 一致：先导出再落盘，保存的方案 result 须带 excel_download_url，否则打开方案时「下载 Excel」为 '#' 无反应
     json_path, xlsx_path = WEB_OUTPUT_DIR / f"{id}.json", WEB_OUTPUT_DIR / f"{id}.xlsx"
@@ -316,6 +411,7 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
     merged = dict(rec)
     merged["params"] = dict(params)
     merged["result"] = payload
+    merged["strategy"] = strategy
     save_plan(merged, plan_id=id)
     return JSONResponse(status_code=200, content=payload)
 

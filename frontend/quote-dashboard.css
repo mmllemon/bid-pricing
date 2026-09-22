@@ -1,0 +1,902 @@
+/* ============================================================================
+   报价页 · 投标报价优化工作台（决策沙盘）
+   接设计稿矿物色系：双栏布局 / 4 联 KPI / A/B/C 方案切换 / 明细穿透表
+   ============================================================================ */
+
+:root{ --brand-gold:#e6b96a; }
+
+/* ---------- 双栏布局 ---------- */
+.workbench-layout{
+  display:grid;grid-template-columns:390px minmax(0,1fr);
+  gap:20px;align-items:stretch;
+}
+.param-column{min-width:0;display:flex;flex-direction:column;gap:16px}
+.param-column > .card{margin-bottom:0}
+.canvas-column{min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px}
+
+/* ---------- 卡片基础 ---------- */
+#quoteView .card{position:relative}
+#quoteView .card-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);
+}
+#quoteView .card-title{
+  font-size:16px;font-weight:700;color:var(--text);
+  display:flex;align-items:center;gap:7px;
+}
+.title-dot{width:6px;height:6px;border-radius:50%;background:var(--module-3);flex-shrink:0}
+.card-subtitle{font-size:12px;color:var(--text-secondary)}
+.field-group{display:flex;flex-direction:column;gap:12px}
+
+/* ---------- 一体化前后缀输入框 ---------- */
+.input-affix{
+  display:flex;align-items:center;background:var(--surface-card);
+  border:1px solid var(--border-input);border-radius:var(--radius-tile);
+  padding:0 10px;transition:border-color .15s,box-shadow .15s,background .15s;
+  box-shadow:inset 0 1px 2px rgba(35,34,32,.03);
+}
+.input-affix:focus-within{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-muted)}
+.input-prefix{font-size:12px;color:var(--text-tertiary);font-weight:500;margin-right:6px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.input-suffix{font-size:12px;color:var(--text-tertiary);background:var(--surface-nested);padding:2px 7px;border-radius:5px;margin-left:6px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.input-affix input{
+  flex:1;min-width:0;border:none;outline:none;height:30px;font-size:14px;
+  font-family:var(--font);color:var(--text);background:transparent;width:100%;
+}
+
+/* ---------- 安全防线比率滑块 ---------- */
+.range-box{
+  background:var(--surface-nested);border:1px solid var(--border);
+  border-radius:var(--radius-tile);padding:12px 14px;margin-top:4px;
+}
+.range-meta{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.range-val{font-size:14px;font-weight:700;color:var(--accent)}
+#quoteView input[type=range]{
+  width:100%;height:5px;background:#dfdcd3;border-radius:3px;outline:none;
+  -webkit-appearance:none;appearance:none;cursor:pointer;
+}
+#quoteView input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:#fff;border:2px solid #fff; /* 白色实体钮体 + 2px 白描边 */
+  box-shadow:0 0 0 2px var(--accent),0 1px 4px rgba(0,0,0,.2); /* 外圈状态色彩环 + 落地影 */
+  cursor:grab;
+}
+#quoteView input[type=range]:focus-visible{box-shadow:0 0 0 3px var(--accent-muted)}
+.ticks{display:flex;justify-content:space-between;font-size:11px;color:var(--text-tertiary);margin-top:5px}
+
+/* ---------- 低价风控留痕：紧凑警示条（不打断操作，点击展开留痕表单） ---------- */
+.risk-alert-box{
+  position:relative;overflow:visible;margin-top:8px;font-size:12px;
+  display:none;
+}
+.risk-alert-box.active{display:block;animation:qdFadeIn .2s ease}
+.risk-summary{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:var(--danger-soft);border:1px dashed rgba(186,74,56,.45);
+  border-radius:var(--radius-control);padding:6px 10px 6px 12px;
+  color:var(--danger);font-size:12px;font-weight:600;cursor:pointer;
+  transition:border-color .15s,background .15s;
+}
+.risk-summary:hover{border-style:solid;border-color:var(--danger)}
+.risk-summary:focus-visible{outline:none;box-shadow:0 0 0 3px var(--danger-soft)}
+.risk-chev{width:14px;height:14px;margin-left:auto;flex-shrink:0;color:var(--danger);transition:transform .18s}
+.risk-alert-box.open .risk-chev{transform:rotate(180deg)}
+.risk-fields-wrap{display:none;padding:9px 2px 0}
+.risk-alert-box.open .risk-fields-wrap{display:block;animation:qdFadeIn .2s ease}
+.risk-hint{color:var(--text-secondary);margin-bottom:2px}
+.risk-alert-box strong{font-weight:600}
+.risk-alert-box input{
+  margin-top:8px;width:100%;padding:6px 9px;border:1px solid rgba(189,138,78,.4);
+  border-radius:6px;background:#fff;font-size:14px;color:var(--text);font-family:var(--font);
+}
+.risk-alert-box input:focus{outline:none;border-color:var(--warn);box-shadow:0 0 0 2px rgba(189,138,78,.18)}
+
+/* ---------- 双通道清单上传舱 ---------- */
+.upload-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.upload-slot{
+  background:var(--surface-nested);border:1px solid var(--border);
+  border-radius:var(--radius-tile);padding:14px 12px;text-align:center;cursor:pointer;
+  transition:all .18s ease;box-shadow:inset 0 1px 2px rgba(35,34,32,.03);
+}
+.upload-slot:hover{background:#fff;border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 12px rgba(35,34,32,.06)}
+.upload-slot:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-muted);outline:none}
+.upload-slot svg{width:22px;height:22px;color:var(--accent);margin-bottom:4px;display:block;margin-left:auto;margin-right:auto}
+.upload-slot strong{display:block;font-size:12px;color:var(--text)}
+.upload-slot > span{font-size:11px;color:var(--text-tertiary)}
+.upload-slot input[type=file]{display:none}
+.upload-slot .file-tag{
+  font-size:11px;color:var(--module-1);font-weight:600;background:var(--success-soft);
+  padding:2px 7px;border-radius:4px;margin-top:8px;display:inline-block;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* ---------- 方案切换胶囊条 ---------- */
+.scheme-switcher-bar{
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;
+  background:var(--surface-card);border:1px solid var(--border);
+  border-radius:var(--radius-tile);padding:6px 10px;box-shadow:var(--shadow-card);
+}
+.scheme-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.scheme-tab{
+  border:none;background:transparent;padding:7px 14px;border-radius:8px;
+  font-size:12px;font-weight:600;color:var(--text-secondary);cursor:pointer;
+  transition:all .15s ease;display:flex;align-items:center;gap:6px;
+}
+.scheme-tab:hover{background:var(--surface-nested)}
+.scheme-tab.active{background:var(--accent);color:var(--on-accent);box-shadow:0 2px 6px rgba(35,34,32,.18)}
+.scheme-tab.active svg,.scheme-tab.active .tab-indicator{color:var(--brand-gold)}
+.scheme-tab .tab-indicator{width:6px;height:6px;border-radius:50%;background:var(--brand-gold)}
+.scheme-tab:focus-visible,.filter-chip:focus-visible,.kpi-card:focus-visible,
+.dock-btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-muted)}
+
+/* ---------- 4 联矿物色 KPI 看板 ---------- */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi-card{
+  background:var(--surface-card);border:1px solid var(--border);
+  border-top:3px solid var(--kpi-accent,var(--accent));
+  border-radius:var(--radius-tile);padding:14px;box-shadow:var(--shadow-card);
+  position:relative;cursor:pointer;transition:all .18s ease;--kpi-accent:var(--accent);
+}
+.kpi-card.kpi-bamboo{--kpi-accent:var(--module-1)}
+.kpi-card.kpi-ochre{--kpi-accent:var(--module-3)}
+.kpi-card.kpi-blue{--kpi-accent:var(--module-2)}
+.kpi-card:hover{transform:translateY(-2px);border-color:var(--border-hover);border-top-color:var(--kpi-accent);box-shadow:0 6px 16px rgba(35,34,32,.07)}
+.kpi-card.active-drill{border-color:var(--accent);border-top-color:var(--kpi-accent);box-shadow:0 0 0 2px var(--accent-muted),0 6px 16px rgba(35,34,32,.07)}
+/* 钻取穿透指示：激活卡片底部向下微三角，建立「该指标正在过滤下方清单」的心智链接 */
+.kpi-card.active-drill::after{
+  content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);
+  width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;
+  border-top:5px solid var(--kpi-accent);filter:drop-shadow(0 1px 1px rgba(35,34,32,.2));
+}
+.kpi-card[tabindex]:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-muted)}
+
+.kpi-label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.kpi-title{font-size:12px;font-weight:500;color:var(--text-secondary)}
+.kpi-drill-hint{font-size:11px;color:var(--text-tertiary);opacity:0;transition:opacity .15s;white-space:nowrap}
+.kpi-card:hover .kpi-drill-hint{opacity:1}
+.kpi-val{
+  font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.02em;
+  display:flex;align-items:baseline;gap:5px;margin-bottom:4px;flex-wrap:wrap;
+}
+.delta-badge{
+  font-size:11px;font-weight:600;padding:1px 6px;border-radius:999px;
+  display:inline-flex;align-items:center;gap:2px;white-space:nowrap;
+}
+.delta-badge.gain{background:var(--success-soft);color:var(--success)}
+.delta-badge.warn{background:var(--warn-soft);color:var(--warn)}
+.delta-badge.neutral{background:var(--surface-nested);color:var(--text-secondary)}
+.sparkline-svg{width:100%;height:28px;margin:4px 0;display:block}
+.kpi-foot{
+  font-size:11px;color:var(--text-tertiary);display:flex;justify-content:space-between;
+  gap:6px;flex-wrap:wrap;border-top:1px dashed var(--border);padding-top:5px;margin-top:2px;
+}
+
+/* ---------- 明细审查表 ---------- */
+/* 明细表撑满右栏剩余高度，底部与左栏（报价资料卡）对齐，行多时表内纵向滚动 */
+.table-section{
+  background:var(--surface-card);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:var(--card-pad) 20px;
+  flex:1 1 auto;min-height:260px;display:flex;flex-direction:column;
+}
+.table-toolbar{
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+  flex-wrap:wrap;gap:10px;flex-shrink:0;
+}
+.filter-chips{display:flex;gap:6px;flex-wrap:wrap}
+.filter-chip{
+  border:1px solid var(--border-input);background:var(--surface-card);
+  padding:4px 11px;border-radius:6px;font-size:12px;font-weight:500;
+  color:var(--text-secondary);cursor:pointer;transition:all .12s ease;
+}
+.filter-chip:hover{border-color:var(--accent);color:var(--text)}
+.filter-chip.active{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600}
+
+.table-scroll{overflow:auto;border:1px solid var(--border);border-radius:var(--radius-tile);background:#fff;flex:1 1 auto;min-height:0;padding:0 0 56px}
+.table-scroll table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.table-scroll th{
+  background:var(--surface-nested);color:var(--text-secondary);font-weight:600;text-align:left;
+  padding:9px 12px;border-bottom:1.5px solid var(--border-input);position:sticky;top:0;z-index:1;
+}
+.table-scroll th.num,.table-scroll td.num{text-align:right;padding-right:14px}
+/* 数字列语义类：从 JS 内联色收拢到 CSS 单点可调（P0-1） */
+.table-scroll td.cell-code{color:var(--text-secondary)}
+.table-scroll td.cap{color:var(--text-secondary)}
+.table-scroll td.cost{color:var(--text-tertiary)}
+.table-scroll td.quote{color:var(--accent);font-weight:700}
+.table-scroll td.cell-total{font-weight:600}
+.table-scroll td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--text)}
+.table-scroll tbody tr:hover{background:rgba(47,46,43,.025)}
+.table-scroll tbody tr:last-child td{border-bottom:none}
+/* 冻结首两列：横向滚动时「项目编码 / 项目名称」保持可见；第二列偏移由 JS 实测 --frozen-w 同步 */
+.table-scroll th:nth-child(1),
+.table-scroll td:nth-child(1):not([colspan]){
+  position:sticky;left:0;z-index:2;background:var(--surface-card);
+}
+.table-scroll th:nth-child(2),
+.table-scroll td:nth-child(2){
+  position:sticky;left:var(--frozen-w,110px);z-index:2;background:var(--surface-card);
+  box-shadow:2px 0 6px rgba(35,34,32,.05);
+}
+.table-scroll thead th:nth-child(1),
+.table-scroll thead th:nth-child(2){z-index:3;background:var(--surface-nested)}
+
+.ratio-pill-cell{display:inline-flex;align-items:center;gap:6px}
+.mini-progress{
+  width:42px;height:4px;background:#e5e3dc;border-radius:2px;overflow:hidden;display:inline-block;
+}
+.mini-progress-fill{height:100%;background:var(--accent)}
+.status-tag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;display:inline-block;white-space:nowrap}
+.status-tag.early{background:var(--warn-soft);color:var(--warn)}
+.status-tag.safe{background:var(--success-soft);color:var(--success)}
+.status-tag.risk{background:var(--danger-soft);color:var(--danger)}
+.note-cell{font-size:12px;color:var(--text-secondary);margin-left:6px}
+
+/* ---------- 常驻悬浮操作坞 ---------- */
+.floating-dock{
+  position:fixed;bottom:24px;right:32px;z-index:50;
+  background:rgba(252,251,248,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid rgba(47,46,43,.1);border-radius:999px;padding:6px 10px;
+  display:flex;align-items:center;gap:8px;box-shadow:0 8px 24px -4px rgba(35,34,32,.08);
+}
+.dock-btn{
+  border:none;padding:8px 16px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:all .15s ease;color:var(--text);background:transparent;
+}
+.dock-btn.primary{background:var(--accent);color:var(--on-accent)}
+.dock-btn.primary:hover{background:var(--accent-600);transform:translateY(-1px)}
+.dock-btn.secondary{border:1px solid var(--border-input)}
+.dock-btn.secondary:hover{background:var(--surface-nested);border-color:var(--accent)}
+.dock-btn:disabled{opacity:.5;cursor:default;transform:none}
+
+/* ---------- 方案对比抽屉 ---------- */
+.diff-backdrop{
+  position:fixed;inset:0;background:rgba(35,34,32,.3);backdrop-filter:blur(2px);
+  z-index:95;opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.diff-backdrop.open{opacity:1;pointer-events:auto}
+.diff-drawer{
+  position:fixed;top:0;right:0;bottom:0;width:480px;max-width:92vw;z-index:100;
+  background:var(--surface-card);border-left:1px solid var(--border);
+  box-shadow:-10px 0 40px rgba(35,34,32,.12);display:flex;flex-direction:column;
+  transform:translateX(105%);transition:transform .26s cubic-bezier(.2,.8,.2,1);
+}
+.diff-drawer.open{transform:translateX(0)}
+.diff-header{
+  padding:18px 22px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.diff-header h3{margin:0;font-size:16px;font-weight:700}
+.diff-body{padding:22px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px}
+.diff-compare-card{background:var(--surface-nested);padding:14px;border-radius:var(--radius-tile);border:1px solid var(--border)}
+
+/* ---------- Toast（状态语义色：success/error/warn，与分类模块色严格分离） ---------- */
+.toast-pill{
+  position:fixed;top:24px;left:50%;transform:translateX(-50%) translateY(-30px);z-index:200;
+  background:#33322f;color:#fff;padding:8px 18px;border-radius:999px;
+  font-size:12px;font-weight:500;box-shadow:0 10px 30px rgba(35,34,32,.2);
+  display:flex;align-items:center;gap:6px;opacity:0;pointer-events:none;transition:all .24s ease;
+}
+.toast-pill.toast-success{background:var(--success)}
+.toast-pill.toast-error{background:var(--danger)}
+.toast-pill.toast-warn{background:var(--warn)}
+.toast-pill.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@keyframes qdFadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ============================================================================
+   报价页升级：等宽数字 / 方案库动线 / 安全防线滑块 / 税口径堆叠条 / 双通道资产舱 / 字段徽标
+   ============================================================================ */
+:root{ --intake-cap:#3d6cad; --intake-cost:#1c6b4e; --cobalt-soft:#e6edf5; --emerald-soft:#e7f2ec; }
+
+/* 2) 等宽数字排版（Tabular Nums）：凡数字一律等宽，逐行对位 */
+.tabular,
+#quoteView .kpi-val, #quoteView .kpi-foot b,
+#quoteView .range-val, #quoteView .delta-badge,
+#quoteView table td.num,
+#quoteView .f-val, #quoteView .comp-formula-badge .f-val,
+#quoteView input.tabular, #quoteView .ratio-pill-cell span:last-child,
+#quoteView .mini-progress ~ span{
+  font-variant-numeric:tabular-nums !important;
+  font-feature-settings:"tnum" !important;
+}
+#quoteView input[type=number]{font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield}
+/* 金额/税率输入去掉原生上下箭头，数字位数多时不挤压输入区 */
+#quoteView input[type=number]::-webkit-outer-spin-button,
+#quoteView input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+/* 1) 方案库操作动线：次级工具组 + 主 CTA */
+.plan-util-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 8px}
+.plan-util{
+  border:1px solid var(--border);background:var(--surface-nested);color:var(--text-secondary);
+  padding:7px 0;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;
+  transition:all .15s ease;
+}
+.plan-util:hover{background:#fff;border-color:var(--text-tertiary);color:var(--accent)}
+.plan-util:focus-visible,.plan-main-act:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-muted)}
+.plan-main-act{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--accent);color:var(--on-accent);border:1px solid var(--accent);
+  padding:10px 14px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;
+  box-shadow:0 3px 10px rgba(35,34,32,.16);transition:all .15s ease;
+}
+.plan-main-act:hover{background:var(--accent-600);box-shadow:0 5px 14px rgba(35,34,32,.22)}
+.plan-main-act:active{transform:translateY(1px)}
+.plan-main-act svg{width:16px;height:16px;color:var(--brand-gold)}
+.plan-main-act:disabled{opacity:.6;cursor:not-allowed}
+
+/* 3) 安全防线双向 Range：0-50% 赤赭微底 / 50-100% 蓝灰微底 · 激活区间填充 · 呼吸态风险边缘 */
+.guardrail{
+  background:var(--surface-nested);border:1px solid var(--border);border-radius:var(--radius-tile);
+  padding:12px 14px;margin-top:4px;
+  transition:border-color .2s ease;
+}
+.guardrail-track{position:relative;height:24px;margin-top:2px}
+.guardrail-zones{
+  position:absolute;left:0;right:0;top:5px;height:9px;border-radius:6px;
+  background:linear-gradient(90deg, color-mix(in srgb,var(--danger) 42%,transparent) 0%, color-mix(in srgb,var(--danger) 30%,transparent) 50%, color-mix(in srgb,var(--text-tertiary) 20%,transparent) 63%, color-mix(in srgb,var(--module-2) 45%,transparent) 100%);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.04);
+  display:flex;align-items:center;font-size:9px;color:rgba(255,255,255,.85);
+}
+.guardrail-zones .gz-serious{padding-left:4px;font-weight:600}
+.guardrail-zones .gz-line{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:color-mix(in srgb,var(--danger) 70%,transparent);z-index:1}
+.guardrail-zones .gz-safe{margin-left:auto;padding-right:4px;font-weight:600;color:#2b2f33}
+.guardrail-fill{
+  position:absolute;top:5px;height:9px;border-radius:6px;z-index:1;
+  background:color-mix(in srgb,var(--accent) 26%, transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 38%, transparent);
+  pointer-events:none;
+  transition:left .08s ease-out,width .08s ease-out;
+}
+/* 呼吸态：上限逼近（<55%）或区间跌入废标区（<50%）时，轨道边缘赤赭色呼吸提示 */
+.guardrail.is-risk{
+  border-color:rgba(186,74,56,.5);
+  animation:guardrailBreathe 2.2s ease-in-out infinite;
+}
+@keyframes guardrailBreathe{
+  0%,100%{box-shadow:0 0 0 0 rgba(186,74,56,0),inset 0 0 0 1px rgba(186,74,56,.25)}
+  50%{box-shadow:0 0 0 4px rgba(186,74,56,.10),inset 0 0 0 1.5px rgba(186,74,56,.65)}
+}
+#quoteView .guardrail input[type=range]{position:relative;z-index:2;height:24px;background:transparent}
+#quoteView .guardrail input[type=range]::-webkit-slider-runnable-track{height:9px;border-radius:6px;background:transparent}
+#quoteView .guardrail input[type=range]::-webkit-slider-thumb{margin-top:-4px}
+#quoteView .guardrail input[type=range]::-moz-range-track{background:transparent;height:9px}
+.guardrail-legend{display:flex;gap:14px;margin-top:6px;font-size:11px;color:var(--text-secondary);flex-wrap:wrap}
+.guardrail-legend span{display:inline-flex;align-items:center;gap:5px}
+.guardrail-legend i{width:8px;height:8px;border-radius:50%}
+.gl-red i{background:var(--danger)}
+.gl-safe i{background:var(--module-2)}
+
+/* 3b) 低价风控留痕：行内角标 + 双输入 + 确认芯片 */
+.risk-corner{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;
+  background:#fff;border:1px solid rgba(186,74,56,.4);
+  color:var(--danger);font-size:10px;font-weight:700;letter-spacing:.04em;
+  padding:2px 8px;border-radius:999px;
+}
+.risk-corner::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--danger)}
+.risk-fields{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
+.risk-alert-box .risk-confirm{
+  display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--warn);
+  border:1px solid rgba(189,138,78,.35);background:rgba(255,255,255,.5);
+  padding:7px 10px;border-radius:7px;cursor:pointer;transition:all .15s ease;
+}
+.risk-alert-box .risk-confirm:has(input:checked){background:var(--warn-soft);border-color:var(--warn)}
+.risk-alert-box .risk-confirm input{width:auto;margin:0;accent-color:var(--warn);cursor:pointer}
+
+/* 4) 税口径：GitHub 式配比堆叠条 + k 公式 Metric Badge */
+.comp-stack{margin-top:8px}
+.comp-stack-bar{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--surface-nested)}
+.comp-stack-bar .cs-fill{height:100%;transition:width .45s cubic-bezier(.22,.61,.36,1)}
+.comp-stack-bar .c-credit{background:var(--module-1)}              /* 翡翠绿：可抵扣 */
+.comp-stack-bar .c-ledger{background:#9aa2a8}                      /* 石板灰：不可抵扣 */
+.comp-stack-legend{display:flex;gap:16px;margin-top:7px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
+.comp-stack-legend .cl-it{display:inline-flex;align-items:center;gap:6px}
+.comp-stack-legend .cl-it b{color:var(--text);font-weight:600}
+.cs-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+.cs-dot.c-credit{background:var(--module-1)}
+.cs-dot.c-ledger{background:#9aa2a8}
+.comp-formula-badge{
+  display:flex;align-items:baseline;gap:8px;margin:10px 0;
+  padding:9px 13px;border-radius:10px;
+  background:var(--accent-muted);
+  border:1px solid var(--border);box-shadow:var(--shadow-card);
+  transition:background .2s ease,box-shadow .2s ease;
+}
+.comp-formula-badge .f-label{font-size:11px;color:var(--text-secondary);font-weight:600;letter-spacing:.02em}
+.comp-formula-badge .f-val{font-size:20px;font-weight:700;color:var(--accent);letter-spacing:-.02em;line-height:1}
+.comp-formula-badge .f-unit{font-size:11px;color:var(--text-tertiary);margin-left:auto;text-align:right}
+
+/* 5) 双通道资产舱 Dual Intake Bay */
+.intake-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.intake-slot{
+  position:relative;background:var(--surface-card);border:1px solid var(--border);
+  border-radius:var(--radius-tile);padding:0;cursor:pointer;overflow:hidden;
+  display:flex;flex-direction:column;
+  transition:all .2s ease;box-shadow:inset 0 1px 2px rgba(35,34,32,.03);
+}
+.intake-slot input[type=file]{display:none}
+.intake-slot:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(35,34,32,.07)}
+.intake-slot:focus-within,
+.intake-slot:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-muted);outline:none}
+.intake-slot.dragging{transform:scale(1.015);box-shadow:0 0 0 3px var(--accent-muted),0 8px 20px rgba(35,34,32,.1)}
+.intake-head{display:flex;align-items:center;gap:9px;padding:12px 12px 9px}
+.intake-slot.cap{--ic:#3d6cad;--ic-soft:#e5edf6}
+.intake-slot.cost{--ic:#2f8f6d;--ic-soft:#e6f1ec}
+.intake-ic{
+  width:34px;height:34px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;
+  background:var(--ic-soft);color:var(--ic); 
+}
+.intake-ic svg{width:18px;height:18px}
+.intake-title strong{display:block;font-size:12px;font-weight:700;color:var(--text)}
+.intake-title span{font-size:11px;color:var(--text-tertiary)}
+.intake-title span:last-child{display:block}
+.intake-body{padding:0 12px 12px;border-top:1px solid var(--border);padding-top:9px;flex:1 1 auto;display:flex;flex-direction:column}
+.intake-state{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
+.intake-cta{color:var(--ic);font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--ic);opacity:.35;flex-shrink:0}
+.intake-slot:not(.loaded) .pulse-dot{animation:intakePulse 1.6s ease infinite}
+.intake-slot.loaded .pulse-dot{background:var(--success);opacity:1;position:relative}
+.intake-slot.loaded .pulse-dot::after{
+  content:"";position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--success);
+  animation:intakePulseRing 1.8s ease infinite;opacity:.7;
+}
+.intake-reup{
+  display:none;margin:0 auto;border:1px solid var(--border);background:#fff;color:var(--text-secondary);
+  font-size:11px;font-weight:600;padding:4px 12px;border-radius:999px;cursor:pointer;transition:all .15s ease;
+}
+.intake-reup:hover{border-color:var(--ic);color:var(--ic)}
+.intake-slot:not(.loaded) .intake-reup{display:inline-block}
+.intake-slot.loaded{border-color:rgba(111,143,106,.4)}
+.intake-slot.loaded .intake-cta{color:var(--success)}
+@keyframes intakePulse{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes intakePulseRing{0%{transform:scale(.8);opacity:.7}100%{transform:scale(1.5);opacity:0}}
+
+/* ---------- 响应式 ---------- */
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  .guardrail.is-risk{animation:none;box-shadow:inset 0 0 0 1.5px rgba(186,74,56,.6)}
+}
+@media (max-width:1200px){
+  .workbench-layout{grid-template-columns:1fr}
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:820px){
+  .floating-dock{left:50%;right:auto;transform:translateX(50%);bottom:16px}
+}
+@media (max-width:720px){
+  .kpi-row{grid-template-columns:1fr}
+  .intake-grid{grid-template-columns:1fr}
+  .table-section{padding:14px}
+}
+
+/* ============================================================================
+   本轮细化 · qd3
+   1) 下拉底色与输入框一致  3) 空态就绪度检查清单  3b) FAB 加载动效
+   4) 右侧对比结果卡  5) 安全防线双滑块叠加  6) 资产舱统计约束
+   ============================================================================ */
+
+/* 1) 下拉触发器与选项面板：实心卡片底色对齐输入框（去毛玻璃），仅作用于报价视图 */
+#quoteView .cs-trigger{
+  background:var(--surface-card);backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+#quoteView .cs-list{
+  background:var(--surface-card);backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+#quoteView .cs-opt:hover,
+#quoteView .cs-opt[aria-selected="true"]{background:var(--surface-nested)}
+
+/* 3) 测算准备就绪度检查清单（测算前空态，替代单行提示） */
+.prepare-panel .card-head{margin-bottom:12px}
+.prep-item{
+  display:flex;align-items:flex-start;gap:9px;padding:10px 12px;margin-bottom:8px;
+  border:1px solid var(--border);border-radius:9px;background:var(--surface-card);
+  font-size:12px;color:var(--text-secondary);transition:border-color .15s,background .15s;
+}
+.prep-item:last-child{margin-bottom:0}
+.prep-item .prep-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0;background:var(--text-tertiary)}
+.prep-item[data-state="ok"]{border-color:rgba(111,143,106,.35);background:var(--success-soft);color:var(--text)}
+.prep-item[data-state="ok"] .prep-dot{background:var(--success)}
+.prep-item[data-state="alert"]{border-color:rgba(189,138,78,.4);background:var(--warn-soft);color:var(--text)}
+.prep-item[data-state="alert"] .prep-dot{background:var(--warn)}
+.prep-text{flex:1;min-width:0}
+.prep-state{
+  flex-shrink:0;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;
+  background:var(--surface-nested);color:var(--text-secondary);margin-left:6px;
+}
+.prep-state.ok{background:var(--success);color:#fff}
+.prep-state.alert{background:var(--warn);color:#fff}
+
+/* 4) 右侧主舞台：多方案横向对比结果卡 */
+.compare-stage .result-head{margin-bottom:12px}
+.compare-stage .result-head h3{font-size:16px;font-weight:700;margin:0;color:var(--accent)}
+.compare-stage .result-head p{font-size:12px;color:var(--text-secondary);margin:4px 0 0}
+.compare-stage .table-wrap{margin-bottom:4px}
+
+/* 3b) FAB 操作坞：分割线 + ghost 次级 + 运算加载旋转动效 */
+.dock-sep{width:1px;height:22px;background:var(--border);margin:0 2px}
+.dock-btn.ghost{color:var(--text-secondary);border:1px solid transparent}
+.dock-btn.ghost:hover{border-color:var(--border-input);background:var(--surface-nested)}
+.floating-dock .dock-btn.dock-busy{pointer-events:none;opacity:.85}
+.dock-btn.dock-busy::before{
+  content:"";display:inline-block;width:12px;height:12px;border-radius:50%;
+  border:2px solid currentColor;border-top-color:transparent;
+  animation:dockSpin .7s linear infinite;margin-right:2px;
+}
+@keyframes dockSpin{to{transform:rotate(360deg)}}
+
+/* 5) 安全防线双滑块：两把 thumb 绝对叠加到同一可视化轨道 */
+#quoteView .guardrail-track input[type=range]{
+  position:absolute;left:0;right:0;top:0;bottom:0;width:100%;height:24px;margin:0;
+  background:transparent;pointer-events:none;z-index:2;
+}
+#quoteView .guardrail-track input[type=range]::-webkit-slider-thumb{pointer-events:auto}
+#quoteView .guardrail-track input[type=range]::-moz-range-thumb{pointer-events:auto}
+
+/* 6) 双通道资产舱：两列等宽、重新上传两卡一致居中 */
+.intake-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.intake-title span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.intake-reup{display:block;width:fit-content;margin:auto auto 0;flex-shrink:0}
+@media (prefers-reduced-motion:reduce){ .dock-btn.dock-busy::before{animation:none} }
+
+/* ============================================================================
+   本轮细化 · qd4
+   双滑块 thumb 区隔化 · k 内联 pill · 方案 Tab 溢出保护
+   ============================================================================ */
+
+/* 双滑块 thumb 区隔：下限暖红=废标风险，上限钴蓝=合规安全，呼应图例（白钮体 + 状态色外环） */
+#quoteView .guardrail-track input[type=range]#ratioLow::-webkit-slider-thumb{box-shadow:0 0 0 2px var(--danger),0 1px 4px rgba(0,0,0,.2)}
+#quoteView .guardrail-track input[type=range]#ratioHigh::-webkit-slider-thumb{box-shadow:0 0 0 2px var(--module-2),0 1px 4px rgba(0,0,0,.2)}
+#quoteView .guardrail-track input[type=range]#ratioLow::-moz-range-thumb{background:#fff;border:2px solid var(--danger)}
+#quoteView .guardrail-track input[type=range]#ratioHigh::-moz-range-thumb{background:#fff;border:2px solid var(--module-2)}
+
+/* k 换算系数：compose-foot 行内 pill（含税→不含税） */
+.compose-foot{gap:8px;flex-wrap:wrap}
+.k-inline{
+  display:inline-flex;align-items:center;gap:5px;flex-shrink:0;
+  background:var(--surface-nested);border:1px solid var(--border);
+  border-radius:999px;padding:2px 10px 2px 8px;font-size:11px;color:var(--text-secondary);
+}
+.k-inline i{font-style:normal;font-weight:700;color:var(--module-2);font-size:11px}
+.k-inline b{font-weight:700;color:var(--accent)}
+.k-inline em{font-style:normal;color:var(--text-tertiary);font-size:11px}
+
+/* 方案 Tab 文字：过长单行省略，悬浮显示完整名（由 label.title 提供） */
+#quoteView .scheme-tab .tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:126px}
+
+/* ============================================================================
+   本轮打磨 · qd5（P2）
+   结果入场动画 · 选中态统一墨黑 · 卡片内边距统一 · FAB 窄屏图标化
+   ============================================================================ */
+
+/* —— 末次测算结果入场：4 卡错峰淡入 + 上浮 —— */
+#quoteView .dash-arrive .kpi-card{animation:kpiIn .3s cubic-bezier(.2,.7,.3,1) both}
+#quoteView .dash-arrive .kpi-card:nth-child(2){animation-delay:.05s}
+#quoteView .dash-arrive .kpi-card:nth-child(3){animation-delay:.1s}
+#quoteView .dash-arrive .kpi-card:nth-child(4){animation-delay:.15s}
+#quoteView .dash-arrive .table-section>*, #quoteView .dash-arrive .compare-stage>*{animation:kpiIn .32s cubic-bezier(.2,.7,.3,1) both}
+@keyframes kpiIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* —— 方案切换（A/B/C）：卡片容器完全静止，仅数值平滑淡入，避免快速连点的上下抖动 —— */
+#quoteView .scheme-fade .table-scroll tbody{animation:valIn .24s ease both}
+#quoteView .kpi-val.val-fade{animation:valIn .24s ease both}
+@keyframes valIn{from{opacity:.3}to{opacity:1}}
+
+/* —— 选中 / 钻取态统一为墨黑（替代彩色掺杂），保留模块色仅作类别左条 —— */
+#quoteView .kpi-card.active-drill{box-shadow:0 0 0 2px var(--accent);transform:translateY(-1px)}
+#quoteView .kpi-card.active-drill::before{background:var(--accent)!important}
+#quoteView .filter-chip.active{background:var(--accent);color:var(--on-accent)}
+
+/* —— 排版网格统一 —— */
+#quoteView .compare-stage{padding:20px}
+#quoteView .kpi-row{gap:14px}
+
+/* —— FAB 窄屏图标化：≤900px 隐文本、保留图标，杜绝 5 按钮横排溢出 —— */
+@media (max-width:900px){
+  .floating-dock .dock-btn{font-size:0;line-height:0;padding:10px;gap:0;min-width:40px;justify-content:center}
+  .floating-dock .dock-sep{margin:0 4px}
+}
+@media (prefers-reduced-motion:reduce){
+  #quoteView .dash-arrive .kpi-card,
+  #quoteView .dash-arrive .table-section>*,
+  #quoteView .dash-arrive .compare-stage>*{animation:none}
+}
+
+/* ============================================================================
+   本轮微调 · qd6
+   成本进项税抵扣模型紧凑化 · k-inline 与占比合计锁定同行 · 双滑块锚定
+   ============================================================================ */
+
+/* 换算系数 pill 与「占比合计」强制同行同高，不换行 */
+.compose-foot{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:nowrap}
+.compose-foot .compose-sum{min-width:0;white-space:nowrap}
+.k-inline{max-width:100%;flex-shrink:1;flex-wrap:wrap;row-gap:0;line-height:1.35}
+.k-inline em{white-space:normal}
+
+/* 成本进项税抵扣模型：逐段收紧纵向留白 */
+#quoteView #composeWrap{margin-top:2px}
+#quoteView #composeWrap .comp-stack{margin:2px 0 6px}
+#quoteView #composeWrap .comp-stack-legend{margin-top:4px}
+#quoteView #composeWrap .compose-table{margin-top:2px}
+#quoteView #composeWrap .compose-row{padding:5px 8px}
+#quoteView #composeWrap .compose-foot{margin-top:6px}
+
+/* ============================================================================
+   本轮重构 · qd11（P0）
+   右栏唯一真相源：就绪清单操作按钮 / 预览核对卡 / 结果动作工具栏 / Toast 语义色
+   ============================================================================ */
+
+/* 1) 就绪清单（#preparePanel）底部操作组：预览=次级、识别并计算=主 CTA */
+.prep-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.prep-actions .btn-primary,
+.prep-actions .btn-secondary{flex:1;min-width:150px;justify-content:center;padding:10px 14px;font-size:14px}
+.prep-actions .btn-primary:focus-visible,
+.prep-actions .btn-secondary:focus-visible,
+.result-actions button:focus-visible,
+.result-actions a:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-muted)}
+
+/* 2) 预览核对卡（#previewStage）：复用 card/table 体系，标题沿用对比卡规格 */
+.preview-stage .result-head{margin-bottom:12px}
+.preview-stage .result-head h3{font-size:16px;font-weight:700;margin:0;color:var(--accent)}
+.preview-stage .result-head p{font-size:12px;color:var(--text-secondary);margin:4px 0 0}
+
+/* 3) 明细表工具栏右侧：结果动作小按钮组（下载 Excel / 下载 JSON / 定稿并回写） */
+.table-toolbar-side{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.result-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.result-actions .btn-primary,
+.result-actions .btn-secondary,
+.result-actions .download-button{padding:6px 12px;font-size:12px;border-radius:7px;min-height:30px}
+
+/* 4) 方案 Tab：槽位 C 恒灰显（disabled 态），A/B 恢复正常指针 */
+#quoteView .scheme-tab:disabled{opacity:.55;cursor:not-allowed;color:var(--text-tertiary)}
+#quoteView .scheme-tab:disabled:hover{background:transparent}
+
+/* 5) 成本清单卡 intake-title：span 与 strong 统一行高、左对齐，两槽位视觉对齐 */
+.intake-title strong,.intake-title span{line-height:1.5;text-align:left}
+
+/* ============================================================================
+   本轮重构 · qd19（方案组 + 右下角吸附弹层）
+   方案中心 #planHub：右下角吸附弹层（对齐操作坞右缘）= 方案组 → A/B/C槽位 + 对比条
+   ============================================================================ */
+
+/* 1) 弹层容器：右下角吸附，右缘对齐操作坞（right:32px），可向左拖缩宽度 */
+.plan-hub{
+  position:fixed;right:32px;bottom:96px;z-index:90;
+  width:340px;max-height:76vh;display:flex;flex-direction:column;
+  background:var(--surface-card);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:var(--shadow-card),0 18px 48px rgba(35,34,32,.18);
+  opacity:0;pointer-events:none;transform:translateY(10px) scale(.98);transform-origin:bottom right;
+  transition:opacity .24s cubic-bezier(.16,1,.3,1),transform .24s cubic-bezier(.16,1,.3,1);
+}
+.plan-hub.open{opacity:1;pointer-events:auto;transform:none}
+
+/* 2) 顶部条：标题 + 当前项目 + 关闭 */
+.ph-header{
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+  padding:12px 14px;border-bottom:1px solid var(--border);border-radius:var(--radius-card) var(--radius-card) 0 0;
+}
+.ph-header h3{margin:0;font-size:14px;font-weight:700;color:var(--text);flex-shrink:0}
+.ph-current{
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12px;color:var(--text-secondary);
+  padding:3px 9px;border:1px solid var(--border);border-radius:999px;background:var(--surface-nested);
+}
+.ph-close{
+  margin-left:auto;flex-shrink:0;border:none;background:transparent;font-size:16px;line-height:1;
+  color:var(--text-secondary);width:30px;height:30px;border-radius:9px;cursor:pointer;transition:background .12s,color .12s;
+  display:grid;place-items:center;
+}
+.ph-close:hover{background:var(--surface-nested);color:var(--text)}
+.ph-close:focus-visible,.ph-run:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-muted)}
+
+/* 3) 主体：方案组卡片竖列 */
+.ph-body{
+  flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px 14px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.ph-empty{
+  padding:40px 16px;text-align:center;color:var(--text-tertiary);font-size:12px;
+  border:1px dashed var(--border);border-radius:var(--radius-tile);background:var(--surface-nested);
+}
+
+/* 4) 方案组卡片（夹心：组信息头 + 可展开 A/B/C 槽位） */
+.phg-card{
+  background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-tile);
+  padding:11px 12px;transition:border-color .15s,box-shadow .15s;min-width:0;
+}
+.phg-card:hover{border-color:var(--border-hover)}
+.phg-card.finalized{border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
+.phg-card.expanded{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-muted)}
+.phg-head{display:flex;align-items:center;gap:8px;min-width:0}
+.phg-expand{
+  flex-shrink:0;width:22px;height:22px;border:1px solid var(--border-input);background:var(--surface-card);
+  border-radius:6px;color:var(--text-secondary);cursor:pointer;font-size:11px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;transition:all .12s ease;
+}
+.phg-expand:hover{border-color:var(--accent);color:var(--accent)}
+.phg-expand .arr{transition:transform .15s ease}
+.phg-card.expanded .phg-expand .arr{transform:rotate(90deg)}
+.phg-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:12px;color:var(--text)}
+.phg-lock{flex-shrink:0;font-size:11px;line-height:1;color:var(--text-tertiary)}
+.phg-lock.on{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 8px;border-radius:999px;
+  background:var(--accent-muted);color:var(--accent);font-weight:600;
+}
+.phg-lock.on svg{width:12px;height:12px;flex-shrink:0}
+.phg-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:11px;color:var(--text-secondary)}
+.phg-meta b{font-variant-numeric:tabular-nums;font-weight:600;color:var(--text)}
+.phg-ops{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;border-top:1px dashed var(--border);padding-top:8px}
+.phg-op{
+  flex:1;border:1px solid var(--border-input);background:var(--surface-card);
+  padding:4px 6px;border-radius:6px;font-size:11px;font-weight:600;
+  color:var(--text-secondary);cursor:pointer;transition:all .12s ease;white-space:nowrap;
+}
+.phg-op:hover{border-color:var(--accent);color:var(--accent);background:#fff}
+.phg-op.fin.is-on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.phg-op.fin.is-on:hover{background:var(--danger-soft);color:var(--danger)}
+.phg-op.is-disabled{opacity:.4;pointer-events:none}
+
+/* 组内行内改名 */
+.phg-rename-input{
+  flex:1;min-width:0;padding:3px 6px;border:1px solid var(--border-input);border-radius:6px;
+  font-size:12px;font-weight:600;color:var(--text);background:var(--surface-card);font-family:var(--font);outline:none;
+}
+.phg-rename-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-muted)}
+
+/* 槽位区（展开后显示） */
+.phg-slots{display:flex;flex-direction:column;gap:6px;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px}
+.phg-slot{
+  display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface-nested);min-width:0;
+}
+.phg-slot .letter{
+  flex-shrink:0;width:20px;height:20px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:#fff;
+}
+.phg-slot.letter-a .letter{background:var(--module-1)}
+.phg-slot.letter-b .letter{background:var(--module-2)}
+.phg-slot.letter-c .letter{background:var(--text-tertiary)}
+.phg-slot-info{flex:1;min-width:0}
+.phg-slot-title{font-size:12px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
+.phg-slot-title .sub{font-weight:500;color:var(--text-tertiary)}
+.phg-slot-stat{font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.phg-slot-stat b{font-variant-numeric:tabular-nums;font-weight:600;color:var(--module-1)}
+.phg-slot.pending{opacity:.75}
+.phg-slot.pending .letter{background:var(--text-tertiary)}
+.phg-slot .slot-act{
+  flex-shrink:0;border:1px solid var(--border-input);background:var(--surface-card);
+  padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;color:var(--text-secondary);cursor:pointer;transition:all .12s ease;white-space:nowrap;
+}
+.phg-slot .slot-act:hover{border-color:var(--accent);color:var(--accent)}
+.phg-slot .slot-check{display:inline-flex;align-items:center;gap:4px;margin:0;cursor:pointer;font-size:11px;color:var(--text-secondary);flex-shrink:0}
+.phg-slot .slot-check input{width:14px;height:14px;margin:0;accent-color:var(--accent);cursor:pointer}
+
+/* 5) 底部对比操作条 */
+.ph-bar{
+  flex-shrink:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  border-top:1px solid var(--border);background:var(--surface-card);
+  padding:10px 14px;border-radius:0 0 var(--radius-card) var(--radius-card);
+  box-shadow:0 -6px 18px rgba(35,34,32,.05);
+}
+.ph-count{font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap}
+.ph-base{flex:none;min-width:150px;width:auto;padding:6px 26px 6px 9px;font-size:12px;border-radius:8px}
+.ph-run{margin-left:auto;padding:7px 14px;font-size:12px;border-radius:8px}
+
+/* 6) 缩放手柄：左侧竖条，向左/右拖动调宽（右缘锚定 dock） */
+.ph-resize{
+  position:absolute;top:0;bottom:0;left:-4px;width:9px;cursor:ew-resize;z-index:2;
+}
+.ph-resize::after{content:"";position:absolute;top:50%;left:3px;transform:translateY(-50%);
+  width:2px;height:36px;border-radius:2px;background:var(--border-input);opacity:0;transition:opacity .15s}
+.ph-resize:hover::after{opacity:1}
+
+/* 7) 断点适配：窄屏（≤720px）弹层全宽贴边，不再吸附 dock */
+@media (max-width:720px){
+  .plan-hub{left:10px;right:10px;width:auto !important;bottom:84px}
+}
+@media (prefers-reduced-motion:reduce){
+  .plan-hub{transition:none}
+}
+
+/* ============================================================================
+   本轮细化 · qd26
+   KPI 穿透清除徽标 · 上传资产舱解析摘要
+   ============================================================================ */
+
+/* KPI 穿透清除徽标：毛利/风险钻取激活时出现，一键回到全部子目 */
+.drill-clear{
+  display:inline-flex;align-items:center;gap:5px;
+  border:1px solid color-mix(in srgb,var(--danger) 45%,transparent);
+  background:var(--danger-soft);color:var(--danger);
+  padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;
+  transition:all .12s ease;
+}
+.drill-clear:hover{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,#fff)}
+.drill-clear:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--danger) 18%,transparent)}
+
+/* 上传资产舱即时摘要：预览解析后回填「已解析行数 / 匹配 / 未匹配」凭证 */
+.intake-stat{
+  margin-top:6px;font-size:11px;color:var(--text-secondary);
+  font-variant-numeric:tabular-nums;line-height:1.5;
+}
+.intake-stat b{font-weight:700;color:var(--text)}
+.intake-slot.loaded .intake-stat b{color:var(--success)}
+
+/* ============================================================================
+   本轮细化 · qd27
+   双滑块重叠防死锁（默认下限在上）· 就绪清单打勾弹跳 · 推演按钮就绪呼吸光晕
+   ============================================================================ */
+
+/* 双滑块 z 序：默认下限 thumb 在上（可被点击），pointer 靠近上限时由 JS 提权（内联 z-index 覆盖） */
+/* 基础层 z 一致；指针靠近提权由 JS refreshRatioHover 单一函数统一管理（P2-11） */
+#quoteView .guardrail-track input[type=range]#ratioLow,
+#quoteView .guardrail-track input[type=range]#ratioHigh{z-index:2}
+
+/* 就绪清单：待就绪 → 就绪 打勾弹跳（prep-dot 每次重建，JS 仅给翻转项加 pop） */
+.prep-dot{transition:transform .18s ease,background .18s ease}
+.prep-dot.pop{animation:prepPop .45s cubic-bezier(.175,.885,.32,1.25)}
+@keyframes prepPop{
+  0%{transform:scale(.4)}
+  55%{transform:scale(1.5)}
+  100%{transform:scale(1)}
+}
+
+/* 就绪呼吸光晕：状态机主按钮唯一化后由 Dock 转移至 preparePanel 内主 CTA（识别文件并计算） */
+.prep-actions .btn-primary.ready-pulse{animation:ctaBreath 2.6s ease-in-out infinite}
+@keyframes ctaBreath{
+  0%,100%{box-shadow:0 0 0 0 rgba(47,46,43,0)}
+  50%{box-shadow:0 0 0 6px rgba(47,46,43,.10)}
+}
+@media (prefers-reduced-motion:reduce){
+  .prep-dot.pop{animation:none}
+  .prep-actions .btn-primary.ready-pulse{animation:none}
+}
+
+/* 结果态状态胶囊条（Status Capsule）：推演完成后 #preparePanel 折叠为 38px 收拢条，释放垂直空间给明细表 */
+.status-capsule{
+  display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;
+  background:var(--surface-card);border:1px solid var(--border);
+  border-radius:999px;box-shadow:var(--shadow-card);
+  font-size:12px;color:var(--text-secondary);
+}
+.status-capsule .capsule-dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex-shrink:0}
+.status-capsule .capsule-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ============================================================================
+   关联项目门控：未选择关联项目 → 报价页全部控件不可交互
+   唯一例外：关联投标项目选择本身（#projectId 及其自定义下拉触发/列表）
+   ============================================================================ */
+body.project-locked .param-column,
+body.project-locked .canvas-column,
+body.project-locked .floating-dock,
+body.project-locked #planHub{pointer-events:none}
+body.project-locked .param-column,
+body.project-locked .floating-dock,
+body.project-locked .prep-actions{opacity:.55;transition:opacity .2s ease}
+body.project-locked #projectId,
+body.project-locked .cs-trigger,
+body.project-locked .cs-list{pointer-events:auto}
+
+/* ============================================================================
+   方案对比结果弹层：居中式大弹层（宽屏表格可横向滚动），不占用右栏主舞台
+   ============================================================================ */
+.cmp-modal{
+  position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;
+  padding:24px;opacity:0;pointer-events:none;transition:opacity .18s ease;
+}
+.cmp-modal.open{opacity:1;pointer-events:auto}
+.cmp-mask{position:absolute;inset:0;background:rgba(20,22,26,.42);backdrop-filter:blur(2px)}
+.cmp-panel{
+  position:relative;z-index:1;display:flex;flex-direction:column;overflow:hidden;
+  width:min(1180px,94vw);max-height:min(88vh,860px);
+  background:var(--surface-card);border:1px solid var(--border);
+  border-radius:var(--radius-sheet);box-shadow:0 24px 60px rgba(0,0,0,.25);
+  opacity:0;transform:translateY(12px) scale(.97);transition:opacity .18s ease,transform .18s ease;
+}
+.cmp-modal.open .cmp-panel{opacity:1;transform:none}
+.cmp-head{
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+  padding:12px 16px;border-bottom:1px solid var(--border);
+}
+.cmp-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
+.cmp-body{padding:16px 18px 20px;overflow:auto;flex:1 1 auto;min-height:0}
+.cmp-body .result-head{margin-top:0}

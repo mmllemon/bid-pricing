@@ -99,6 +99,7 @@ def _summary(rec: dict[str, Any], p: Path) -> dict[str, Any]:
         "competitive_budget": (rec.get("result") or {}).get("competitive_budget"),
         "objective": (rec.get("result") or {}).get("objective"),
         "target_total": (rec.get("params") or {}).get("target_total"),
+        "strategy": rec.get("strategy") or "optimal",
         "finalized": bool(rec.get("finalized")),
         "finalized_at": rec.get("finalized_at"),
     }
@@ -184,6 +185,32 @@ def list_plans(dir_path: Path | str | None = None) -> list[dict[str, Any]]:
     ]
     out.sort(key=lambda r: r.get("saved_at") or "", reverse=True)
     return out
+
+
+def find_plan_by_strategy(project_key: str, strategy: str = "optimal",
+                          dir_path: Path | str | None = None,
+                          group_id: str | None = None) -> str | None:
+    """按 (项目归一键, 报价策略) 查找已有方案，返回 plan_id；未命中返回 None。
+
+    归一键口径与 ``plan_compare.project_key`` 一致（``project_id or name or ""``），
+    使「固定槽位覆盖」的槽位判定与多方案对比的『同一项目』判定使用同一把尺子。
+    同一项目同一策略重复计算时复用原 plan_id 覆盖更新；历史方案缺省按
+    ``strategy="optimal"`` 处理。
+
+    group_id：可选。传入时仅在同组槽位内匹配（方案记录里的 group_id）；缺省
+    回退旧行为——不限组、仅按项目+策略匹配，保证旧调用方与旧数据可用。
+    """
+    dir_path = _resolve_dir(dir_path)
+    for p, rec in _iter_plan_files(dir_path):
+        key = rec.get("project_id") or rec.get("name") or ""
+        if key != project_key:
+            continue
+        if (rec.get("strategy") or "optimal") != strategy:
+            continue
+        if group_id and rec.get("group_id") != group_id:
+            continue
+        return rec.get("id") or p.stem
+    return None
 
 
 def delete_plan(plan_id: str, dir_path: Path | str | None = None) -> bool:

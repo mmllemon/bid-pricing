@@ -21,7 +21,7 @@
 
     /* ---- 文本层级 ---- */
     --text: #232220;                 /* 主文本：标题、正文、数值 */
-    --text-secondary: #8f8a80;       /* 次文本：标签、副标题、描述 */
+    --text-secondary: #736e65;       /* 次文本：标签、副标题、描述 */
     --text-tertiary: #b6b1a6;        /* 弱文本：图标色、导航字、占位、空态 */
 
     /* ---- 主色（按钮/选中/强调） ---- */
@@ -37,8 +37,8 @@
     --module-5: #7d7195;             /* 雾紫 — 笔记/日记 */
 
     /* ---- 危险色 ---- */
-    --danger: #c25d4f;               /* 删除/危险操作 */
-    --danger-muted: #f6ece9;         /* 危险浅底：删除 hover、P0 标签 */
+    --danger: #ba4a38;               /* 删除/危险操作 */
+    --danger-muted: #f7ebe9;         /* 危险浅底：删除 hover、P0 标签 */
 
     /* ---- 抽屉/侧栏（深色面板，与主色板同色温） ---- */
     --drawer-bg: #232220;            /* 侧栏底色 */
@@ -208,7 +208,7 @@
   .pin-m { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
   .pin-chk { flex:0 0 auto; width: 26px; height: 26px; border-radius: 8px; border: 1.6px solid var(--border-input);
     display:grid; place-items:center; cursor:pointer; background:var(--surface-card); color:var(--on-accent); transition: all .15s; }
-  .pin-chk.on { background: var(--module-1); border-color: var(--module-1); }
+  .pin-chk.on { background: var(--success); border-color: var(--success); }
   .pin-chk svg { opacity: 0; }
   .pin-chk.on svg { opacity: 1; }
   .pin-step { flex:0 0 auto; display:flex; gap: 7px; }
@@ -309,7 +309,7 @@
   .rec .top { display:flex; align-items:center; gap:12px; }
   .rec .chk { flex:0 0 auto; width:23px; height:23px; border-radius:7px; border:1.6px solid var(--border-input); display:grid; place-items:center;
     cursor:pointer; background:var(--surface-card); color:var(--on-accent); transition: all .15s; }
-  .rec .chk.on { background:var(--module-1); border-color:var(--module-1); }
+  .rec .chk.on { background:var(--success); border-color:var(--success); }
   .rec .chk svg { opacity:0; } .rec .chk.on svg { opacity:1; }
   .rec .body { flex:1; min-width:0; cursor:pointer; display:flex; align-items:center; gap:11px; flex-wrap:wrap; }
   .rec .rname { font-weight:700; font-size:14.5px; letter-spacing:-.01em; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
@@ -330,7 +330,7 @@
   .rec .pbar { flex:1; min-width:80px; height:6px; border-radius:999px; background:var(--border); overflow:hidden; }
   .rec .pbar i { display:block; height:100%; border-radius:999px; }
   .rec .amt { font-size:15px; font-weight:800; letter-spacing:-.02em; white-space:nowrap; margin-left:auto; }
-  .rec .amt.exp { color:var(--danger); } .rec .amt.inc { color:var(--module-1); }
+  .rec .amt.exp { color:var(--danger); } .rec .amt.inc { color:var(--success); }
   .rec .streak { font-size:11.5px; color:var(--module-3); font-weight:700; display:inline-flex; align-items:center; gap:4px; }
   .rec .rdate { color:var(--text-secondary); font-size:11.5px; margin-left:auto; white-space:nowrap; }
   .empty { text-align:center; color:var(--text-secondary); padding:50px 20px; }
@@ -444,7 +444,7 @@
   .habit-tb td.hrate { text-align:right; font-size:12.5px; font-weight:800; letter-spacing:-.02em; }
   .hcell { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:7px; color:var(--on-accent); cursor:pointer; transition:transform .12s; }
   .hcell:hover { transform:scale(1.12); }
-  .hcell.on { background:var(--module-1); }
+  .hcell.on { background:var(--success); }
   .hcell.off { background:var(--surface-nested); border:1px solid var(--border); }
   .hcell svg { opacity:0; } .hcell.on svg { opacity:1; }
   .habit-tb .tdcol { background:var(--accent-muted); }
@@ -461,7 +461,7 @@
   .tk-row:last-child { border-bottom:none; }
   .tk-chk { flex:0 0 auto; width:20px; height:20px; border-radius:6px; border:1.6px solid var(--border-input);
     display:grid; place-items:center; cursor:pointer; background:var(--surface-card); color:var(--on-accent); transition:all .15s; }
-  .tk-chk.on { background:var(--module-1); border-color:var(--module-1); }
+  .tk-chk.on { background:var(--success); border-color:var(--success); }
   .tk-chk svg { opacity:0; } .tk-chk.on svg { opacity:1; }
   .tk-name { flex:1; min-width:0; font-size:13.5px; font-weight:600; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .tk-name.done { text-decoration:line-through; color:var(--text-secondary); }
@@ -507,7 +507,7 @@
   .goal-list { display:flex; flex-direction:column; gap:13px; }
   .goal-row .gt { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; margin-bottom:7px; }
   .goal-row .gt .gp { margin-left:auto; font-size:12.5px; font-weight:800; color:var(--text-secondary); letter-spacing:-.02em; }
-  .goal-row .gt .gdone { color:var(--module-1); display:flex; }
+  .goal-row .gt .gdone { color:var(--success); display:flex; }
   .goal-row .gbar { height:7px; border-radius:999px; background:var(--border); overflow:hidden; }
   .goal-row .gbar i { display:block; height:100%; border-radius:999px; }
 
@@ -590,7 +590,7 @@ const CONFIG = {
   // ============ 模块定义 ============
   modules: [
     { key:"todo", name:"今日计划", icon:"list", tint:"#efeee8", color:"var(--accent)", type:"todo", desc:"任务清单与进度追踪",
-      priorities:[ {key:"P0",label:"重要",color:"#f6ece9",text:"#c25d4f"}, {key:"P1",label:"一般",color:"#f6efe6",text:"#bd8a4e"}, {key:"P2",label:"随手",color:"#eef2ec",text:"#6f8f6a"} ],
+      priorities:[ {key:"P0",label:"重要",color:"#f7ebe9",text:"#ba4a38"}, {key:"P1",label:"一般",color:"#f8f1e7",text:"#c97a2b"}, {key:"P2",label:"随手",color:"#e8efe9",text:"#4d7c59"} ],
       seed:[ {id:11,title:"完成英语核心词汇 30min",priority:"P0",done:false,note:"积累词汇量，稳步提升英语能力"},
              {id:12,title:"发布 1 篇笔记 / 视频",priority:"P1",done:false,note:""},
              {id:13,title:"整理今日工作纪要",priority:"P2",done:true,note:""} ] },
@@ -608,7 +608,7 @@ const CONFIG = {
     { key:"note", name:"心情日记", icon:"pen", tint:"#f1eef4", color:"var(--module-5)", type:"note", desc:"文字·摘录·心情记录",
       moods:["开心","平静","低落","焦虑","疲惫"],
       seed:[ {id:61,title:"今天的小确幸",content:"阳台的多肉冒出了新芽，顺手拍了张照片。",mood:"开心",date:isoToday()} ] },
-    { key:"hot", name:"今日热点", icon:"flame", tint:"#f6ece9", color:"var(--danger)", type:"note", desc:"热点内容·收藏·稍后阅读",
+    { key:"hot", name:"今日热点", icon:"flame", tint:"#f7ebe9", color:"var(--danger)", type:"note", desc:"热点内容·收藏·稍后阅读",
       moods:["收藏","稍后读","已读"],
       seed:[ {id:71,title:"AI 提示词技巧合集",content:"整理常用提示词模板，方便复用。",mood:"收藏",date:isoToday()} ] },
   ],
@@ -775,7 +775,7 @@ function overviewTileHTML(){
   const money=data.money||[];
   const inc=money.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
   const exp=money.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
-  const bal=inc-exp, balCol=bal>=0?"var(--module-1)":"var(--danger)";
+  const bal=inc-exp, balCol=bal>=0?"var(--success)":"var(--danger)";
   return `<div class="tile b12"><div class="tile-h"><span class="tic">${icon("target",16)}</span><div class="tt"><span class="en">DAILY VITALS</span><span class="zh">今日概览</span></div><span class="r">${dateStr()}</span></div>
     <div class="ov2-body">
       <div class="rings">${rings}</div>
@@ -877,7 +877,7 @@ function goalsTileHTML(){
   const all=data.sport||[]; const colors=["var(--module-3)","var(--module-1)","var(--module-2)","var(--module-4)","var(--module-5)"];
   const rows=all.length? all.map((x,i)=>{ const pct=Math.min(100,Math.round((x.current/x.target)*100||0)); const col=colors[i%colors.length];
     return `<div class="book-row"><span class="spine" style="background:${col}">${icon("activity",16)}</span>
-      <div class="bmid"><div class="btt">${pct>=100?`<span style="color:var(--module-1);display:inline-flex;vertical-align:-2px;margin-right:3px">${icon("check",13,2.6)}</span>`:''}${esc(x.title)}</div>
+      <div class="bmid"><div class="btt">${pct>=100?`<span style="color:var(--success);display:inline-flex;vertical-align:-2px;margin-right:3px">${icon("check",13,2.6)}</span>`:''}${esc(x.title)}</div>
         <div class="bsub">${x.current}/${x.target} ${x.unit||'次'}</div>
         <div class="bbar"><i style="width:${pct}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pct}%</span></div>`; }).join("")
     : `<div class="focus-empty">还没有锻炼目标，去「每日锻炼」添加吧</div>`;
@@ -973,7 +973,7 @@ function renderModule(key){
     const inc=all.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
     const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
     head=`<div class="mod-summary">
-      <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--module-1)">¥${inc}</div></div>
+      <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--success)">¥${inc}</div></div>
       <div class="mini"><div class="l">支出</div><div class="v" style="color:var(--danger)">¥${exp}</div></div>
       <div class="mini"><div class="l">结余</div><div class="v">¥${inc-exp}</div></div>
       <div class="mini"><div class="l">笔数</div><div class="v">${all.length}</div></div></div>`;
@@ -1045,7 +1045,7 @@ function sideStats(m, all){
       : `<div style="color:var(--text-tertiary);font-size:12.5px;padding:6px 0">暂无支出记录</div>`;
     const todayExp=all.filter(x=>x.type==="expense"&&x.date===t).reduce((a,x)=>a+ +x.amount,0);
     return `<div class="side-card"><div class="sh">${icon("wallet",15)} 收支概况</div>
-        ${row("总收入",`<span style="color:var(--module-1)">¥${inc}</span>`)}
+        ${row("总收入",`<span style="color:var(--success)">¥${inc}</span>`)}
         ${row("总支出",`<span style="color:var(--danger)">¥${exp}</span>`)}
         ${row("净结余",`¥${inc-exp}`)}
         ${row("今日支出",`¥${todayExp}`)}

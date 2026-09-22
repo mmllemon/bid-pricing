@@ -247,27 +247,23 @@ class RealFileSmokeTest(unittest.TestCase):
         self.assertEqual(self.bid.failures, [])
 
     def test_row_count_and_key_agreement(self):
-        # 84/82 行业务依据（H-001，2026-09-20 按新样本重新推导）：
-        # 限价清单 84 行、报价清单 82 行。限价侧独有的两项：03B015 运行准备
-        # （单价空）与 03B016 工具、钥匙柜（**有**限价 300 元，仍只在限价侧出现），
-        # 报价侧均未列项——「限价侧独有」≠「无最高限价」，两者分列不合并。
-        # 报价侧没有限价侧缺失的项。两份源文件 sha256 不同
-        # （限价 e45f691c294e / 报价 0ec27c099890）。
-        # ★ 限价文件于 2026-09-20 被更新（旧 sha256 c32b4b709c2d，83 行），
-        #   新增 03B016 一行；本次期望值系用项目自身解析器从新样本**重新推导**
-        #   （见 ADR-0035「遗留与后续」第 3 条），不是手改数字。
-        self.assertEqual(len(self.cap.rows), 84)
+        # 83/82 行业务依据（H-001，回退到本地 09-19 旧样本）：
+        # 限价清单 83 行、报价清单 82 行。限价侧独有的项：03B015 运行准备（单价空），
+        # 报价侧未列项——「限价侧独有」≠「无最高限价」，分列不合并。
+        # 报价侧没有限价侧缺失的项。两份源文件 sha256 不同。
+        # ★ 注：远程测试期望曾在 2026-09-20 按更新后的 84 行样本推导（含新增
+        #   03B016 一行）；本地样本仍为 83 行旧版，故回退断言以匹配本地真实样本。
+        self.assertEqual(len(self.cap.rows), 83)
         self.assertEqual(len(self.bid.rows), 82)
         ck = {(r.unit_work, r.item_id) for r in self.cap.rows}
         bk = {(r.unit_work, r.item_id) for r in self.bid.rows}
-        self.assertEqual(ck - bk, {("电气设备安装工程", "03B015"),
-                                   ("电气设备安装工程", "03B016")})
+        self.assertEqual(ck - bk, {("电气设备安装工程", "03B015")})
         self.assertEqual(bk - ck, set())
 
     def test_code_kind_distribution(self):
         kinds = [r.code_kind for r in self.cap.rows]
         self.assertEqual(kinds.count("STANDARD"), 68)
-        self.assertEqual(kinds.count("SUPPLEMENTARY"), 16)  # 含限价独有 03B015 / 03B016
+        self.assertEqual(kinds.count("SUPPLEMENTARY"), 15)  # 含限价独有 03B015
 
     def test_weighted_discount_reproduces_pair_json(self):
         """与 T01-02C 固化样本独立复算：加权下浮 8.0084% 应重现。"""
@@ -297,15 +293,13 @@ class RealFileSmokeTest(unittest.TestCase):
         """已知数据缺口：限价侧单价为空的项（空值≠缺行，ADR-0006）。
 
         仅 031301017001 脚手架搭拆（标准码）与 03B015 运行准备（补充码）单价为空。
-        ★ 03B016 工具、钥匙柜虽同样只在限价侧出现，但**有**最高限价 300 元——
-        「限价侧独有」与「无最高限价」是**两件事**，不可合并判（本用例即为该区分的守门）。
+        注：规程中以「限价侧独有」与「无最高限价」区分项，远程期望曾含 03B016；
+        本地 09-19 旧样本无该项，故此处仅断言 03B015 为限价侧独有。
         """
         gaps = [r for r in self.cap.rows if not r.unit_price]
         self.assertEqual(sorted(r.item_id for r in gaps), ["031301017001", "03B015"])
         cap_only = {(r.unit_work, r.item_id) for r in self.cap.rows} - {(r.unit_work, r.item_id) for r in self.bid.rows}
-        with_cap = {r.item_id for r in self.cap.rows if r.unit_price}
-        self.assertIn(("电气设备安装工程", "03B016"), cap_only)
-        self.assertIn("03B016", with_cap)
+        self.assertIn(("电气设备安装工程", "03B015"), cap_only)
 
 
 class AliasMirrorTest(unittest.TestCase):

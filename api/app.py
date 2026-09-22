@@ -21,27 +21,39 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from bidpricing import project_overview, project_store
-from bidpricing import group_store
+from bidpricing import sqlite_store
 from bidpricing.deployment import log_event, safe_user, user_scope
 from bidpricing.import_preview import build_listing_preview
 from bidpricing.io.boq import parse_listing
 from bidpricing.io.clean import clean_listing_rows
 from bidpricing.io.match import MatchReport, match_canonical_rows
 from bidpricing.plan_compare import compare_plans, same_project
-from bidpricing.project_store import save_plan, list_plans, load_plan, delete_plan, mark_finalized, _safe_folder, find_plan_by_strategy
-from bidpricing.group_store import (
-    find_group_by_plan_id, group_finalize, create_group, rename_group,
+from bidpricing.project_store import _safe_folder
+from bidpricing.sqlite_store import (
+    save_plan, list_plans, load_plan, delete_plan, mark_finalized, find_plan_by_strategy,
+    find_group_by_plan_id, find_slot_plan_id, group_finalize, create_group, rename_group,
     list_groups, copy_group, delete_group, find_group_by_id, list_groups_for_project,
+    upsert_slot, append_audit, list_audit,
 )
 from bidpricing.quote_resolve import run_resolve
 from bidpricing.quote_strategies import STRATEGIES
 from bidpricing.validation.low_price_policy import DISPOSITION_NOTE
 
 # H-012 多用户隔离（不鉴权，仅目录级）：以运行账号作为命名空间，各用户方案互不相见。
+# 方案与方案组统一落到 SQLite，库文件沿用按用户重定向的 PROJECTS_DIR 模型。
 CURRENT_USER = safe_user(os.environ.get("USERNAME") or os.environ.get("USER") or "default")
-project_store.PROJECTS_DIR = user_scope(ROOT / "outputs" / "projects", CURRENT_USER)
+USER_PROJECTS = user_scope(ROOT / "outputs" / "projects", CURRENT_USER)
+project_store.PROJECTS_DIR = USER_PROJECTS
+sqlite_store.PROJECTS_DIR = USER_PROJECTS
 LOG_DIR = ROOT / "outputs" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+# 一次性种子迁移：仅当本用户库尚未建立时把既有 JSON 树幂等归库；
+# 此后库为唯一真相，避免把已在库中删除的方案从遗留 JSON 复活。
+if not sqlite_store.resolve_db_path().exists():
+    try:
+        sqlite_store.import_json_tree(source_dir=USER_PROJECTS)
+    except Exception as exc:  # noqa: BLE001 迁移失败不阻止服务启动
+        print(f"[bidpricing] SQLite 种子迁移失败（将跳过）：{exc}")
 
 
 def _parse_clean_match(cap_path: Path, cost_path: Path, project_id: str) -> tuple[str, MatchReport]:
@@ -237,10 +249,10 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
             if existing and find_group_by_plan_id(existing):
                 effective_group_id = find_group_by_plan_id(existing)
         if not effective_group_id:
-            effective_group_id = group_store.create_group(
+            effective_group_id = create_group(
                 proj_uuid or pid, proj_name, target_total=target_total)["group_id"]
         # 同组同策略槽位复用；未命中则新建 plan_id
-        job_id = group_store.find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
+        job_id = find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
         preview = build_listing_preview(matched, pid)
         preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
         preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
@@ -255,9 +267,10 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         except (subprocess.SubprocessError, OSError) as exc:
             payload["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
         save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
-        group_store.upsert_slot(effective_group_id, strategy, job_id)
-        log_event(LOG_DIR, CURRENT_USER, "POST /api/quote/optimize", "PASS",
-                  project_id=proj_uuid or pid, plan_id=job_id, group_id=effective_group_id, objective=payload.get("objective"))
+        upsert_slot(effective_group_id, strategy, job_id)
+        append_audit(CURRENT_USER, "quote.optimize", "PASS",
+                     project_id=proj_uuid or pid, plan_id=job_id, group_id=effective_group_id,
+                     objective=payload.get("objective"))
         return JSONResponse(status_code=200, content=payload)
 
 
@@ -481,6 +494,14 @@ def project_compare(id: str = Form(...), base: str = Form("")) -> JSONResponse:
     return JSONResponse(status_code=200, content=compare_plans(records, base_id=base_id))
 
 
+@app.get("/api/audit/list")
+def audit_list(limit: int = 200, action: str = "", user: str = "") -> JSONResponse:
+    """查询审计日志（库内 audit_log，按 ts 倒序），可选按 action/user 过滤。"""
+    cap = max(1, min(int(limit), 1000))
+    rows = list_audit(limit=cap, action=action.strip() or None, user=user.strip() or None)
+    return JSONResponse(status_code=200, content={"status": "PASS", "audit": rows})
+
+
 # ============ 项目经营概览（H-013）：全生命周期看板数据集 ============
 def _overview_body(entries: list[tuple[str, Any]]) -> dict[str, Any]:
     """从 FastAPI form/query 请求中取出非空的可编辑字段。"""
@@ -514,7 +535,7 @@ def overview_save(pid: str = Form(""), name: str = Form(""), short_name: str = F
                 return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在或已删除"})
         else:
             rec = project_overview.create_project(form)
-        log_event(LOG_DIR, CURRENT_USER, "POST /api/project/overview/save", "PASS", project_id=rec.get("id"))
+        append_audit(CURRENT_USER, "project.overview.save", "PASS", project_id=rec.get("id"))
         return JSONResponse(status_code=200, content={"status": "PASS", "project": rec})
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
@@ -524,7 +545,7 @@ def overview_save(pid: str = Form(""), name: str = Form(""), short_name: str = F
 def overview_delete(id: str = Form(...)):
     if not project_overview.delete_project(id.strip()):
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在或已删除"})
-    log_event(LOG_DIR, CURRENT_USER, "POST /api/project/overview/delete", "PASS", project_id=id.strip())
+    append_audit(CURRENT_USER, "project.overview.delete", "PASS", project_id=id.strip())
     return JSONResponse(status_code=200, content={"status": "PASS"})
 
 
@@ -534,6 +555,6 @@ def overview_finalize(id: str = Form(...), bid_amount: str = Form(""), bid_cost:
     rec = project_overview.finalize(id.strip(), bid_amount, bid_cost)
     if rec is None:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在或已删除"})
-    log_event(LOG_DIR, CURRENT_USER, "POST /api/project/overview/finalize", "PASS", project_id=id.strip(),
-              bid_amount=rec.get("bid_amount"))
+    append_audit(CURRENT_USER, "project.overview.finalize", "PASS", project_id=id.strip(),
+             detail={"bid_amount": rec.get("bid_amount")})
     return JSONResponse(status_code=200, content={"status": "PASS", "project": rec})

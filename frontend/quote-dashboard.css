@@ -32,12 +32,12 @@
 .input-affix{
   display:flex;align-items:center;background:var(--surface-card);
   border:1px solid var(--border-input);border-radius:var(--radius-tile);
-  padding:0 10px;transition:border-color .15s,box-shadow .15s,background .15s;
+  padding:0 8px;transition:border-color .15s,box-shadow .15s,background .15s;
   box-shadow:inset 0 1px 2px rgba(35,34,32,.03);
 }
 .input-affix:focus-within{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-muted)}
-.input-prefix{font-size:12px;color:var(--text-tertiary);font-weight:500;margin-right:6px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
-.input-suffix{font-size:12px;color:var(--text-tertiary);background:var(--surface-nested);padding:2px 7px;border-radius:5px;margin-left:6px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.input-prefix{font-size:12px;color:var(--text-tertiary);font-weight:500;margin-right:3px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.input-suffix{font-size:12px;color:var(--text-tertiary);background:var(--surface-nested);padding:2px 5px;border-radius:5px;margin-left:3px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
 .input-affix input{
   flex:1;min-width:0;border:none;outline:none;height:30px;font-size:14px;
   font-family:var(--font);color:var(--text);background:transparent;width:100%;
@@ -900,3 +900,16 @@ body.project-locked .cs-list{pointer-events:auto}
 .cmp-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
 .cmp-body{padding:16px 18px 20px;overflow:auto;flex:1 1 auto;min-height:0}
 .cmp-body .result-head{margin-top:0}
+/* —— 审计日志弹层表格（#auditModal，复用 #cmpModal 外观）—— */
+.audit-body{padding:16px 18px 20px;overflow:auto;flex:1 1 auto;min-height:0}
+.audit-body .table-wrap{padding:0;max-height:56vh;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.audit-loading,.audit-empty{color:var(--text-secondary);font-size:14px;padding:20px 4px}
+.audit-meta{color:var(--text-tertiary);font-size:12px;margin:10px 2px 0}
+table.audit-table{width:100%;border-collapse:collapse;font-size:13px}
+table.audit-table th{position:sticky;top:0;background:var(--surface-muted);z-index:1;text-align:left;padding:8px 12px;color:var(--text-secondary);font-weight:600;white-space:nowrap}
+table.audit-table td{padding:7px 12px;border-top:1px solid var(--border);vertical-align:top;white-space:nowrap}
+table.audit-table td.sec{white-space:normal;color:var(--text-secondary);min-width:180px}
+table.audit-table tr:hover td{background:var(--surface-soft)}
+.audit-success{color:var(--success)}
+.audit-error{color:var(--danger)}
+.audit-warn{color:var(--warn)}

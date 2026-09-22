@@ -23,6 +23,7 @@ function showModule(module) {
   moduleView.querySelector('.module-back').addEventListener('click', () => selectModule('quote'));
 }
 function selectModule(module) {
+  closeOverlays();  // 切页即关闭报价页弹层（方案中心/对比/审计），避免跨页面残留
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.module === module));
   // 操作坞只挂在「投标报价」页；其余页面隐藏（各模块后续接入各自专属操作坞）
   const dock = document.querySelector('.floating-dock');
@@ -30,12 +31,17 @@ function selectModule(module) {
   if (module === 'quote') { location.hash = ''; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); }
   else showModule(module);
 }
+function closeOverlays() {
+  if (typeof closePlanHub === 'function') closePlanHub();
+  if (typeof closeCompareModal === 'function') closeCompareModal();
+  if (typeof closeAuditModal === 'function') closeAuditModal();
+}
 document.querySelectorAll('.nav-item').forEach(button => {
   button.addEventListener('click', () => selectModule(button.dataset.module));
 });
 window.addEventListener('hashchange', () => selectModule(location.hash.slice(1) || 'quote'));
-if (location.hash) { const h = location.hash.slice(1); if (h === 'workbench' || h === 'quote' || modulePages[h]) selectModule(h); }
-else selectModule('workbench');
+// 初始模块选择延后到 initDashboard 内执行：此时 hubView/hubSelected 等模块级 let 已就绪，
+// 避免在文件顶部同步调用 selectModule → closeOverlays → closePlanHub 读到 TDZ 中的 hubView。
 
 /* 侧栏收起：窄屏抽屉式（汉堡按钮 + 遮罩），点导航项/遮罩/Esc 均关闭 */
 (function () {
@@ -1645,6 +1651,85 @@ function closeCompareModal() {
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
 }
+// —— 审计日志弹层（#auditModal）：操作坞「审计日志」→ GET /api/audit/list ——
+function openAuditModal() {
+  const modal = document.querySelector('#auditModal');
+  if (!modal) return;
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  loadAudit();
+  const closeBtn = document.querySelector('#auditModalCloseBtn');
+  if (closeBtn) closeBtn.focus();
+}
+function closeAuditModal() {
+  const modal = document.querySelector('#auditModal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+}
+const AUDIT_ACTIONS = {
+  'quote.optimize': '测算优化', 'plan.save': '保存方案', 'plan.finalize': '方案定稿',
+  'plan.delete': '删除方案', 'group.create': '新建方案组', 'group.copy': '复制方案组',
+  'group.delete': '删除方案组', 'group.rename': '重命名方案组', 'plan.compare': '方案对比',
+  'project.overview.save': '保存项目概览', 'project.overview.finalize': '定稿并回写项目',
+  'project.overview.delete': '删除项目概览',
+};
+function escapeHtml(v) {
+  return String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+async function loadAudit() {
+  const body = document.querySelector('#auditBody');
+  if (!body) return;
+  body.innerHTML = '<p class="audit-loading">正在读取审计日志…</p>';
+  try {
+    const res = await (await fetch(API_BASE + '/api/audit/list?limit=100')).json();
+    if (res.status !== 'PASS') throw new Error(res.reason || '读取失败');
+    renderAudit(body, res.audit || []);
+  } catch (err) {
+    body.innerHTML = `<p class="audit-empty">审计日志读取失败：${escapeHtml(err.message)}</p>`;
+  }
+}
+function renderAudit(body, rows) {
+  if (!rows.length) { body.innerHTML = '<p class="audit-empty">暂无审计记录</p>'; return; }
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const esc = (v) => escapeHtml(v == null ? '' : String(v));
+  const head = ['时间', '操作', '状态', '项目', '方案', '说明'];
+  const html = [
+    '<div class="table-wrap"><table class="audit-table"><thead><tr>',
+    head.map(h => `<th scope="col">${esc(h)}</th>`).join(''),
+    '</tr></thead><tbody>',
+    rows.map(r => {
+      let ts = r.ts || '';
+      try { ts = new Date(ts).toLocaleString('zh-CN', { timeZone: tz }); } catch (e) { /* 原样 */ }
+      const action = AUDIT_ACTIONS[r.action] || r.action || '';
+      const statusHtml = r.status ? `<span class="audit-${esc(r.status)}">${esc(r.status)}</span>` : '<span class="md">—</span>';
+      const detail = (() => {
+        let t = r.detail;
+        if (typeof t === 'string') { try { const o = JSON.parse(t); t = (o && o.title) || t; } catch (e) { /* raw */ } }
+        return String(t || '').slice(0, 60);
+      })();
+      return `<tr><td class="num">${esc(ts)}</td><td>${esc(action)}</td><td>${statusHtml}</td>` +
+             `<td>${esc(r.project_id || '')}</td><td class="num">${esc((r.plan_id || '').slice(0, 8))}</td>` +
+             `<td class="sec">${esc(detail)}</td></tr>`;
+    }).join(''),
+    '</tbody></table></div>',
+    `<p class="audit-meta">共 ${rows.length} 条（最近 100）· 本地时区 ${esc(tz)}</p>`,
+  ].join('');
+  body.innerHTML = html;
+}
+function bindAudit() {
+  const dock = document.querySelector('#auditDockBtn');
+  if (dock) dock.addEventListener('click', openAuditModal);
+  const close = document.querySelector('#auditModalCloseBtn');
+  if (close) close.addEventListener('click', closeAuditModal);
+  const mask = document.querySelector('#auditModalMask');
+  if (mask) mask.addEventListener('click', closeAuditModal);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const modal = document.querySelector('#auditModal');
+    if (modal && modal.classList.contains('open')) closeAuditModal();
+  });
+}
 // 宽度：默认 = 操作坞宽；可拖至 260~490 并存 localStorage(planHubWidth)
 const HUB_W_KEY = 'planHubWidth';
 function applyHubWidth() {
@@ -1765,10 +1850,17 @@ async function onGlobalProjectChange() {
   ['#targetTotal', '#fixedPretax'].forEach(s => { const el = document.querySelector(s); if (el) el.addEventListener('input', () => { if (!dashActive) refreshPrepare(); }); });
   bindDock();
   bindPlanHub();
+  bindAudit();
   updateSchemeBalance();
   refreshSchemeTabs();
   refreshPrepare();
   // 窗口尺寸变化时重算明细表高度，保持与左栏底部对齐
   let alignT = 0;
   window.addEventListener('resize', () => { clearTimeout(alignT); alignT = setTimeout(alignDetailTable, 120); });
+  // 初始模块选择：放到宏任务里执行，保证在所有模块级声明（含 hubView/hubSelected）就绪后再调用
+  // selectModule → closeOverlays → closePlanHub，避免初始化早期读到 TDZ 中的变量。
+  setTimeout(() => {
+    if (location.hash) { const h = location.hash.slice(1); if (h === 'workbench' || h === 'quote' || modulePages[h]) selectModule(h); }
+    else selectModule('workbench');
+  }, 0);
 })();

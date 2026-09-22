@@ -1,11 +1,11 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>工程智算 · 投标报价</title>
   <link rel="stylesheet" href="./styles.css?v=2026-09-22-qd25" />
-  <link rel="stylesheet" href="./quote-dashboard.css?v=2026-09-22-qd44" />
+  <link rel="stylesheet" href="./quote-dashboard.css?v=2026-09-22-qd46" />
   <link rel="stylesheet" href="./results.css?v=2026-09-21-qd20" />
   <link rel="stylesheet" href="./workbench.css?v=2026-09-20-wb16" />
   <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
@@ -112,9 +112,25 @@
                     <div class="input-affix">
                       <span class="input-prefix">¥</span>
                       <input id="fixedPretax" class="tabular" type="number" placeholder="0.00" />
-                      <span class="input-suffix">固定项</span>
+                      <span class="input-suffix">元</span>
                     </div>
                   </label>
+                </div>
+                <div style="display:flex;gap:10px;">
+                  <div class="field" style="flex:1;">
+                    <label class="field-label">增值税率</label>
+                    <div class="input-affix">
+                      <input id="vatRate" class="tabular" type="number" step="1" min="0" max="100" value="9" />
+                      <span class="input-suffix">%</span>
+                    </div>
+                  </div>
+                  <div class="field" style="flex:1;">
+                    <label class="field-label">附加税率</label>
+                    <div class="input-affix">
+                      <input id="surtaxRate" class="tabular" type="number" step="1" min="0" max="100" value="12" />
+                      <span class="input-suffix">%</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -169,28 +185,12 @@
                 </div>
               </div>
 
-              <div style="margin-top:14px;" class="field-group">
-                <div style="display:flex;gap:10px;">
-                  <div class="field" style="flex:1;">
-                    <label class="field-label">增值税率</label>
-                    <div class="input-affix">
-                      <input id="vatRate" class="tabular" type="number" step="1" min="0" max="100" value="9" />
-                      <span class="input-suffix">%</span>
-                    </div>
-                  </div>
-                  <div class="field" style="flex:1;">
-                    <label class="field-label">附加税率</label>
-                    <div class="input-affix">
-                      <input id="surtaxRate" class="tabular" type="number" step="1" min="0" max="100" value="12" />
-                      <span class="input-suffix">%</span>
-                    </div>
-                  </div>
-                  </div>
-                </div>
+              <div class="field-group">
                 <label class="field check">
                   <input id="clauseEnabled" type="checkbox" checked />
                   <span>启用严重不平衡报价结算修正条款</span>
                 </label>
+              </div>
             </section>
 
             <!-- 成本税口径（成本构成） -->
@@ -469,6 +469,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></svg>
       方案中心
     </button>
+    <button class="dock-btn ghost" id="auditDockBtn" aria-label="审计日志" aria-expanded="false">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><polyline points="14 3 14 9 20 9"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+      审计日志
+    </button>
   </div>
 
   <!-- 方案中心（右下角吸附弹层：当前项目的方案组 → A/B/C 槽位，由操作坞唯一入口打开） -->
@@ -501,9 +505,23 @@
     </div>
   </div>
 
+  <!-- 审计日志弹层：操作坞「审计日志」→ GET /api/audit/list 居中呈现 -->
+  <div class="cmp-modal" id="auditModal" role="dialog" aria-modal="true" aria-label="审计日志" aria-hidden="true">
+    <div class="cmp-mask" id="auditModalMask" data-close></div>
+    <div class="cmp-panel" role="document">
+      <div class="cmp-head">
+        <h3>审计日志</h3>
+        <button type="button" class="ph-close" id="auditModalCloseBtn" aria-label="关闭审计日志">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="audit-body" id="auditBody" aria-live="polite"></div>
+    </div>
+  </div>
+
   <div class="toast-pill" id="toastPill" role="status" aria-live="polite"><span id="toastMsg"></span></div>
 
   <script src="./workbench.js?v=2026-09-22-wb20"></script>
-  <script src="./app.js?v=2026-09-22-qd43"></script>
+  <script src="./app.js?v=2026-09-22-qd49"></script>
 </body>
 </html>

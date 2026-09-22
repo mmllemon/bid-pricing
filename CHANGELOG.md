@@ -10,6 +10,43 @@
 
 ## [未发布]
 
+### 报价页前端：审计日志展示 / 弹层跨页关闭 / 初始化与输入细节
+
+**新增**
+
+- 操作坞第 4 键「审计日志」+ 居中弹层：拉取 `GET /api/audit/list` 渲染 时间/操作/状态/项目/方案/说明 表；操作名中文映射、状态语义色、空态/错误态；补 `escapeHtml`。
+
+**修正**
+
+- 方案中心/对比/审计弹层跨模块切换残留：`selectModule` 统一调用 `closeOverlays()` 切页即关。
+- 初始化早期同步调用 `selectModule` 读到 `let hubView` 触发 TDZ（`ReferenceError: Cannot access 'hubView' before initialization`）→ 初始模块选择延后到 `setTimeout` 宏任务执行。
+- 审计表格渲染误用 `html.join`（String 无 `join`）→ 改 `innerHTML`。
+
+**变更**
+
+- 金额输入（目标总报价/固定税前项）后缀统一为「元」；`.input-affix` 压缩水平留白以容纳更多位数。
+- 「增值税率/附加税率」从「单项报价安全防线」卡移至「本次测算参数」卡、位于目标报价行下方；顺带修正该卡 `field-group` 缺失的闭合 `</div>`。
+
+### SQLite 持久化迁移：方案/方案组/审计从 JSON 文件 → 库（ADR-0037）
+
+**变更**
+
+- 新增 `src/bidpricing/sqlite_store.py`：`plan`/`plan_group`/`plan_slot`/`audit_log` 四表。一个方案 = 一行（金额/税率提为可查询真列，`params/all_items/preview/result` 走 JSON 列）；建组与组槽同事务；按用户一库一文件（`PROJECTS_DIR` 调用时动态解析，WAL）。
+- `api/app.py` 持久化入口全走 `sqlite_store`；业务事件（optimize / overview save/delete/finalize）从文件 `log_event` 改走 `append_audit` 入库。
+- 旧 `project_store`/`group_store` 的**读写入口**被取代（保留纯工具与文件读取）；文件 JSON 只读保留、不再写。
+
+**新增**
+
+- `tools/migrate_to_sqlite.py`（CLI）+ `sqlite_store.import_json_tree()`：把现存 JSON 树幂等归库；`app` 启动时仅当库文件不存在才触发，避免将库中已删方案复活。
+- `GET /api/audit/list` 审计读取端点（`limit/action/user` 过滤）。
+- `tests/test_sqlite_store.py`（12 项）：单表/组/审计/迁移幂等/删除定稿复制级联。
+- `docs/adr/ADR-0037` 决策记录。
+
+**验证**
+
+- 真实按用户库 cold 迁移成功（leema：14 方案 / 12 组）；`/api/audit/list` 正常。
+- 全量回归通过：1551 项（含新增 12 项）。
+
 ### run.ps1 一键启动器加固（解释器能力探测 + 停止路径 + 编码）
 
 **修正**

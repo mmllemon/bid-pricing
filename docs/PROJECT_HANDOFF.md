@@ -27,9 +27,25 @@ python -m unittest discover -s tests -t . -q     # 回归
 
 **已知缺口**：`cost_composition` 目前是**项目级单一分解**，逐项覆盖属后续扩展（机制已预留）；9% 服务桶假定非货物成本均按 9% 进项，若含无票自有劳务（真实 0%）会略微高估可抵扣。**项目固定成本 / 隐形成本链路仍未闭环**，模型利润 ≠ 最终财务利润。
 
+### 交接补记（2026-09-22 · SQLite 持久化迁移）
+
+方案/方案组/审计从 **JSON 文件 → SQLite**（`docs/adr/ADR-0037`）。要点：
+
+**决策**
+- **库为唯一真相**：一个方案 = `plan` 表一行（元数据真列 + `params/all_items/preview/result` 走 JSON 列）；另有 `plan_group`、`plan_slot`、`audit_log` 三表。
+- **按用户一库一文件**：`outputs/projects/<用户>/.sqlite/quote.db`，`resolve_db_path()` 在调用时从 `PROJECTS_DIR` 动态解析（同 H-012 纪律，不得绑定默认路径）。WAL。
+- **启动一次性种子迁移**：仅当本用户库文件**不存在**才 `import_json_tree` 归库；避免每次重启把库中已删方案从遗留 JSON 复活。手动重导用 `python -m tools.migrate_to_sqlite`（或 `tools/migrate_to_sqlite.py`）。
+
+**代码落点**
+- `src/bidpricing/sqlite_store.py`：保存/读取/列表/删除/按策略查找/定稿/建组/挂槽/改名/整组定稿/整组复制/整组删除/审计；迁移 `import_json_tree`。
+- `api/app.py`：持久化入口全走 `sqlite_store`；业务事件（optimize / overview save/delete/finalize）改走 `append_audit` 入库；HTTP 访问日志仍走文件 JSONL（避免逐请求刷库）。新增 **`GET /api/audit/list`**（审计读取，`limit/action/user` 过滤）。
+- 新增 `tests/test_sqlite_store.py`（12 项）。
+
+**验证**：`import app` 成功，真实 leema 库已建并导入 **14 方案 / 12 组**；全量回归 **1551 项通过**（含新增 12 项）；`/api/audit/list` 返回正常。**遗留**：前端界面完整链路实测待做（见 §7 / §8）。**回滚**：旧 JSON 只读保留不删；需回退文件层时把 `app.py` 持久化入口指回 `project_store`（会丢库内新写，谨慎）。
+
 ## 0. 先看结论
 
-这是一个「给定总报价，联合求解分部分项综合单价」的报价优化项目。当前已形成 **计算内核 + 网页报价平台 + 个人工作台** 三层完整闭环，全量测试 **1539 项通过**（`python -m unittest discover -s tests -t .`），并已版本化、可推送到私有仓库。
+这是一个「给定总报价，联合求解分部分项综合单价」的报价优化项目。当前已形成 **计算内核 + 网页报价平台 + 个人工作台** 三层完整闭环，全量测试 **1551 项通过**（`python -m unittest discover -s tests -t .`），并已版本化、可推送到私有仓库。
 
 接手时必须记住四件事：
 
@@ -67,9 +83,9 @@ python -m unittest discover -s tests -t . -q     # 回归
 - **计算内核**：固定格式/变体 Excel 读取与清洗、复合主键匹配（`(project_id, unit_work, item_id)`，重复键阻断不合并）、Phase 1 普通优化、Phase 2 C13 结算调整 MILP（McCormick 线性化 + 独立复算）、Phase 0 预检/可行性证书、不可行诊断、结算规则引擎（2013/2024 规则集）、数值稳定性/退化检测/奇偶校验。
 - **网页报价平台**（FastAPI 8000 + 原生 JS 8080）：上传导入预览（行数/字段/匹配覆盖/异常/文件哈希）、计算、方案保存/打开/复制/重算/定稿回写、多方案对比（限同项目变体）、低价确认留痕、Excel 导出（`build_web_result.mjs`，缺文件自愈重建）。
 - **个人工作台**：项目经营概览看板（投标/中标在建/完工/结算/售后 + 未中标归档）、项目档案（简称便利贴、堆叠卡片、搜索、按列排序、阶段流转）、方案库、今日计划/习惯打卡等个人模块。
-- **多用户目录隔离**（H-012）：`outputs/<projects|web-results>/<用户>/`，默认目录调用时解析（`deployment.py`）。
+- **多用户目录隔离**（H-012）：`outputs/<projects|web-results>/<用户>/`，默认目录调用时解析（`deployment.py`）。方案库现落 SQLite：`outputs/projects/<用户>/.sqlite/quote.db`（ADR-0037）。
 - **前端体验**：MiSans VF 可变字体本地化子集（56 woff2 切片按需加载）、窄屏抽屉式侧栏、毛玻璃自定义下拉、`font-synthesis:none`、响应式断点。
-- **质量设施**：配置制品（`config/`）、ADR 决策记录（36 项）、状态快照、审计日志、68 项任务机械状态（`docs/tasks.json`）。
+- **质量设施**：配置制品（`config/`）、ADR 决策记录（37 项）、状态快照、审计日志、68 项任务机械状态（`docs/tasks.json`）。
 
 ### 2.2 部分实现 / 已知缺口
 
@@ -97,7 +113,9 @@ bid-pricing/
 │  ├─ contracts/                       2013/2024 规则集与规则选择
 │  ├─ quote_pipeline.py                报价主业务流程
 │  ├─ settlement.py                    结算规则引擎
-│  ├─ project_store.py                 方案持久化（<报价金额>_<id>.json 命名）
+│  ├─ project_store.py                 方案持久化（文件 JSON，已被 sqlite_store 取代读写入口；保留纯工具）
+│  ├─ sqlite_store.py                  方案持久化（SQLite，库为唯一真相；源码注释见 ADR-0037）
+│  ├─ group_store.py                   方案组存储（文件 JSON，读取侧被 sqlite_store 取代）
 │  ├─ project_overview.py              项目经营概览存储
 │  ├─ plan_compare.py                  方案对比（同项目门禁）
 │  ├─ deployment.py                    用户隔离与访问日志
@@ -168,6 +186,7 @@ bid-pricing/
 | `POST /api/project/copy` / `recompute` / `mark-finalized` / `delete` | 方案复制/重算/定稿（含回写）/删除 |
 | `POST /api/project/overview/save\|list\|delete\|finalize` | 项目经营概览 CRUD 与定稿 |
 | `POST /api/project/compare` | 方案对比（仅同项目，跨项目 400） |
+| `GET /api/audit/list` | 审计日志查询（`limit`/`action`/`user` 过滤，按时间倒序） |
 
 字段约定：`project_id` = 经营概览真实项目 UUID；`project_name` = 展示名；`overview_id` = 定稿回写目标项目 id。
 
@@ -180,7 +199,7 @@ Excel 由 `build_web_result.mjs` 生成，明细表含报价比率公式、汇�
 ## 7. 测试与验证
 
 ```powershell
-# 全量测试（当前 1534 项通过）
+# 全量测试（当前 1551 项通过）
 $env:PYTHONPATH="src"; python -m unittest discover -s tests -t . -q
 
 # 契约/状态
@@ -224,6 +243,7 @@ $env:PYTHONPATH="src"; python -m bidpricing.cli status --write
 10. **规则配置与代码常量重复会漂移。** 新增阈值必须加配置—实现—测试三方一致性检查。
 11. **用户输入必须转义。** 前端所有来自 Excel/用户的字符串进 `innerHTML` 前过 `esc()`，防注入。
 12. **前端缓存。** 修改 `app.js`/`styles.css`/`workbench.js` 后必须递增版本查询串（如 `wb31`），否则浏览器 HTML 缓存会加载旧脚本（曾导致「下拉显示旧值」假象）。
+13. **方案持久化以库为唯一真相，且按用户一库一文件。** `resolve_db_path()` 必须从 `PROJECTS_DIR` 调用时动态解析（不得绑定默认路径，否则 H-012 用户隔离失效）；启动种子迁移**只在库文件不存在时**执行，否则会把库中已删方案从遗留 JSON「复活」（ADR-0037）。
 
 ## 11. 接手者操作手册
 

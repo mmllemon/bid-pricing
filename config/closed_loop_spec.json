@@ -1,0 +1,10 @@
+{
+  "schema_id": "closed_loop_spec_v1",
+  "task": "T07-03/T07-04",
+  "title": "Q0→Q1 闭环编排（对照→精度监控→参数校准）",
+  "predicted_q1_sources": ["historical_replay", "model", "manual"],
+  "independence_rule": "predicted_q1 须为独立来源；不得与 actual_q1 的绑定源 cost.q1_point 同源。缺 predicted_q1 或其来源未登记时该级判 BLOCKED，不得用 q0 或 actual 顶替。",
+  "stages": ["T07-02 reconcile", "T07-03 precision", "T07-04 calibrate"],
+  "closed_when": ["reconciliation=PASS", "precision_promotion=READY", "calibration 生成版本化建议（审批 PENDING）"],
+  "status_domain": ["READY", "BLOCKED"]
+}

@@ -5,7 +5,7 @@
 
 # 项目状态快照
 
-> 生成于 **2026-09-22 10:52:55** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-09-22 18:09:56** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
@@ -19,10 +19,10 @@
 
 ## 一、版本锚点
 
-- 提交：`4e813eb` ｜ 累计 89 次提交 ｜ 未推送 1 次提交
-- 最新提交信息：feat(frontend): 落地前端 12 项审查修复 + 导出空态置灰 + API_BASE 单一配置
+- 提交：`7790961` ｜ 累计 90 次提交 ｜ 未推送 0 次提交
+- 最新提交信息：docs(handoff): 同步交接手册与状态快照至 4e813eb
 - 最近里程碑标签：`h002-cost-tax-basis-v1`
-- 工作区：有 3 处未提交改动
+- 工作区：有 11 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -67,7 +67,7 @@
 
 ## 四、质量门
 
-- 单元测试：**1539** 项，结果 **通过**（OK）
+- 单元测试：**1570** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
@@ -139,7 +139,7 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T03-03 | Phase 0 预检与可行性证书 | done | ✓ 成立 | config/phase0_precheck_spec.json 存在（11910 字节）；src/bidpricing/solver/precheck.py 存在；tests/test_precheck.py 存在；ADR ADR-0030-phase0-precheck.md 存在 |
 | T03-06 | 不可行诊断 | done | ✓ 成立 | config/infeasibility_diagnosis_spec.json 存在（8357 字节）；src/bidpricing/solver/diagnose.py 存在；tests/test_diagnose.py 存在；ADR ADR-0031-infeasibility-diagnosis.md 存在 |
 | T03-04 | 约束判定器 | done | ✓ 成立 | config/constraint_judge_spec.json 存在（15213 字节）；src/bidpricing/solver/constraint_judge.py 存在；tests/test_constraint_judge.py 存在；ADR ADR-0029-constraint-judge.md 存在 |
-| T03-07 | 状态机与低价处置状态 | done | ✓ 成立 | 已实现全局四态聚合与三态低价处置状态：BLOCKED > FAIL > WARN > PASS；潜在不可行 > 成本证据不足 > 低价复核，未触发时不生成状态。6 项状态机测试通过。；config/state_machine_spec.json 存在；src/bidpricing/state_machine.py 存在；tests/test_state_machine.py 存在（1773 字节） |
+| T03-07 | 状态机与低价处置状态 | done | ✓ 成立 | 已实现全局四态聚合与三态低价处置状态：BLOCKED > FAIL > WARN > PASS；潜在不可行 > 成本证据不足 > 低价复核，未触发时不生成状态。6 项状态机测试通过。；config/state_machine_spec.json 存在；src/bidpricing/state_machine.py 存在；tests/test_state_machine.py 存在（1814 字节） |
 | T03-05 | 判定层测试矩阵 | done | ✓ 成立 | config/judgment_test_matrix_spec.json（13 约束 × 6 边界类 = 78 格，12 格声明不适用；「缺失」拆 NOT_ACTIVE(SKIP)/MISSING_INPUT(BLOCKED) 两格；「1 单位」逐约束具名绑定——res 0.01 元 / tol_width / count / sigma_step 三种量纲）+ src/bidpricing/validation/judgment_matrix.py（枚举与覆盖审计：未声明空格⇒BLOCKED、零格⇒BLOCKED；参数化 judge_fn：真实实现与变异体同跑；25 条变异体注入审计，kills_by 按「声明 ⊆ 实际」对账，存活⇒FAIL；规则优先级 A1–A4；规则集切换两层判据 L1 数值/L2 元信息 + SEGMENT 退化登记为 WARN）+ tests/test_judgment_matrix.py 34 项元测试。实测：78 格零失配、25/25 变异体被杀、覆盖审计 PASS（66 覆盖 + 12 声明例外）、总结论 WARN（唯一来源＝SEGMENT 下数值指纹退化，已登记）。首轮 M-05/M-06 假存活（变异体依赖 reason 文案）已修正并加元测试钉住。CLI judgment-matrix。；config/judgment_test_matrix_spec.json 存在（19787 字节）；src/bidpricing/validation/judgment_matrix.py 存在；tests/test_judgment_matrix.py 存在；ADR ADR-0034-judgment-test-matrix.md 存在 |
 | T04-00 | Phase 1 适用条件证明与反例集 | done | ✓ 成立 | 2026-09-17 完成《Phase 1 精确性条件》+ 反例集。**定理 T1（阈值分割）用交换论证证明**，刻意不走 KKT——KKT 是 T04-02A/D 的实现路线，两者共用会让「证明」与「实现」按同一个误解同时成立，T04-08 的独立性验收即失去对象（ADR-0019）。九条条件分两组：A 组（EC-1 作用域完备 / EC-2 排序键正确 / EC-3 权重正 / EC-4 系数非负 / EC-5 非退化 / EC-6 软约束不激活 / EC-7 可行域非空）违反则阈值分割解不再是 P_A 最优解；B 组（EC-8 舍入可调和 / EC-9 上界有限）违反只加实现性义务。**verdict 只看 A 组**——首版把 EC-8 放 A 组的结果是任何实例都判不出 EXACT（舍入上界 0.005·Σq0 几乎总超 eps_total），一个永远需要附注的 verdict 等于没有 verdict。反例集 CE-01..CE-09 每个都带「误用解 vs 正确解」数值见证，由 check_solution 代回原式复算；expected 做**双向**比对（实现判 FAIL 的条件不得漏声明——CE-07 首跑即踩到单向比对的漏洞）。正例 PE-01 = 附录 B 例 2R 的 SEGMENT 分支（本项目已落 SEGMENT），用 n=2 端点比较做**完整**最优性验证。副产品：修掉 compute_r_eff 的 SEGMENT 分支真 bug（increase_threshold 本身已是 1+θ_dev，原式再加 1.0 使越界段 r_eff 系统性高估）。本项目真实结论：EC-9 对西永L样本判 WARN（031301017001 cap 空），故 Phase 1 算法必须内建「空 cap 项固定为临界项」分支。测试 50 项；phase1-check 10/10 制品↔实现一致。；config/phase1_exactness_spec.json 存在（39093 字节）；src/bidpricing/solver/exactness.py 存在；src/bidpricing/solver/cases.py 存在；src/bidpricing/solver/instance.py 存在；tests/test_phase1_exactness.py 存在；ADR ADR-0019-phase1-exactness-by-exchange-argument.md 存在 |
 | T04-01 | Phase 1 解析解 | done | ✓ 成立 | 2026-09-17：排序+二分+贪心定容解析解落地。spec=config/phase1_solver_spec.json（PS-01..PS-11）；实现 src/bidpricing/solver/phase1.py（solve_phase1/judge_phase1/phase1_report/两个内置探针）；Z 一律由 instance.check_solution 复算（不重实现 R_i）；lb_i 复用 formulation.merged_lower（_merged_lower 提升为公开名，唯一实现不变）。两个探针（free-cap/simple）verdict=PASS。测试 48 项全绿（全量 838），含 PS-06 双向交换探针、r vs r_eff 逆序实例、空 cap 临界项、平台 tie-break、不支持政策 BLOCKED、INFEASIBLE≠BLOCKED。CLI 新增 phase1-solve（--probe/--instance/--json）。遗留：PS-11 曾抓到制品把三容差入参写成一条，已拆分制品（判据先于实现纠错）；PS-06 首版只做单向交换，补齐「先增后减」方向。；config/phase1_solver_spec.json 存在（22640 字节）；src/bidpricing/solver/phase1.py 存在；tests/test_phase1_solver.py 存在；ADR ADR-0026-phase1-analytic-solver.md 存在 |
@@ -169,8 +169,8 @@ cd bid-pricing && PYTHONPATH=src python -m bidpricing.cli contract-check
 | T06-08 | 不可变审计运行记录 | done | ✓ 成立 | 已实现不可变审计运行记录链：RunID→Input→Config→RuleSet→Model→Solver→Output→Decision；每段包含 run_id、operator、created_at、payload、previous_hash、event_hash，篡改或断链校验为 BLOCKED。4 项测试通过。；config/audit_log_spec.json 存在；src/bidpricing/audit_log.py 存在；tests/test_audit_log.py 存在 |
 | T07-01 | 历史项目回放 | deferred | ✓ 成立 | 已实现历史项目回放框架：机制测试 4 项通过，但仅有 1 个真实历史项目样本，不足以达到『≥3 个历史项目完整复算』的 Gate 6 门槛。标记为【待定/跳过】：不误报完成，也不作为可开工遗留，待后续补充真实项目数据后恢复。；config/historical_replay_spec.json 存在；src/bidpricing/historical_replay.py 存在；tests/test_historical_replay.py 存在 |
 | T07-02 | $Q_0 \to Q_1$ 实际对照 | partial | ✓ 成立 | 已实现 Q0→Q1 逐项对照框架，并正式绑定实际结算口径：actual_q1=成本清单 q1_point，settlement_unit_price=报价 p_bid，settlement_amount=两者相乘；输出 signed_error、absolute_error、relative_error。当前样本尚未提供独立 predicted_q1，因此精度对照仍需补预测输出。5 项测试通过。；config/quantity_reconciliation_spec.json 存在；src/bidpricing/quantity_reconciliation.py 存在；tests/test_quantity_reconciliation.py 存在 |
-| T07-03 | 精度监控 | partial | ✓ 成立 | 已实现 MAE/WAPE/sMAPE 监控、小工程量 q1<q_min 单独口径，以及基于 sample_size、confidence_interval、segment、project_type 的升级闸门；实际结算量可由成本 q1_point 与报价 p_bid 构造，但当前尚缺独立 predicted_q1，升级仍保持 HOLD。4 项测试通过。；config/precision_monitor_spec.json 存在；src/bidpricing/precision_monitor.py 存在；tests/test_precision_monitor.py 存在 |
-| T07-04 | 参数校准 | partial | ✓ 成立 | 已实现参数校准记录框架：只有 replay=PASS、实际对照=PASS、精度 promotion=READY 才生成版本化建议；建议记录 old_value/new_value/reason，永不直接覆盖当前 config，审批默认 PENDING。4 项测试通过，真实闭环证据不足时保持 BLOCKED。；config/calibration_spec.json 存在；src/bidpricing/calibration.py 存在；tests/test_calibration.py 存在 |
+| T07-03 | 精度监控 | partial | ✓ 成立 | 已实现 MAE/WAPE/sMAPE 监控、小工程量 q1<q_min 单独口径，以及基于 sample_size、confidence_interval、segment、project_type 的升级闸门；并接入闭环编排（closed_loop.py：对照→精度→校准），predicted_q1 来源独立性契约登记于 config/closed_loop_spec.json（来源限 historical_replay/model/manual 且不得与 cost.q1_point 同源，未登记即该级 BLOCKED、不得用 q0/actual 顶替）。预测值事实源=声明书机制（predicted_q1.py + config/predicted_q1_spec.json + CLI predict-register）：留痕四件（source/declared_by/declared_at/rationale）缺一拒登；闭环经 predicted_q1_declaration 引用声明书，缺值由声明书补齐、异值判篡改、未覆盖项判无登记来源。新增 CLI 命令 precision-monitor / closed-loop / predict-register。14 项闭环 + 17 项声明书 + 4 项监控测试通过。真实样本尚未登记真正的独立预测来源，升级闸门保持 HOLD、闭环保持 BLOCKED（缺口由 reason 逐条具名）。；config/precision_monitor_spec.json 存在；src/bidpricing/precision_monitor.py 存在；tests/test_precision_monitor.py 存在；config/closed_loop_spec.json 存在；src/bidpricing/closed_loop.py 存在；tests/test_closed_loop.py 存在；config/predicted_q1_spec.json 存在；src/bidpricing/predicted_q1.py 存在；tests/test_predicted_q1.py 存在 |
+| T07-04 | 参数校准 | partial | ✓ 成立 | 已实现参数校准记录框架：只有 replay=PASS、实际对照=PASS、精度 promotion=READY 才生成版本化建议；建议记录 old_value/new_value/reason，永不直接覆盖当前 config，审批默认 PENDING。已接入闭环编排（closed_loop.py 按 spec.stages 串联，证据键与校准三门前置一一对应，整体状态域 READY/BLOCKED，缺数据逐级如实 BLOCKED/HOLD）；预测值事实源=声明书机制（predicted_q1.py：留痕四件 + 逐项交叉校验，闭环经 predicted_q1_declaration 引用）。新增 CLI 命令 calibrate / closed-loop / predict-register。17 项声明书 + 14 项闭环 + 4 项校准测试通过；真实闭环三门（replay/对照/升级）未齐时保持 BLOCKED。；config/calibration_spec.json 存在；src/bidpricing/calibration.py 存在；tests/test_calibration.py 存在；src/bidpricing/closed_loop.py 存在；tests/test_closed_loop.py 存在；src/bidpricing/predicted_q1.py 存在；tests/test_predicted_q1.py 存在 |
 
 ---
 

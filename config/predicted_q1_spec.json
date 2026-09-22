@@ -1,0 +1,18 @@
+{
+  "schema_id": "predicted_q1_declaration_v1",
+  "task": "T07-03/T07-04",
+  "title": "predicted_q1 独立来源声明书",
+  "role": "q1 在投标期不可观测（见 q1_assumption_spec.observability）：一切 predicted_q1 取值都是假设。声明书是 predicted_q1 的**可审计事实源**——谁（declared_by）、何时（declared_at）、为什么（rationale）、来源（source）必须齐备；闭环引用声明书后，逐项 predicted_q1 值以声明书为准，缺项不静默补、异值判篡改。",
+  "source_domain": ["historical_replay", "model", "manual"],
+  "source_domain_lock": "本域与 closed_loop_spec.predicted_q1_sources 必须一致（测试双向锁定；任一侧单方面扩域即漂移）",
+  "provenance_required": ["source", "declared_by", "declared_at", "rationale"],
+  "record_fields": ["item", "predicted_q1"],
+  "rules": [
+    "source 必须已登记在 closed_loop_spec.predicted_q1_sources，且不得与 actual_q1 绑定源 cost.q1_point 同源",
+    "predicted_q1 值必须为非负实数；缺项/非数/负值一律拒绝登记，不静默补 0",
+    "declared_by 如实填写：业务声明=user，Agent 代操作=agent(...)，不得冒充用户（ADR-0007 同款纪律）",
+    "闭环 bundle 引用 declaration 后：records 里已带的 predicted_q1 必须与声明书逐项相等（不等=篡改/漂移），bundle 里每个记录都必须被声明书覆盖（未覆盖=无登记来源，该级 BLOCKED）",
+    "声明书被替换/覆盖前必须留版本（--replace 时旧版须已备份或提交）"
+  ],
+  "status_domain": ["PASS", "BLOCKED"]
+}

@@ -18,7 +18,11 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .calibration import CalibrationRecord, PREREQUISITES, build_calibration_record
-from .precision_monitor import PrecisionMonitorReport, monitor_precision
+from .precision_monitor import (
+    PrecisionMonitorReport,
+    bootstrap_error_ci,
+    monitor_precision,
+)
 from .predicted_q1 import PredictionDeclarationError, load_declaration, verify_and_merge
 from .quantity_reconciliation import QuantityReconciliationReport, compare_quantities
 
@@ -139,6 +143,7 @@ class ClosedLoopReport:
     quantity_comparison: QuantityReconciliationReport
     precision: PrecisionMonitorReport | None
     calibration: CalibrationRecord
+    promotion_sources: Mapping[str, str]
     source: str | None
     reason: str
 
@@ -152,6 +157,7 @@ class ClosedLoopReport:
             "quantity_comparison": self.quantity_comparison.to_dict(),
             "precision": self.precision.to_dict() if self.precision is not None else None,
             "calibration": self.calibration.to_dict(),
+            "promotion_sources": dict(self.promotion_sources),
             "source": self.source,
             "reason": self.reason,
         }
@@ -176,6 +182,58 @@ def check_predicted_source(bundle: ClosedLoopBundle, spec: Mapping[str, Any]) ->
     if bundle.predicted_q1_source_ref:
         note += f"（出处：{bundle.predicted_q1_source_ref}）"
     return True, note
+
+
+def resolve_promotion_inputs(
+    records: Sequence[Mapping[str, Any]],
+    comparison: QuantityReconciliationReport,
+    bundle: ClosedLoopBundle,
+) -> tuple[Mapping[str, Any] | None, str | None, str | None, Mapping[str, str]]:
+    """精度升级闸门三项输入的来源解析（precision_monitor_spec.promotion_input_sources 的可执行形式）。
+
+    优先级一律：bundle 显式声明 > 记录/对照派生 > 具名缺口。每一档都留痕
+    （来源说明），未定即如实说明缺什么、等什么，不静默补默认值。
+
+    返回 (confidence_interval, segment, project_type, 来源说明表)。
+    """
+    sources: dict[str, str] = {}
+
+    if bundle.confidence_interval is not None:
+        ci: Mapping[str, Any] | None = dict(bundle.confidence_interval)
+        sources["confidence_interval"] = "bundle 显式声明"
+    else:
+        ci = bootstrap_error_ci([c.relative_error for c in comparison.comparisons])
+        if ci is not None:
+            sources["confidence_interval"] = (
+                f"本次对照逐项相对误差计算（{ci['method']}，n={ci['n_observations']}，"
+                f"seed={ci['seed']}，level={ci['level']}）"
+            )
+        else:
+            sources["confidence_interval"] = "未提供且可观测相对误差 < 2 项：无法构成置信区间（不伪造）"
+
+    segment: str | None = bundle.segment
+    if segment is not None:
+        sources["segment"] = "bundle 显式声明"
+    else:
+        units = sorted({str(r["unit_work"]) for r in records if r.get("unit_work") is not None})
+        if len(units) == 1:
+            segment = units[0]
+            sources["segment"] = f"记录集 unit_work 唯一值 {units[0]!r}"
+        elif units:
+            sources["segment"] = (
+                f"记录集跨多个分部 {units[:4]}{' …' if len(units) > 4 else ''}："
+                "无法形成单段结论（判未定，不静默合并）"
+            )
+        else:
+            sources["segment"] = "记录集未携带 unit_work：segment 未定"
+
+    project_type: str | None = bundle.project_type
+    if project_type is not None:
+        sources["project_type"] = "bundle 显式声明"
+    else:
+        sources["project_type"] = "无已声明来源（ruleset_selector_spec.known_limits：待 T00-01 规则表/显式声明）"
+
+    return ci, segment, project_type, sources
 
 
 def resolve_precision_inputs(
@@ -267,15 +325,19 @@ def run_closed_loop(
 
     merged_records, source_note = resolve_precision_inputs(bundle, spec)
 
-    comparison = compare_quantities(merged_records or bundle.records)
+    active_records = merged_records if merged_records is not None else bundle.records
+    comparison = compare_quantities(active_records)
+    ci_eff, seg_eff, ptype_eff, promotion_sources = resolve_promotion_inputs(
+        active_records, comparison, bundle
+    )
 
     if merged_records is not None:
         precision = monitor_precision(
             merged_records,
             q_min=q_min,
-            confidence_interval=confidence_interval,
-            segment=segment,
-            project_type=project_type,
+            confidence_interval=ci_eff,
+            segment=seg_eff,
+            project_type=ptype_eff,
             min_sample_size=min_sample_size,
         )
         promotion = precision.promotion_status
@@ -329,6 +391,7 @@ def run_closed_loop(
         quantity_comparison=comparison,
         precision=precision,
         calibration=calibration,
+        promotion_sources=promotion_sources,
         source=source,
         reason=reason,
     )

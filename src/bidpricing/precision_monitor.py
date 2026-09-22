@@ -2,15 +2,60 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 SPEC_FILENAME = "precision_monitor_spec.json"
 
+# bootstrap 置信区间的声明参数——与 config/precision_monitor_spec.json 的
+# bootstrap_ci 段由测试双向锁定（N/seed 沿用 T05-01 约定）。
+BOOTSTRAP_METHOD = "percentile_bootstrap"
+BOOTSTRAP_N_RESAMPLES = 1000
+BOOTSTRAP_SEED = 20260915
+BOOTSTRAP_LEVEL = 0.95
+BOOTSTRAP_MIN_OBSERVATIONS = 2
+
 
 def load_precision_monitor_spec(config_dir: Path | str = "config") -> dict[str, Any]:
     return json.loads((Path(config_dir) / SPEC_FILENAME).read_text(encoding="utf-8"))
+
+
+def bootstrap_error_ci(
+    errors: Sequence[float | None],
+    n_resamples: int = BOOTSTRAP_N_RESAMPLES,
+    seed: int = BOOTSTRAP_SEED,
+    level: float = BOOTSTRAP_LEVEL,
+) -> Mapping[str, Any] | None:
+    """逐项绝对相对误差均值的 bootstrap 百分位置信区间（spec.bootstrap_ci 的可执行形式）。
+
+    固定 N/seed ⇒ 同一误差序列重放结果逐位一致（可复算）；
+    观测不足 BOOTSTRAP_MIN_OBSERVATIONS 时返回 None——不得伪造区间。
+    """
+    values = [abs(float(e)) for e in errors if e is not None]
+    if len(values) < BOOTSTRAP_MIN_OBSERVATIONS:
+        return None
+    rng = random.Random(seed)
+    n = len(values)
+    means: list[float] = []
+    for _ in range(n_resamples):
+        sample = [values[rng.randrange(n)] for _ in range(n)]
+        means.append(sum(sample) / n)
+    means.sort()
+    tail = (1.0 - level) / 2.0
+    low = means[int(tail * (n_resamples - 1))]
+    high = means[int((1.0 - tail) * (n_resamples - 1))]
+    return {
+        "method": BOOTSTRAP_METHOD,
+        "target": "逐项绝对相对误差均值",
+        "n_observations": n,
+        "n_resamples": n_resamples,
+        "seed": seed,
+        "level": level,
+        "low": round(low, 6),
+        "high": round(high, 6),
+    }
 
 
 @dataclass(frozen=True)

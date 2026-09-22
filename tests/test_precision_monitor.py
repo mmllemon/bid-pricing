@@ -1,7 +1,15 @@
 import unittest
 from pathlib import Path
 
-from bidpricing.precision_monitor import load_precision_monitor_spec, monitor_precision
+from bidpricing.precision_monitor import (
+    BOOTSTRAP_LEVEL,
+    BOOTSTRAP_METHOD,
+    BOOTSTRAP_N_RESAMPLES,
+    BOOTSTRAP_SEED,
+    bootstrap_error_ci,
+    load_precision_monitor_spec,
+    monitor_precision,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +39,33 @@ class PrecisionMonitorTest(unittest.TestCase):
     def test_missing_actual_blocks(self):
         report = monitor_precision([{"predicted_q1": 2}], min_sample_size=1)
         self.assertEqual(report.status, "BLOCKED")
+
+
+class BootstrapCiTest(unittest.TestCase):
+    def test_constants_track_spec(self):
+        spec = load_precision_monitor_spec(ROOT / "config")
+        bs = spec["bootstrap_ci"]
+        self.assertEqual(BOOTSTRAP_METHOD, bs["method"])
+        self.assertEqual(BOOTSTRAP_N_RESAMPLES, bs["n_resamples"])
+        self.assertEqual(BOOTSTRAP_SEED, bs["seed"])
+        self.assertEqual(BOOTSTRAP_LEVEL, bs["level"])
+        self.assertEqual(len(spec["promotion_input_sources"]), 4)
+
+    def test_deterministic_and_bounded(self):
+        errors = [0.1, 0.2, 0.3, None, 0.15]
+        ci1 = bootstrap_error_ci(errors)
+        ci2 = bootstrap_error_ci(errors)
+        self.assertEqual(ci1, ci2)
+        self.assertEqual(ci1["method"], "percentile_bootstrap")
+        self.assertEqual(ci1["n_observations"], 4)
+        self.assertGreaterEqual(ci1["low"], 0.0)
+        self.assertLessEqual(ci1["low"], ci1["high"])
+        self.assertLessEqual(ci1["high"], 0.3)
+
+    def test_fewer_than_two_observations_returns_none(self):
+        self.assertIsNone(bootstrap_error_ci([]))
+        self.assertIsNone(bootstrap_error_ci([0.5]))
+        self.assertIsNone(bootstrap_error_ci([None, None]))
 
 
 if __name__ == "__main__":

@@ -3984,8 +3984,13 @@ def cmd_precision_monitor(args) -> int:
     """
     from pathlib import Path as _P
 
-    from .closed_loop import load_closed_loop_spec, resolve_precision_inputs
+    from .closed_loop import (
+        load_closed_loop_spec,
+        resolve_precision_inputs,
+        resolve_promotion_inputs,
+    )
     from .precision_monitor import monitor_precision
+    from .quantity_reconciliation import compare_quantities
 
     bundle, err = _load_closed_loop_bundle(args.records)
     if err:
@@ -4008,19 +4013,24 @@ def cmd_precision_monitor(args) -> int:
         print(f"■ [BLOCKED] {note}")
         return 1
 
+    comparison = compare_quantities(merged)
+    ci_eff, seg_eff, ptype_eff, gate_sources = resolve_promotion_inputs(
+        merged, comparison, bundle
+    )
     report = monitor_precision(
         merged,
         q_min=bundle.q_min if bundle.q_min is not None else 1.0,
         min_sample_size=bundle.min_sample_size or 30,
-        confidence_interval=bundle.confidence_interval,
-        segment=bundle.segment,
-        project_type=bundle.project_type,
+        confidence_interval=ci_eff,
+        segment=seg_eff,
+        project_type=ptype_eff,
     )
 
     if args.json:
         print(json.dumps({
             "predicted_q1_source": bundle.predicted_q1_source,
             "note": note,
+            "promotion_sources": dict(gate_sources),
             "report": report.to_dict(),
         }, ensure_ascii=False, indent=2))
         return 0 if report.status != "BLOCKED" else 1
@@ -4029,6 +4039,8 @@ def cmd_precision_monitor(args) -> int:
     print(f"Q1 精度监控（T07-03）｜ 输入束 {_P(bundle.source) if bundle.source else args.records}")
     print("=" * 78)
     print(f"  来源判据：{note}")
+    for key, desc in gate_sources.items():
+        print(f"  闸门来源 [{key}] {desc}")
     print(f"  样本量：{report.sample_size}（阈值 {bundle.min_sample_size or 30}；"
           f"q_min = {bundle.q_min if bundle.q_min is not None else 1.0}）")
     for m in report.metrics:
@@ -4132,6 +4144,8 @@ def cmd_closed_loop(args) -> int:
     print(f"  证据：replay={report.evidence['replay_status']}  "
           f"对照={report.evidence['quantity_comparison_status']}  "
           f"精度升级={report.evidence['precision_promotion_status']}")
+    for key, desc in report.promotion_sources.items():
+        print(f"  闸门 [{key}] {desc}")
     print("-" * 78)
     mark = "OK" if report.status == "READY" else "BLOCKED"
     print(f" [{mark}] 整体结论：{report.status} —— {report.reason}")

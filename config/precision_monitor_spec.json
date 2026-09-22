@@ -5,5 +5,20 @@
   "metrics": ["MAE", "WAPE", "sMAPE"],
   "low_quantity_policy": "q1 < q_min 单独统计，不并入总体升级判据",
   "promotion_inputs": ["sample_size", "confidence_interval", "segment", "project_type"],
+  "bootstrap_ci": {
+    "method": "percentile_bootstrap",
+    "target": "逐项绝对相对误差（relative_error 未定义的观测剔除）的均值",
+    "n_resamples": 1000,
+    "seed": 20260915,
+    "level": 0.95,
+    "min_observations": 2,
+    "note": "N/seed 沿用 T05-01 约定（N=1000、seed=20260915）；观测 < 2 时不得构成置信区间，必须返回 None（不伪造）"
+  },
+  "promotion_input_sources": {
+    "sample_size": "closed_loop_spec.min_sample_size（bundle 可覆盖）",
+    "confidence_interval": "bundle 显式声明优先；否则由本次对照的逐项相对误差序列按 bootstrap_ci 计算（方法具名留痕）",
+    "segment": "bundle 显式声明优先；否则取记录集 unit_work 的唯一值（跨多个分部 = 无法形成单段结论，判未定，不静默合并）",
+    "project_type": "暂无已声明来源（ruleset_selector_spec.known_limits：待 T00-01 补充规则表后启用）；bundle 可显式声明"
+  },
   "status_domain": ["PASS", "WARN", "BLOCKED"]
 }

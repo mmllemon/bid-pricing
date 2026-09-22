@@ -155,16 +155,27 @@ class RunClosedLoopTest(unittest.TestCase):
         self.assertEqual(report.status, "BLOCKED")
         self.assertIn("未登记", report.stages[1].detail)
 
-    def test_holding_precision_holds_calibration(self):
+    def test_missing_ci_is_computed_from_comparison(self):
         report = run_closed_loop(
             _records(), spec=_spec(),
+            **_full_kwargs(confidence_interval=None))
+        self.assertEqual(report.status, "READY")
+        self.assertIn("percentile_bootstrap", report.promotion_sources["confidence_interval"])
+        self.assertEqual(report.stages[1].status, "PASS")
+
+    def test_gate_hold_when_ci_cannot_be_formed(self):
+        records = [
+            {"item": f"I{i:02d}", "q0": 10.0, "predicted_q1": 12.0, "actual_q1": 0.0}
+            for i in range(32)
+        ]
+        report = run_closed_loop(
+            records, spec=_spec(),
             **_full_kwargs(confidence_interval=None))
         self.assertEqual(report.status, "BLOCKED")
         self.assertEqual(report.stages[1].status, "WARN")
         self.assertEqual(report.precision.promotion_status, "HOLD")
-        self.assertEqual(report.calibration.status, "BLOCKED")
-        self.assertIn("精度升级 HOLD", report.reason)
-        self.assertIn("calibrate BLOCKED", report.reason)
+        self.assertIn("无法构成置信区间", report.promotion_sources["confidence_interval"])
+        self.assertIn("HOLD", report.reason)
 
     def test_replay_blocked_blocks_calibration_only(self):
         report = run_closed_loop(
@@ -182,6 +193,69 @@ class RunClosedLoopTest(unittest.TestCase):
             **_full_kwargs(proposed_changes=[]))
         self.assertEqual(report.calibration.status, "BLOCKED")
         self.assertIn("没有可审计的参数变更建议", report.calibration.reason)
+
+
+class PromotionInputResolutionTest(unittest.TestCase):
+    def _records(self, unit):
+        return [
+            {"item": "A", "q0": 10.0, "predicted_q1": 12.0, "actual_q1": 11.0, "unit_work": unit},
+            {"item": "B", "q0": 10.0, "predicted_q1": 8.0, "actual_q1": 9.0, "unit_work": unit},
+        ]
+
+    def test_gate_flips_ready_when_only_project_type_undetermined_is_supplied(self):
+        records = self._records("电气")
+        records2 = [dict(r) for r in records]
+        records2[0]["unit_work"] = "电气"
+        records2[1]["unit_work"] = "土建"
+        report = run_closed_loop(
+            self._records("电气"),
+            replay_status="PASS",
+            base_config_version="c1",
+            proposed_config_version="c2",
+            proposed_changes=[{"key": "k", "new_value": 2, "reason": "测试"}],
+            current_config={"k": 1},
+            predicted_q1_source="model",
+            project_type="t",
+            min_sample_size=2,
+            spec=load_closed_loop_spec(ROOT / "config"),
+        )
+        self.assertEqual(report.status, "READY")
+        self.assertIn("percentile_bootstrap", report.promotion_sources["confidence_interval"])
+        self.assertEqual(report.stages[1].status, "PASS")
+        # 跨分部场景：segment 判未定 ⇒ 闸门 HOLD
+        blocked = run_closed_loop(
+            records2,
+            replay_status="PASS",
+            base_config_version="c1",
+            proposed_config_version="c2",
+            proposed_changes=[{"key": "k", "new_value": 2, "reason": "测试"}],
+            current_config={"k": 1},
+            predicted_q1_source="model",
+            project_type="t",
+            min_sample_size=2,
+            spec=load_closed_loop_spec(ROOT / "config"),
+        )
+        self.assertEqual(blocked.status, "BLOCKED")
+        self.assertEqual(blocked.stages[1].status, "WARN")
+        self.assertEqual(blocked.precision.promotion_status, "HOLD")
+        self.assertIn("跨多个分部", blocked.promotion_sources["segment"])
+
+    def test_missing_unit_work_names_gap(self):
+        records = [
+            {"item": "A", "q0": 10.0, "predicted_q1": 12.0, "actual_q1": 11.0},
+            {"item": "B", "q0": 10.0, "predicted_q1": 8.0, "actual_q1": 9.0},
+        ]
+        report = run_closed_loop(
+            records,
+            replay_status="PASS",
+            predicted_q1_source="model",
+            min_sample_size=2,
+            spec=load_closed_loop_spec(ROOT / "config"),
+        )
+        self.assertEqual(report.status, "BLOCKED")
+        self.assertIn("未携带 unit_work", report.promotion_sources["segment"])
+        self.assertIn("无已声明来源", report.promotion_sources["project_type"])
+        self.assertEqual(report.precision.promotion_status, "HOLD")
 
 
 if __name__ == "__main__":

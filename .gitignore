@@ -24,3 +24,5 @@ frontend/node_modules/
 # ---- 环境与本地文件 ----
 .env
 *.pdf
+.trae/
+.workbuddy/

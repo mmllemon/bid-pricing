@@ -5,15 +5,17 @@
 
 ---
 
-## 0.1 本次交接（2026-09-20 · 云）
+## 0.1 本次交接（2026-09-22 · 云）
 
-**最新提交**：`ae7eac7`（feat(h002): 成本税口径成本构成前端自定义 + 参数区四列并列布局），已推送 `origin/master`。
+**最新提交**：`4e813eb`（feat(frontend): 落地前端 12 项审查修复 + 导出空态置灰 + API_BASE 单一配置），已推送 `origin/master`。（此前 HEAD 为 `bdfbf73`。）
 
 **本轮做了什么**
-- 成本税口径从「阻断（UNKNOWN）」推进到「已声明 `PARTIAL` + 前端可自定义构成」：新增分项精算 `k = 1 − Σ(p_j·r_j/(1+r_j))`，两条报价入口共用同一判据；前端新增「成本税口径（成本构成）」面板（抵扣方式下拉 + 占比/税率输入 + 实时 k 展示）。
-- 前端体验修复：`#taxMode` 接入毛玻璃自定义下拉（与页面其他下拉一致）；修复 app.js 暂时性死区（TDZ）导致构成行不渲染的崩溃；参数区由「3 列 + 成本税口径独占整行」改为**四列并列**，输入框与下拉同宽。
+- 前端质量评估（12 项）落地：明细表颜色内联抽成语义类 `td.cap/cost/quote`、Toast 语义色改用 `--success/--warn/--danger`、keyframes 归一为 `qdFadeIn` 单一动画源、前端「抵扣总额」口径对齐后端 `cost_input_tax.multiplier`（`k=1−Σ p·r/(1+r)` 反推，删除单一 credit 加权近似）、方案中心/文件槽位/KPI 卡键盘可达与 `aria-pressed`/`focus-within`、invalid 多源红统一派生语义色、响应式断点统一（1200/960/820/720）、下拉箭头抽 `--select-arrow` token、双滑块 z 序提权归拢到 JS 单一函数、guardrail 配色 token 化。
+- 「导出报表」改为空态置灰禁用（存在 `excel_download_url` 才启用，避免点出「暂无可导出」toast）。
+- API 基址抽为单一 `API_BASE` 常量（`app.js`/`workbench.js` 各一处），消除 19 处 `http://localhost:8000` 硬编码；换环境/域名只改这一处（`config` 常量为空 `''` 即同源相对路径）。
+- 同步此前累积的后端成本构成/分组策略与对拍相关改动。
 
-**验证**：全量测试 1534 项通过；`contract-check` PASS 17/17；`docs/STATE.md` 已 `status --write` 重生成（同批提交）。
+**验证**：`docs/STATE.md` 已 `status --write` 重生成（同批提交）：**1539 项测试通过**，Gate 0a=PASS、Phase 0 输入门=PASS；遗留项 13 条；下一步 T07-03 / T07-04。前端各文件版本：app `qd43` / workbench `wb20` / styles `qd25` / quote-dashboard `qd44`。
 
 **回家继续开发的起手式**
 ```powershell
@@ -21,13 +23,13 @@ git pull
 .\run.ps1                                        # 后端 8000 + 前端 8080，探活 /api/health
 python -m unittest discover -s tests -t . -q     # 回归
 ```
-改完前端务必递增 `index.html` 里 `app.js`/`styles.css` 的 `?v=`（当前 `wb32`/`wb17`），否则浏览器缓存会加载旧脚本。
+改完前端务必递增 `index.html` 里 `app.js`/`styles.css`/`quote-dashboard.css` 的 `?v=`，否则浏览器缓存会加载旧脚本。API 基址如需换环境，改 `API_BASE`（app.js 与 workbench.js 各一处）。
 
 **已知缺口**：`cost_composition` 目前是**项目级单一分解**，逐项覆盖属后续扩展（机制已预留）；9% 服务桶假定非货物成本均按 9% 进项，若含无票自有劳务（真实 0%）会略微高估可抵扣。**项目固定成本 / 隐形成本链路仍未闭环**，模型利润 ≠ 最终财务利润。
 
 ## 0. 先看结论
 
-这是一个「给定总报价，联合求解分部分项综合单价」的报价优化项目。当前已形成 **计算内核 + 网页报价平台 + 个人工作台** 三层完整闭环，全量测试 **1534 项通过**（`python -m unittest discover -s tests -t .`），并已版本化、可推送到私有仓库。
+这是一个「给定总报价，联合求解分部分项综合单价」的报价优化项目。当前已形成 **计算内核 + 网页报价平台 + 个人工作台** 三层完整闭环，全量测试 **1539 项通过**（`python -m unittest discover -s tests -t .`），并已版本化、可推送到私有仓库。
 
 接手时必须记住四件事：
 

@@ -247,23 +247,22 @@ class RealFileSmokeTest(unittest.TestCase):
         self.assertEqual(self.bid.failures, [])
 
     def test_row_count_and_key_agreement(self):
-        # 83/82 行业务依据（H-001，回退到本地 09-19 旧样本）：
-        # 限价清单 83 行、报价清单 82 行。限价侧独有的项：03B015 运行准备（单价空），
-        # 报价侧未列项——「限价侧独有」≠「无最高限价」，分列不合并。
+        # 84/82 行业务依据（H-001，本地真实样本 84 行版）：
+        # 限价清单 84 行、报价清单 82 行。限价侧独有项：03B015 运行准备（单价空）与
+        # 03B016（单价非空），报价侧均未列项——「限价侧独有」≠「无最高限价」，分列不合并。
         # 报价侧没有限价侧缺失的项。两份源文件 sha256 不同。
-        # ★ 注：远程测试期望曾在 2026-09-20 按更新后的 84 行样本推导（含新增
-        #   03B016 一行）；本地样本仍为 83 行旧版，故回退断言以匹配本地真实样本。
-        self.assertEqual(len(self.cap.rows), 83)
+        self.assertEqual(len(self.cap.rows), 84)
         self.assertEqual(len(self.bid.rows), 82)
         ck = {(r.unit_work, r.item_id) for r in self.cap.rows}
         bk = {(r.unit_work, r.item_id) for r in self.bid.rows}
-        self.assertEqual(ck - bk, {("电气设备安装工程", "03B015")})
+        self.assertEqual(
+            ck - bk, {("电气设备安装工程", "03B015"), ("电气设备安装工程", "03B016")})
         self.assertEqual(bk - ck, set())
 
     def test_code_kind_distribution(self):
         kinds = [r.code_kind for r in self.cap.rows]
         self.assertEqual(kinds.count("STANDARD"), 68)
-        self.assertEqual(kinds.count("SUPPLEMENTARY"), 15)  # 含限价独有 03B015
+        self.assertEqual(kinds.count("SUPPLEMENTARY"), 16)  # 含限价独有 03B015 / 03B016
 
     def test_weighted_discount_reproduces_pair_json(self):
         """与 T01-02C 固化样本独立复算：加权下浮 8.0084% 应重现。"""
@@ -292,9 +291,9 @@ class RealFileSmokeTest(unittest.TestCase):
     def test_cap_side_known_gap_is_scaffold_item(self):
         """已知数据缺口：限价侧单价为空的项（空值≠缺行，ADR-0006）。
 
-        仅 031301017001 脚手架搭拆（标准码）与 03B015 运行准备（补充码）单价为空。
-        注：规程中以「限价侧独有」与「无最高限价」区分项，远程期望曾含 03B016；
-        本地 09-19 旧样本无该项，故此处仅断言 03B015 为限价侧独有。
+        仅 031301017001 脚手架搭拆（标准码）与 03B015 运行准备（补充码）单价为空；
+        03B016 单价非空、不属「单价空缺口」。注：「限价侧独有」与「无最高限价」分列——
+        限价独有项为 03B015 / 03B016，其中 03B015 单价空。
         """
         gaps = [r for r in self.cap.rows if not r.unit_price]
         self.assertEqual(sorted(r.item_id for r in gaps), ["031301017001", "03B015"])

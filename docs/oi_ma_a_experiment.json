@@ -1,0 +1,133 @@
+{
+  "experiment": "OI-MA-A M_hi scaling vs HiGHS B&B convergence",
+  "runs_per_k": 5,
+  "scales": [
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    100.0
+  ],
+  "probe": {
+    "1.0": {
+      "k": 1.0,
+      "status": "OPTIMAL",
+      "mip_objective": 460000.0,
+      "lp_relaxation_objective": 460000.0,
+      "lp_overoptimality_rel": 0.0,
+      "mip_node_count": 0.0,
+      "mip_gap": 0.0,
+      "wall_ms_median": 3.0758,
+      "wall_ms_max": 243.2161
+    },
+    "2.0": {
+      "k": 2.0,
+      "status": "OPTIMAL",
+      "mip_objective": 460000.0,
+      "lp_relaxation_objective": 460000.0,
+      "lp_overoptimality_rel": 0.0,
+      "mip_node_count": 0.0,
+      "mip_gap": 0.0,
+      "wall_ms_median": 1.7164,
+      "wall_ms_max": 2.2364
+    },
+    "5.0": {
+      "k": 5.0,
+      "status": "OPTIMAL",
+      "mip_objective": 460000.0,
+      "lp_relaxation_objective": 460000.0,
+      "lp_overoptimality_rel": 0.0,
+      "mip_node_count": 0.0,
+      "mip_gap": 0.0,
+      "wall_ms_median": 1.724,
+      "wall_ms_max": 2.6933
+    },
+    "10.0": {
+      "k": 10.0,
+      "status": "OPTIMAL",
+      "mip_objective": 460000.0,
+      "lp_relaxation_objective": 460000.0,
+      "lp_overoptimality_rel": 0.0,
+      "mip_node_count": 0.0,
+      "mip_gap": 0.0,
+      "wall_ms_median": 1.7413,
+      "wall_ms_max": 2.3783
+    },
+    "100.0": {
+      "k": 100.0,
+      "status": "OPTIMAL",
+      "mip_objective": 460000.0,
+      "lp_relaxation_objective": 460000.0,
+      "lp_overoptimality_rel": 0.0,
+      "mip_node_count": 0.0,
+      "mip_gap": 0.0,
+      "wall_ms_median": 1.5965,
+      "wall_ms_max": 1.9239
+    }
+  },
+  "synthetic": {
+    "n_items": 60,
+    "n_vars": 120,
+    "n_rows": 239,
+    "n_c7_upper_rows": 60,
+    "results": {
+      "1.0": {
+        "k": 1.0,
+        "status": "OPTIMAL",
+        "mip_objective": 12163.931999999997,
+        "lp_relaxation_objective": 12163.931999999995,
+        "lp_overoptimality_rel": -0.0,
+        "mip_node_count": 1.0,
+        "mip_gap": 0.0,
+        "wall_ms_median": 26.6853,
+        "wall_ms_max": 27.8271
+      },
+      "2.0": {
+        "k": 2.0,
+        "status": "OPTIMAL",
+        "mip_objective": 12163.931999999997,
+        "lp_relaxation_objective": 12163.931999999995,
+        "lp_overoptimality_rel": -0.0,
+        "mip_node_count": 1.0,
+        "mip_gap": 0.0,
+        "wall_ms_median": 27.1108,
+        "wall_ms_max": 30.2405
+      },
+      "5.0": {
+        "k": 5.0,
+        "status": "OPTIMAL",
+        "mip_objective": 12163.931999999995,
+        "lp_relaxation_objective": 12163.931999999995,
+        "lp_overoptimality_rel": 0.0,
+        "mip_node_count": 1.0,
+        "mip_gap": 0.0,
+        "wall_ms_median": 27.8128,
+        "wall_ms_max": 28.8824
+      },
+      "10.0": {
+        "k": 10.0,
+        "status": "OPTIMAL",
+        "mip_objective": 12163.931999999995,
+        "lp_relaxation_objective": 12163.931999999995,
+        "lp_overoptimality_rel": 0.0,
+        "mip_node_count": 1.0,
+        "mip_gap": 0.0,
+        "wall_ms_median": 28.3997,
+        "wall_ms_max": 32.9975
+      },
+      "100.0": {
+        "k": 100.0,
+        "status": "OPTIMAL",
+        "mip_objective": 12163.931999999997,
+        "lp_relaxation_objective": 12163.931999999995,
+        "lp_overoptimality_rel": -0.0,
+        "mip_node_count": 1.0,
+        "mip_gap": 0.0,
+        "wall_ms_median": 28.7842,
+        "wall_ms_max": 31.1822
+      }
+    }
+  },
+  "probe_semantics_guard": "PASS",
+  "synthetic_semantics_guard": "PASS"
+}

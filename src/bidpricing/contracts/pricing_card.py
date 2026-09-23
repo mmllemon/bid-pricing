@@ -33,10 +33,7 @@ from .rule_sets.base import (
     DECREASE_THRESHOLD,
     INCREASE_THRESHOLD,
 )
-
-#: 状态取值——与闸门层/校验层同构
-STATUS_PASS = "PASS"
-STATUS_BLOCKED = "BLOCKED"
+from ..states import STATUS_PASS, STATUS_BLOCKED
 
 CARD_FILENAME = "pricing_rule_card.json"
 

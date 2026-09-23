@@ -132,16 +132,20 @@ def freeze_record(
     if not target.exists():
         raise FileNotFoundError(f"制品不存在：{target}")
 
+    # O14（治理审查 P2）：此前 read_text 与 compute_artifact_hash 各读一次
+    # 同一文件。这里一次读入字节，JSON 解析与 hash 派生复用同一份——不引入
+    # 全局缓存（Windows mtime 粒度下 size+mtime 相同会错缓存内容变更）。
+    raw = target.read_bytes()
     try:
-        payload = json.loads(target.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+        payload = json.loads(raw.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
         payload = None
     if isinstance(payload, dict) and payload.get("freeze_blocker"):
         raise ArtifactNotFreezable(
             f"{gate_key}.{key} 自声明未完成，拒绝冻结：{payload['freeze_blocker']}"
         )
 
-    digest = compute_artifact_hash(target)
+    digest = HASH_PREFIX + sha256_short12(raw)
     stamp = (now or datetime.now(timezone.utc)).replace(microsecond=0).isoformat()
     spec["version"] = digest
     spec["hash"] = digest
@@ -244,8 +248,8 @@ def advisories(registry: dict, config_dir: Path) -> list[dict]:
             if not path.exists():
                 continue
             try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
+                payload = json.loads(path.read_bytes().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 continue
             if not isinstance(payload, dict):
                 continue

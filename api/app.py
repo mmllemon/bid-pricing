@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import hmac
 import hashlib
+import re
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -62,6 +64,70 @@ if not sqlite_store.resolve_db_path().exists():
 #: 清单 xlsx 通常在数 MB 以内，10 MB 上限足够容容。
 _MAX_UPLOAD_MB = int(os.environ.get("BIDPRICING_MAX_UPLOAD_MB", "10"))
 
+#: job_id 白名单：仅接受 16~64 位十六进制（uuid4.hex / 派生 id），纵深防御路径穿越。
+_JOB_ID_RE = re.compile(r"^[0-9a-f]{16,64}$")
+
+
+def _valid_job_id(job_id: str) -> bool:
+    return bool(_JOB_ID_RE.match(job_id or ""))
+
+
+def _blocked_parse_error(exc: Exception, endpoint: str = "/api/quote/preview") -> JSONResponse:
+    """Excel 解析失败的稳定错误响应：原始异常写日志，不回显内部路径/库名。
+
+    O5（治理审查 P0）：此前两处 `except Exception` 把 `str(exc)` 直接回给用户，
+    可能泄露绝对路径与底层库名，且不进 LOG_DIR。
+    统一改为先记结构化日志、再返回固定文案。
+    """
+    log_event(LOG_DIR, CURRENT_USER, endpoint, "ERROR", detail=repr(exc))
+    return JSONResponse(status_code=400, content={
+        "status": "BLOCKED",
+        "reason": "Excel 识别失败：文件无法解析（明细已记入服务端日志，请核对清单/成本文件是否为合规的 xlsx 且含单价列）",
+    })
+
+
+def _export_xlsx(rec_result: dict, out_id: str) -> str | None:
+    """导出 JSON+XLSX 到 WEB_OUTPUT_DIR，返回 excel_download_url 或 None。
+
+    O7（治理审查 P1）：此前 optimize / recompute / rebuild 三处各自
+    write_text + subprocess.run(node build_web_result.mjs)，参数完全一致。
+    统一为一个单点，失败时在 rec_result 上挂 excel_export_warning（不抛异常）。
+    """
+    json_path = WEB_OUTPUT_DIR / f"{out_id}.json"
+    xlsx_path = WEB_OUTPUT_DIR / f"{out_id}.xlsx"
+    json_path.write_text(json.dumps(rec_result, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(xlsx_path)],
+                       cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
+        return f"/api/quote/download/{out_id}"
+    except (subprocess.SubprocessError, OSError) as exc:
+        rec_result["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
+        return None
+
+
+def _validate_quote_params(*, vat_rate, surtax_rate, target_total, fixed_pretax,
+                           cost_input_vat_rate=None, credit_ratio=None,
+                           ratio_min=0.5, ratio_max=1.0) -> JSONResponse | None:
+    """报价参数合法性校验。返回 JSONResponse(400) 或 None。
+
+    O7（治理审查 P1）：此前 optimize 与 recompute 各自四段 if 校验，
+    后者漏校验 target_total > 0 与 fixed_pretax >= 0，语义漂移已开始。
+    统一为一个单点，可选参数缺省时跳过。
+    """
+    if not (0.0 <= vat_rate <= 1.0) or not (0.0 <= surtax_rate <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "税率非法：增值税率/附加税率须为 0～1 之间的小数（0.09 = 9%、0.12 = 12%），请勿输入百分数"})
+    if target_total is None or target_total <= 0:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "目标总报价非法：须为正数"})
+    if fixed_pretax is None or fixed_pretax < 0:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "固定税前项非法：须为非负数"})
+    if not (0.0 <= ratio_min <= ratio_max <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "单项报价比率区间非法：必须满足 0 ≤ 下限 ≤ 上限 ≤ 1.00"})
+    if cost_input_vat_rate is not None and not (0.0 <= cost_input_vat_rate <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "进项增值税率非法：须为 0～1 之间的小数（0.13 = 13%）"})
+    if credit_ratio is not None and not (0.0 <= credit_ratio <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "进项税额抵扣比例非法：须为 0～1 之间的小数（0.70 = 70%）"})
+    return None
+
 
 async def _read_upload_limited(file: UploadFile, max_mb: int = _MAX_UPLOAD_MB) -> tuple[bytes | None, str | None]:
     """读取 UploadFile 内容并检查体积；超限返回 (None, reason) 而 (data, None)。"""
@@ -72,7 +138,18 @@ async def _read_upload_limited(file: UploadFile, max_mb: int = _MAX_UPLOAD_MB) -
             f"上传文件超过 {_MAX_UPLOAD_MB} MB 上限"
             f"（实际 {len(data) / 1024 / 1024:.2f} MB）"
         )
+    if not _is_xlsx_magic(data):
+        return None, "上传文件格式错误：仅接受 .xlsx 文件（ZIP 魔数校验失败）"
     return data, None
+
+
+#: xlsx 是 ZIP 格式，前 4 字节为 PK\\x03\\x04（O18：上传无 MIME/魔数校验）
+_XLSX_MAGIC = b"PK\x03\x04"
+
+
+def _is_xlsx_magic(data: bytes) -> bool:
+    """检查文件魔数：xlsx 是 ZIP 格式，前 4 字节须为 PK\\x03\\x04。"""
+    return data[:4] == _XLSX_MAGIC
 
 
 
@@ -143,9 +220,16 @@ def _low_price_guard(params: dict, low_policy: dict) -> JSONResponse | None:
     return None
 
 app = FastAPI(title="工程智算报价 API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
+                   allow_methods=["GET", "POST"], allow_headers=["Authorization", "X-API-Token", "Content-Type", "Accept"])
 WEB_OUTPUT_DIR = user_scope(ROOT / "outputs" / "web-results", CURRENT_USER)
 WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+#: 槽位写入互斥锁：并发请求命中同组同策略槽位时，
+#: 「读槽位 → 写 json/xlsx → 落 SQLite → 回写槽位」序列须原子化。
+#: O4（治理审查 P0）：此前文件写入在 SQLite 锁之前，Windows 下 O_TRUNC 非原子，
+#: 并发可能产出半成品产物。参照 deployment.py 的 threading.Lock 模式。
+_SLOT_LOCK = threading.Lock()
 
 
 @app.middleware("http")
@@ -203,6 +287,25 @@ async def _auth_guard(request, call_next):
     return await call_next(request)
 
 
+#: F-16（UI/UX 审查 P2）：CSP header，限制内联脚本/事件处理器。
+#: 静态文件由 uvicorn 直接服务，不经 API 路由，故仅对非 /api 响应注入。
+_CSP_HEADER = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "connect-src 'self' http://127.0.0.1:8000"
+)
+
+
+@app.middleware("http")
+async def _csp_guard(request, call_next):
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Content-Security-Policy"] = _CSP_HEADER
+    return response
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "bidpricing"}
@@ -223,7 +326,7 @@ async def preview_quote(limit_file: UploadFile = File(...), cost_file: UploadFil
         try:
             pid, matched = _parse_clean_match(cap_path, cost_path, proj_name)
         except Exception as exc:  # noqa: BLE001
-            return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"Excel 识别失败：{exc}"})
+            return _blocked_parse_error(exc, "/api/quote/preview")
         payload = build_listing_preview(matched, pid)
         payload["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
         payload["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
@@ -232,6 +335,8 @@ async def preview_quote(limit_file: UploadFile = File(...), cost_file: UploadFil
 
 @app.get("/api/quote/download/{job_id}")
 def download_quote(job_id: str):
+    if not _valid_job_id(job_id):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "非法的报价文件 id"})
     fname = _excel_filename(job_id)
     path = WEB_OUTPUT_DIR / f"{job_id}.xlsx"
     if path.exists() and path.parent == WEB_OUTPUT_DIR:
@@ -262,13 +367,8 @@ def _rebuild_xlsx(job_id: str) -> Path | None:
     rec = load_plan(job_id)
     if not rec or not rec.get("result"):
         return None
-    json_path = WEB_OUTPUT_DIR / f"{job_id}.json"
     xlsx_path = WEB_OUTPUT_DIR / f"{job_id}.xlsx"
-    try:
-        json_path.write_text(json.dumps(rec["result"], ensure_ascii=False, indent=2), encoding="utf-8")
-        subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(xlsx_path)], cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
-    except (subprocess.SubprocessError, OSError):
-        return None
+    _export_xlsx(rec["result"], job_id)
     return xlsx_path if xlsx_path.exists() else None
 
 
@@ -279,10 +379,12 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"未知报价策略：{strategy}（可选：{'、'.join(sorted(STRATEGIES))}）"})
     if not clause_enabled:
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "当前版本要求启用 C13 结算调整条款"})
-    if not (0.0 <= ratio_min <= ratio_max <= 1.0):
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "单项报价比率区间非法：必须满足 0 ≤ 下限 ≤ 上限 ≤ 1.00"})
-    if not (0.0 <= vat_rate <= 1.0) or not (0.0 <= surtax_rate <= 1.0):
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "税率非法：增值税率/附加税率须为 0～1 之间的小数（0.09 = 9%、0.12 = 12%），请勿输入百分数"})
+    _param_err = _validate_quote_params(
+        vat_rate=vat_rate, surtax_rate=surtax_rate, target_total=target_total,
+        fixed_pretax=fixed_pretax, cost_input_vat_rate=cost_input_vat_rate,
+        credit_ratio=credit_ratio, ratio_min=ratio_min, ratio_max=ratio_max)
+    if _param_err is not None:
+        return _param_err
     # 项目凭证：project_id 必须为经营概览的真实项目 id（UUID）；project_name 仅用于展示/目录/文件名。
     proj_uuid = project_id.strip()
     proj_name = project_name.strip() or proj_uuid or "当前项目"
@@ -303,7 +405,7 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         try:
             pid, matched = _parse_clean_match(cap_path, cost_path, proj_name)
         except Exception as exc:  # noqa: BLE001
-            return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"Excel 识别失败：{exc}"})
+            return _blocked_parse_error(exc, "/api/quote/optimize")
         all_items = [{"item_id": row.item_id, "item_name": row.item_name, "unit": getattr(row, "unit", "") or "", "q0": row.q0, "q1_point": row.q1_point, "c_i": row.c_i, "cap": row.cap, "L": (float(row.cap) * ratio_min if row.cap is not None else 0.0), "U": (float(row.cap) * ratio_max if row.cap is not None else None)} for row in matched.items if row.q0 is not None or row.q1_point is not None]
         result, payload, status_code = _run_resolve(all_items, params, low_policy, matched, tax_policy_override=tax_override, strategy=strategy)
         if status_code != 200:
@@ -326,36 +428,35 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
             effective_group_id = create_group(
                 proj_uuid or pid, proj_name, target_total=target_total)["group_id"]
         # 同组同策略槽位复用；未命中则新建 plan_id
-        job_id = find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
-        # 校验 group 归属（A2）：防止跨项目写入他人的方案组
-        if effective_group_id:
-            group_info = find_group_by_id(effective_group_id)
-            if group_info and proj_uuid and group_info.get("project_id") != proj_uuid:
-                return JSONResponse(
-                    status_code=403,
-                    content={"status": "FORBIDDEN",
-                             "reason": f"方案组 {effective_group_id} 归属项目 "
-                                       f"{group_info.get('project_id')!r}，拒绝以当前项目 "
-                                       f"{proj_uuid!r} 写入"}
-                )
-        preview = build_listing_preview(matched, pid)
-        preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
-        preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
-        payload["plan_id"] = job_id
-        payload["group_id"] = effective_group_id
-        # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
-        json_path, xlsx_path = WEB_OUTPUT_DIR / f"{job_id}.json", WEB_OUTPUT_DIR / f"{job_id}.xlsx"
-        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        try:
-            subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(xlsx_path)], cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
-            payload["excel_download_url"] = f"/api/quote/download/{job_id}"
-        except (subprocess.SubprocessError, OSError) as exc:
-            payload["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
-        try:
-            save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
-            upsert_slot(effective_group_id, strategy, job_id)
-        except (PlanOwnershipError, StoreWriteLockedError) as exc:
-            return JSONResponse(status_code=409, content={"status": "BLOCKED", "reason": str(exc)})
+        # O4：「读槽位 → 写 json/xlsx → 落 SQLite → 回写槽位」序列须原子化，
+        # 防止并发请求命中同槽位时 O_TRUNC 产出半成品产物。
+        with _SLOT_LOCK:
+            job_id = find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
+            # 校验 group 归属（A2）：防止跨项目写入他人的方案组
+            if effective_group_id:
+                group_info = find_group_by_id(effective_group_id)
+                if group_info and proj_uuid and group_info.get("project_id") != proj_uuid:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"status": "FORBIDDEN",
+                                 "reason": f"方案组 {effective_group_id} 归属项目 "
+                                           f"{group_info.get('project_id')!r}，拒绝以当前项目 "
+                                           f"{proj_uuid!r} 写入"}
+                    )
+            preview = build_listing_preview(matched, pid)
+            preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
+            preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
+            payload["plan_id"] = job_id
+            payload["group_id"] = effective_group_id
+            # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
+            excel_url = _export_xlsx(payload, job_id)
+            if excel_url:
+                payload["excel_download_url"] = excel_url
+            try:
+                save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
+                upsert_slot(effective_group_id, strategy, job_id)
+            except (PlanOwnershipError, StoreWriteLockedError) as exc:
+                return JSONResponse(status_code=409, content={"status": "BLOCKED", "reason": str(exc)})
         append_audit(CURRENT_USER, "quote.optimize", "PASS",
                      project_id=proj_uuid or pid, plan_id=job_id, group_id=effective_group_id,
                      objective=payload.get("objective"))
@@ -485,10 +586,11 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"未知报价策略：{strategy}（可选：{'、'.join(sorted(STRATEGIES))}）"})
     if not clause_enabled:
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "当前版本要求启用 C13 结算调整条款"})
-    if not (0.0 <= ratio_min <= ratio_max <= 1.0):
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "单项报价比率区间非法：必须满足 0 ≤ 下限 ≤ 上限 ≤ 1.00"})
-    if not (0.0 <= vat_rate <= 1.0) or not (0.0 <= surtax_rate <= 1.0):
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "税率非法：增值税率/附加税率须为 0～1 之间的小数（0.09 = 9%、0.12 = 12%），请勿输入百分数"})
+    _param_err = _validate_quote_params(
+        vat_rate=vat_rate, surtax_rate=surtax_rate, target_total=target_total,
+        fixed_pretax=fixed_pretax, ratio_min=ratio_min, ratio_max=ratio_max)
+    if _param_err is not None:
+        return _param_err
     low_policy, _, _ = _load_low_policy()
     # 重算时保留方案原有的关联经营项目 id（前端重算表单不含该字段）
     _keep_ov = (rec.get("params") or {}).get("overview_id", "")
@@ -497,6 +599,10 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
     mode = (input_vat_credit_mode or "").strip() or rec_params.get("input_vat_credit_mode") or "PARTIAL"
     rate = cost_input_vat_rate if cost_input_vat_rate is not None else rec_params.get("cost_input_vat_rate", 0.13)
     cr = credit_ratio if credit_ratio is not None else rec_params.get("credit_ratio", 0.70)
+    if not (0.0 <= float(rate) <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "进项增值税率非法：须为 0～1 之间的小数（0.13 = 13%）"})
+    if not (0.0 <= float(cr) <= 1.0):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "进项税额抵扣比例非法：须为 0～1 之间的小数（0.70 = 70%）"})
     comp = cost_composition or rec_params.get("cost_composition") or ""
     tax_override = _build_tax_override(mode, rate, cr, comp)
     params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": _keep_ov, "input_vat_credit_mode": mode, "cost_input_vat_rate": rate, "credit_ratio": cr, "cost_composition": tax_override.get("cost_composition")}
@@ -510,13 +616,9 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
     payload.update({"project_id": rec.get("name") or id, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "strategy": strategy})
     payload["plan_id"] = id
     # 与 optimize 一致：先导出再落盘，保存的方案 result 须带 excel_download_url，否则打开方案时「下载 Excel」为 '#' 无反应
-    json_path, xlsx_path = WEB_OUTPUT_DIR / f"{id}.json", WEB_OUTPUT_DIR / f"{id}.xlsx"
-    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    try:
-        subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(xlsx_path)], cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
-        payload["excel_download_url"] = f"/api/quote/download/{id}"
-    except (subprocess.SubprocessError, OSError) as exc:
-        payload["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
+    excel_url = _export_xlsx(payload, id)
+    if excel_url:
+        payload["excel_download_url"] = excel_url
     merged = dict(rec)
     merged["params"] = dict(params)
     merged["result"] = payload

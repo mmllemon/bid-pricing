@@ -1,6 +1,6 @@
 # ADR-0021：LP 形式化 —— 目标线性性是 LP 成立的唯一依据；三条约束须改变位置
 
-- 状态：已采纳（2026-09-17）
+- 状态：已采纳（2026-09-17）｜ **决策一已被 ADR-0022 推翻**（superseded-in-part：见下「后续修正」）
 - 任务：T04-02A
 - 制品：`config/lp_formulation_spec.json`
 - 实现：`src/bidpricing/solver/formulation.py`、`cli formulate-check`
@@ -40,6 +40,14 @@ Z = Σ_{i∈X_opt} q1_i · ( r_eff_i · p_i − c_i )
 容易搞混的是两个边际：`∂R_i/∂p_i = q0_i · r_eff_i`（收入对报价，这正是
 `r_eff` 的定义式）与 `∂Z/∂p_i = q1_i · r_eff_i`（目标对报价）。二者相差 `r_i` 倍。
 **F-02 检前者**，目标系数由前者乘 `r_i` 导出，不得各自实现一份。
+
+> ⚠ **后续修正（2026-09-19，superseded-in-part）**：`∂Z/∂p_i = q1_i · r_eff_i`
+> 一句**已被 ADR-0022 决策三推翻**。正确形式是 `∂Z/∂p_i = q0_i · r_eff_i`
+> （即目标对 p 的边际等于收入对 p 的边际；目标不含 p 的项 `c_i·q1_i` 与 p 无关）。
+> 原写法把排序键 `(目标系数)/(C1 系数)` 又乘了一遍 `r_i`，导致解满足全部约束但次优。
+> 见 [`ADR-0022`](ADR-0022-lp-compiler-positions.md) 决策三。
+> 本 ADR 决策一的**结论**（LP 成立、MILP 唯一来源是 C7 的 `z_i`）仍然成立；
+> 被推翻的仅是**边际表达式**，不是 LP 的线性性结论。
 
 ### 二、C5 的 LP 下界必须抬到报价分辨率
 

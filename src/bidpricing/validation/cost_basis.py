@@ -21,13 +21,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from ..money import money
-
-STATUS_PASS = "PASS"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_WARN = "WARN"
-STATUS_INFO = "INFO"
-STATUS_SKIP = "SKIP"
+from ..states import STATUS_PASS, STATUS_FAIL, STATUS_BLOCKED, STATUS_WARN, STATUS_INFO, STATUS_SKIP
 
 #: T00-09 要求的八项分解——**键序即规范顺序**，改任一侧须同步两侧。
 REQUIRED_COMPONENTS = (

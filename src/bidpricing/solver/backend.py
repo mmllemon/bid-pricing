@@ -1262,8 +1262,9 @@ def check_backend(
         if not adapter.exists():
             adapter = src / "solver" / "backend.py"
         if adapter.exists():
+            _tree = ast.parse(adapter.read_text(encoding="utf-8"))
             leaked = sorted({
-                v for _ln, v in _code_string_literals(adapter.read_text(encoding="utf-8"))
+                v for _ln, v in _iter_code_string_literals(_tree)
                 if v in {n for _f, n in domain.all_natives}
             })
             if leaked:
@@ -1502,74 +1503,15 @@ def _rel_posix(path: Path, src_root: Path) -> str:
     return Path(path).resolve().relative_to(Path(src_root).resolve()).as_posix()
 
 
-def _docstring_nodes(tree: ast.Module) -> set[int]:
-    """收集全部 docstring 的 Constant 节点 id（模块/类/函数体的首条字符串）。"""
-    out: set[int] = set()
-    for node in ast.walk(tree):
-        body = getattr(node, "body", None)
-        if not isinstance(body, list) or not body:
-            continue
-        first = body[0]
-        if (
-            isinstance(first, ast.Expr)
-            and isinstance(first.value, ast.Constant)
-            and isinstance(first.value.value, str)
-        ):
-            out.add(id(first.value))
-    return out
-
-
-def _code_string_literals(source: str) -> list[tuple[int, str]]:
-    """源码里**参与代码**的字符串字面量（docstring 排除）。
-
-    判据要拦的是「代码路径上有一份硬拷贝」，不是「文档里提到了这个词」。
-    把 docstring 算进来会让判据惩罚注释的详尽程度——那是反的。
-    """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:                          # pragma: no cover - 防御
-        return []
-    skip = _docstring_nodes(tree)
-    out: list[tuple[int, str]] = []
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and id(node) not in skip
-        ):
-            out.append((getattr(node, "lineno", -1), node.value))
-    return out
-
-
-def _module_level_imports(tree: ast.Module) -> list[tuple[int, str]]:
-    """只看模块顶层的 import（函数体内的惰性 import 不算）。"""
-    out: list[tuple[int, str]] = []
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            for a in node.names:
-                out.append((node.lineno, a.name.split(".")[0]))
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                out.append((node.lineno, node.module.split(".")[0]))
-    return out
-
-
-def _all_imports(tree: ast.Module) -> list[tuple[int, str, bool]]:
-    """全部 import：``(lineno, 顶层包名, 是否函数体内)``。"""
-    parent: dict[int, bool] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for sub in ast.walk(node):
-                parent[id(sub)] = True
-    out: list[tuple[int, str, bool]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for a in node.names:
-                out.append((node.lineno, a.name.split(".")[0], parent.get(id(node), False)))
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                out.append((node.lineno, node.module.split(".")[0], parent.get(id(node), False)))
-    return out
+# O9 收敛：AST visitor 函数已抽至 _audit.py，此处仅保留导入与业务封装。
+from .._audit import (
+    docstring_node_ids as _docstring_nodes,
+    iter_call_names,
+    iter_code_string_literals as _iter_code_string_literals,
+    iter_module_level_imports as _iter_module_level_imports,
+    iter_imports as _iter_all_imports,
+    iter_branch_string_constants as _iter_branch_string_constants,
+)
 
 
 def audit_source_tree(
@@ -1598,7 +1540,7 @@ def audit_source_tree(
         except SyntaxError as exc:                # pragma: no cover - 防御
             problems.append(f"{rel}: 解析失败 {exc}")
             continue
-        for lineno, pkg, in_func in _all_imports(tree):
+        for lineno, pkg, in_func in _iter_all_imports(tree):
             if pkg not in pkgs:
                 continue
             if rel not in allow_import:
@@ -1611,16 +1553,12 @@ def audit_source_tree(
                     f"{rel}:{lineno} 求解器包 {pkg!r} 用了**模块级** import ⇒ "
                     "没装包时 import 期即失败，SKIP 退化为 ImportError"
                 )
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            fn = node.func
-            if isinstance(fn, ast.Attribute) and fn.attr == "solve":
-                if rel not in allow_call:
-                    problems.append(
-                        f"{rel}:{node.lineno} 业务层调用了 .solve() ⇒ "
-                        "业务逻辑不得求解（模型与解必须分家）"
-                    )
+        for lineno, name in iter_call_names(tree):
+            if name == "solve" and rel not in allow_call:
+                problems.append(
+                    f"{rel}:{lineno} 业务层调用了 .solve() ⇒ "
+                    "业务逻辑不得求解（模型与解必须分家）"
+                )
     return problems
 
 
@@ -1642,15 +1580,10 @@ def _audit_comparison_branches(
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except SyntaxError:                       # pragma: no cover - 防御
             continue
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.If, ast.While)):
-                continue
-            for sub in ast.walk(node.test):
-                if not isinstance(sub, ast.Constant) or not isinstance(sub.value, str):
-                    continue
-                if sub.value in wanted:
-                    problems.append(
-                        f"{rel}:{sub.lineno} 后端名 {sub.value!r} 出现在分支条件里 "
-                        "⇒ 换后端要改代码，不只是改配置"
-                    )
+        for lineno, value in _iter_branch_string_constants(tree):
+            if value in wanted:
+                problems.append(
+                    f"{rel}:{lineno} 后端名 {value!r} 出现在分支条件里 "
+                    "⇒ 换后端要改代码，不只是改配置"
+                )
     return sorted(set(problems))

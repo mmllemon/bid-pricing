@@ -14,11 +14,17 @@ function setMessage(text, kind = '') {
   const tm = document.querySelector('#toastMsg');
   if (!tp || !tm) return;
   tp.className = 'toast-pill' + (kind ? ' toast-' + kind : '');
-  tm.innerHTML = text;
+  tm.innerHTML = _safeToastHtml(text);
   tp.classList.add('show');
   clearTimeout(toastTimer);
   const ms = kind === 'success' ? 3500 : kind === 'error' ? 6000 : 4000;
   toastTimer = setTimeout(() => tp.classList.remove('show'), ms);
+}
+// F-11：setMessage 的 text 参数来自 API 响应与用户输入，此前直接注入 innerHTML 构成 XSS 面。
+// 白名单过滤：仅允许 <b>/<strong>/<br> 三种安全标签（现有调用含 <b>已保存</b> 等粗体），
+// 其它所有标签一律剥除，防止 <script>/<img onerror>/事件处理器等注入。
+function _safeToastHtml(text) {
+  return String(text ?? '').replace(/<(?!\/?(b|strong|br)\b)[^>]*>/g, '');
 }
 
 // 即时校验：比率区间非法在提交前拦截，并给对应输入框加错误态/焦点，避免空跑服务端再 422。

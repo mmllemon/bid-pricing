@@ -48,14 +48,11 @@ from .instance import (
 
 SPEC_FILENAME = "lp_formulation_spec.json"
 
+from ..states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED, STATUS_SKIP
+
 #: 本层的状态域——全局 ``Status`` 只有四态，而这里需要 **SKIP**：缺实例时
 #: 「没检查」必须与「检查过且通过」可区分，否则漏检会被读成通过。
 #: SKIP 刻意不进闸门聚合（它不改变任何结论），但也绝不等于 PASS。
-STATUS_PASS = "PASS"
-STATUS_WARN = "WARN"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_SKIP = "SKIP"
 
 #: 求解器内可执行的形式——这些条目必须给出非空且可解析的 coefficient_sources。
 LP_FORMS: tuple[str, ...] = (

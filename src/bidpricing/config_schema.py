@@ -48,7 +48,7 @@ def validate_config_schema(schema: dict[str, Any]) -> list[ConfigSchemaIssue]:
             if definition.get("required") and definition.get("default") is not None:
                 issues.append(ConfigSchemaIssue(sheet, key, "required 字段禁止配置隐式 default"))
             enum = definition.get("enum")
-            if definition.get("type") == "enum" and not isinstance(enum, list) or definition.get("type") != "enum" and enum is not None:
+            if (definition.get("type") == "enum" and not isinstance(enum, list)) or (definition.get("type") != "enum" and enum is not None):
                 issues.append(ConfigSchemaIssue(sheet, key, "enum 必须与 type=enum 一致"))
     return issues
 

@@ -28,10 +28,7 @@ ROLE_NON_COMPETITIVE = "NON_COMPETITIVE"
 ROLE_PASS_THROUGH = "PASS_THROUGH"
 
 #: 判定状态取值——与闸门层/校验层同构（config/constraint_schema.status_domain）
-STATUS_PASS = "PASS"
-STATUS_WARN = "WARN"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
+from ..states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED
 
 #: 单价舍入分辨率（元）——与 precision_profile.rounding.resolution 同源。
 PRICE_RESOLUTION = 0.01

@@ -35,14 +35,9 @@ from typing import Any, Mapping, Sequence
 from .formulation import compute_lb_c5
 from .instance import Phase1Instance, Phase1Item
 from ..paths import config_dir
+from ..states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED, STATUS_SKIP
 
 SPEC_FILENAME = "constraint_judge_spec.json"
-
-STATUS_PASS = "PASS"
-STATUS_WARN = "WARN"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_SKIP = "SKIP"
 
 #: 聚合序——最严在前；空判据集 ⇒ BLOCKED（「没判过」不是 PASS）。
 STATUS_ORDER: tuple[str, ...] = (

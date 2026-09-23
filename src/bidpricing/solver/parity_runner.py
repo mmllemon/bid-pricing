@@ -39,6 +39,7 @@ from .parity import (
     load_spec,
     resolve_tolerances,
 )
+from ..states import _STATUS_ORDER
 
 BUNDLE_SCHEMA = "phase12_parity_input_v1"
 REPORT_TASK = "T04-04"
@@ -46,7 +47,7 @@ REPORTER = "src/bidpricing/solver/parity_runner.py"
 
 #: 聚合序：FAIL 最严，PASS 最宽。**SKIP 不参与竞争**（否则带未激活项的报告
 #: 永远到不了 PASS）；空判据集 ⇒ BLOCKED。
-_STATUS_ORDER = ("FAIL", "BLOCKED", "WARN", "SKIP", "PASS")
+# _STATUS_ORDER 已统一至 states.py（O6 收敛）。
 
 #: 缺输入时结论栏里必须出现的具名 owner——把「谁该补什么」写进制品。
 MISSING_BUNDLE_OWNER = "T04-04（须给出两条路径的结果留痕：Phase 1 解析解 + Phase 2 LP/MILP）"

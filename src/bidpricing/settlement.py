@@ -44,14 +44,9 @@ from .contracts.rule_sets import (
     RuleSet,
 )
 from .paths import config_dir
+from .states import STATUS_PASS, STATUS_FAIL, STATUS_BLOCKED, STATUS_WARN, STATUS_SKIP
 
 SPEC_FILENAME = "settlement_rule_spec.json"
-
-STATUS_PASS = "PASS"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_WARN = "WARN"
-STATUS_SKIP = "SKIP"
 
 #: 严重度序（SKIP 不参与最严竞争，见 ADR-0029 跨层不变量）
 _SEVERITY = {

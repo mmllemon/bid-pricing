@@ -1317,6 +1317,19 @@ def build_parser() -> argparse.ArgumentParser:
                       help="覆盖已存在的声明书（须已备份/提交旧版）")
     p_pr.set_defaults(func=cmd_predict_register)
 
+    # ---- O19 审计链独立复核
+    p_av = sub.add_parser(
+        "audit-verify",
+        help="O19：独立复核历史审计链（previous_hash/event_hash/时序/operator/"
+             "外置锚点；外部审计员可脱离业务进程离线核验）",
+    )
+    p_av.add_argument("--input", required=True,
+                      help="审计链 JSON：事件数组，或含 events 键的对象")
+    p_av.add_argument("--anchor", default=None,
+                      help="外置留存的链尾 event_hash；缺失则整体重写无法检测")
+    p_av.add_argument("--json", action="store_true", help="输出 JSON")
+    p_av.set_defaults(func=cmd_audit_verify)
+
     return parser
 
 
@@ -4230,6 +4243,49 @@ def cmd_predict_register(args) -> int:
     print(f"\n下一步：在闭环输入束里加 \"predicted_q1_declaration\": \"{out_path}\"，")
     print(f"        跑 closed-loop / precision-monitor 即自动交叉校验。")
     return 0
+
+
+def cmd_audit_verify(args) -> int:
+    """O19（治理审查 P3）：独立复核历史审计链文件。
+
+    ``verify_audit_chain`` 已实现完整校验（previous_hash + event_hash +
+    ISO 8601 时序 + operator 一致 + 外置锚点），但此前没有 CLI 入口，
+    外部审计员无法脱离业务进程独立复核。本命令：
+    * 读入审计链 JSON（事件数组，或含 ``events`` 键的对象）；
+    * 逐条跑 ``verify_audit_chain``；
+    * 可选 ``--anchor`` 外置链尾哈希——失配即判「链被整体重写」。
+    校验通过退出 0，失败退出 1（与既有业务失败口令一致）。
+    """
+    from pathlib import Path as _P
+
+    from .audit_log import verify_audit_chain
+
+    in_path = _P(args.input)
+    if not in_path.exists():
+        print(f"■ 审计链文件不存在：{in_path}")
+        return 2
+    try:
+        doc = json.loads(in_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"■ 输入不是合法 JSON：{exc}")
+        return 2
+    events = doc.get("events") if isinstance(doc, dict) and "events" in doc else doc
+    if not isinstance(events, list) or not events:
+        print("■ 审计链须为事件数组或含 events 键的对象")
+        return 2
+    ok, errors = verify_audit_chain(events, anchor_hash=args.anchor)
+    if args.json:
+        print(json.dumps({"ok": ok, "errors": list(errors), "events": len(events)},
+                         ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+    if ok:
+        print(f"[PASS] 审计链完整（{len(events)} 事件）"
+              + (f"，外置锚点一致" if args.anchor else ""))
+        return 0
+    print(f"[BLOCKED] 审计链校验失败（{len(events)} 事件）：")
+    for err in errors:
+        print(f"   · {err}")
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:

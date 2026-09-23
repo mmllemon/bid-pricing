@@ -28,21 +28,17 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .contracts.pricing_card import ResolvedParameters
+from .states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED, STATUS_SKIP, _STATUS_ORDER
+from ._audit import iter_call_names, iter_docstring_values, iter_import_modules
 
 #: 判据范围前缀（与 CC / BB / SV / EC 并列）。
 SCOPE = "DQ"
 
 SPEC_FILENAME = "derived_quantities_spec.json"
 
-STATUS_PASS = "PASS"
-STATUS_WARN = "WARN"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_SKIP = "SKIP"
-
 #: 聚合序：取最严。BLOCKED 排在 WARN 之前，因为「算不出」会让下游所有
 #: 结论失去依据，而 WARN 至少还有一个成立的值。
-_STATUS_ORDER = (STATUS_FAIL, STATUS_BLOCKED, STATUS_WARN, STATUS_SKIP, STATUS_PASS)
+# _STATUS_ORDER 已统一至 states.py（O6 收敛）。
 
 #: ``loss_acceptance`` 的取值域（selection_options.LOSS_ACCEPTANCE）。
 LOSS_ACCEPT = "ACCEPT"
@@ -294,21 +290,12 @@ def audit_derived_source(
             source = fh.read()
 
     tree = ast.parse(source)
-    docstrings = _collect_docstrings(tree)
+    docstrings = set(iter_docstring_values(tree))
 
-    calls: list[str] = []
+    calls: list[str] = [name for _lineno, name in iter_call_names(tree)]
     imports: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            name = _call_name(node.func)
-            if name:
-                calls.append(name)
-        elif isinstance(node, ast.Import):
-            imports.extend(a.name for a in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                imports.append(node.module)
-            imports.extend(f"{node.module or ''}.{a.name}" for a in node.names)
+    for _lineno, mod in iter_import_modules(tree):
+        imports.append(mod)
 
     text_calls = [c for c in calls if c not in docstrings]
     forbidden_calls = sorted(
@@ -328,24 +315,6 @@ def audit_derived_source(
         "forbidden_imports": forbidden_imports,
         "checked_calls": len(text_calls),
     }
-
-
-def _collect_docstrings(tree: ast.AST) -> set[str]:
-    out: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            ds = ast.get_docstring(node)
-            if ds:
-                out.add(ds)
-    return out
-
-
-def _call_name(func: ast.AST) -> str | None:
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        return func.attr
-    return None
 
 
 # --------------------------------------------------------------------------

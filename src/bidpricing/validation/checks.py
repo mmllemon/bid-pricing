@@ -22,11 +22,7 @@ __all__ = [
     "load_validation_rules", "run_validation",
 ]
 
-STATUS_PASS = "PASS"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_WARN = "WARN"
-STATUS_SKIP = "SKIP"
+from ..states import STATUS_PASS, STATUS_FAIL, STATUS_BLOCKED, STATUS_WARN, STATUS_SKIP
 
 RULES_CONFIG = "validation_rules.json"
 

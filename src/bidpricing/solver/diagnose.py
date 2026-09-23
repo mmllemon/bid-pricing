@@ -39,6 +39,8 @@ from .phase1 import (
 )
 
 SPEC_FILENAME = "infeasibility_diagnosis_spec.json"
+from ..states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED, STATUS_SKIP, _STATUS_ORDER
+
 ROLES_SPEC_FILENAME = "constraint_schema.json"
 
 #: 预言机三态（spec.oracle.contract）
@@ -46,13 +48,7 @@ FEASIBLE = "FEASIBLE"
 INFEASIBLE = "INFEASIBLE"
 UNKNOWN = "UNKNOWN"
 
-#: 诊断状态域
-STATUS_PASS = "PASS"
-STATUS_WARN = "WARN"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_SKIP = "SKIP"
-_STATUS_ORDER = (STATUS_FAIL, STATUS_BLOCKED, STATUS_WARN, STATUS_SKIP, STATUS_PASS)
+#: 诊断状态域（STATUS_* 与 _STATUS_ORDER 已统一至 states.py）
 
 
 def _worst(statuses: list[str]) -> str:

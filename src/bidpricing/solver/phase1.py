@@ -69,14 +69,7 @@ SOLUTION_BLOCKED = "BLOCKED"
 _SOLUTION_DOMAIN = (SOLUTION_OPTIMAL, SOLUTION_INFEASIBLE, SOLUTION_BLOCKED)
 
 # ---- 判据域 -----------------------------------------------------------------
-STATUS_PASS = "PASS"
-STATUS_WARN = "WARN"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_SKIP = "SKIP"
-
-#: 聚合序：取最严。SKIP 排在 PASS 之前——「本轮没查」不得记成「已通过」。
-_STATUS_ORDER = (STATUS_FAIL, STATUS_BLOCKED, STATUS_WARN, STATUS_SKIP, STATUS_PASS)
+from ..states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED, STATUS_SKIP, _STATUS_ORDER
 
 # ---- 解的定位 ---------------------------------------------------------------
 ROLE_CANDIDATE = "candidate"

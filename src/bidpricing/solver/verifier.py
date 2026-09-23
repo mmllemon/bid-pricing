@@ -54,11 +54,8 @@ from .instance import (
 SPEC_FILENAME = "solution_verifier_spec.json"
 
 #: 状态域——与 F/CC/BB 判据同构的五态。
-STATUS_PASS = "PASS"
-STATUS_WARN = "WARN"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_SKIP = "SKIP"
+from ..states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED, STATUS_SKIP
+from .._audit import iter_call_names, iter_imports as iter_import_roots
 
 #: 判据域（报告里的 scope）。
 SCOPE = "SV"
@@ -620,25 +617,12 @@ def audit_verifier_source(
         return STATUS_BLOCKED, [f"无法解析 verifier 源码：{exc}"]
 
     findings: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            fn = node.func
-            name = (
-                fn.id if isinstance(fn, ast.Name)
-                else fn.attr if isinstance(fn, ast.Attribute)
-                else None
-            )
-            if name in FORBIDDEN_CALLS:
-                findings.append(f"第 {node.lineno} 行调用了内层判据 {name}(...)")
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                root = alias.name.split(".")[0]
-                if root in FORBIDDEN_IMPORTS:
-                    findings.append(f"第 {node.lineno} 行 import 了求解器包 {root}")
-        elif isinstance(node, ast.ImportFrom):
-            root = (node.module or "").split(".")[0]
-            if root in FORBIDDEN_IMPORTS:
-                findings.append(f"第 {node.lineno} 行 from {root} import ...")
+    for lineno, name in iter_call_names(tree):
+        if name in FORBIDDEN_CALLS:
+            findings.append(f"第 {lineno} 行调用了内层判据 {name}(...)")
+    for lineno, root, _in_func in iter_import_roots(tree):
+        if root in FORBIDDEN_IMPORTS:
+            findings.append(f"第 {lineno} 行 import 了求解器包 {root}")
     return (STATUS_PASS if not findings else STATUS_BLOCKED), findings
 
 

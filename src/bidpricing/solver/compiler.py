@@ -36,14 +36,13 @@ from .formulation import (
     Row,
     _f,
 )
+from ..states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED, STATUS_SKIP
+from .._audit import (
+    named_numeric_constant_ids as _named_numeric_ids,
+    structural_constant_ids as _structural_ids,
+)
 
 SPEC_FILENAME = "lp_compiler_spec.json"
-
-STATUS_PASS = "PASS"
-STATUS_WARN = "WARN"
-STATUS_FAIL = "FAIL"
-STATUS_BLOCKED = "BLOCKED"
-STATUS_SKIP = "SKIP"
 
 #: 浮点比较容差——系数逐项比对用。取相对容差的理由是系数跨多个量级
 #: （q0 可达 1e5、r_eff ~ 1），绝对容差会在大系数上误判。
@@ -1423,29 +1422,8 @@ def _audit_literals(source: str, allow: set[float]) -> list[tuple[int, float]]:
     except SyntaxError as exc:                   # pragma: no cover
         raise CompilerError(f"编译器源码无法解析：{exc}") from exc
 
-    named: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Assign, ast.AnnAssign)):
-            val = node.value
-            if isinstance(val, ast.Constant) and isinstance(val.value, (int, float)):
-                named.add(id(val))
-
-    # 切片下标/边界也是**结构系数**（制品 literal_allowlist.rationale 明写
-    # 「切片下标、偏移」）。``term[2]`` 里的 2 是下标不是系数：若不豁免，判据
-    # 又会把正常实现报成违规（首跑即把 ``_expand_c10`` 的 ``term[2]`` 报成
-    # 「手写系数 (585, 2)」）——与首版按值白名单犯的是同一类错：判据的问题，
-    # 不是实现的问题。故把出现在 Subscript 索引位 / Slice 边界的常量一并豁免。
-    structural: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Subscript):
-            for c in ast.walk(node.slice):
-                if isinstance(c, ast.Constant):
-                    structural.add(id(c))
-        elif isinstance(node, ast.Slice):
-            for b in (node.lower, node.upper, node.step):
-                if isinstance(b, ast.Constant):
-                    structural.add(id(b))
-
+    named = _named_numeric_ids(tree)
+    structural = _structural_ids(tree)
     allowed = {float(a) for a in allow}
     out: list[tuple[int, float]] = []
     for node in ast.walk(tree):

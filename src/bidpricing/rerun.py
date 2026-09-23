@@ -18,16 +18,23 @@ def load_rerun_spec(config_dir: Path | str = "config") -> dict[str, Any]:
     return json.loads((Path(config_dir) / SPEC_FILENAME).read_text(encoding="utf-8"))
 
 
-def _canonical(value: Any) -> Any:
+_META_KEYS = {"run_id", "timestamp", "created_at", "operator"}
+
+
+def _canonical(value: Any, _strip_meta: bool = True) -> Any:
+    """键排序归一；运行元信息仅剔除**顶层**（回归 A6：深层同名业务字段
+    如 items[i].operator / items[i].timestamp 参与指纹，不得静默消失）。"""
     if isinstance(value, Mapping):
-        return {str(k): _canonical(value[k]) for k in sorted(value, key=str) if k not in {"run_id", "timestamp", "created_at", "operator"}}
+        kept = {k: _canonical(v, False) for k, v in value.items()
+                if not (_strip_meta and k in _META_KEYS)}
+        return {str(k): kept[k] for k in sorted(kept, key=str)}
     if isinstance(value, (list, tuple)):
-        return [_canonical(item) for item in value]
+        return [_canonical(item, False) for item in value]
     return value
 
 
 def result_hash(result: Any) -> str:
-    """对不含运行元信息的规范结果计算稳定 SHA-256。"""
+    """对不含顶层运行元信息的规范结果计算稳定 SHA-256。"""
     payload = json.dumps(_canonical(result), ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 

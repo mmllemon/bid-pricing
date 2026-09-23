@@ -1,4 +1,4 @@
-"""T01-06 D01–D12 校验器 —— 求解前数据体检（9 阻断 + 3 告警）。
+"""T01-06 D01–D13 校验器 —— 求解前数据体检（10 阻断 + 3 告警）。
 
 规范事实源 = config/validation_rules.json（thresholds/rules）；本模块实现与
 规范由 tests/test_validation_rules.py 双向锁定（防「同一规则两处说法」）。
@@ -108,7 +108,8 @@ def run_validation(report, *, classification: dict, selection: dict,
                    history: dict | None = None, p_star: float | None = None,
                    p_star_max: float | None = None,
                    p_star_min: float | None = None,
-                   thresholds: dict | None = None) -> ValidationReport:
+                   thresholds: dict | None = None,
+                   missing_unit_price_sheets: dict | None = None) -> ValidationReport:
     """对 MatchReport 执行 D01–D11 阻断 + W01–W03 告警。
 
     threshold 默认取 config/validation_rules.json.thresholds 的值。
@@ -311,6 +312,27 @@ def run_validation(report, *, classification: dict, selection: dict,
             band = (f"[{p_star_min if p_star_min is not None else '−∞'}, "
                     f"{p_star_max if p_star_max is not None else '+∞'}]")
             res.results.append(_ok("D11", f"P*={p_star} ∈ {band}"))
+
+    # ---- D13 单价列完整性（列缺失 ≠ 单元格空） ------------------------------------
+    # 上传侧：ParseReport.missing_unit_price_sheets 由解析器按列映射判定。
+    # 列在而值空 = 合法 no_cap（D03 通道）；整列缺失 = 数据缺陷，必须阻断。
+    if missing_unit_price_sheets is None:
+        res.results.append(_blocked(
+            "D13", "未提供列完整性事实（解析侧 missing_unit_price_sheets 未传入）"))
+    else:
+        cap_missing = list(missing_unit_price_sheets.get("cap") or [])
+        cost_missing = list(missing_unit_price_sheets.get("cost") or [])
+        if cap_missing or cost_missing:
+            res.results.append(_fail(
+                "D13",
+                f"明细表缺少单价列（cap 侧 {len(cap_missing)} 张 / cost 侧 "
+                f"{len(cost_missing)} 张）：空值会被当作『不限价』，"
+                "限价与成本无法判定",
+                [f"cap:{s}" for s in cap_missing] + [f"cost:{s}" for s in cost_missing]))
+        else:
+            res.results.append(_ok(
+                "D13", "cap 与 cost 两侧明细表均含单价列"
+                       "（『不限价』只指列在而值为空，整列缺失已排除）"))
 
     # ---- D12 告警组（v0.3 D10/D11/D12 → W01/W02/W03） ----------------------------
     # W01: UNKNOWN 项金额占比 > 15%

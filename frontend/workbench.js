@@ -12,6 +12,22 @@
    ============================================================ */
 /* 后端服务基址：单一配置点（与提案报价页 app.js 的 API_BASE 保持一致） */
 const API_BASE = 'http://localhost:8000';
+
+// H-013：可选 API token——服务端启用 BIDPRICING_API_TOKEN 后，把 token 存入
+// localStorage('bidpricingApiToken')，此包装器为所有 /api 请求自动附加 Authorization。
+(() => {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    const token = (localStorage.getItem('bidpricingApiToken') || '').trim();
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (token && url.startsWith(API_BASE)) {
+      init = Object.assign({}, init || {}, {
+        headers: Object.assign({}, (init || {}).headers || {}, { Authorization: 'Bearer ' + token }),
+      });
+    }
+    return _fetch(input, init);
+  };
+})();
 const CONFIG = {
   storageKey: "gc-workbench-v2",        // 换 key 可强制重置
   owner: "我的工作台",                  // 侧栏顶部标题

@@ -14,10 +14,12 @@ from pathlib import Path
 
 from bidpricing.io.boq import (
     COLUMN_ALIASES,
+    assert_price_columns_present,
     ParseReport,
     classify_code_kind,
     parse_listing,
 )
+from bidpricing.io.clean import clean_listing_rows
 from bidpricing.io.xlsx import XlsxError, load_workbook
 
 REPO = Path(__file__).resolve().parents[1]
@@ -187,6 +189,35 @@ class ParserMechanismTest(unittest.TestCase):
             self.assertEqual(len(rep.failures), 1)
             self.assertIn("工程量为空", rep.failures[0].reason)
             self.assertFalse(any(r.item_id == "030402017002" for r in rep.rows))
+
+    def test_missing_price_column_is_defect_not_no_cap(self):
+        """回归（A1）：整列缺失 ≠ 单元格空。
+
+        无「综合单价」列时，行仍产出且 unit_price 全空——清洗层会把每一项判为合法
+        no_cap（不限价），零失败零告警、D03 放行，下游即无上界报价。此处必须留痕并阻断。
+        """
+        sheet = "表-09 分部分项工程项目清单计价表【测试单位工程】"
+        no_price = [
+            ["表-09"],
+            ["分部分项工程项目清单计价表"],
+            ["序号", "项目编码", "", "项目名称", "", "项目特征", "", "计量单位", "工程量"],
+            ["1", "030402017001", "", "高压柜A", "", "…", "", "台", "2"],
+            ["2", "030402017002", "", "变压器B", "", "…", "", "台", "1"],
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            rep = self._parse(Path(tmp), [(sheet, no_price)])
+            self.assertEqual(len(rep.rows), 2)
+            self.assertEqual(rep.missing_unit_price_sheets, [sheet])
+            self.assertEqual(len(rep.failures), 1)
+            self.assertIn("缺少单价列", rep.failures[0].reason)
+            # 旧口径的静默退化：两项都被清洗层当成合法「不限价」
+            cleaned, _ = clean_listing_rows(rep.rows, "cap")
+            self.assertTrue(all(c.no_cap for c in cleaned))
+            with self.assertRaises(XlsxError):
+                assert_price_columns_present(cap_report=rep)
+            # 成本侧同样缺列 → 一并阻断
+            with self.assertRaises(XlsxError):
+                assert_price_columns_present(cost_report=rep)
 
     def test_alias_ambiguity_blocks_not_guesses(self):
         """同一表头行命中两个「项目编码」→ 结构不可判定，整表失败。"""

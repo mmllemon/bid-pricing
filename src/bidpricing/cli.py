@@ -935,7 +935,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_iv.set_defaults(func=cmd_import_verify)
 
     p_vb = sub.add_parser("validate-boq",
-                          help="T01-06：D01–D12 数据校验（9 阻断 + 3 告警）")
+                          help="T01-06：D01–D13 数据校验（10 阻断 + 3 告警）")
     p_vb.add_argument("--cap-xlsx", required=True, help="限价清单 xlsx")
     p_vb.add_argument("--cost-xlsx", required=True, help="成本清单 xlsx")
     p_vb.add_argument("--project-id", required=True)
@@ -3422,7 +3422,7 @@ def cmd_match_boq(args) -> int:
 
 
 def cmd_validate_boq(args) -> int:
-    """T01-06：D01–D12 校验 —— 求解前数据体检（9 阻断 + 3 告警）。
+    """T01-06：D01–D13 校验 —— 求解前数据体检（10 阻断 + 3 告警）。
 
     复用 T01-04 管线（解析→清洗→匹配），再对 MatchReport 执行校验。
     规范事实源 = config/validation_rules.json。阻断级 FAIL/BLOCKED → 退出码 1。
@@ -3486,11 +3486,15 @@ def cmd_validate_boq(args) -> int:
         basis=basis, history=None,
         p_star=args.p_star, p_star_max=args.p_star_max,
         p_star_min=args.p_star_min,
+        missing_unit_price_sheets={
+            "cap": list(cap_parsed.missing_unit_price_sheets),
+            "cost": list(cost_parsed.missing_unit_price_sheets),
+        },
         thresholds=rules_cfg["thresholds"],
     )
 
     print("=" * 78)
-    print(f"D01–D12 数据校验（T01-06）：{args.project_id}")
+    print(f"D01–D13 数据校验（T01-06）：{args.project_id}")
     print("=" * 78)
     print(" " + rep.summary_line())
     print(" " + vrep.summary_line())

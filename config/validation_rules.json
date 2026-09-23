@@ -1,7 +1,7 @@
 {
   "spec_id": "validation_rules_v1",
   "task": "T01-06",
-  "source_spec": "model_v0.3.md §3.5（D01–D09 阻断 + D10–D12 告警）；model_v0.3_R2.md §3.6（D09/D10 重定义、告警改名 W01–W05）。任务板 T01-06 引用 v0.3 编号：D01–D12 = 9 阻断 + 3 告警。",
+  "source_spec": "model_v0.3.md §3.5（D01–D09 阻断 + D10–D12 告警）；model_v0.3_R2.md §3.6（D09/D10 重定义、告警改名 W01–W05）。任务板 T01-06 引用 v0.3 编号：D01–D12 = 9 阻断 + 3 告警；对抗审查（A1）追加 D13 单价列完整性（阻断）→ 现 10 阻断 + 3 告警。",
   "rebase_note": "多条规则在 2026-09-16 已裁定输入模型下 re-base（见 docs/adr/ADR-0008）：①输入 B 由输入 C 兼任 → 无投标清单量 q0 的独立来源，q1_point := 成本清单量（OI-01）；②base_i := cap_i → D03 的 base 判据收缩；③「三表」收缩为两侧 → D05 覆盖度分母改 master 并集；④无双向量比 → D11(w) 效率比 re-base 为价值比 cap/c。每条规则的 rebase 字段记录映射依据，规范与实现由 tests/test_validation_rules.py 双向锁定。",
   "status_vocabulary": {
     "PASS": "判据通过",
@@ -83,6 +83,12 @@
       "predicate": "P* 落在 [P*_min, P*_max]（给的才判）",
       "rebase": "P* 与 P*_max 由用户给定（裁定）；P*_min 无来源则不判下侧。P* 未提供 = 未定态 BLOCKED（不得默认）。",
       "inputs": ["p_star", "p_star_max", "p_star_min"]
+    },
+    {
+      "id": "D13", "level": "BLOCK",
+      "predicate": "cap 与 cost 两侧明细表均含单价列（综合单价/最高限价）",
+      "rebase": "缺单价列时解析层 unit_price 恒为空串，清洗层全部走 no_cap 通道，D03 按『合法不限价』放行——整份清单静默退化为无上界（列缺失 ≠ 单元格空，ADR-0005 族）。本条把列完整性作为独立事实输入（解析器列映射判定，非事后猜），阻断级。",
+      "inputs": ["missing_unit_price_sheets.cap", "missing_unit_price_sheets.cost"]
     },
     {
       "id": "D12", "level": "WARN",

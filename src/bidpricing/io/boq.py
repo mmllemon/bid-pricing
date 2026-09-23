@@ -28,7 +28,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .xlsx import Sheet, Workbook, load_workbook
+from .xlsx import Sheet, Workbook, XlsxError, load_workbook
 
 # ---------------------------------------------------------------- 识别表
 
@@ -104,6 +104,7 @@ class ParseReport:
     rows: list[ParsedRow] = field(default_factory=list)
     failures: list[FailedRow] = field(default_factory=list)
     skipped_rows: int = 0          # 分节标题/页脚/注释行——机械可解释的跳过
+    missing_unit_price_sheets: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -290,6 +291,15 @@ def parse_listing(path: str | Path, project_id: str) -> ParseReport:
         if role not in ("DETAIL_BOQ", "TECH_MEASURE"):
             continue  # 只有明细表产出规范行
 
+        if "unit_price" not in mapping:
+            # D13：缺单价列 ≠ 单元格空——列缺失会让清洗层判为合法 no_cap，
+            # 下游无上界报价；此处必须留痕并阻断，交 D13 判据阻断求解。
+            report.missing_unit_price_sheets.append(sheet.name)
+            report.failures.append(
+                FailedRow(sheet.name, hri + 1,
+                          "明细表缺少单价列（综合单价/最高限价）——数据缺陷，不猜", [])
+            )
+
         for ri in range(hri + 1, sheet.n_rows()):
             row = sheet.rows[ri]
             skippable, why = _is_skippable(row)
@@ -349,6 +359,28 @@ def parse_listing(path: str | Path, project_id: str) -> ParseReport:
                 )
             )
     return report
+
+
+def assert_price_columns_present(*, cap_report=None, cost_report=None) -> None:
+    """D13：缺单价列 = 数据缺陷，不是「不限价」。
+
+    「不限价」只指列在而值为空（D03 通道）；整列缺失 = 上传的不是本口径清单，
+    此时 unit_price 恒为空，清洗层全部走 no_cap，下游无上界报价。此处显式拒绝。
+
+    参数二选一（或同时）：cap_report 为限价清单侧，cost_report 为成本清单侧。
+    任一侧有缺列 → 抛 XlsxError。
+    """
+    bad: list[str] = []
+    if cap_report is not None and getattr(cap_report, "missing_unit_price_sheets", None):
+        bad.extend([f"cap:{s}" for s in cap_report.missing_unit_price_sheets])
+    if cost_report is not None and getattr(cost_report, "missing_unit_price_sheets", None):
+        bad.extend([f"cost:{s}" for s in cost_report.missing_unit_price_sheets])
+    if bad:
+        raise XlsxError(
+            f"明细表缺少单价列（综合单价/最高限价），无法判定限价或成本："
+            f"{'、'.join(bad)}。"
+            "请提供含单价列的清单（『不限价』只指列在而值为空，不是整列缺失）。"
+        )
 
 
 def write_report(report: ParseReport, out_dir: Path) -> dict[str, Path]:

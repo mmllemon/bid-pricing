@@ -83,6 +83,7 @@ class TestSpecImplementationLock(unittest.TestCase):
         rules = {r["id"]: r for r in self.spec["rules"]}
         for i in range(1, 12):
             self.assertEqual(rules[f"D{i:02d}"]["level"], "BLOCK")
+        self.assertEqual(rules["D13"]["level"], "BLOCK")
         d12 = rules["D12"]
         self.assertEqual(d12["level"], "WARN")
         self.assertEqual([s["id"] for s in d12["subrules"]],
@@ -120,6 +121,7 @@ class TestBlockingRules(unittest.TestCase):
         kw.setdefault("classification", CLS)
         kw.setdefault("selection", SEL)
         kw.setdefault("basis", BASIS)
+        kw.setdefault("missing_unit_price_sheets", {"cap": [], "cost": []})
         return run_validation(report, **kw)
 
     def test_d01_duplicate_keys_fail(self):
@@ -246,6 +248,28 @@ class TestBlockingRules(unittest.TestCase):
                              p_star_max=1_500_000.0)
         self.assertEqual(rep2.by_rule("D11").status, STATUS_FAIL)
 
+    def test_d13_missing_price_column_blocked(self):
+        """回归（A1）：缺单价列必须阻断，不得静默按「合法不限价」放行。"""
+        rep = self.validate(_report([_mk()]),
+                            missing_unit_price_sheets={"cap": ["表-09 分部分项"],
+                                                       "cost": []})
+        r = rep.by_rule("D13")
+        self.assertEqual(r.status, STATUS_FAIL)
+        self.assertEqual(r.evidence[0], "cap:表-09 分部分项")
+        self.assertTrue(rep.blocked)
+
+    def test_d13_both_sides_clean_passes(self):
+        rep = self.validate(_report([_mk()]),
+                            missing_unit_price_sheets={"cap": [], "cost": []})
+        self.assertEqual(rep.by_rule("D13").status, STATUS_PASS)
+
+    def test_d13_fact_absent_blocked(self):
+        """事实未提供 = 未定态，不得当成通过（沉默不是断言）。"""
+        rep = run_validation(_report([_mk()]), classification=CLS, selection=SEL,
+                            basis=BASIS)
+        self.assertEqual(rep.by_rule("D13").status, STATUS_BLOCKED)
+        self.assertIn("未提供列完整性事实", rep.by_rule("D13").detail)
+
 
 class TestWarningRules(unittest.TestCase):
     def validate(self, items, **kw):
@@ -289,28 +313,31 @@ class TestEndToEndAggregation(unittest.TestCase):
             _report([_mk(f"K{i:03d}") for i in range(10)]),
             classification=CLS, selection=SEL, basis=BASIS,
             sheet_roles={"表-09 分部分项": "BOQ"},
-            history=HIST, p_star=1_000_000.0, p_star_max=1_200_000.0)
+            history=HIST, p_star=1_000_000.0, p_star_max=1_200_000.0,
+            missing_unit_price_sheets={"cap": [], "cost": []})
         self.assertFalse(rep.blocked)
         self.assertEqual(rep.summary_line().split()[0], "✓")
 
     def test_failures_aggregate_to_blocked(self):
         items = [_mk("A", cap=0.0), _mk("B", c_i=-5.0)]
         rep = run_validation(_report(items), classification=CLS,
-                             selection={"options": {}}, basis=None)
+                             selection={"options": {}}, basis=None,
+                             missing_unit_price_sheets={"cap": [], "cost": []})
         self.assertTrue(rep.blocked)
         d = rep.to_dict()
         self.assertTrue(d["blocked"])
-        self.assertEqual(len(d["results"]), 14)   # 11 阻断 + 3 告警
+        self.assertEqual(len(d["results"]), 15)   # 12 阻断 + 3 告警
 
     def test_report_serializable(self):
         rep = run_validation(_report([_mk()]), classification=CLS,
-                             selection=SEL, basis=BASIS)
+                             selection=SEL, basis=BASIS,
+                             missing_unit_price_sheets={"cap": [], "cost": []})
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "r.json"
             p.write_text(json.dumps(rep.to_dict(), ensure_ascii=False),
                          encoding="utf-8")
             back = json.loads(p.read_text(encoding="utf-8"))
-        self.assertEqual(len(back["results"]), 14)
+        self.assertEqual(len(back["results"]), 15)
 
 
 if __name__ == "__main__":

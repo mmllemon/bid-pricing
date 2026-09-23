@@ -25,7 +25,7 @@ from bidpricing import project_overview, project_store
 from bidpricing import sqlite_store
 from bidpricing.deployment import log_event, safe_user, user_scope
 from bidpricing.import_preview import build_listing_preview
-from bidpricing.io.boq import parse_listing
+from bidpricing.io.boq import assert_price_columns_present, parse_listing
 from bidpricing.io.clean import clean_listing_rows
 from bidpricing.io.match import MatchReport, match_canonical_rows
 from bidpricing.plan_compare import compare_plans, same_project
@@ -35,6 +35,7 @@ from bidpricing.sqlite_store import (
     find_group_by_plan_id, find_slot_plan_id, group_finalize, create_group, rename_group,
     list_groups, copy_group, delete_group, find_group_by_id, list_groups_for_project,
     upsert_slot, append_audit, list_audit,
+    PlanOwnershipError, StoreWriteLockedError,
 )
 from bidpricing.quote_resolve import run_resolve
 from bidpricing.quote_strategies import STRATEGIES
@@ -79,6 +80,7 @@ def _parse_clean_match(cap_path: Path, cost_path: Path, project_id: str) -> tupl
     """解析 → 清洗 → 匹配 三步，预览与优化共用（同一份数据源避免两侧口径漂移）。"""
     pid = project_id.strip() or "当前项目"
     cap_report, cost_report = parse_listing(cap_path, pid), parse_listing(cost_path, pid)
+    assert_price_columns_present(cap_report=cap_report, cost_report=cost_report)
     cap_rows, _ = clean_listing_rows(cap_report.rows, "cap")
     cost_rows, _ = clean_listing_rows(cost_report.rows, "cost")
     return pid, match_canonical_rows(cap_rows, cost_rows)
@@ -325,6 +327,17 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
                 proj_uuid or pid, proj_name, target_total=target_total)["group_id"]
         # 同组同策略槽位复用；未命中则新建 plan_id
         job_id = find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
+        # 校验 group 归属（A2）：防止跨项目写入他人的方案组
+        if effective_group_id:
+            group_info = find_group_by_id(effective_group_id)
+            if group_info and proj_uuid and group_info.get("project_id") != proj_uuid:
+                return JSONResponse(
+                    status_code=403,
+                    content={"status": "FORBIDDEN",
+                             "reason": f"方案组 {effective_group_id} 归属项目 "
+                                       f"{group_info.get('project_id')!r}，拒绝以当前项目 "
+                                       f"{proj_uuid!r} 写入"}
+                )
         preview = build_listing_preview(matched, pid)
         preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
         preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
@@ -338,8 +351,11 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
             payload["excel_download_url"] = f"/api/quote/download/{job_id}"
         except (subprocess.SubprocessError, OSError) as exc:
             payload["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
-        save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
-        upsert_slot(effective_group_id, strategy, job_id)
+        try:
+            save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
+            upsert_slot(effective_group_id, strategy, job_id)
+        except (PlanOwnershipError, StoreWriteLockedError) as exc:
+            return JSONResponse(status_code=409, content={"status": "BLOCKED", "reason": str(exc)})
         append_audit(CURRENT_USER, "quote.optimize", "PASS",
                      project_id=proj_uuid or pid, plan_id=job_id, group_id=effective_group_id,
                      objective=payload.get("objective"))
@@ -396,7 +412,11 @@ def group_create(project_id: str = Form(""), project_name: str = Form(""),
 
 @app.post("/api/group/rename")
 def group_rename(group_id: str = Form(...), name: str = Form("")) -> JSONResponse:
-    if not rename_group(group_id.strip(), name.strip()):
+    try:
+        ok = rename_group(group_id.strip(), name.strip())
+    except StoreWriteLockedError as exc:
+        return JSONResponse(status_code=409, content={"status": "LOCKED", "reason": str(exc)})
+    if not ok:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
     return JSONResponse(status_code=200, content={"status": "PASS", "group_id": group_id.strip()})
 
@@ -418,7 +438,11 @@ def group_copy(group_id: str = Form(...), name: str = Form("")) -> JSONResponse:
 
 @app.post("/api/group/delete")
 def group_delete(group_id: str = Form(...), keep_plans: int = Form(0)) -> JSONResponse:
-    if not delete_group(group_id.strip(), keep_plans=keep_plans == 1):
+    try:
+        ok = delete_group(group_id.strip(), keep_plans=keep_plans == 1)
+    except StoreWriteLockedError as exc:
+        return JSONResponse(status_code=409, content={"status": "LOCKED", "reason": str(exc)})
+    if not ok:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
     return JSONResponse(status_code=200, content={"status": "PASS", "deleted": group_id.strip()})
 

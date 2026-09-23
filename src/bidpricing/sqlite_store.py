@@ -126,6 +126,24 @@ def _as_bool(v: Any) -> bool:
     return bool(v)
 
 
+class PlanOwnershipError(Exception):
+    """方案归属冲突：以既有 plan_id 写入不同 project 的记录。
+
+    回归（对抗审查 A2）：find_plan_by_strategy 允许按名称归一键命中既有方案，
+    随后 save_plan 对同 plan_id 整行覆盖——若无此拦截，攻击者可把他人方案
+    改写成自己的 project_id（接管）。同 plan_id 重存须保持 project_id 不变。
+    """
+
+
+class StoreWriteLockedError(Exception):
+    """定稿锁（对抗审查 A4）：已定稿方案/方案组上的写入与删除被拒绝。
+
+    group_store 语义『定稿=整组锁定、三槽位都不能删改』在库层落实：
+    save_plan / delete_plan / delete_group / rename_group / upsert_slot 一律拦截，
+    唯一的解锁路径是 group_finalize(finalized=False) / mark_finalized(False)。
+    """
+
+
 def _param(rec: dict[str, Any], key: str) -> Any:
     """从 params 取金额/税率真列值（无则 None）。"""
     v = (rec.get("params") or {}).get(key)
@@ -158,15 +176,35 @@ def _row_to_record(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def save_plan(record: dict[str, Any], plan_id: str | None = None,
-              db: Path | str | None = None) -> tuple[str, str]:
+              db: Path | str | None = None,
+              *, force: bool = False) -> tuple[str, str]:
     """持久化一个方案为一整行；重复保存同 plan_id 覆盖（原子 upsert）。
 
     返回 (plan_id, saved_at)。
+
+    既有的 plan_id 受两道保护（对抗审查 A2/A4）：
+    * 归属：既有行 project_id 与新记录不同 → PlanOwnershipError（整行接管拒绝）；
+    * 定稿锁：既有行 finalized=1 且 force=False → StoreWriteLockedError。
+    ``force=True`` 仅供库内迁移/测试等显式场景。
     """
     rid = plan_id or uuid.uuid4().hex
     saved_at = record.get("saved_at") or _now_iso()
     conn = _connect(db)
     try:
+        if plan_id is not None:
+            existing = conn.execute(
+                "SELECT project_id, finalized FROM plan WHERE plan_id = ?",
+                (plan_id,)).fetchone()
+            if existing is not None:
+                old_pid, new_pid = existing["project_id"], record.get("project_id")
+                if old_pid and new_pid and old_pid != new_pid:
+                    raise PlanOwnershipError(
+                        f"方案 {plan_id} 已归属项目 {old_pid!r}，"
+                        f"拒绝以项目 {new_pid!r} 的记录整行覆盖（需先删旧方案或新建方案）")
+                if existing["finalized"] and not force:
+                    raise StoreWriteLockedError(
+                        f"方案 {plan_id} 已定稿（整组锁定），拒绝写入；"
+                        "请先取消定稿（mark_finalized(False) / group_finalize）")
         rows = [{
             "plan_id": rid,
             "name": record.get("name"),
@@ -247,10 +285,22 @@ def list_plans(db: Path | str | None = None) -> list[dict[str, Any]]:
 
 
 def delete_plan(plan_id: str, db: Path | str | None = None) -> bool:
-    """删除一个方案行；不存在返回 False。"""
+    """删除一个方案行；不存在返回 False。
+
+    已定稿方案拒绝删除（StoreWriteLockedError）；删除时同步清空指向该方案的
+    槽位指针（回归 A4：槽位不再悬挂指向已删方案）。"""
     conn = _connect(db)
     try:
+        row = conn.execute(
+            "SELECT finalized FROM plan WHERE plan_id = ?", (plan_id,)).fetchone()
+        if row is None:
+            return False
+        if row["finalized"]:
+            raise StoreWriteLockedError(
+                f"方案 {plan_id} 已定稿，拒绝删除；请先取消定稿")
         cur = conn.execute("DELETE FROM plan WHERE plan_id = ?", (plan_id,))
+        conn.execute("UPDATE plan_slot SET plan_id = NULL, status = 'pending'"
+                     " WHERE plan_id = ?", (plan_id,))
         conn.commit()
         return cur.rowcount > 0
     finally:
@@ -297,12 +347,14 @@ def mark_finalized(plan_id: str, db: Path | str | None = None,
         if row is None:
             return False
         if finalized:
-            conn.execute(
-                "UPDATE plan SET finalized = 0, finalized_at = NULL"
-                " WHERE finalized = 1 AND plan_id != ?"
-                "   AND (project_id = ? OR project_name = ?)",
-                (plan_id, row["project_id"], row["project_name"]),
-            )
+            # 互斥范围 = 同一 project_id（回归 A3：按名称互斥会让「同名不同项目」
+            # 的两个项目互相取消定稿；按名称匹配是查询侧特性，不进入定稿互斥）
+            if row["project_id"]:
+                conn.execute(
+                    "UPDATE plan SET finalized = 0, finalized_at = NULL"
+                    " WHERE finalized = 1 AND plan_id != ? AND project_id = ?",
+                    (plan_id, row["project_id"]),
+                )
             conn.execute(
                 "UPDATE plan SET finalized = 1,"
                 "                finalized_at = COALESCE(finalized_at, ?)"
@@ -380,6 +432,16 @@ def _load_group_row(group_id: str, db: Path | str | None) -> dict[str, Any] | No
     if row is None:
         return None
     return dict(row)
+
+
+def _require_group_editable(group_id: str, db: Path | str | None) -> None:
+    """可写性守卫：组不存在 → 静默（调用方按原逻辑返回 False）；
+    已定稿 → StoreWriteLockedError（回归 A4：定稿=整组锁，挂槽/改名/删组一律拒绝）。"""
+    g = _load_group_row(group_id, db)
+    if g is not None and g.get("finalized"):
+        raise StoreWriteLockedError(
+            f"方案组 {group_id} 已定稿（整组锁定），拒绝写入槽位/改名；"
+            "请先取消定稿")
 
 
 def _load_slots(group_id: str, db: Path | str | None) -> dict[str, dict[str, Any]]:
@@ -467,6 +529,7 @@ def find_group_by_plan_id(plan_id: str, db: Path | str | None = None) -> str | N
 def upsert_slot(group_id: str, strategy: str, plan_id: str,
                 db: Path | str | None = None) -> bool:
     """把某组指定策略槽位指向 plan_id 并标 computed；组不存在返回 False。"""
+    _require_group_editable(group_id, db)
     conn = _connect(db)
     try:
         g = conn.execute(
@@ -495,6 +558,7 @@ def upsert_slot(group_id: str, strategy: str, plan_id: str,
 
 
 def rename_group(group_id: str, new_name: str, db: Path | str | None = None) -> bool:
+    _require_group_editable(group_id, db)
     conn = _connect(db)
     try:
         g = conn.execute(
@@ -516,6 +580,7 @@ def rename_group(group_id: str, new_name: str, db: Path | str | None = None) -> 
 def group_finalize(group_id: str, db: Path | str | None = None,
                    finalized: bool = True) -> bool:
     """整组定稿/取消；finalized=False 时清除定稿标记。"""
+    # 定稿/取消是唯一的解锁路径，不做可写性检查（对不存在组 rowcount=0 返回 False）
     conn = _connect(db)
     try:
         cur = conn.execute(
@@ -598,6 +663,10 @@ def copy_group(group_id: str, db: Path | str | None = None,
             continue
         rec["group_id"] = gid
         rec["is_copy"] = True
+        # 副本不继承定稿（与 project_copy 同口径）：新组未定稿，
+        # 且副本若带 finalized=1 会触发定稿互斥取消源方案定稿（回归 A3）
+        rec["finalized"] = False
+        rec["finalized_at"] = None
         dup_id, _ = save_plan(rec, db=db)
         upsert_slot(gid, letter, dup_id, db)
     return find_group_by_id(gid, db)
@@ -605,10 +674,15 @@ def copy_group(group_id: str, db: Path | str | None = None,
 
 def delete_group(group_id: str, db: Path | str | None = None,
                  keep_plans: bool = False) -> bool:
-    """删除一组；keep_plans=False 时一并删除组内槽位方案行。"""
+    """删除一组；keep_plans=False 时一并删除组内槽位方案行。
+
+    已定稿组拒绝删除（StoreWriteLockedError，回归 A4）。"""
     g = _load_group_row(group_id, db)
     if g is None:
         return False
+    if g.get("finalized"):
+        raise StoreWriteLockedError(
+            f"方案组 {group_id} 已定稿（整组锁定），拒绝删除；请先取消定稿")
     slots = _load_slots(group_id, db)
     conn = _connect(db)
     try:
@@ -695,7 +769,7 @@ def import_json_tree(source_dir: Path | str | None = None,
         rid = rec.get("id")
         if not rid:
             continue
-        save_plan(rec, plan_id=rid, db=db)
+        save_plan(rec, plan_id=rid, db=db, force=True)
         plans += 1
     groups = 0
     for g in _iter_json_groups(source):

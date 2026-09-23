@@ -139,6 +139,22 @@ let plans = [];
 let lastResult = null;
 // 后端服务基址：单一配置点，换域名/环境只改这一处（下载与所有 API 调用共用）
 const API_BASE = 'http://localhost:8000';
+
+// H-013：可选 API token——服务端启用 BIDPRICING_API_TOKEN 后，把 token 存入
+// localStorage('bidpricingApiToken')，此包装器为所有 /api 请求自动附加 Authorization。
+(() => {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    const token = (localStorage.getItem('bidpricingApiToken') || '').trim();
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (token && url.startsWith(API_BASE)) {
+      init = Object.assign({}, init || {}, {
+        headers: Object.assign({}, (init || {}).headers || {}, { Authorization: 'Bearer ' + token }),
+      });
+    }
+    return _fetch(input, init);
+  };
+})();
 let overviewProjects = [];   // 项目经营概览数据集（用于关联与定稿回写）
 let activeOverviewId = '';    // 当前关联的经营项目 id（非空才显示定稿回写按钮）
 const fmt = (value, digits = 2) => {
@@ -963,7 +979,7 @@ async function openSlot(planId, group, opts = {}) {
     fillParams(plan.params || {});
     if (plan.preview) renderPreview(plan.preview);
     if (plan.result) {
-      setMessage(`已打开方案「${plan.name || plan.id}」。${plan.result.low_ratio_review_required ? '该结果存在低于50%的报价比率，未作出废标判定，以招标文件为准。' : ''}`, 'success');
+      setMessage(`已打开方案「${esc(plan.name || plan.id)}」。${plan.result.low_ratio_review_required ? '该结果存在低于50%的报价比率，未作出废标判定，以招标文件为准。' : ''}`, 'success');
       renderResult(plan.result, { animate: opts.animate !== false });
     } else {
       setMessage('已打开方案，但该槽位尚未生成结果，可点击「按当前参数重算」。', 'success');

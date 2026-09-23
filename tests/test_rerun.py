@@ -17,6 +17,12 @@ class RerunTest(unittest.TestCase):
         b = {"timestamp": "t2", "run_id": "b", "value": 1}
         self.assertEqual(result_hash(a), result_hash(b))
 
+    def test_deep_metadata_fields_still_hashed(self):
+        """回归（A6）：深层 operator/timestamp 是业务字段，须参与指纹；只剔除顶层元信息。"""
+        a = {"items": [{"item_id": "X", "operator": "甲", "timestamp": "t1", "value": 1}]}
+        b = {"items": [{"item_id": "X", "operator": "乙", "timestamp": "t1", "value": 1}]}
+        self.assertNotEqual(result_hash(a), result_hash(b))
+
     def test_deterministic_runner_passes_reproducibility_and_correctness(self):
         report = build_rerun_report(lambda x: {"value": x * 2, "run_id": "volatile"}, 3, expected_result={"value": 6}, random_seed=7)
         self.assertEqual(report.status, "PASS")

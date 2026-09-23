@@ -87,6 +87,41 @@ class SqliteStorePlanTest(unittest.TestCase):
         finals = [r["id"] for r in sqlite_store.list_plans(self.db) if r["finalized"]]
         self.assertEqual(finals, [])
 
+    def test_save_plan_ownership_conflict_refused(self):
+        """回归（A2）：同 plan_id 跨项目整行覆盖必须拒绝；同项目重算合法。"""
+        sqlite_store.save_plan(_record("P1", "甲", "optimal", None, 100000, "p1"),
+                               plan_id="p1", db=self.db)
+        with self.assertRaises(sqlite_store.PlanOwnershipError):
+            sqlite_store.save_plan(_record("P2", "乙", "optimal", None, 1, "p1"),
+                                   plan_id="p1", db=self.db)
+        sqlite_store.save_plan(_record("P1", "甲", "optimal", None, 200000, "p1"),
+                               plan_id="p1", db=self.db)
+        self.assertEqual(sqlite_store.load_plan("p1", db=self.db)["project_id"], "P1")
+
+    def test_finalized_plan_write_lock(self):
+        """回归（A4）：已定稿方案的写入/删除一律拒绝，取消定稿后恢复。"""
+        sqlite_store.save_plan(_record("P1", "甲", "optimal", None, 1, "p1"),
+                               plan_id="p1", db=self.db)
+        self.assertTrue(sqlite_store.mark_finalized("p1", db=self.db))
+        with self.assertRaises(sqlite_store.StoreWriteLockedError):
+            sqlite_store.save_plan(_record("P1", "甲", "optimal", None, 2, "p1"),
+                                    plan_id="p1", db=self.db)
+        with self.assertRaises(sqlite_store.StoreWriteLockedError):
+            sqlite_store.delete_plan("p1", db=self.db)
+        self.assertTrue(sqlite_store.mark_finalized("p1", finalized=False, db=self.db))
+        self.assertTrue(sqlite_store.delete_plan("p1", db=self.db))
+
+    def test_finalized_mutual_exclusion_by_project_id_only(self):
+        """回归（A3）：同名不同项目（P1/P2）的定稿互不取消。"""
+        sqlite_store.save_plan(_record("P1", "同名项目", "optimal", None, 1, "a"),
+                               plan_id="a", db=self.db)
+        sqlite_store.save_plan(_record("P2", "同名项目", "optimal", None, 1, "b"),
+                               plan_id="b", db=self.db)
+        self.assertTrue(sqlite_store.mark_finalized("a", db=self.db))
+        self.assertTrue(sqlite_store.mark_finalized("b", db=self.db))
+        self.assertTrue(sqlite_store.load_plan("a", db=self.db)["finalized"])
+        self.assertTrue(sqlite_store.load_plan("b", db=self.db)["finalized"])
+
 
 class SqliteStoreGroupTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -154,6 +189,27 @@ class SqliteStoreGroupTest(unittest.TestCase):
         self.assertIsNone(sqlite_store.load_plan("opt", db=self.db))
         self.assertIsNone(sqlite_store.find_group_by_id(gid, db=self.db))
         self.assertFalse(sqlite_store.delete_group(gid, db=self.db))
+
+    def test_finalized_group_locks_edits(self) -> None:
+        """回归（A4）：已定稿组拒绝删除/改名/挂槽；取消定稿是唯解锁路径。"""
+        gid = self._seed()
+        self.assertTrue(sqlite_store.group_finalize(gid, db=self.db))
+        with self.assertRaises(sqlite_store.StoreWriteLockedError):
+            sqlite_store.delete_group(gid, db=self.db)
+        with self.assertRaises(sqlite_store.StoreWriteLockedError):
+            sqlite_store.rename_group(gid, "新名", db=self.db)
+        with self.assertRaises(sqlite_store.StoreWriteLockedError):
+            sqlite_store.upsert_slot(gid, "optimal", "ghost", db=self.db)
+        self.assertTrue(sqlite_store.group_finalize(gid, finalized=False, db=self.db))
+        self.assertTrue(sqlite_store.rename_group(gid, "新名", db=self.db))
+
+    def test_delete_plan_clears_slot_pointer(self) -> None:
+        """回归（A4）：删方案同步清槽位，不得悬挂指向已删方案。"""
+        gid = self._seed()
+        self.assertTrue(sqlite_store.delete_plan("opt", db=self.db))
+        slot = sqlite_store._load_slots(gid, db=self.db)["A"]
+        self.assertIsNone(slot["plan_id"])
+        self.assertEqual(slot["status"], "pending")
 
 
 class SqliteStoreMigrationTest(unittest.TestCase):

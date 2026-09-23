@@ -43,55 +43,6 @@ window.addEventListener('hashchange', () => selectModule(location.hash.slice(1) 
 // 初始模块选择延后到 initDashboard 内执行：此时 hubView/hubSelected 等模块级 let 已就绪，
 // 避免在文件顶部同步调用 selectModule → closeOverlays → closePlanHub 读到 TDZ 中的 hubView。
 
-/* 侧栏收起：窄屏抽屉式（汉堡按钮 + 遮罩），点导航项/遮罩/Esc 均关闭 */
-(function () {
-  const shell = document.querySelector('.app-shell');
-  const toggle = document.getElementById('sbToggle');
-  const backdrop = document.getElementById('sbBackdrop');
-  if (!shell || !toggle || !backdrop) return;
-  const set = (open) => {
-    shell.classList.toggle('sb-open', open);
-    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    toggle.setAttribute('aria-label', open ? '关闭导航菜单' : '打开导航菜单');
-  };
-  toggle.addEventListener('click', () => set(!shell.classList.contains('sb-open')));
-  backdrop.addEventListener('click', () => set(false));
-  document.querySelectorAll('.nav-item').forEach(n => n.addEventListener('click', () => set(false)));
-  window.addEventListener('keydown', e => { if (e.key === 'Escape') set(false); });
-})();
-
-/* 侧栏用户名可自定义：点击后内联编辑，回车/失焦保存（localStorage 持久化，工作台问候同步读取） */
-(function () {
-  const NAME_KEY = 'gc_user_name';
-  const el = document.getElementById('userName');
-  if (!el || !window.localStorage) return;
-  const saved = localStorage.getItem(NAME_KEY);
-  if (saved) el.textContent = saved;
-  el.title = '点击修改用户名';
-  el.style.cursor = 'text';
-  el.onclick = () => {
-    const input = document.createElement('input');
-    input.type = 'text'; input.maxLength = 20;
-    input.value = el.textContent;
-    input.className = 'name-input';
-    input.style.cssText = 'width:100%;max-width:150px;padding:2px 6px;border:1px solid var(--border-input);border-radius:8px;font-size:13px;font-weight:600;color:var(--text);background:var(--surface-card);font-family:var(--font);outline:none';
-    input.addEventListener('focus', () => input.select());
-    const commit = () => {
-      const v = input.value.trim();
-      if (v) localStorage.setItem(NAME_KEY, v);
-      el.textContent = v || '未命名';
-      input.replaceWith(el);
-    };
-    const onKey = e => {
-      if (e.key === 'Enter') commit();
-      else if (e.key === 'Escape') { input.value = ''; commit(); }
-    };
-    input.addEventListener('blur', commit);
-    input.addEventListener('keydown', onKey);
-    el.replaceWith(input);
-    input.focus();
-  };
-})();
 // ---- 双通道资产舱：选择/拖拽/成功态/重新上传 ----
 document.querySelectorAll('.intake-slot input[type=file]').forEach(input => {
   input.addEventListener('change', () => {
@@ -456,44 +407,6 @@ function readTaxOverride() {
   return {mode, creditRatio: credit, compositionJson: JSON.stringify(comp)};
 }
 
-// ---- 提示 Toast（P0：消息从左栏内联提示改为顶部 Toast 气泡） ----
-// 保留 setMessage(text, kind) 签名（40+ 处调用点不动），内部实现为顶部 toast-pill。
-// kind ∈ {success,error,warn,''}：success=模块绿、error=赤陶、warn=赭石、默认墨灰；
-// 自动消失（success 3.5s / error 6s / 其他 4s）；内容可含 HTML（现有调用含 <b>）。
-let toastTimer = null;
-function setMessage(text, kind = '') {
-  const tp = document.querySelector('#toastPill');
-  const tm = document.querySelector('#toastMsg');
-  if (!tp || !tm) return;
-  tp.className = 'toast-pill' + (kind ? ' toast-' + kind : '');
-  tm.innerHTML = text;
-  tp.classList.add('show');
-  clearTimeout(toastTimer);
-  const ms = kind === 'success' ? 3500 : kind === 'error' ? 6000 : 4000;
-  toastTimer = setTimeout(() => tp.classList.remove('show'), ms);
-}
-
-// 即时校验：比率区间非法在提交前拦截，并给对应输入框加错误态/焦点，避免空跑服务端再 422。
-function clearInvalid() { document.querySelectorAll('.invalid').forEach(el => { el.classList.remove('invalid'); el.removeAttribute('aria-invalid'); }); }
-function markInvalid(el, msg) { el.classList.add('invalid'); el.setAttribute('aria-invalid', 'true'); el.focus(); setMessage(msg, 'error'); }
-function validateParams() {
-  clearInvalid();
-  const loEl = document.querySelector('#ratioMin'); const hiEl = document.querySelector('#ratioMax');
-  const lo = Number(loEl.value); const hi = Number(hiEl.value);
-  if (Number.isNaN(lo) || lo < 0 || lo > 1) { markInvalid(loEl, '单项报价比率下限非法：须为 0～1 之间的数值。'); return false; }
-  if (Number.isNaN(hi) || hi > 1 || hi < lo) { markInvalid(hiEl, `报价比率区间非法：上限须 ≥ 下限（${lo}）且 ≤ 1.00。`); return false; }
-  // 税率采用整数百分比口径（9 = 9%），提交时 /100 转小数（0.09）；须落在 (0, 100]
-  const vtEl = document.querySelector('#vatRate'); const stEl = document.querySelector('#surtaxRate');
-  const vt = Number(vtEl.value); const st = Number(stEl.value);
-  if (Number.isNaN(vt) || vt <= 0 || vt > 100) { markInvalid(vtEl, '增值税率须为 0～100 之间的百分比整数（如 9 表示 9%）。'); return false; }
-  if (Number.isNaN(st) || st <= 0 || st > 100) { markInvalid(stEl, '附加税率须为 0～100 之间的百分比整数（如 12 表示 12%）。'); return false; }
-  return true;
-}
-// 比率输入实时校验：输完即标红，不必等提交
-document.querySelectorAll('#ratioMin,#ratioMax').forEach(el => el.addEventListener('input', validateParams));
-// 读取数字输入：留空时回落到浅灰占位默认值（目标总报价/固定税前项）
-function numVal(id) { const el = document.querySelector(`#${id}`); return el.value.trim() !== '' ? el.value : el.placeholder; }
-
 document.querySelector('#previewBtn').addEventListener('click', async () => {
   const cap = document.querySelector('#capFile').files[0];
   const cost = document.querySelector('#costFile').files[0];
@@ -590,78 +503,6 @@ document.querySelector('#calculateBtn').addEventListener('click', async () => {
     setMessage(`计算失败：${error.message}${error.hint ? `<br>${esc(error.hint)}` : ''}`, 'error');
   } finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = '识别文件并计算 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'; setDockBusy(false); }
 });
-
-// ---- 自定义下拉：毛玻璃选项面板，替代原生 select ----
-function initCustomSelect(selId) {
-  const sel = document.querySelector(selId);
-  if (!sel || sel.__cs) return sel;
-  sel.classList.add('cs-hidden');                 // 隐藏原生 select，仍保留为 value 载体
-  const wrap = document.createElement('div');
-  wrap.className = 'cs';
-  wrap.innerHTML =
-    '<button type="button" class="cs-trigger" aria-haspopup="listbox">' +
-    '<span class="cs-label"></span>' +
-    '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8l4 4 4-4"/></svg>' +
-    '</button>' +
-    '<ul class="cs-list hidden" role="listbox"></ul>';
-  sel.parentNode.insertBefore(wrap, sel.nextSibling);
-  const label = wrap.querySelector('.cs-label');
-  const list = wrap.querySelector('.cs-list');
-  const trigger = wrap.querySelector('.cs-trigger');
-  let data = [];
-
-  function populate() {
-    list.innerHTML = '';
-    data.forEach((o, i) => {
-      const li = document.createElement('li');
-      li.className = 'cs-opt' + (o.value === sel.value ? ' cs-selected' : '');
-      li.setAttribute('role', 'option');
-      li.setAttribute('aria-selected', String(o.value === sel.value));
-      li.dataset.i = String(i);
-      li.textContent = o.label;                    // textContent：防注入
-      list.appendChild(li);
-    });
-  }
-  function render() {
-    const hit = data.find(o => o.value === sel.value);
-    label.textContent = hit ? hit.label : (sel.value || '— 请选择 —');
-  }
-  function close() { list.classList.add('hidden'); wrap.classList.remove('open'); document.removeEventListener('click', onDoc); }
-  function open() { populate(); render(); list.classList.remove('hidden'); wrap.classList.add('open'); setTimeout(() => document.addEventListener('click', onDoc), 0); }
-  function onDoc(e) { if (!wrap.contains(e.target)) close(); }
-
-  trigger.addEventListener('click', e => { e.stopPropagation(); wrap.classList.contains('open') ? close() : open(); });
-  list.addEventListener('click', e => {
-    const li = e.target.closest('.cs-opt');
-    if (!li) return;
-    const o = data[+li.dataset.i];
-    if (o && o.value !== sel.value) {
-      sel.value = o.value; render();
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    close();
-  });
-
-  data = Array.from(sel.options).map(o => ({ value: o.value, label: o.textContent }));
-  render();
-  sel.__cs = {
-    setOptions(opts) {
-      data = opts || [];
-      // 先记住重建前的选中值：清空 sel.innerHTML 会把 sel.value 重置为 ''，
-      // 而占位符 option 的 value 也是 ''，会导致『当前值有效』误判、回读丢失。
-      const prev = sel.value;
-      sel.innerHTML = '';
-      data.forEach(o => { const op = document.createElement('option'); op.value = o.value; op.textContent = o.label; sel.appendChild(op); });
-      // 新数据里仍在则还原选中，否则落回首个(占位符)选项。
-      if (data.some(o => o.value === prev)) sel.value = prev;
-      else if (data[0]) sel.value = data[0].value;
-      render();
-    },
-    refresh: render
-  };
-  return sel;
-}
-// 注：旧左栏 #planSelect/#baseSelect 已随 P1 重构移除（方案库迁移到底部方案条，使用原生 select）。
 
 // ---- 方案中心：方案组（当前关联项目）→ A/B/C 槽位 ----
 let groups = [];              // 当前关联项目的方案组列表

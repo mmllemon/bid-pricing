@@ -1,6 +1,7 @@
 """网页前端的报价优化 API。"""
 from __future__ import annotations
 
+import hmac
 import hashlib
 import json
 import os
@@ -54,6 +55,24 @@ if not sqlite_store.resolve_db_path().exists():
         sqlite_store.import_json_tree(source_dir=USER_PROJECTS)
     except Exception as exc:  # noqa: BLE001 迁移失败不阻止服务启动
         print(f"[bidpricing] SQLite 种子迁移失败（将跳过）：{exc}")
+
+
+#: 单个上传文件上限（MB）。超过则直接拒绝，避免内存占用异常放大。
+#: 清单 xlsx 通常在数 MB 以内，10 MB 上限足够容容。
+_MAX_UPLOAD_MB = int(os.environ.get("BIDPRICING_MAX_UPLOAD_MB", "10"))
+
+
+async def _read_upload_limited(file: UploadFile, max_mb: int = _MAX_UPLOAD_MB) -> tuple[bytes | None, str | None]:
+    """读取 UploadFile 内容并检查体积；超限返回 (None, reason) 而 (data, None)。"""
+    data = await file.read()
+    limit_bytes = max_mb * 1024 * 1024
+    if len(data) > limit_bytes:
+        return None, (
+            f"上传文件超过 {_MAX_UPLOAD_MB} MB 上限"
+            f"（实际 {len(data) / 1024 / 1024:.2f} MB）"
+        )
+    return data, None
+
 
 
 def _parse_clean_match(cap_path: Path, cost_path: Path, project_id: str) -> tuple[str, MatchReport]:
@@ -137,6 +156,51 @@ async def _access_log(request, call_next):
     return response
 
 
+# H-013 API token（可选加固）：设置环境变量 BIDPRICING_API_TOKEN 后，
+# 全部 /api 路由（/api/health 除外）须携带 Authorization: Bearer <token>
+# 或 X-API-Token: <token>。
+#
+# 默认行为：未设置 token 时保持纯本地无鉴权流程，但打印醒目告警。
+# 强制模式：设 BIDPRICING_REQUIRE_TOKEN=1 后，未设 token 直接拒绝启动。
+#
+# **多用户隔离语义澄清**：本项目的多用户隔离基于 CURRENT_USER（os.USERNAME/USER），
+# 在进程启动时定死。同一端口只服务**一个**逻辑用户——多人共用机器时须各自
+# 起服务进程，不能通过同一 API 服务实现多用户。若需真正的多用户服务，
+# 须改为按请求头 X-User 动态切 user_scope（配合 token 保护），当前版本不支持。
+API_TOKEN = os.environ.get("BIDPRICING_API_TOKEN", "").strip()
+_REQUIRE_TOKEN = os.environ.get("BIDPRICING_REQUIRE_TOKEN", "").strip().lower() in ("1", "true", "yes", "on")
+if not API_TOKEN:
+    if _REQUIRE_TOKEN:
+        raise RuntimeError(
+            "BIDPRICING_REQUIRE_TOKEN 已设置但 BIDPRICING_API_TOKEN 未设置。"
+            "对外暴露服务时必须先设置 token，例如："
+            "export BIDPRICING_API_TOKEN=$(openssl rand -hex 32)"
+        )
+    print("=" * 68)
+    print("[bidpricing] 安全告警：BIDPRICING_API_TOKEN 未设置，/api 路由无鉴权可访问。")
+    print("  纯本地单机使用可接受；对外暴露前必须设置 BIDPRICING_API_TOKEN，")
+    print("  或设 BIDPRICING_REQUIRE_TOKEN=1 让本进程在无 token 时拒绝启动。")
+    print("  多用户隔离基于启动账号（CURRENT_USER），同一端口只服务一个逻辑用户。")
+    print("=" * 68)
+
+
+@app.middleware("http")
+async def _auth_guard(request, call_next):
+    if not API_TOKEN or request.url.path == "/api/health":
+        return await call_next(request)
+    candidates = [request.headers.get("X-API-Token") or ""]
+    authz = request.headers.get("Authorization") or ""
+    if authz.startswith("Bearer "):
+        candidates.append(authz[len("Bearer "):].strip())
+    # 用 hmac.compare_digest 避免 timing attack（即使 localhost 风险低，也保持安全默认）。
+    if not any(c and hmac.compare_digest(c.strip(), API_TOKEN) for c in candidates):
+        return JSONResponse(status_code=401, content={
+            "status": "UNAUTHORIZED",
+            "reason": "API token 缺失或不正确（Authorization: Bearer <token> 或 X-API-Token）",
+        })
+    return await call_next(request)
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "bidpricing"}
@@ -148,8 +212,12 @@ async def preview_quote(limit_file: UploadFile = File(...), cost_file: UploadFil
     proj_name = project_name.strip() or project_id.strip() or "当前项目"
     with tempfile.TemporaryDirectory(prefix="bidpricing-api-") as temp_dir:
         cap_path, cost_path = Path(temp_dir) / "limit.xlsx", Path(temp_dir) / "cost.xlsx"
-        cap_path.write_bytes(await limit_file.read())
-        cost_path.write_bytes(await cost_file.read())
+        cap_data, cap_err = await _read_upload_limited(limit_file)
+        cost_data, cost_err = await _read_upload_limited(cost_file)
+        if cap_err or cost_err:
+            return JSONResponse(status_code=413, content={"status": "BLOCKED", "reason": cap_err or cost_err})
+        cap_path.write_bytes(cap_data)
+        cost_path.write_bytes(cost_data)
         try:
             pid, matched = _parse_clean_match(cap_path, cost_path, proj_name)
         except Exception as exc:  # noqa: BLE001
@@ -224,8 +292,12 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         return guard
     with tempfile.TemporaryDirectory(prefix="bidpricing-api-") as temp_dir:
         cap_path, cost_path = Path(temp_dir) / "limit.xlsx", Path(temp_dir) / "cost.xlsx"
-        cap_path.write_bytes(await limit_file.read())
-        cost_path.write_bytes(await cost_file.read())
+        cap_data, cap_err = await _read_upload_limited(limit_file)
+        cost_data, cost_err = await _read_upload_limited(cost_file)
+        if cap_err or cost_err:
+            return JSONResponse(status_code=413, content={"status": "BLOCKED", "reason": cap_err or cost_err})
+        cap_path.write_bytes(cap_data)
+        cost_path.write_bytes(cost_data)
         try:
             pid, matched = _parse_clean_match(cap_path, cost_path, proj_name)
         except Exception as exc:  # noqa: BLE001

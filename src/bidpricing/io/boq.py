@@ -20,7 +20,9 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import re
 from dataclasses import asdict, dataclass, field
@@ -140,7 +142,13 @@ def classify_code_kind(item_id: str) -> str:
 
 
 def _table_no(sheet_name: str) -> str | None:
-    m = re.match(r"(表-\d+)", sheet_name.strip())
+    """提取工作表名的表号前缀（如「表-09」）。
+
+    **必须**拒绝半角字母/数字后缀——否则「表-09A 补充清单」会被误判为「表-09」
+    而套用主表的角色与列映射，实测真实样本里 A/B/C 后缀表示补充/附表。
+    中文紧邻（如「表-09分部分项...」）是合法的，需放行。
+    """
+    m = re.match(r"(表-\d+)(?![A-Za-z0-9])", sheet_name.strip())
     return m.group(1) if m else None
 
 
@@ -179,7 +187,13 @@ def _find_header(sheet: Sheet) -> tuple[int, dict[str, int]] | None:
                 mapping[logical] = hits[0]
                 texts[logical] = row[hits[0]].strip()
             elif len(hits) > 1:
-                return None  # 同行命中多个别名 → 列结构不可判定，不猜
+                # 契约 column_aliases.policy 原文：「同一逻辑字段命中≥2 个别名时 BLOCK」。
+                # 只对**必需键**（item_id/quantity）的歧义做整表阻断——契约口径下，
+                # 非必需字段的歧义走数据缺口路径（后续取值为空串）而不是打断整表。
+                # 原实现「任何字段歧义就整表 BLOCK」会把大量真实可解析的表头判死。
+                if logical in ("item_id", "quantity"):
+                    return None  # 必需键歧义 → 整表不可判定，不猜
+                # 非必需键歧义：跳过该字段，继续扫描其他字段
         if "item_id" in mapping and "quantity" in mapping:
             # 金额区子列可能在本行之后的子表头行——已在同行的就用同行的
             if ri + 1 < sheet.n_rows():
@@ -202,13 +216,22 @@ def _find_header(sheet: Sheet) -> tuple[int, dict[str, int]] | None:
 
 
 def _is_skippable(row: list[str]) -> tuple[bool, str]:
-    """机械可解释的跳过：注释 / 页码 / 空行 / 分节标题。"""
+    """机械可解释的跳过：注释 / 页码 / 空行 / 分节标题。
+
+    注释行仅认「注：」/「注：」/「备注：」这类**注释块标记**；不认
+    `first.startswith("注")`——那会把项目名以「注」开头的行（如「注资设备」）
+    当注释吞掉，而项目名完全可能以「注」开头。
+    """
     joined = "".join(c for c in row if c).strip()
     if not joined:
         return True, "空行"
     first = next((c for c in row if c.strip()), "")
-    if first.startswith("注") or first.startswith("表-") or "页  共" in joined:
-        return True, "表头/页脚/注释"
+    if re.match(r"^(注|备注)\s*[：:]", first):
+        return True, "注释块"
+    if first.startswith("表-"):
+        return True, "分节/表头重复"
+    if "页  共" in joined:
+        return True, "页脚"
     return False, ""
 
 
@@ -364,12 +387,19 @@ def write_report(report: ParseReport, out_dir: Path) -> dict[str, Path]:
     md_path = out_dir / f"{stem}.mapping.md"
     md_path.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
 
-    csv_lines = ["source_sheet,source_row,reason,raw"]
+    # CSV 导出：用 csv.writer + QUOTE_ALL 正确处理含逗号/引号/换行的字段。
+    # 旧实现用 `replace(",", "，")` 只处理 ASCII 逗号，双引号、换行、工作表名里的逗号都会破坏 CSV。
+    csv_buf = io.StringIO()
+    writer = csv.writer(csv_buf, quoting=csv.QUOTE_ALL, lineterminator="\n")
+    writer.writerow(["source_sheet", "source_row", "reason", "raw"])
     for f in report.failures:
-        raw = "|".join(cell.replace(",", "，") for cell in f.raw)
-        reason = f.reason.replace(",", "，")
-        csv_lines.append(f"{f.source_sheet},{f.source_row},{reason},{raw}")
+        writer.writerow([
+            f.source_sheet,
+            f.source_row,
+            f.reason,
+            "|".join(f.raw),
+        ])
     csv_path = out_dir / f"{stem}.failures.csv"
-    csv_path.write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
+    csv_path.write_text(csv_buf.getvalue(), encoding="utf-8")
 
     return {"log": log_path, "mapping": md_path, "failures": csv_path}

@@ -199,6 +199,15 @@ def verify_versioned(rec: ArtifactRecord, config_dir: Path) -> CheckItem:
                 actual=raw,
             )
 
+    # version 与 hash 必须恒等——freeze_record 写入时两者均为同一 digest，
+    # version_binding.validate_binding 已校验这一点（防注册表被单独污染 version）；
+    # 此处补上，使两条校验路径口径一致，消除「只校 hash 不校 version」的静默窗口。
+    if rec.version != rec.hash:
+        return bad(
+            "version 与 hash 不一致：冻结器要求二者恒等（SHA-256 前 12 位）",
+            actual=rec.version, expected=rec.hash,
+        )
+
     # ① hash 绑定：与制品内容比对
     if not rec.artifact_path:
         return bad("未声明 artifact_path，无法完成 hash 绑定校验")

@@ -89,9 +89,17 @@ def _sheet_entries(zf: zipfile.ZipFile) -> list[tuple[str, str]]:
 
 
 def _col_index(ref: str) -> int:
+    """把 OOXML 单元格列引用（如 ``A`` / ``AA`` / ``BC``）转成 0-based 列号。
+
+    非法 ref（如空字符串、纯数字、开头就非字母）直接 raise——静默返 0 会把值
+    归位到 A 列，下游看不出数据错乱。xlsx 标准保证 ref 形如 ``A1`` / ``BC12``，
+    非法 ref 本身意味着文件损坏。
+    """
     m = re.match(r"([A-Z]+)", ref)
     if not m:
-        return 0
+        raise ValueError(
+            f"非法单元格引用 {ref!r}（应为 'A1'、'BC12' 等 OOXML 格式）"
+        )
     idx = 0
     for ch in m.group(1):
         idx = idx * 26 + (ord(ch) - 64)

@@ -9,12 +9,20 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
 #: 用户名允许字符；其它一律转 `_`，杜绝目录穿越。
 _SAFE = re.compile(r"[^\w.\-]")
 _USER_MAX = 64
+
+#: 单进程内写入互斥。
+# FastAPI 中间件每次请求都会调 log_event，异步并发下多个请求可能同时进 open+write，
+# Windows 下 `open("a")` 的 write 不保证小于 PIPE_BUF 时原子。用 threading.Lock 让
+# 「open → write → close」序列互斥，避免同进程内行错乱。
+# 多进程部署（如 uvicorn --workers N）需运维侧确保单 worker，或用文件锁/队列外部协调。
+_LOG_LOCK = threading.Lock()
 
 
 def safe_user(raw: str | None) -> str:
@@ -48,6 +56,7 @@ def log_event(log_dir: Path | str, user: str | None, endpoint: str, outcome,
         line["project_id"] = project_id
     line.update(extra)
     path = _log_path(log_dir, now.date().isoformat())
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(line, ensure_ascii=False) + "\n")
+    with _LOG_LOCK:
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(line, ensure_ascii=False) + "\n")
     return path

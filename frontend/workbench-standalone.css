@@ -339,7 +339,7 @@
     display:flex; align-items:center; justify-content:center; animation: fade .16s ease; }
   @keyframes fade { from { opacity:0; } }
   .modal { background:var(--surface-card); border-radius:20px; padding:26px; width:480px; max-width:92vw; max-height:90vh; overflow-y:auto;
-    box-shadow:0 24px 60px color-mix(in srgb, var(--text) 26%, transparent); animation: pop .18s cubic-bezier(.2,.8,.3,1); }
+    box-shadow:var(--shadow-modal); animation: pop .18s cubic-bezier(.2,.8,.3,1); }
   @keyframes pop { from { transform: translateY(10px) scale(.98); opacity:0; } }
   .modal h3 { font-size:19px; font-weight:800; letter-spacing:-.01em; }
   .modal .sub { color:var(--text-secondary); font-size:13px; margin:5px 0 18px; }

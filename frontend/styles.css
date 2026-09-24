@@ -48,9 +48,12 @@
   --radius-tile:12px;
   --radius-card:16px;
   --radius-sheet:22px;
-  /* 阴影 */
+  /* 阴影（语义化 token：card 轻、overlay 中、modal 重、popover 下拉、tooltip 微） */
   --shadow-card:0 1px 2px rgba(35,34,32,.04),0 4px 16px rgba(35,34,32,.05);
   --shadow-overlay:0 10px 28px rgba(35,34,32,.12);
+  --shadow-modal:0 24px 60px rgba(35,34,32,.25);   /* modal / confirm / cmp-modal */
+  --shadow-popover:0 12px 40px rgba(35,34,32,.18);  /* 下拉列表 / 气泡 */
+  --shadow-tooltip:0 2px 6px rgba(35,34,32,.18);    /* 小型 tooltip / 标签气泡 */
   /* 字体与布局 */
   --font:"MiSans VF","MiSans","HarmonyOS Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
   --sidebar-w:258px;
@@ -465,7 +468,7 @@ button{font-family:var(--font)}
 
 /* ---------- 确认弹窗（报价定稿回写） ---------- */
 .modal-mask{position:fixed;inset:0;background:rgba(20,22,26,.42);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:var(--z-modal);animation:fadeIn .16s ease}
-.modal{background:var(--surface-card);border-radius:20px;padding:26px;width:440px;max-width:92vw;box-shadow:0 24px 60px rgba(0,0,0,.25);max-height:90vh;overflow-y:auto;animation:modalEnter .24s cubic-bezier(.175,.885,.32,1.15)}
+.modal{background:var(--surface-card);border-radius:20px;padding:26px;width:440px;max-width:92vw;box-shadow:var(--shadow-modal);max-height:90vh;overflow-y:auto;animation:modalEnter .24s cubic-bezier(.175,.885,.32,1.15)}
 .modal h3{margin:0 0 12px;font-size:16px;font-weight:700;letter-spacing:-.01em}
 .modal p{margin:0 0 20px;font-size:14px;line-height:1.7;color:var(--text);word-break:break-all}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px}
@@ -508,11 +511,11 @@ button{font-family:var(--font)}
 
 /* ---------- 应用内确认框（替换原生 confirm，防止误删） ---------- */
 .ui-confirm-overlay{position:fixed;inset:0;background:rgba(13,13,15,.45);display:flex;align-items:center;justify-content:center;z-index:var(--z-portal);animation:fadeIn .12s}
-.ui-confirm-box{background:var(--surface-card);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(360px,90vw);box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.ui-confirm-box{background:var(--surface-card);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(360px,90vw);box-shadow:var(--shadow-popover)}
 .ui-confirm-msg{font-size:14px;color:var(--text);margin-bottom:18px;line-height:1.6;word-break:break-all}
 .ui-confirm-title{font-size:16px;font-weight:700;color:var(--danger);margin-bottom:4px}
 .ui-confirm-sub{font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.55}
-.ui-confirm-overlay.danger .ui-confirm-box{border-color:color-mix(in srgb,var(--danger) 45%,transparent);box-shadow:0 12px 40px rgba(0,0,0,.22)}
+.ui-confirm-overlay.danger .ui-confirm-box{border-color:color-mix(in srgb,var(--danger) 45%,transparent);box-shadow:var(--shadow-popover)}
 .ui-confirm-actions{display:flex;justify-content:flex-end;gap:10px}
 .btn-danger{border:none;border-radius:999px;padding:7px 16px;font-size:12px;cursor:pointer;background:var(--danger);color:#fff;transition:filter .15s}
 .btn-danger:hover{filter:brightness(1.1)}

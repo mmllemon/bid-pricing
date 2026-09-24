@@ -281,7 +281,7 @@ button{font-family:var(--font)}
   content:attr(data-tip);
   position:absolute;left:0;bottom:calc(100% + 6px);
   background:var(--accent);
-  color:#f4f3f0;font-size:12px;line-height:1.5;font-weight:500;
+  color:var(--on-accent);font-size:12px;line-height:1.5;font-weight:500;
   padding:7px 11px;border-radius:9px;white-space:normal;
   border:1px solid rgba(255,255,255,.10);
   box-shadow:0 6px 18px rgba(35,34,32,.18);

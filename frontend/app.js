@@ -522,7 +522,7 @@ function uiConfirm(message, options = {}) {
     if (ov) ov.remove();
     ov = document.createElement('div');
     ov.id = 'ui-confirm';
-    ov.className = 'ui-confirm-overlay' + (options.danger ? ' danger' : '');
+    ov.className = 'ui-confirm-overlay open' + (options.danger ? ' danger' : '');
     ov.innerHTML = `<div class="ui-confirm-box" role="alertdialog" aria-modal="true" aria-label="${options.danger ? '删除已定稿方案' : '确认删除'}">
       ${options.danger ? '<div class="ui-confirm-title">删除已定稿方案</div><div class="ui-confirm-sub">该方案已定稿并回写项目，删除后需重新计算与回写，请谨慎操作。</div>' : ''}
       <div class="ui-confirm-msg">${esc(message)}</div>
@@ -531,10 +531,17 @@ function uiConfirm(message, options = {}) {
         <button type="button" class="btn-danger" data-act="ok">${options.danger ? '仍要删除' : '确认删除'}</button>
       </div></div>`;
     document.body.appendChild(ov);
-    const done = val => { ov.remove(); resolve(val); };
+    trapModal();
+    const done = val => { releaseTrap(); ov.remove(); resolve(val); };
     ov.querySelector('[data-act="cancel"]').addEventListener('click', () => done(false));
     ov.querySelector('[data-act="ok"]').addEventListener('click', () => done(true));
     ov.addEventListener('mousedown', e => { if (e.target === ov) done(false); });
+    // 键盘：Escape 取消、Enter 确认（默认焦点在取消上，更安全）
+    document.addEventListener('keydown', function _k(e) {
+      if (!document.contains(ov)) { document.removeEventListener('keydown', _k, true); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); done(false); }
+    }, true);
+    setTimeout(() => { const c = ov.querySelector('[data-act="cancel"]'); if (c) c.focus(); }, 0);
   });
 }
 
@@ -1530,6 +1537,7 @@ function openPlanHub() {
   hub.setAttribute('aria-hidden', 'false');
   const dock = document.querySelector('#diffDrawerBtn');
   if (dock) dock.setAttribute('aria-expanded', 'true');
+  trapModal(dock);
   const close = document.querySelector('#planHubCloseBtn');
   if (close) close.focus();
 }
@@ -1540,7 +1548,7 @@ function closePlanHub() {
   hubSelected.clear();
   const dock = document.querySelector('#diffDrawerBtn');
   if (dock) dock.setAttribute('aria-expanded', 'false');
-  if (dock) dock.focus();
+  releaseTrap();
 }
 // —— 对比结果弹层（#cmpModal）：方案中心「开始对比」结果的居中式呈现 ——
 function openCompareModal() {
@@ -1548,6 +1556,7 @@ function openCompareModal() {
   if (!modal) return;
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
+  trapModal();
   const closeBtn = document.querySelector('#cmpModalCloseBtn');
   if (closeBtn) closeBtn.focus();
 }
@@ -1556,6 +1565,7 @@ function closeCompareModal() {
   if (!modal) return;
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
+  releaseTrap();
 }
 // —— 审计日志弹层（#auditModal）：操作坞「审计日志」→ GET /api/audit/list ——
 function openAuditModal() {
@@ -1564,6 +1574,7 @@ function openAuditModal() {
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   loadAudit();
+  trapModal();
   const closeBtn = document.querySelector('#auditModalCloseBtn');
   if (closeBtn) closeBtn.focus();
 }
@@ -1572,6 +1583,7 @@ function closeAuditModal() {
   if (!modal) return;
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
+  releaseTrap();
 }
 const AUDIT_ACTIONS = {
   'quote.optimize': '测算优化', 'plan.save': '保存方案', 'plan.finalize': '方案定稿',
@@ -1694,6 +1706,41 @@ async function runHubCompare() {
   } catch (error) { setMessage(`对比失败：${error.message}`, 'error'); }
   finally { if (btn) btn.disabled = false; }
 }
+
+// ---- 焦点陷阱（a11y）：Tab 在模态框内循环，不跳到背景 ----
+// 三个模态框（planHub / cmpModal / auditModal）共享此工具，支持嵌套：
+// 用栈记录每个模态的触发元素，关闭顶层模态时把焦点还给被它打开的下层模态的触发元素；
+// 最后一个关闭时解锁 body 并把焦点还给最外层触发元素。
+const _trapStack = [];
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || !_trapStack.length) return;
+  const openModals = document.querySelectorAll('.open');
+  if (!openModals.length) return;
+  const modal = openModals[openModals.length - 1]; // 最顶层模态
+  const focusables = modal.querySelectorAll(
+    'button:not([disabled]), input:not([type=hidden]):not([disabled]), ' +
+    'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  if (e.shiftKey) {
+    if (active === first || active === document.body) { e.preventDefault(); last.focus(); }
+  } else {
+    if (active === last) { e.preventDefault(); first.focus(); }
+  }
+}, true);
+function trapModal(triggerEl) {
+  _trapStack.push(triggerEl || document.activeElement);
+  if (_trapStack.length === 1) document.body.setAttribute('tabindex', '-1');
+}
+function releaseTrap() {
+  _trapStack.pop();
+  if (!_trapStack.length) { document.body.removeAttribute('tabindex'); return; }
+  const t = _trapStack[_trapStack.length - 1];
+  if (t && t.focus && document.contains(t)) t.focus();
+}
+
 function bindPlanHub() {
   const closeBtn = document.querySelector('#planHubCloseBtn');
   if (closeBtn) closeBtn.addEventListener('click', closePlanHub);

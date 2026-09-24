@@ -788,8 +788,9 @@ function renderBizPage(){
   const sortOpts = [["default","默认"],["name","名称"],["date","开标日期"],["amount","报价金额"],["profit","总毛利"]];
   let projects = [], bizQ = "", colSort = {};
 
+  const bizSkeleton = () => '<div class="biz-col" style="padding:4px 2px">' + Array.from({length:4}).map(()=>`<div class="biz-card" style="margin-bottom:10px"><div style="display:flex;gap:12px;align-items:center;margin-bottom:8px"><div class="skeleton" style="width:8px;height:32px;border-radius:3px"></div><div class="skeleton" style="height:16px;flex:0 0 40%"></div><div class="skeleton" style="height:12px;flex:0 0 20%"></div><div style="margin-left:auto"><div class="skeleton" style="width:90px;height:14px"></div></div></div><div style="display:flex;gap:16px"><div class="skeleton" style="height:10px;flex:1"></div><div class="skeleton" style="height:10px;flex:0.7"></div><div class="skeleton" style="height:10px;flex:0.5"></div></div></div>`).join('') + '</div>';
   const fetchAll = () => {
-    fill(head + '<div class="biz-loading">正在读取项目经营概览…</div>');
+    fill(head + bizSkeleton());
     fetch(API_BASE + "/api/project/overview/list").then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(json=>{
       projects = (json && json.projects) || [];
       window.__bizProjects = projects;

@@ -948,6 +948,60 @@ function triggerToast(text) {
 }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 
+// ---- KPI 数字 count-up 动画（从旧值平滑滚动到新值）----
+// 旧值从 DOM 读取，无状态依赖。动画中旧值被新调用取消。
+// prefers-reduced-motion 时直接跳到最终值。
+const _reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+function _parseNum(text) {
+  if (!text) return 0;
+  const m = String(text).replace(/[^0-9.\-]/g, '');
+  return m ? parseFloat(m) : 0;
+}
+function _animateNum(el, from, to, fmt, dur) {
+  if (!el) return;
+  dur = dur || 600;
+  if (Math.abs(from - to) < 0.001 || _reduceMotion) { el.textContent = fmt(to); return; }
+  if (el._numAnim) cancelAnimationFrame(el._numAnim);
+  const t0 = performance.now(), diff = to - from;
+  (function tick(now) {
+    const t = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - t, 3); // easeOutCubic
+    el.textContent = fmt(from + diff * e);
+    if (t < 1) el._numAnim = requestAnimationFrame(tick);
+    else el._numAnim = null;
+  })(t0);
+}
+// KPI 数值更新：自动从 DOM 读旧值，滚动到新值。
+// hasEmpty：当 finalVal 为 0/空时显示 '—'（总报价/利润用）。
+function setKpiNum(id, finalVal, fmt, hasEmpty) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (hasEmpty && !finalVal) { el.textContent = '—'; return; }
+  _animateNum(el, _parseNum(el.textContent), finalVal, fmt);
+}
+// 评分特殊处理：数字部分滚动，grade span 保留不动
+function setKpiScore(el, finalScore, grade) {
+  if (!el) return;
+  if (!el.querySelector('span')) {
+    el.innerHTML = `${finalScore} <span style="font-size:13px;color:var(--module-3)">${grade}</span>`;
+    return;
+  }
+  const oldScore = parseInt(el.textContent.trim().split(/\s+/)[0]) || 0;
+  if (Math.abs(oldScore - finalScore) < 0.5 || _reduceMotion) {
+    el.firstChild.nodeValue = finalScore + ' ';
+    return;
+  }
+  if (el._numAnim) cancelAnimationFrame(el._numAnim);
+  const t0 = performance.now(), diff = finalScore - oldScore;
+  (function tick(now) {
+    const t = Math.min(1, (now - t0) / 600);
+    const e = 1 - Math.pow(1 - t, 3);
+    el.firstChild.nodeValue = Math.round(oldScore + diff * e) + ' ';
+    if (t < 1) el._numAnim = requestAnimationFrame(tick);
+    else el._numAnim = null;
+  })(t0);
+}
+
 // 派生合规评分：status / violations / anomalies / low_ratio_review_required → 评分+等级
 function computeCompliance(result) {
   let score = 100, reasons = [];
@@ -1057,15 +1111,16 @@ function renderKpi(result) {
   const comp = computeCompliance(result);
   const vatObj = computeInputVat(result);
   const marginRate = total > 0 ? (objective / total) * 100 : 0;
-  setText('kpiTotalVal', total ? `¥${total.toLocaleString('zh-CN',{minimumFractionDigits:2})}` : '—');
+  // 主 KPI 数值走 count-up 动画（从 DOM 读旧值，平滑滚动到新值）
+  setKpiNum('kpiTotalVal', total, (v) => `¥${v.toLocaleString('zh-CN',{minimumFractionDigits:2})}`, true);
   setText('kpiTotalCap', result.competitive_budget ? `竞争预算 ${Number(result.competitive_budget).toLocaleString('zh-CN',{maximumFractionDigits:0})}` : '—');
   setText('kpiTotalDelta', result.status === 'PASS' ? '锁定约束' : '未平衡');
-  setText('kpiMarginVal', objective ? `¥${objective.toLocaleString('zh-CN',{minimumFractionDigits:2})}` : '—');
+  setKpiNum('kpiMarginVal', objective, (v) => `¥${v.toLocaleString('zh-CN',{minimumFractionDigits:2})}`, true);
   setText('kpiMarginRate', `毛利率 ${marginRate.toFixed(1)}%`);
   setText('kpiCashflowTag', result.status === 'PASS' ? '结算调整后利润 · 不含税' : '待计算');
   // 评分格需让 grade 成为真元素（setText 用 textContent 会把 <span> 当字面文本显示），grade 为固定枚举非用户输入，安全用 innerHTML
   const scoreEl = document.querySelector('#kpiScoreVal');
-  if (scoreEl) scoreEl.innerHTML = `${comp.score} <span style="font-size:13px;color:var(--module-3)">${comp.grade}</span>`;
+  if (scoreEl) setKpiScore(scoreEl, comp.score, comp.grade);
   setText('kpiAuditTag', comp.audit);
   const auditBadge = document.querySelector('#kpiAuditTag');
   if (auditBadge) auditBadge.className = 'delta-badge ' + comp.badge;
@@ -1073,7 +1128,7 @@ function renderKpi(result) {
   document.querySelector('#scaleSafe').style.width = comp.safe + '%';
   document.querySelector('#scaleEarly').style.width = comp.early + '%';
   document.querySelector('#scaleRisk').style.width = comp.risk + '%';
-  setText('kpiVatVal', `¥${vatObj.vat.toLocaleString('zh-CN',{minimumFractionDigits:2})}`);
+  setKpiNum('kpiVatVal', vatObj.vat, (v) => `¥${v.toLocaleString('zh-CN',{minimumFractionDigits:2})}`);
   setText('kpiVatK', `k: ${vatObj.k}`);
   setText('kpiVatShare', `材料抵扣贡献 ${vatObj.share}`);
   setText('kpiVatStatus', vatObj.status);

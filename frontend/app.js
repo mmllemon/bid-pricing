@@ -942,15 +942,9 @@ function renderCompare(res, { silent = false } = {}) {
    仅作用于报价视图，接入现有真实后端 renderResult(result)。
    ============================================================================= */
 function triggerToast(text) {
-  const tp = document.querySelector('#toastPill');
-  const tm = document.querySelector('#toastMsg');
-  if (!tp) return;
-  tm.textContent = text;
-  tp.className = 'toast-pill';
-  tp.classList.add('show');
-  // 与 setMessage 共用 toastTimer，避免旧计时器提前隐藏新 Toast
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => tp.classList.remove('show'), 2200);
+  // 复用 setMessage 的堆叠实现（右上角，最多 3 条），与 38 处调用点行为一致。
+  // 旧版单独操作 #toastPill 的实现已废弃。
+  setMessage(text, '');
 }
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 

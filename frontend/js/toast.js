@@ -4,21 +4,34 @@
  * 需在 app.js 之前加载（app.js 依赖 setMessage 等全局函数）。
  */
 
-// ---- 提示 Toast（P0：消息从左栏内联提示改为顶部 Toast 气泡） ----
-// 保留 setMessage(text, kind) 签名（40+ 处调用点不动），内部实现为顶部 toast-pill。
-// kind ∈ {success,error,warn,''}：success=模块绿、error=赤陶、warn=赭石、默认墨灰；
-// 自动消失（success 3.5s / error 6s / 其他 4s）；内容可含 HTML（现有调用含 <b>）。
-let toastTimer = null;
+// ---- 提示 Toast（堆叠式）----
+// setMessage(text, kind) 被全局调用（38 处），签名不变。内部实现为右上角堆叠容器，
+// 最多同时显示 3 条；超出时最早一条从顶部滑出。每条独立计时自动消失
+// （success 3.5s / error 6s / 其他 4s）。内容经 _safeToastHtml 白名单过滤。
+//
+// 设计取舍：旧版单例 toast-pill 会在连续操作（如"已保存"+"已删除"）时覆盖前一条，
+// 用户看不到中间结果。改堆叠后能完整保留消息序列，最多 3 条堆叠不阻塞交互。
+const TOAST_MAX = 3;
+const TOAST_LIFE = { success: 3500, error: 6000, warn: 4000, '': 4000 };
 function setMessage(text, kind = '') {
-  const tp = document.querySelector('#toastPill');
-  const tm = document.querySelector('#toastMsg');
-  if (!tp || !tm) return;
-  tp.className = 'toast-pill' + (kind ? ' toast-' + kind : '');
-  tm.innerHTML = _safeToastHtml(text);
-  tp.classList.add('show');
-  clearTimeout(toastTimer);
-  const ms = kind === 'success' ? 3500 : kind === 'error' ? 6000 : 4000;
-  toastTimer = setTimeout(() => tp.classList.remove('show'), ms);
+  const stack = document.querySelector('#toastStack');
+  if (!stack) return;
+  // 超限时移除最早一条（立即移除，不留过渡，避免堆叠时动画重叠）
+  while (stack.children.length >= TOAST_MAX) {
+    stack.removeChild(stack.firstElementChild);
+  }
+  const pill = document.createElement('div');
+  pill.className = 'toast-pill' + (kind ? ' toast-' + kind : '');
+  pill.innerHTML = '<span>' + _safeToastHtml(text) + '</span>';
+  stack.appendChild(pill);
+  // 强制回流，确保 transition 触发（从 opacity:0 → opacity:1）
+  void pill.offsetWidth;
+  pill.classList.add('show');
+  const ms = TOAST_LIFE[kind] ?? TOAST_LIFE[''];
+  setTimeout(() => {
+    pill.classList.add('leaving');
+    setTimeout(() => pill.remove(), 240);
+  }, ms);
 }
 // F-11：setMessage 的 text 参数来自 API 响应与用户输入，此前直接注入 innerHTML 构成 XSS 面。
 // 白名单过滤：仅允许 <b>/<strong>/<br> 三种安全标签（现有调用含 <b>已保存</b> 等粗体），

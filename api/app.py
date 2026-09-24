@@ -229,6 +229,16 @@ WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 #: 「读槽位 → 写 json/xlsx → 落 SQLite → 回写槽位」序列须原子化。
 #: O4（治理审查 P0）：此前文件写入在 SQLite 锁之前，Windows 下 O_TRUNC 非原子，
 #: 并发可能产出半成品产物。参照 deployment.py 的 threading.Lock 模式。
+#:
+#: 已知局限（O4-c，2026-09-24 登记，未修）：
+#: (a) 本锁是 **threading.Lock**（进程内），在 async 路由内 with 会阻塞整个事件循环。
+#:     锁内子进程调用（node build_web_result.mjs，timeout=60s）期间，其它请求的
+#:     事件循环也被卡住。修法：改用 asyncio.Lock + asyncio.to_thread 包装 save_plan
+#:     / upsert_slot / _export_xlsx（都是同步 IO）。当前单 worker 部署可接受。
+#: (b) 本锁不跨进程。**多 worker 部署（uvicorn --workers N）下失效**：每个 worker
+#:     各持一把锁，跨进程并发写同槽位仍可能产出半成品产物。当前部署是单 worker 进程
+#:     （未使用 --workers），此锁足够；若需多 worker，须把本锁换成 SQLite 事务或
+#:     外部锁（例如文件锁），并在部署手册中登记。
 _SLOT_LOCK = threading.Lock()
 
 
@@ -368,7 +378,10 @@ def _rebuild_xlsx(job_id: str) -> Path | None:
     if not rec or not rec.get("result"):
         return None
     xlsx_path = WEB_OUTPUT_DIR / f"{job_id}.xlsx"
-    _export_xlsx(rec["result"], job_id)
+    # O4：与 optimize_quote 一致，写 json/xlsx 须持 _SLOT_LOCK，
+    # 防止下载时重建与 optimize 并发写同 plan_id 时 O_TRUNC 产出半成品 xlsx。
+    with _SLOT_LOCK:
+        _export_xlsx(rec["result"], job_id)
     return xlsx_path if xlsx_path.exists() else None
 
 
@@ -615,15 +628,18 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
         return JSONResponse(status_code=status_code, content=payload)
     payload.update({"project_id": rec.get("name") or id, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "strategy": strategy})
     payload["plan_id"] = id
-    # 与 optimize 一致：先导出再落盘，保存的方案 result 须带 excel_download_url，否则打开方案时「下载 Excel」为 '#' 无反应
-    excel_url = _export_xlsx(payload, id)
-    if excel_url:
-        payload["excel_download_url"] = excel_url
-    merged = dict(rec)
-    merged["params"] = dict(params)
-    merged["result"] = payload
-    merged["strategy"] = strategy
-    save_plan(merged, plan_id=id)
+    # O4：与 optimize_quote 一致，「导出 xlsx → 落 SQLite」序列须原子化，
+    # 防止重算与 optimize 并发写同 plan_id 时 O_TRUNC 产出半成品产物。
+    with _SLOT_LOCK:
+        # 先导出再落盘：保存的方案 result 须带 excel_download_url，否则打开方案时「下载 Excel」为 '#' 无反应
+        excel_url = _export_xlsx(payload, id)
+        if excel_url:
+            payload["excel_download_url"] = excel_url
+        merged = dict(rec)
+        merged["params"] = dict(params)
+        merged["result"] = payload
+        merged["strategy"] = strategy
+        save_plan(merged, plan_id=id)
     return JSONResponse(status_code=200, content=payload)
 
 

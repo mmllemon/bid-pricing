@@ -573,11 +573,16 @@ function currentProjectPlans() {
 async function loadProjectGroups() {
   const pid = curProjectIdUuid();
   if (!pid) { groups = []; plans = []; renderHubCards(); return []; }
+  // 首次加载（无缓存）时显示 skeleton，避免空白闪屏
+  const body = document.querySelector('#planHubBody');
+  const isInitial = !groups.length && (!body || !body.dataset.loaded);
+  if (isInitial && body) body.innerHTML = _skeletonCards(3);
   try {
     const res = await (await fetch(API_BASE + '/api/group/list?project_id=' + encodeURIComponent(pid))).json();
     groups = (res && res.groups) || [];
     plans = currentProjectPlans();
     renderHubCards();
+    if (body) body.dataset.loaded = '1';
     return groups;
   } catch (error) { setMessage(`方案组加载失败：${error.message}`, 'error'); return []; }
 }
@@ -1595,10 +1600,39 @@ const AUDIT_ACTIONS = {
 function escapeHtml(v) {
   return String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// 生成 skeleton loading HTML（审计日志 / 方案组 / 其他列表）
+function _skeletonRows(n = 6) {
+  const cols = [1, 0.35, 0.2, 0.4, 0.35, 0.5]; // 各列宽度比例
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    html += '<div class="skeleton-row">' + cols.map(c =>
+      `<div class="skeleton skeleton-cell" style="flex:${c}"></div>`
+    ).join('') + '</div>';
+  }
+  return `<div class="table-wrap" style="padding:0;max-height:56vh;overflow:hidden;border:1px solid var(--border);border-radius:8px">${html}</div>`;
+}
+function _skeletonCards(n = 3) {
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    html += `<div class="skeleton-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div class="skeleton" style="width:18px;height:18px;flex-shrink:0;border-radius:4px"></div>
+        <div class="skeleton" style="height:14px;flex:0 0 40%"></div>
+        <div class="skeleton" style="height:14px;flex:0 0 20%"></div>
+        <div style="margin-left:auto"><div class="skeleton" style="width:60px;height:14px"></div></div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <div class="skeleton" style="height:10px;flex:1"></div>
+        <div class="skeleton" style="height:10px;flex:0.7"></div>
+      </div></div>`;
+  }
+  return html;
+}
+
 async function loadAudit() {
   const body = document.querySelector('#auditBody');
   if (!body) return;
-  body.innerHTML = '<p class="audit-loading">正在读取审计日志…</p>';
+  body.innerHTML = _skeletonRows(6);
   try {
     const res = await (await fetch(API_BASE + '/api/audit/list?limit=100')).json();
     if (res.status !== 'PASS') throw new Error(res.reason || '读取失败');

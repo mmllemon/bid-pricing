@@ -924,3 +924,11 @@ table.audit-table tr:hover td{background:var(--surface-soft)}
 .audit-success{color:var(--success)}
 .audit-error{color:var(--danger)}
 .audit-warn{color:var(--warn)}
+/* ---- Skeleton loading：shimmer 扫光，尊重 prefers-reduced-motion ---- */
+.skeleton{position:relative;overflow:hidden;background:var(--surface-nested);border-radius:6px}
+.skeleton::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);transform:translateX(-100%);animation:shimmer 1.4s ease infinite}
+@keyframes shimmer{to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.skeleton::after{animation:none;opacity:.5}}
+.skeleton-row{display:flex;gap:12px;align-items:center;padding:8px 12px;border-top:1px solid var(--border)}
+.skeleton-cell{height:14px;border-radius:4px;flex:1;min-width:0}
+.skeleton-card{padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px}

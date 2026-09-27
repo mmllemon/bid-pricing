@@ -1263,6 +1263,20 @@ function refreshSchemeTabs() {
   });
   syncSchemeSwitcher();
 }
+// 通用：为 role="tab" 的标签组补 ArrowLeft/Right 键盘导航（ARIA APG tab pattern）
+function _bindTabArrowNav(selector) {
+  document.querySelectorAll(selector).forEach(tab => {
+    tab.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      const tabs = Array.from(document.querySelectorAll(selector)).filter(t => !t.disabled);
+      const idx = tabs.indexOf(tab);
+      const next = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+      tabs[next].focus();
+      tabs[next].click();
+    });
+  });
+}
 function bindSchemeTabs() {
   const letters = ['A', 'B', 'C'];
   document.querySelectorAll('.scheme-tab').forEach(tab => {
@@ -1277,6 +1291,7 @@ function bindSchemeTabs() {
       else { if (bal) bal.textContent = '该槽位暂无方案'; triggerToast('该方案槽位暂无方案'); }
     });
   });
+  _bindTabArrowNav('.scheme-tab');
 }
 function updateSchemeBalance() {
   const bal = document.querySelector('#schemeBalanceText');
@@ -1300,11 +1315,12 @@ function bindFilters() {
   };
   document.querySelectorAll('.filter-chip').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c === btn));
+      document.querySelectorAll('.filter-chip').forEach(c => { c.classList.toggle('active', c === btn); c.setAttribute('aria-selected', String(c === btn)); });
       dashFilter = btn.dataset.filter;
       renderDashTable(); syncDrillClear();
     });
   });
+  _bindTabArrowNav('.filter-chip');
   const clearChip = document.querySelector('#clearDrillChip');
   if (clearChip) clearChip.addEventListener('click', resetDrill);
   // KPI 卡即按 role="button"：补 Enter/Space 键盘触发（P1-6）

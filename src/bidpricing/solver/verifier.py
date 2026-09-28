@@ -437,7 +437,7 @@ def bound_verdicts(
     *,
     tolerances: Mapping[str, float],
     P_ref: float | None,
-    resolution: float,
+    resolution: float | None,
     floor_by_id: Mapping[str, float] | None,
 ) -> tuple[BoundVerdict, ...]:
     """逐项复算 L_i / floor_i / U_i / lb_C5 四路阈值。
@@ -447,10 +447,14 @@ def bound_verdicts(
     **``compute_lb_c5`` 的入参必须是无量纲的 ``eps_rel_price``**，不是已 ×P* 的
     ``eps_price``——后者会让该函数再乘一遍 P_ref（实测 lb_C5 由 0.01 元被放大
     成 9000 元，四项全判违反下界）。见制品 ``discovered_defect_2``（DV-02）。
+
+    ``resolution=None``（精度档案未声明 rounding.resolution 且调用方未显式
+    传参）时 lb_C5 路整体缺席（SKIP），**不得落 0 继续判**——resolution=0
+    会把 lb_C5 静默降级成 eps_rel·P_ref，下界检查形同虚设且无人知晓。
     """
     eps_rel = tolerances.get(EPS_Z_REL_NAME)
     lb_c5: float | None = None
-    if eps_rel is not None and P_ref is not None:
+    if eps_rel is not None and P_ref is not None and resolution is not None:
         lb_c5 = compute_lb_c5(float(P_ref), float(eps_rel), float(resolution))
 
     out: list[BoundVerdict] = []
@@ -672,11 +676,30 @@ def verify_solution(
     P_ref: float | None = None
     if instance is not None:
         P_ref = instance.P_star if instance.P_star is not None else instance.B
+    resolution_declared = resolution is not None
     if resolution is None:
         rounding = (profile.get("rounding") or {})
-        resolution = float(rounding.get("resolution", 0.0))
+        # 缺声明不落 0（与 F-06 对同一缺失判 SKIP 同口径）：resolution=0
+        # 会把 lb_C5 静默降级成 eps_rel·P_ref。置 None ⇒ bound_verdicts 的
+        # lb_C5 路整体缺席并由下方检查显式留痕。
+        if "resolution" in rounding:
+            resolution = float(rounding["resolution"])
+            resolution_declared = True
+        else:
+            resolution = None
 
     tolerances, tol_problems = resolve_tolerances(profile, spec, P_ref=P_ref)
+
+    # ---- SV-00 rounding.resolution 声明（缺声明留痕，不静默降级）--------
+    # 与 F-06 同一缺失同一口径：resolution 未声明时 lb_C5 路整体缺席
+    # （bound_verdicts 内 SKIP），此处 WARN 留痕——「少查了一路下界」
+    # 必须在报告里看得见，不能让降级静默发生。
+    if not resolution_declared:
+        checks.append(VerifierCheck(
+            SCOPE, "SV-00 rounding.resolution 声明", STATUS_WARN,
+            "精度档案未声明 rounding.resolution 且调用方未显式传参 ⇒ "
+            "lb_C5 下界路本轮缺席（不落 0 继续判）；补齐声明后复跑",
+        ))
 
     # ---------------- SV-01 声明容差名全可解析 --------------------------
     declared = sorted({r.tolerance for r in model.rows})
@@ -855,7 +878,7 @@ def verify_solution(
         # ------------ SV-07 / SV-08 上下界 ----------------------------
         bounds = bound_verdicts(
             instance, x, tolerances=tolerances, P_ref=P_ref,
-            resolution=float(resolution), floor_by_id=floor_by_id,
+            resolution=resolution, floor_by_id=floor_by_id,
         )
         floor_missing = any(
             v.get("status") == STATUS_BLOCKED

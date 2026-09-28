@@ -108,7 +108,7 @@ def _probe_model(*, active=()):
         instance,
         _resolved(),
         eps_abs=float(prof["eps_abs"]["value"]),
-        eps_price=float(prof["eps_price"]["value"]),
+        eps_rel_price=float(prof["eps_price"]["value"]),
         resolution=float(prof["rounding"]["resolution"]),
         **{k: PROBE_SOLVER_INPUTS[k] for k in
            ("theta", "n_max", "d_max", "r_min", "z_min", "pi_target")},

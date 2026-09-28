@@ -127,13 +127,12 @@ def build_settlement_adjustment_formulation(
         lower = merged_lower(item, lb_c5, floor_by_id)
         if lower is None:
             raise UnbalancedPolicyError(f"{item.item_id}: 单价下界不可计算")
-        upper = item.U
+        # U_eff 统一 cap 回退（U 缺席而 cap 有值时不再各自为政）。
+        upper = item.U_eff
         q0, q1 = float(item.q0), float(item.q1_point)
         cap = None if item.cap is None else float(item.cap)
         if cap is None:
             warnings.append(f"{item.item_id}:无最高限价，无法按 CAP 判断严重低价，按普通结算收入处理")
-        if upper is None and cap is not None:
-            upper = cap
 
         # 基准收入系数：当前条款在非严重低价区间为 q1*p。
         variables.append(Column("p", item.item_id, "CONTINUOUS", lower, upper, q1 * revenue_factor,

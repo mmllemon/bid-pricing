@@ -11,13 +11,16 @@
    图标用 icon 字段（取自下方 ICONS 图标库，全部为单色线性图标）。
    ============================================================ */
 /* 后端服务基址：单一配置点（与提案报价页 app.js 的 API_BASE 保持一致） */
-const API_BASE = 'http://localhost:8000';
+// 部署钩子：页面脚本前定义 window.__API_BASE__ 可覆盖；缺省同机开发端口。
+const API_BASE = window.__API_BASE__ || 'http://localhost:8000';
 
 // H-013：可选 API token——服务端启用 BIDPRICING_API_TOKEN 后，把 token 存入
 // localStorage('bidpricingApiToken')，此包装器为所有 /api 请求自动附加 Authorization。
 (() => {
+  // 幂等标记：与 app.js 的包装同型——同页双加载时只生效一层。
+  if (window.fetch && window.fetch.__tokenPatched) return;
   const _fetch = window.fetch.bind(window);
-  window.fetch = (input, init) => {
+  const patched = (input, init) => {
     const token = (localStorage.getItem('bidpricingApiToken') || '').trim();
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     if (token && url.startsWith(API_BASE)) {
@@ -27,9 +30,11 @@ const API_BASE = 'http://localhost:8000';
     }
     return _fetch(input, init);
   };
+  patched.__tokenPatched = true;
+  window.fetch = patched;
 })();
 const CONFIG = {
-  storageKey: "gc-workbench-v2",        // 换 key 可强制重置
+  storageKey: "gc-workbench-v2",        // 换 key 可强制重置；workbench.html 跳转页负责把旧 v1 一次性迁入
   owner: "我的工作台",                  // 侧栏顶部标题
   slogan: "工程智算 · 个人空间",
 
@@ -125,8 +130,13 @@ function isoToday(){ return new Date().toISOString().slice(0,10); }
 function today(){ return isoToday(); }
 function avgProgress(list){
   if(!list||!list.length) return { value:0, sub:"0" };
-  const v = Math.round(list.reduce((s,x)=>s+Math.min(100,(x.current/x.target)*100||0),0)/list.length);
-  return { value:v, sub:`${list.length} 项` };
+  // target=0（未设目标）不参与平均：原写法除得 Infinity 被 Math.min
+  // 吞成 100%，把「没定目标」伪装成「已完成」。
+  const scored = list.filter(x=>Number(x.target)>0)
+    .map(x=>Math.min(100,Math.round((x.current/x.target)*100||0)));
+  if(!scored.length) return { value:0, sub:`${list.length} 项 · 未设目标` };
+  const v = Math.round(scored.reduce((a,b)=>a+b,0)/scored.length);
+  return { value:v, sub:`${scored.length}/${list.length} 项` };
 }
 const modOf = k => CONFIG.modules.find(m=>m.key===k);
 const $ = s => document.querySelector(s);
@@ -134,10 +144,23 @@ const $ = s => document.querySelector(s);
 const store = {
   load(){
     const raw = localStorage.getItem(CONFIG.storageKey);
-    if(raw){ try { return JSON.parse(raw); } catch(e){} }
+    if(raw){
+      try { return JSON.parse(raw); }
+      catch(e){
+        // 损坏 ≠ 空数据：先把原始串备份出来留证再回退种子，否则下一次
+        // save() 会把可能可修复的数据永久覆盖掉。
+        try { localStorage.setItem(CONFIG.storageKey+".corrupt", raw); } catch(_e){}
+      }
+    }
     const d={}; CONFIG.modules.forEach(m=>d[m.key]=structuredClone(m.seed||[])); return d;
   },
-  save(){ localStorage.setItem(CONFIG.storageKey, JSON.stringify(data)); },
+  save(){
+    try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(data)); }
+    catch(e){
+      // 头像/大数据塞爆配额是最常见来源：静默失败会让人以为存上了。
+      alert("本地保存失败（存储空间不足）：请清理浏览器存储或更换更小的头像后再试。");
+    }
+  },
 };
 let data = store.load();
 let view = "home";
@@ -159,7 +182,11 @@ function weekNum(){ const n=new Date(); const s=new Date(n.getFullYear(),0,1);
 /* 秒级心跳：更新时钟；番茄钟运行时倒计时 */
 function startClock(){ if(clockTimer) return; clockTimer=setInterval(heartbeat,1000); heartbeat(); }
 function heartbeat(){
-  const el=$("#clk"); if(el){ const n=new Date(); el.textContent=`${pad2(n.getHours())}:${pad2(n.getMinutes())}:${pad2(n.getSeconds())}`; }
+  // 空转优化：既无时钟元素展示、番茄钟也未运行时，本轮什么都不做——
+  // 不降频到 5s 是因为番茄钟计时精度依赖 1s tick（后台标签页由浏览器自行节流）。
+  const el=$("#clk");
+  if(!el && !pomo.running) return;
+  if(el){ const n=new Date(); el.textContent=`${pad2(n.getHours())}:${pad2(n.getMinutes())}:${pad2(n.getSeconds())}`; }
   if(pomo.running){ pomo.remain--; if(pomo.remain<=0) completePomo(); pomoUpdate(); }
 }
 function pomoUpdate(){
@@ -208,7 +235,7 @@ function focusTileHTML(){
   const chk=icon("check",13,2.6);
   const sub=(m,x)=>{
     if(m.type==="checkin") return `${m.name} · 连续 ${streak(x.log)} 天`;
-    if(m.type==="progress"){ const p=Math.min(100,Math.round((x.current/x.target)*100||0)); return `${m.name} · ${x.current}/${x.target} ${x.unit||m.unit||''} · ${p}%`; }
+    if(m.type==="progress"){ const p=Math.min(100,Math.round((x.current/x.target)*100||0)); return `${m.name} · ${x.current}/${x.target} ${esc(x.unit||m.unit||'')} · ${p}%`; }
     return m.name;
   };
   const ctl=(m,x)=>{
@@ -241,8 +268,10 @@ function overviewTileHTML(){
   const recCount=CONFIG.modules.reduce((s,m)=>s+((data[m.key]||[]).length),0);
   const pinCount=CONFIG.modules.reduce((s,m)=>s+((data[m.key]||[]).filter(x=>x.pinned).length),0);
   const money=data.money||[];
-  const inc=money.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
-  const exp=money.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+  // 按分（整数）累计再换回元：浮点直加会出 ¥0.30000000000000004。
+  const cents = arr => arr.reduce((a,x)=>a+Math.round(Number(x.amount||0)*100), 0);
+  const inc=cents(money.filter(x=>x.type==="income"))/100;
+  const exp=cents(money.filter(x=>x.type==="expense"))/100;
   const bal=inc-exp, balCol=bal>=0?"var(--success)":"var(--danger)";
   return `<div class="tile b12"><div class="tile-h"><span class="tic">${icon("target",16)}</span><div class="tt"><span class="en">DAILY VITALS</span><span class="zh">今日概览</span></div><span class="r">${dateStr()}</span></div>
     <div class="ov2-body">
@@ -314,17 +343,17 @@ function trendTileHTML(){
 
 /* 月度开销：finance 支出按分类占比 */
 function spendTileHTML(){
-  const all=data.money||[]; const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+  const all=data.money||[]; const expC=all.filter(x=>x.type==="expense").reduce((a,x)=>a+Math.round(Number(x.amount||0)*100),0);
   const palette=["var(--module-4)","var(--module-3)","var(--module-1)","var(--module-2)","var(--module-5)","var(--accent)","var(--danger)"];
-  const byCat={}; all.filter(x=>x.type==="expense").forEach(x=>{ const c=x.category||"其他"; byCat[c]=(byCat[c]||0)+ +x.amount; });
+  const byCat={}; all.filter(x=>x.type==="expense").forEach(x=>{ const c=x.category||"其他"; byCat[c]=(byCat[c]||0)+Math.round(Number(x.amount||0)*100); });
   const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
-  const rows=cats.length? cats.map((c,i)=>{ const pc=exp?Math.round(c[1]/exp*100):0; const col=palette[i%palette.length];
+  const rows=cats.length? cats.map((c,i)=>{ const pc=expC?Math.round(c[1]/expC*100):0; const col=palette[i%palette.length];
     return `<div class="book-row js-open" data-open="money"><span class="spine" style="background:${col}">${icon("wallet",16)}</span>
-      <div class="bmid"><div class="btt">${esc(c[0])}</div><div class="bsub">¥${c[1]}</div>
+      <div class="bmid"><div class="btt">${esc(c[0])}</div><div class="bsub">¥${money(c[1]/100)}</div>
         <div class="bbar"><i style="width:${pc}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pc}%</span></div>`; }).join("")
     : `<div class="focus-empty">暂无支出记录</div>`;
   return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("wallet",16)}</span><div class="tt"><span class="en">MONTHLY SPENDING</span><span class="zh">月度开销</span></div><span class="r js-open" data-open="money">明细</span></div>
-    <div class="spend-sum"><span class="spend-total">¥${exp}</span><span class="spend-cap">本月支出 · 共 ${all.filter(x=>x.type==='expense').length} 笔</span></div>
+    <div class="spend-sum"><span class="spend-total">¥${money(expC/100)}</span><span class="spend-cap">本月支出 · 共 ${all.filter(x=>x.type==='expense').length} 笔</span></div>
     <div class="book-list">${rows}</div></div>`;
 }
 
@@ -417,7 +446,7 @@ function renderInsight(){
     if(m.type==="todo"){ main=`${it.filter(x=>x.done).length}/${it.length} 已完成`; pct=it.length?Math.round(it.filter(x=>x.done).length/it.length*100):0; }
     else if(m.type==="checkin"){ const t=today(); main=`今日 ${it.filter(x=>x.log&&x.log[t]).length}/${it.length} 打卡`; pct=it.length?Math.round(it.filter(x=>x.log&&x.log[t]).length/it.length*100):0; }
     else if(m.type==="progress"){ pct=avgProgress(it).value; main=`平均进度 ${pct}%`; }
-    else if(m.type==="finance"){ const e=it.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0); const inc=it.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0); main=`收 ¥${inc} · 支 ¥${e}`; }
+    else if(m.type==="finance"){ const _c=arr=>arr.reduce((a,x)=>a+Math.round(Number(x.amount||0)*100),0); main=`收 ¥${money(_c(it.filter(x=>x.type==="income"))/100)} · 支 ¥${money(_c(it.filter(x=>x.type==="expense"))/100)}`; }
     else main=`${it.length} 条记录`;
     return `<div class="pin" data-open="${m.key}" style="cursor:pointer">
       <span class="pin-ic" style="color:${m.color};background:${m.tint};border-color:transparent">${icon(m.icon,19)}</span>
@@ -439,12 +468,12 @@ function renderModule(key){
 
   let head="";
   if(m.type==="finance"){
-    const inc=all.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
-    const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+    const _c=arr=>arr.reduce((a,x)=>a+Math.round(Number(x.amount||0)*100),0);
+    const incC=_c(all.filter(x=>x.type==="income")), expC2=_c(all.filter(x=>x.type==="expense"));
     head=`<div class="mod-summary">
-      <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--success)">¥${inc}</div></div>
-      <div class="mini"><div class="l">支出</div><div class="v" style="color:var(--danger)">¥${exp}</div></div>
-      <div class="mini"><div class="l">结余</div><div class="v">¥${inc-exp}</div></div>
+      <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--success)">¥${money(incC/100)}</div></div>
+      <div class="mini"><div class="l">支出</div><div class="v" style="color:var(--danger)">¥${money(expC2/100)}</div></div>
+      <div class="mini"><div class="l">结余</div><div class="v">¥${money((incC-expC2)/100)}</div></div>
       <div class="mini"><div class="l">笔数</div><div class="v">${all.length}</div></div></div>`;
   } else if(m.type==="todo"){
     const done=all.filter(x=>x.done).length;
@@ -504,20 +533,22 @@ function sideStats(m, all){
   const row=(k,v,dot)=>`<div class="stat-row"><span class="k">${dot?`<span class="kd" style="background:${dot}"></span>`:''}${k}</span><span class="val">${v}</span></div>`;
 
   if(m.type==="finance"){
-    const inc=all.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
-    const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+    // 全程按分（整数）累计，显示时才经 money() 格式化——
+    // 先格式化再相减会对带千分位的字符串做算术，出 NaN。
+    const cents = arr => arr.reduce((a,x)=>a+Math.round(Number(x.amount||0)*100), 0);
+    const incC=cents(all.filter(x=>x.type==="income")), expC=cents(all.filter(x=>x.type==="expense"));
     // 支出按分类聚合
-    const byCat={}; all.filter(x=>x.type==="expense").forEach(x=>{ const c=x.category||"其他"; byCat[c]=(byCat[c]||0)+ +x.amount; });
+    const byCat={}; all.filter(x=>x.type==="expense").forEach(x=>{ const c=x.category||"其他"; byCat[c]=(byCat[c]||0)+Math.round(Number(x.amount||0)*100); });
     const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
     const maxC=cats.length?cats[0][1]:1;
-    const catBars=cats.length? cats.map((c,i)=>`<div class="cbrow"><span class="cbn">${esc(c[0])}</span><span class="cbt"><i style="width:${Math.round(c[1]/maxC*100)}%;background:${palette[i%palette.length]}"></i></span><span class="cbv">¥${c[1]}</span></div>`).join("")
+    const catBars=cats.length? cats.map((c,i)=>`<div class="cbrow"><span class="cbn">${esc(c[0])}</span><span class="cbt"><i style="width:${Math.round(c[1]/maxC*100)}%;background:${palette[i%palette.length]}"></i></span><span class="cbv">¥${money(c[1]/100)}</span></div>`).join("")
       : `<div style="color:var(--text-tertiary);font-size:12.5px;padding:6px 0">暂无支出记录</div>`;
-    const todayExp=all.filter(x=>x.type==="expense"&&x.date===t).reduce((a,x)=>a+ +x.amount,0);
+    const todayExpC=cents(all.filter(x=>x.type==="expense"&&x.date===t));
     return `<div class="side-card"><div class="sh">${icon("wallet",15)} 收支概况</div>
-        ${row("总收入",`<span style="color:var(--success)">¥${inc}</span>`)}
-        ${row("总支出",`<span style="color:var(--danger)">¥${exp}</span>`)}
-        ${row("净结余",`¥${inc-exp}`)}
-        ${row("今日支出",`¥${todayExp}`)}
+        ${row("总收入",`<span style="color:var(--success)">¥${money(incC/100)}</span>`)}
+        ${row("总支出",`<span style="color:var(--danger)">¥${money(expC/100)}</span>`)}
+        ${row("净结余",`¥${money((incC-expC)/100)}`)}
+        ${row("今日支出",`¥${money(todayExpC/100)}`)}
         ${row("总笔数",`${all.length} 笔`)}</div>
       <div class="side-card"><div class="sh">${icon("chart",15)} 支出分类占比</div><div class="catbar">${catBars}</div></div>`;
   }
@@ -627,20 +658,20 @@ function recHTML(m,x){
     return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
       <span class="rname">${esc(x.title)}</span>
       <div class="pbar"><i style="width:${pct}%;background:${m.color}"></i></div>
-      <span class="rdate" style="margin-left:0;color:var(--text-secondary)">${x.current}/${x.target} ${x.unit||m.unit||''} · ${pct}%</span>
+      <span class="rdate" style="margin-left:0;color:var(--text-secondary)">${x.current}/${x.target} ${esc(x.unit||m.unit||'')} · ${pct}%</span>
       ${x.note?`<div class="rnote">${esc(x.note)}</div>`:''}${customBlock}</div></div></div>`; }
   if(m.type==="finance"){ const inc=x.type==="income";
     return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
       <span class="rname">${esc(x.title)}</span>
       <span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">${esc(x.category||'其他')}</span>
-      <span class="rdate">${x.date||''}</span>${customBlock}</div>
+      <span class="rdate">${esc(x.date||'')}</span>${customBlock}</div>
       <div class="amt ${inc?'inc':'exp'}">${inc?'+':'-'}¥${x.amount}</div></div></div>`; }
   // note
   return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
     <span class="rname">${esc(x.title||'无标题')}</span>
     ${x.mood?`<span class="badge" style="background:var(--accent-muted);color:var(--accent)">${esc(x.mood)}</span>`:''}
     ${x.content?`<span class="rdate" style="margin-left:0;color:var(--text-tertiary)">${esc(x.content).slice(0,40)}</span>`:''}
-    <span class="rdate">${x.date||''}</span>${customBlock}</div></div></div>`;
+    <span class="rdate">${esc(x.date||'')}</span>${customBlock}</div></div></div>`;
 }
 
 function streak(log){ if(!log) return 0; let n=0; const d=new Date();
@@ -705,7 +736,11 @@ function openEditor(key,item){
     <div class="modal-actions">${editing?'<button class="link-danger" id="m-del">删除</button>':''}<div class="spacer"></div>
       <button class="btn ghost" id="m-cancel">取消</button><button class="btn" id="m-save">保存</button></div></div>`;
   $("#workbenchView").appendChild(overlay);
-  const close=()=>overlay.remove();
+  // Escape 关闭 + 初始焦点：完整焦点陷阱暂缓，先补最基本的两项。
+  const onKey=e=>{ if(e.key==="Escape") close(); };
+  const close=()=>{ document.removeEventListener("keydown", onKey); overlay.remove(); };
+  document.addEventListener("keydown", onKey);
+  const _f=overlay.querySelector("input,textarea,button"); _f && _f.focus();
   overlay.onclick=e=>{ if(e.target===overlay) close(); };
   overlay.querySelector("#m-cancel").onclick=close;
   overlay.querySelectorAll(".seg").forEach(seg=>seg.querySelectorAll(".opt").forEach(o=>o.onclick=()=>{ seg.querySelectorAll(".opt").forEach(x=>x.classList.remove("on")); o.classList.add("on"); }));
@@ -749,7 +784,10 @@ function confirmDelete(key,id){ const item=(data[key]||[]).find(i=>i.id==id); if
   overlay.innerHTML=`<div class="modal" style="width:400px"><h3>删除记录</h3><div class="sub">确定删除「${esc(item.title||'这条记录')}」？此操作不可撤销。</div>
     <div class="modal-actions"><div class="spacer"></div><button class="btn ghost" id="c-cancel">取消</button><button class="btn danger" id="c-ok">删除</button></div></div>`;
   $("#workbenchView").appendChild(overlay);
-  const close=()=>overlay.remove();
+  const onKey=e=>{ if(e.key==="Escape") close(); };
+  const close=()=>{ document.removeEventListener("keydown", onKey); overlay.remove(); };
+  document.addEventListener("keydown", onKey);
+  const _f=overlay.querySelector("button"); _f && _f.focus();
   overlay.onclick=e=>{ if(e.target===overlay) close(); };
   overlay.querySelector("#c-cancel").onclick=close;
   overlay.querySelector("#c-ok").onclick=()=>{ data[key]=data[key].filter(i=>i.id!=id); persist(); close(); };
@@ -769,18 +807,23 @@ function buildNav(){
     .concat(CONFIG.modules.map(m=>`<div class="navi" data-go="${m.key}">${icon(m.icon,19)}${m.name}</div>`))
     .concat([`<div class="nav-sep">统计</div>`, `<div class="navi" data-go="insight">${icon("chart",19)}洞察复盘</div>`]);
   $("#wbNav").innerHTML=html.join("");
-  $("#wbNav").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>go(el.dataset.go));
+  $("#wbNav").querySelectorAll("[data-go]").forEach(el=>{ el.onclick=()=>go(el.dataset.go);
+    // 键盘可达：div.navi 原生不可聚焦，补 tabindex/role + Enter/Space。
+    el.setAttribute("tabindex","0"); el.setAttribute("role","button");
+    el.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(el.dataset.go); } }); });
   renderNavActive();
 }
 function renderNavActive(){ $("#wbNav").querySelectorAll(".navi").forEach(el=>el.classList.toggle("active", el.dataset.go===view)); }
 
 /* ---------- utils ---------- */
-function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
+function esc(s){ return window.gcEsc ? window.gcEsc(s) : String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }   // 转义统一在 js/escape.js
+function attr(s){ return esc(s); }
 
 /* ===== 项目经营概览（独立子页 · 由顶部导航进入） ===== */
 /* 同阶段列内卡片「纸质归档堆叠」参数：折叠标签高 + 相邻错位下移步长(px) */
 const BIZ_TAB_H = 48, BIZ_CAS = 30;
+/* 经营概览数据拉取序号：慢的旧响应不得覆写新状态（见 renderBizPage.fetchAll） */
+let bizFetchSeq = 0;
 function renderBizPage(){
   const head = '<div class="header"><div><h2>项目经营概览</h2><p>项目全生命周期看板 · 新建/编辑项目、报价定稿回写、阶段流转</p></div><div class="spacer"></div><span class="date-chip">'+icon("calendar",14)+' '+dateStr()+'</span></div>';
   const fill = html => { $("#screen").innerHTML = '<section class="wb-biz">'+html+'</section>'; };
@@ -789,14 +832,22 @@ function renderBizPage(){
   let projects = [], bizQ = "", colSort = {};
 
   const bizSkeleton = () => '<div class="biz-col" style="padding:4px 2px">' + Array.from({length:4}).map(()=>`<div class="biz-card" style="margin-bottom:10px"><div style="display:flex;gap:12px;align-items:center;margin-bottom:8px"><div class="skeleton" style="width:8px;height:32px;border-radius:3px"></div><div class="skeleton" style="height:16px;flex:0 0 40%"></div><div class="skeleton" style="height:12px;flex:0 0 20%"></div><div style="margin-left:auto"><div class="skeleton" style="width:90px;height:14px"></div></div></div><div style="display:flex;gap:16px"><div class="skeleton" style="height:10px;flex:1"></div><div class="skeleton" style="height:10px;flex:0.7"></div><div class="skeleton" style="height:10px;flex:0.5"></div></div></div>`).join('') + '</div>';
+  // 请求序号 + 视图守卫：fetchAll 是异步的，若用户已切到其他模块、或更新的
+  // 拉取已在途，慢的旧响应直接丢弃——否则 fill() 会把当前正在操作的视图
+  // 整体覆写成经营概览看板（搜索词、未保存的弹窗状态全部丢失）。
   const fetchAll = () => {
+    const seq = ++bizFetchSeq;
     fill(head + bizSkeleton());
     fetch(API_BASE + "/api/project/overview/list").then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(json=>{
+      if(seq !== bizFetchSeq || view !== "biz") return;
       projects = (json && json.projects) || [];
       window.__bizProjects = projects;
       if(!projects.length){ fill(head + '<div class="toolbar"><div class="spacer"></div><button class="btn" onclick="window.__bizNew&amp;&amp;__bizNew()">'+icon("plus",16,2.2)+'新建项目</button></div><div class="biz-head"><span class="bt">暂无项目</span></div><div class="biz-empty">还没有项目，点右上角「新建项目」创建一个开始经营概览。</div>'); return; }
       renderPage();
-    }).catch(err=>{ fill(head + '<div class="biz-error">暂无法连接后端服务（'+String(err.message||err)+'）。请先启动 8000 端口服务。</div>'); });
+    }).catch(err=>{
+      if(seq !== bizFetchSeq || view !== "biz") return;
+      fill(head + '<div class="biz-error">暂无法连接后端服务（'+esc(String(err.message||err))+'）。请先启动 8000 端口服务。</div>');
+    });
   };
 
   // 搜索过滤：按项目名称模糊匹配（与今日计划搜索栏一致）
@@ -860,6 +911,7 @@ function renderBizPage(){
       s.addEventListener("compositionend",()=>{ composing=false; refresh(); });
       s.addEventListener("input",()=>{ if(!composing) refresh(); });
     }
+    wireCards();
     wireSort();
   };
   function bizCardHTML(p, i){
@@ -884,23 +936,32 @@ function renderBizPage(){
       +'</div><div class="biz-foot">点击卡片编辑参数 · 阶段下拉为流转唯一入口</div>'
       +'</div></div>';
   }
-  // 卡片点击 → 编辑弹窗
-  $("#screen").addEventListener("click", e=>{
-    const card = e.target.closest(".biz-card"); if(!card) return;
-    const id = card.getAttribute("data-id");
-    const proj = (window.__bizProjects || []).find(x=>x.id===id);
-    if(proj) bizEditModal(proj, fetchAll);
-  });
-  // 键盘可访问：聚焦标签后按 Enter 打开编辑
-  $("#screen").addEventListener("keydown", e=>{
-    if(e.key==="Enter"){ const card = e.target.closest(".biz-card"); if(card) card.click(); }
-  });
+  // 卡片点击 → 编辑弹窗。委托绑在每次重建的 .biz-board 上，而不是常驻的
+  // #screen：绑在 #screen 上会随每次渲染累积监听器（访问 N 次 = 点一张卡
+  // 弹 N 个编辑窗、存一次发 N 个 POST）；.biz-board 随 #screen innerHTML
+  // 重建而消亡，监听器随之释放。
+  const wireCards = () => {
+    const board = $("#screen .biz-board");
+    if(!board) return;
+    board.addEventListener("click", e=>{
+      const card = e.target.closest(".biz-card"); if(!card) return;
+      const id = card.getAttribute("data-id");
+      const proj = (window.__bizProjects || []).find(x=>x.id===id);
+      if(proj) bizEditModal(proj, fetchAll);
+    });
+    // 键盘可访问：聚焦标签后按 Enter 打开编辑
+    board.addEventListener("keydown", e=>{
+      if(e.key==="Enter"){ const card = e.target.closest(".biz-card"); if(card) card.click(); }
+    });
+  };
   window.__bizNew = ()=>bizEditModal(null, fetchAll);
   fetchAll();
 }
 
 /* 元格式化：保留 2 位小数 */
-function yf(v){ return (v==null||v==="") ? "—" : Number(v).toFixed(2); }
+function yf(v){ return (v==null||v==="") ? "—" : Number(v).toLocaleString("zh-CN",{minimumFractionDigits:2, maximumFractionDigits:2}); }
+/* 金额：按分取整消浮点尾数（0.1+0.2 → 0.30），千分位 2 位小数。 */
+function money(v){ return (Math.round(Number(v||0)*100)/100).toLocaleString("zh-CN",{minimumFractionDigits:2, maximumFractionDigits:2}); }
 /* 百分比：内部存 0-1 小数，转百分比保留 2 位 */
 function pct(v){ return (v==null||v==="") ? "—" : (Number(v)*100).toFixed(2)+"%"; }
 function toNum(v){ if(v==null||v==="") return null; const n=Number(v); return isNaN(n)?null:n; }
@@ -953,40 +1014,49 @@ function bizEditModal(proj, after){
   mask.innerHTML = html;
   $("#workbenchView").appendChild(mask);
   const wrap = mask.querySelector("#bizMask");
+  // 字段查询一律走 wrap 作用域：#bo-* 等 id 在叠放的多份弹窗里会重复，
+  // 全局 $ 永远命中 DOM 顺序里第一份弹窗的字段，多窗叠开时数据串窗。
   const recalc = ()=>{
     const f = collect();
-    $("#prev-gross_profit").textContent = yf(deriveProj(f).gross_profit);
-    $("#prev-gross_margin").textContent = pct(deriveProj(f).gross_margin);
-    $("#prev-actual_yield").textContent = pct(deriveProj(f).actual_yield);
+    wrap.querySelector("#prev-gross_profit").textContent = yf(deriveProj(f).gross_profit);
+    wrap.querySelector("#prev-gross_margin").textContent = pct(deriveProj(f).gross_margin);
+    wrap.querySelector("#prev-actual_yield").textContent = pct(deriveProj(f).actual_yield);
   };
   ["bo-bid_amount","bo-bid_cost","bo-actual_revenue","bo-actual_cost"].forEach(id=>{
     const el = wrap.querySelector("#"+id); el && el.addEventListener("input", recalc);
   });
   function collect(){
-    return { name: $("#bo-name").value.trim(),
-      short_name: $("#bo-short_name").value.trim(),
-      limit_total: $("#bo-limit_total").value.trim(), bid_open_date: $("#bo-bid_open_date").value,
-      stage: $("#bo-stage").value, bid_amount: $("#bo-bid_amount").value.trim(),
-      bid_cost: $("#bo-bid_cost").value.trim(), actual_cost: $("#bo-actual_cost").value.trim(),
-      actual_revenue: $("#bo-actual_revenue").value.trim(), settle_amount: $("#bo-settle_amount").value.trim(),
-      completed_at: $("#bo-completed_at").value };
+    const g = id => wrap.querySelector("#"+id);
+    return { name: g("bo-name").value.trim(),
+      short_name: g("bo-short_name").value.trim(),
+      limit_total: g("bo-limit_total").value.trim(), bid_open_date: g("bo-bid_open_date").value,
+      stage: g("bo-stage").value, bid_amount: g("bo-bid_amount").value.trim(),
+      bid_cost: g("bo-bid_cost").value.trim(), actual_cost: g("bo-actual_cost").value.trim(),
+      actual_revenue: g("bo-actual_revenue").value.trim(), settle_amount: g("bo-settle_amount").value.trim(),
+      completed_at: g("bo-completed_at").value };
   }
-  function close(){ mask.remove(); }
-  $("#bizClose").addEventListener("click", close);
-  $("#bizCancel").addEventListener("click", close);
+  // Escape 关闭 + 初始焦点（与 workbench 其他弹窗同口径；完整焦点陷阱暂缓）
+  const onKey=e=>{ if(e.key==="Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  function close(){ document.removeEventListener("keydown", onKey); mask.remove(); }
+  wrap.querySelector("#bizClose").addEventListener("click", close);
+  const _bf = wrap.querySelector("input"); _bf && _bf.focus();
+  wrap.querySelector("#bizCancel").addEventListener("click", close);
   wrap.addEventListener("click", e=>{ if(e.target===wrap) close(); });
-  $("#bizSave").addEventListener("click", async ()=>{
+  wrap.querySelector("#bizSave").addEventListener("click", async ()=>{
     const f = collect();
     if(!f.name){ alert("请填写项目名称"); return; }
     const data = new FormData();
     for(const k in f){ data.append(k, f[k]); }
     if(p.id) data.append("pid", p.id);
+    // 请求期间禁用：双击「保存」会创建两个同名项目。
+    const btn = wrap.querySelector("#bizSave"); btn.disabled = true;
     try{
       const r = await fetch(API_BASE + "/api/project/overview/save", {method:"POST", body:data});
       const j = await r.json();
       if(!r.ok || j.status!=="PASS") throw new Error(j.reason||"保存失败");
       close(); after && after();
-    }catch(err){ alert("保存失败："+(err.message||err)); }
+    }catch(err){ btn.disabled = false; alert("保存失败："+(err.message||err)); }
   });
   const del = wrap.querySelector("#bizDel");
   if(del) del.addEventListener("click", async ()=>{

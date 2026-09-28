@@ -132,7 +132,7 @@ def build_bundle(
     mf = manifest if manifest is not None else json.loads(
         (gd / "manifest.json").read_text(encoding="utf-8"))
     eps_abs = float(prof["eps_abs"]["value"])
-    eps_price = float(prof["eps_price"]["value"])
+    eps_rel_price = float(prof["eps_price"]["value"])
     resolution = float((prof.get("rounding") or {}).get("resolution", 0.01))
 
     cases: list[dict[str, Any]] = []
@@ -161,7 +161,7 @@ def build_bundle(
             continue
 
         # ---- Phase 1：解析解 ------------------------------------------
-        sol1 = solve_phase1(inst, resolved, eps_abs=eps_abs, eps_price=eps_price)
+        sol1 = solve_phase1(inst, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price)
         if not sol1.optimal:
             skipped.append(f"{cid}:Phase1 非 OPTIMAL（{sol1.status}）")
             continue
@@ -171,7 +171,7 @@ def build_bundle(
 
         # ---- Phase 2：编译 LP 求解 -------------------------------------
         fm = build_formulation(inst, resolved, eps_abs=eps_abs,
-                               eps_price=eps_price, resolution=resolution)
+                               eps_rel_price=eps_rel_price, resolution=resolution)
         model = compile_model(fm, source=f"parity_suite:{cid}")
         P_ref = inst.P_star if inst.P_star is not None else inst.B
         tolerances, _ = resolve_tolerances(prof, vspec, P_ref=P_ref)
@@ -185,9 +185,9 @@ def build_bundle(
 
         # ---- 目标值：同一独立裁判（check_solution）给两侧，保证口径一致 ----
         ck1 = check_solution(inst, p1, resolved, eps_total=eps_abs,
-                             tolerances={"eps_price": eps_price})
+                             tolerances={"eps_price": eps_rel_price})
         ck2 = check_solution(inst, p2, resolved, eps_total=eps_abs,
-                             tolerances={"eps_price": eps_price})
+                             tolerances={"eps_price": eps_rel_price})
 
         # ---- 层归属（复用 Phase1 的 _layer_for，保证两侧同语言）-----------
         layers2: dict[str, str] = {}

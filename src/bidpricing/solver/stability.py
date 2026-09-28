@@ -64,18 +64,71 @@ def restore_values(values: Mapping[str, float], *, factor: float) -> dict[str, f
     return {str(k): float(v) * float(factor) for k, v in values.items()}
 
 
+def same_bucket(a: float, b: float, eps: float) -> bool:
+    """两个数值是否落在同一「平台」内——**直接两两比较**语义 ``|a−b| ≤ eps``。
+
+    **为什么收拢成一个函数（2026-09-28）**：「两个 r_eff 是否近似相等」这一
+    性质此前有三份手写实现——本模块 ``detect_platform`` 的 ``round(v/eps)``
+    分桶、exactness._ec5 的同型分桶、phase1._lambda_info 的直接
+    ``abs(diff) ≤ eps``。三份口径在边界上并不一致（分桶对 ``round`` 的
+    half-to-even 与进位敏感，直接比较不受影响），一旦调整 eps 语义就得同步
+    三处，漏一处就是同一性质在两层口径分叉。本函数只保证「比较式只有一份」；
+    分组语义（锚点链式合并）由各消费方在它之上实现。
+
+    NaN 按不可比较处理（返回 False）——平台检测把非有限值排除在外，这里
+    不代为裁决。
+    """
+    a = float(a)
+    b = float(b)
+    if not (math.isfinite(a) and math.isfinite(b)):
+        return False
+    return abs(a - b) <= float(eps)
+
+
+def group_by_platform(
+    items: Sequence[Any],
+    value_of: Any,
+    *,
+    eps: float,
+) -> list[list[Any]]:
+    """按「排序键近似相等」把 items 分组（锚点链式合并）。
+
+    先按值升序，再从每组**第一个成员（锚点）**出发链式合并：后续元素只要
+    与锚点满足 :func:`same_bucket` 就留在本组，否则开启新组。选锚点而非
+    「与前一元素比较」，是为了保住组内两两近似的不变量——链式漂移会让
+    ``a≈b、b≈c`` 传递出 ``a 与 c 差 3ε`` 的组，那不是「平台」而是「坡」。
+
+    这是 ``round(v/eps)`` 分桶的替代：分桶以桶中心为锚，边界值可能被
+    half-to-even 拆进相邻两桶；锚点链式合并以真实值为锚，边界行为可解释
+    （第一个到达的值为锚）。对「完全相等」的测试场景两者分组一致。
+    """
+    ordered = sorted(items, key=value_of)
+    groups: list[list[Any]] = []
+    anchor: float | None = None
+    for it in ordered:
+        v = float(value_of(it))
+        if anchor is None or not same_bucket(v, anchor, eps):
+            groups.append([it])
+            anchor = v
+        else:
+            groups[-1].append(it)
+    return groups
+
+
 def detect_platform(values: Mapping[str, float], *, q0: Mapping[str, float] | None = None, eps_r: float = 1e-9) -> StabilityIssue:
-    """识别相同有效排序键的平台；q0=0 项明确排除。"""
-    groups: dict[float, list[str]] = {}
-    for key, raw in values.items():
-        if q0 is not None and q0.get(key) == 0:
-            continue
-        value = float(raw)
-        if not math.isfinite(value):
-            continue
-        bucket = round(value / max(eps_r, 1e-15))
-        groups.setdefault(bucket, []).append(str(key))
-    platforms = [ids for ids in groups.values() if len(ids) > 1]
+    """识别相同有效排序键的平台；q0=0 项明确排除。
+
+    分组经由 :func:`group_by_platform`（比较式唯一实现在
+    :func:`same_bucket`）——此前这里手写 ``round(v/eps)`` 分桶，与
+    exactness/_ec5、phase1/_lambda_info 三处口径各自为政。
+    """
+    eligible = [
+        (str(key), float(raw)) for key, raw in values.items()
+        if not (q0 is not None and q0.get(key) == 0)
+        and math.isfinite(float(raw))
+    ]
+    groups = group_by_platform(eligible, lambda kv: kv[1], eps=eps_r)
+    platforms = [[key for key, _v in g] for g in groups if len(g) > 1]
     if platforms:
         return StabilityIssue("WARN", "PLATFORM", "检测到相同或近似排序键", platforms)
     return StabilityIssue("PASS", "NO_PLATFORM", "未检测到平台效应")

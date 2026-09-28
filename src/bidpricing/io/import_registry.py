@@ -25,12 +25,16 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from ..atomic_io import atomic_write_text
+from ..project_store import _safe_folder
 from .xlsx import Workbook, load_workbook
 
 __all__ = [
@@ -128,25 +132,82 @@ class VerifyResult:
 
 
 def registry_path_for(base_dir: Path, project_id: str, side: str) -> Path:
-    return base_dir / "imports" / project_id / f"import_registry_{side}.json"
+    # project_id/side 来自 CLI 入参，直接拼路径时 ``--project-id ../../x``
+    # 会走出 base_dir 造成目录穿越。复用 project_store._safe_folder 消毒：
+    # 只剔文件系统非法字符与分隔符（``/`` ``\`` → ``_``），中文等合法字符
+    # （如「当前项目」）原样保留。
+    return (base_dir / "imports" / _safe_folder(project_id)
+            / f"import_registry_{_safe_folder(side)}.json")
 
 
 def load_registry(path: Path) -> list[ImportRecord]:
     if not path.exists():
         return []
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return [ImportRecord(**r) for r in payload.get("records", [])]
+    out: list[ImportRecord] = []
+    for i, r in enumerate(payload.get("records", [])):
+        try:
+            out.append(ImportRecord(**r))
+        except (TypeError, KeyError) as exc:
+            # 字段漂移（登记表由旧版本代码写入、增删过字段）不该裸抛
+            # TypeError——带上登记表路径与记录序号，人工能直接定位坏行。
+            raise ValueError(
+                f"登记表 {path} 第 {i} 条记录结构与 ImportRecord 字段不符"
+                f"（登记表版本漂移？）：{exc!r}") from exc
+    return out
 
 
 def _save_registry(path: Path, records: list[ImportRecord]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    # 登记表是不可变追加的事实记录：覆盖写中途崩溃会丢全部历史，必须原子写。
+    atomic_write_text(
+        path,
         json.dumps(
             {"records": [r.to_dict() for r in records]},
             ensure_ascii=False, indent=1,
         ),
-        encoding="utf-8",
     )
+
+
+@contextlib.contextmanager
+def _registry_lock(reg_path: Path, timeout: float = 5.0,
+                   stale_after: float = 30.0):
+    """登记表写锁：同目录 ``<name>.lock`` 文件（``O_CREAT|O_EXCL`` 独占创建）。
+
+    为什么不用进程内锁：登记表可能被多个**进程**（CLI / API 各自的导入命令）
+    并发「读→追加→写」，互斥只能落在文件系统上。锁文件建在登记表同目录，
+    随临时目录一起消失，不产生额外清理负担。
+    陈锁（mtime 超过 ``stale_after`` 秒）视为持有进程已死、可夺取——否则
+    一次中途崩溃会把登记表永久锁死。锁语义只靠「文件存在」，创建后立即
+    关闭句柄，Windows 上也不会因句柄占用导致陈锁无法删除。
+    """
+    lock_path = reg_path.with_name(reg_path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                age = time.time() - lock_path.stat().st_mtime
+            except OSError:
+                continue  # 锁恰好在检测间隙被释放 → 立即重试抢占
+            if age > stale_after:
+                with contextlib.suppress(OSError):
+                    lock_path.unlink()
+                continue  # 夺锁后回到 O_EXCL 重试，两进程同时夺取也至多一方成功
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"等待登记表写锁超时（{timeout:.0f}s）：{lock_path}，"
+                    "可能存在并发写入方")
+            time.sleep(0.05)
+        else:
+            os.close(fd)
+            break
+    try:
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            lock_path.unlink()
 
 
 def register_import(
@@ -169,22 +230,25 @@ def register_import(
     fh = file_sha256(path)
     sheet_hashes = compute_sheet_hashes(wb)
     reg_path = registry_path_for(base_dir, project_id, side)
-    records = load_registry(reg_path)
-    rec = ImportRecord(
-        import_seq=len(records) + 1,
-        project_id=project_id,
-        side=side,
-        file_name=path.name,
-        file_path=str(path),
-        file_hash=fh,
-        file_version=file_version_note or fh[:12],
-        sheet_hash=sheet_hashes,
-        sheet_hash_combined=_combined_sheet_hash(sheet_hashes),
-        import_timestamp=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        source_owner=source_owner,
-    )
-    records.append(rec)
-    _save_registry(reg_path, records)
+    # load→append→save 不是原子的：两个进程同时登记会互相覆盖丢记录，
+    # 全程持锁保证「读到写回」期间没有别的写入方插进来。
+    with _registry_lock(reg_path):
+        records = load_registry(reg_path)
+        rec = ImportRecord(
+            import_seq=len(records) + 1,
+            project_id=project_id,
+            side=side,
+            file_name=path.name,
+            file_path=str(path),
+            file_hash=fh,
+            file_version=file_version_note or fh[:12],
+            sheet_hash=sheet_hashes,
+            sheet_hash_combined=_combined_sheet_hash(sheet_hashes),
+            import_timestamp=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            source_owner=source_owner,
+        )
+        records.append(rec)
+        _save_registry(reg_path, records)
     return rec
 
 

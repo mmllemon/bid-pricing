@@ -47,6 +47,7 @@ from .exactness import (
     check_exactness,
 )
 from .formulation import compute_lb_c5, merged_lower, probe_instance
+from .stability import same_bucket
 from .instance import (
     PRICE_RESOLUTION,
     ROLE_OPTIMIZABLE,
@@ -55,6 +56,7 @@ from .instance import (
     Phase1Params,
     SolutionCheck,
     check_solution,
+    resolve_eps_total,
 )
 
 SPEC_FILENAME = "phase1_solver_spec.json"
@@ -103,14 +105,21 @@ LAMBDA_NONE = "NONE"
 
 # ---- 精度缺省（仅作函数签名完整之用，**不构成项目口径**）---------------------
 DEFAULT_EPS_ABS = 0.01
-DEFAULT_EPS_PRICE = 1e-9
+DEFAULT_EPS_REL_PRICE = 1e-9
 
 #: 排序键比较容差（与 T04-00 的 ``EPS_R`` 同源同值）。
 EPS_R = 1e-6
 
-#: PS-06 的交换见证最多试多少对（防止 O(n²) 在大实例上失控）。被截断时
-#: ``tested`` 仍如实计数，判据只要求「至少走到一个」。
-MAX_EXCHANGE_PROBES = 200
+#: PS-06 的交换见证预算（防止 O(n²) 在大实例上失控）。被截断时 ``tested``
+#: 仍如实计数，PASS 文案按实际覆盖面表述，不夸大。
+#:
+#: 2026-09-28 起两级化：有序对总数不超过 :data:`FULL_SCAN_PAIR_LIMIT` 时
+#: **逐对全测**（n ≈ 141 项以内的实例覆盖 100%，消除旧实现「按 rank 序截断
+#: 200 对」的系统性盲区）；更大的实例改为**确定性分层抽样**——每个 i 在 j
+#: 全序上均匀取点，覆盖整个 rank 区间，而不是只测头部。抽样点选取只依赖
+#: n 与预算，不含随机数，可复算性不受影响。
+MAX_EXCHANGE_PROBES = 2000
+FULL_SCAN_PAIR_LIMIT = 20_000
 
 
 class Phase1Error(ValueError):
@@ -350,18 +359,19 @@ def _rows(
     instance: Phase1Instance,
     resolved: ResolvedParameters,
     *,
-    eps_price: float,
+    eps_rel_price: float,
     resolution: float,
     floor_by_id: Mapping[str, float] | None,
 ) -> list[_Row]:
     """逐项构造求解行。``lower`` 走 ``formulation.merged_lower``（唯一实现）。"""
     P_ref = _reference_price(instance)
-    lb_c5 = 0.0 if P_ref is None else compute_lb_c5(P_ref, eps_price, resolution)
+    lb_c5 = 0.0 if P_ref is None else compute_lb_c5(P_ref, eps_rel_price, resolution)
     out: list[_Row] = []
     for item in instance.opt_items:
         q0 = item.q0
         r_eff = instance.r_eff(item, resolved)
         lower = merged_lower(item, lb_c5, floor_by_id)
+        upper = item.U_eff
         problem = ""
         if q0 is None:
             problem = "q0 缺失（EC-3）"
@@ -371,9 +381,16 @@ def _rows(
             problem = "r_eff 算不出（q1_point 或 q0 缺失）"
         elif lower is None:
             problem = "下界算不出（L / floor / lb_C5 全缺）"
+        elif upper is not None and lower > upper:
+            # 箱型局部不可行：EC-7 只查**声明**边界（L > U），查不到「L 声明
+            # 缺失/合法但 floor 或 lb_C5 把合并下界抬过 U」的实例。带着
+            # lower > upper 继续算，前缀和非单调、k* 扫描会过早定格并自报
+            # OPTIMAL——与 formulation 的 box_notes 同一意识：建模前判 BLOCKED，
+            # 不得交给求解器报泛化 infeasible。
+            problem = "下界超过上界（merged_lower > U_eff）"
         out.append(
             _Row(item=item, q0=q0, r_eff=r_eff, lower=lower,
-                 upper=item.U, problem=problem)
+                 upper=upper, problem=problem)
         )
     return out
 
@@ -398,7 +415,7 @@ def solve_phase1(
     resolved: ResolvedParameters,
     *,
     eps_abs: float = DEFAULT_EPS_ABS,
-    eps_price: float = DEFAULT_EPS_PRICE,
+    eps_rel_price: float = DEFAULT_EPS_REL_PRICE,
     resolution: float = PRICE_RESOLUTION,
     floor_by_id: Mapping[str, float] | None = None,
 ) -> Phase1Solution:
@@ -409,7 +426,7 @@ def solve_phase1(
     取什么值」。
     """
     verdict = check_exactness(
-        instance, resolved, eps_abs=eps_abs, eps_price=eps_price
+        instance, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price
     )
 
     # ---- 适用范围守卫（PS-01）------------------------------------------
@@ -454,13 +471,33 @@ def solve_phase1(
         )
 
     rows = _rows(
-        instance, resolved, eps_price=eps_price,
+        instance, resolved, eps_rel_price=eps_rel_price,
         resolution=resolution, floor_by_id=floor_by_id,
     )
     if not rows:
         return Phase1Solution(
             status=SOLUTION_BLOCKED, applicability=verdict.verdict,
             reason="实例没有可优化项——EC-1 本应拦下（无变量可优化）。",
+        )
+    # ---- 箱型局部不可行熔断（merged_lower > U_eff）------------------------
+    # 必须在一切扫描之前：前缀和以 lower 为起点、upper 为增量，lower > upper
+    # 的行使其非单调，k* 会停在错误位置并自报 OPTIMAL（比报错更糟）。
+    inverted = [
+        r for r in rows
+        if r.lower is not None and r.upper is not None and r.lower > r.upper
+    ]
+    if inverted:
+        detail = "、".join(
+            f"{r.item.item_id}(merged_lower={r.lower:g} > U_eff={r.upper:g})"
+            for r in inverted
+        )
+        return Phase1Solution(
+            status=SOLUTION_BLOCKED, applicability=verdict.verdict,
+            reason=(
+                f"箱型局部不可行：{detail}——可行域为空，须在建模前判 BLOCKED，"
+                "不得交给求解器报泛化 infeasible（与 formulation 的 box_notes "
+                "同一意识）。"
+            ),
         )
     bad = [r for r in rows if not r.usable]
     if bad:
@@ -491,7 +528,8 @@ def solve_phase1(
         )
 
     B = float(instance.B)  # EC-7 已保证非 None
-    eps_total = max(float(eps_abs), float(eps_price) * B)
+    # 公式唯一实现在 instance.resolve_eps_total（basis 取 B）。
+    eps_total = resolve_eps_total(eps_abs, eps_rel_price, B)
 
     # ---- 排序 + 前缀和 + 二分 -------------------------------------------
     ordered = sorted(rows, key=_sort_key)
@@ -618,9 +656,12 @@ def _lambda_info(
     a = assignments[k_star]
     eff = float(crit.r_eff)
     residual = B - prefix[k_star]
+    # 比较式唯一实现在 stability.same_bucket（直接两两比较语义）——此前
+    # 这里手写 abs(diff) <= EPS_R，与 exactness/_ec5、stability 的分桶口径
+    # 各自为政（2026-09-28 收拢）。
     same = [
         r.item.item_id for r in ordered[k_star + 1:]
-        if r.r_eff is not None and abs(float(r.r_eff) - eff) <= EPS_R
+        if r.r_eff is not None and same_bucket(float(r.r_eff), eff, EPS_R)
     ]
     if same:
         return LambdaInfo(
@@ -663,7 +704,7 @@ def judge_phase1(
     solution: Phase1Solution,
     *,
     eps_abs: float = DEFAULT_EPS_ABS,
-    eps_price: float = DEFAULT_EPS_PRICE,
+    eps_rel_price: float = DEFAULT_EPS_REL_PRICE,
     resolution: float = PRICE_RESOLUTION,
     floor_by_id: Mapping[str, float] | None = None,
     tolerances: Mapping[str, float] | None = None,
@@ -678,7 +719,7 @@ def judge_phase1(
     """
     checks: list[Phase1Check] = []
     checks.append(_ps01(instance, resolved, solution, exactness,
-                        eps_abs=eps_abs, eps_price=eps_price))
+                        eps_abs=eps_abs, eps_rel_price=eps_rel_price))
 
     if not solution.optimal:
         # 没产出解 ⇒ 需要解向量的判据**无样本**，判 SKIP（不是 PASS，也不是 FAIL）。
@@ -705,16 +746,16 @@ def judge_phase1(
         return tuple(checks)
 
     rows = _rows(
-        instance, resolved, eps_price=eps_price,
+        instance, resolved, eps_rel_price=eps_rel_price,
         resolution=resolution, floor_by_id=floor_by_id,
     )
     lb_c5 = 0.0
     P_ref = _reference_price(instance)
     if P_ref is not None:
-        lb_c5 = compute_lb_c5(P_ref, eps_price, resolution)
+        lb_c5 = compute_lb_c5(P_ref, eps_rel_price, resolution)
     eps_total = (
         None if instance.B is None
-        else max(float(eps_abs), float(eps_price) * float(instance.B))
+        else resolve_eps_total(eps_abs, eps_rel_price, float(instance.B))
     )
 
     referee = check_solution(
@@ -742,11 +783,11 @@ def _ps01(
     exactness: ExactnessVerdict | None,
     *,
     eps_abs: float,
-    eps_price: float,
+    eps_rel_price: float,
 ) -> Phase1Check:
     """适用范围守卫：只在 EXACT 上给解。"""
     verdict = exactness or check_exactness(
-        instance, resolved, eps_abs=eps_abs, eps_price=eps_price
+        instance, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price
     )
     if verdict.verdict == VERDICT_EXACT and solution.optimal:
         return Phase1Check(
@@ -949,13 +990,22 @@ def _ps06(
     tol = PRICE_RESOLUTION / 2.0
     tested = 0
     improving: list[str] = []
+    n_rows = len(rows)
+    full_scan = n_rows * (n_rows - 1) <= FULL_SCAN_PAIR_LIMIT
+    # 分层抽样的每个 i 的 j 预算：均匀铺满 [0, n)，不含随机数。
+    per_i = max(1, MAX_EXCHANGE_PROBES // max(n_rows, 1))
     # ★ 必须遍历**有序**对：交换是定向的（i 下调、j 上调）。只扫 i<j 会漏掉
     #   一半方向——而「让高 r_eff 项上调、低 r_eff 项下调」这一半恰恰是次优解
     #   的常见形态（首版即因此漏判，被本文件的用例照出）。
-    for i in range(len(rows)):
+    for i in range(n_rows):
         if tested >= MAX_EXCHANGE_PROBES:
             break
-        for j in range(len(rows)):
+        if full_scan:
+            j_seq = (j for j in range(n_rows) if j != i)
+        else:
+            step = n_rows / per_i
+            j_seq = (int(k * step) for k in range(per_i))
+        for j in j_seq:
             if tested >= MAX_EXCHANGE_PROBES:
                 break
             if i == j:
@@ -987,9 +1037,16 @@ def _ps06(
             "（典型：所有项都贴在边界上）。这是「这一轮没走到」，不是「已成立」，"
             "也不是「已违反」。",
         )
+    total_pairs = n_rows * (n_rows - 1)
+    coverage = (
+        f"全部 {total_pairs} 对有序交换逐一测过"
+        if full_scan else
+        f"分层抽样 {tested} 对（每项 i 均匀铺满 j 全序，覆盖全部 rank 区间；"
+        f"全量为 {total_pairs} 对）"
+    )
     return Phase1Check(
         SCOPE, "PS-06", STATUS_PASS if not improving else STATUS_FAIL,
-        (f"{tested} 对交换全部无利（Z 单调不增）⇒ 局部最优（交换论证）成立"
+        (f"{coverage}，无有利交换（Z 单调不增）⇒ 局部最优（交换论证）成立"
          if not improving else
          "存在有利交换 ⇒ 解**满足全部约束但次优**："
          + "；".join(improving[:3])
@@ -1174,7 +1231,7 @@ def phase1_report(
     resolved: ResolvedParameters,
     *,
     eps_abs: float = DEFAULT_EPS_ABS,
-    eps_price: float = DEFAULT_EPS_PRICE,
+    eps_rel_price: float = DEFAULT_EPS_REL_PRICE,
     resolution: float = PRICE_RESOLUTION,
     floor_by_id: Mapping[str, float] | None = None,
     tolerances: Mapping[str, float] | None = None,
@@ -1187,13 +1244,13 @@ def phase1_report(
     不得按严格算术冒充可行性结论）。
     """
     solution = solve_phase1(
-        instance, resolved, eps_abs=eps_abs, eps_price=eps_price,
+        instance, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price,
         resolution=resolution, floor_by_id=floor_by_id,
     )
     declared = declared_input_names(spec) if spec is not None else None
     checks = judge_phase1(
         instance, resolved, solution,
-        eps_abs=eps_abs, eps_price=eps_price, resolution=resolution,
+        eps_abs=eps_abs, eps_rel_price=eps_rel_price, resolution=resolution,
         floor_by_id=floor_by_id, tolerances=tolerances,
         declared_inputs=declared,
     )
@@ -1201,7 +1258,7 @@ def phase1_report(
     if solution.optimal:
         eps_total = (
             None if instance.B is None
-            else max(float(eps_abs), float(eps_price) * float(instance.B))
+            else resolve_eps_total(eps_abs, eps_rel_price, float(instance.B))
         )
         referee = check_solution(
             instance, dict(solution.p_by_id), resolved,
@@ -1211,7 +1268,7 @@ def phase1_report(
         solution=solution,
         checks=checks,
         exactness=check_exactness(
-            instance, resolved, eps_abs=eps_abs, eps_price=eps_price
+            instance, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price
         ),
         referee=referee,
     )

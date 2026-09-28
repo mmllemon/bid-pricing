@@ -28,10 +28,13 @@
 from __future__ import annotations
 
 import json
+import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from bidpricing.atomic_io import atomic_write_text
 from bidpricing.project_store import (
     PROJECTS_DIR,
     _resolve_dir,
@@ -45,6 +48,14 @@ from bidpricing.project_store import (
 # ---------------------------------------------------------------------------
 # 低层：组索引文件的定位与读写
 # ---------------------------------------------------------------------------
+
+
+class GroupIndexOverwriteError(Exception):
+    """组索引防覆盖：本次写入会把磁盘上已有的组从索引里抹掉。
+
+    触发场景几乎总是「索引读坏了被当成空表」——坏读之后照常追加/更新，
+    写回的就是『只剩本次改动』的索引，其余全部组静默消失。拒绝写入比
+    事后发现组没了便宜得多。"""
 
 
 def _groups_path_for(project_dir: Path) -> Path:
@@ -62,20 +73,73 @@ def _iter_project_dirs(dir_path: Path):
         yield folder
 
 
+def _snapshot_corrupt_index(path: Path) -> None:
+    """坏索引留证：原文件复制为 ``<name>.corrupt-<时间戳>``。
+
+    为什么留证而不改名：读路径必须保持「文件在但读不出 = 空表」的既有容错
+    契约（migrate_dangling 等调用方依赖它），不能在读路径上把坏文件挪走；
+    留一份副本让损坏可被发现、可手工恢复，坏原件留在原地也便于诊断。
+    """
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = path.with_name(f"{path.name}.corrupt-{stamp}")
+    try:
+        shutil.copy2(path, backup)
+    except OSError:
+        pass  # 留证失败（如只读盘）不升级为读失败，坏原件仍在原地
+
+
 def _load_index(path: Path) -> list[dict[str, Any]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         groups = data.get("groups") if isinstance(data, dict) else data
         return groups if isinstance(groups, list) else []
     except (OSError, json.JSONDecodeError, AttributeError):
+        # 坏索引静默当空表是**升级事故的起点**：随后的 _update_group /
+        # copy_group 写回「只有本次改动」的索引，把其余全部组从索引里抹掉。
+        # 先把坏文件留证再返回空表——调用契约不变，但损坏不再无痕。
+        if path.exists():
+            _snapshot_corrupt_index(path)
         return []
 
 
-def _save_index(path: Path, groups: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+def _parseable_index_ids(path: Path) -> set[str] | None:
+    """磁盘索引里可解析出的 group_id 集合；文件不存在返回 None，
+    解析失败（坏文件）返回空集——防覆盖闸只对「能读出的真相」负责，
+    坏文件已由 _load_index 留证，这里放行写入属于自愈。"""
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        groups = data.get("groups") if isinstance(data, dict) else data
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return set()
+    if not isinstance(groups, list):
+        return set()
+    return {g.get("group_id") for g in groups
+            if isinstance(g, dict) and g.get("group_id")}
+
+
+def _save_index(path: Path, groups: list[dict[str, Any]],
+                *, allow_shrink: bool = False) -> None:
+    """写组索引。默认拒绝「缩集合」写：磁盘上有可解析的既有组、而本次写入
+    的 group_id 集合比它少 → 有组将被抹掉 → 拒绝（见 GroupIndexOverwriteError）。
+
+    ``allow_shrink=True`` 仅供**有意删组**的调用方（delete_group）——那是
+    用户明确要求集合变小，不是坏读后的意外抹除。
+    """
+    old_ids = _parseable_index_ids(path)
+    if old_ids is not None and not allow_shrink:
+        new_ids = {g.get("group_id") for g in groups
+                   if isinstance(g, dict) and g.get("group_id")}
+        lost = old_ids - new_ids
+        if lost:
+            raise GroupIndexOverwriteError(
+                f"拒绝写入组索引 {path}：本次写入将抹掉磁盘上已有的组"
+                f" {sorted(lost)}（多为索引读取损坏后被当成空表所致）。"
+                "请先修复/恢复该索引文件，或确认后改用 delete_group 删组")
+    atomic_write_text(
+        path,
         json.dumps({"groups": groups}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
     )
 
 
@@ -341,7 +405,8 @@ def delete_group(group_id: str, dir_path: Path | str | None = None,
                 delete_plan(pid, dir_path)
     groups = _load_index(idx_path)
     groups = [x for x in groups if x.get("group_id") != group_id]
-    _save_index(idx_path, groups)
+    # 删组是**有意**让集合变小，须放行防覆盖闸（否则合法删组也被拒）
+    _save_index(idx_path, groups, allow_shrink=True)
     return True
 
 

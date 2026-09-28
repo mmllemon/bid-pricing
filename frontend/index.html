@@ -96,7 +96,7 @@
               <div class="field-group">
                 <label class="field" data-tip="从「项目经营概览」选择处于投标阶段的项目，选中后自动带入项目名称与目标总报价">
                   <span class="field-label">关联投标项目</span>
-                  <select id="projectId"><option value="">— 手动填写 / 不关联 —</option></select>
+                  <select id="projectId"><option value="">— 请先选择关联投标项目 —</option></select>
                 </label>
                 <div style="display:flex;gap:10px;">
                   <label class="field" style="flex:1;" data-tip="目标总报价 = 投标报价金额（含税，元），结算调整模型以此反推竞争性预算">
@@ -413,6 +413,7 @@
                     </span>
                     <span style="border-left:1px solid var(--border);height:12px;"></span>
                     <span class="tabular" id="tableCount">合计清单项: 0 项</span>
+                    <span id="tablePager" style="display:inline-flex;align-items:center;gap:6px;margin-left:8px"><button type="button" data-pg="prev" style="border:1px solid var(--border);background:var(--surface-card);color:var(--text-secondary);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;display:none">‹ 上页</button><span style="font-size:12px;color:var(--text-tertiary)">第 <b>1</b> / 1 页</span><button type="button" data-pg="next" style="border:1px solid var(--border);background:var(--surface-card);color:var(--text-secondary);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer;display:none">下页 ›</button></span>
                   </div>
                 </div>
               </div>
@@ -521,6 +522,7 @@
 
   <div class="toast-stack" id="toastStack" role="status" aria-live="polite"></div>
 
+  <script src="./js/escape.js?v=2026-09-28"></script>
   <script src="./js/sidebar.js?v=2026-09-23-split1"></script>
   <script src="./js/toast.js?v=2026-09-23-split1"></script>
   <script src="./js/dropdown.js?v=2026-09-23-split1"></script>

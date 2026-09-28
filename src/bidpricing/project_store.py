@@ -17,8 +17,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .atomic_io import atomic_write_text
+
 PROJECTS_DIR = Path(__file__).resolve().parents[2] / "outputs" / "projects"
-PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+# 注意：import 时不 mkdir——模块导入应无副作用。写路径（save_plan /
+# project_overview 的写函数）各自负责建目录，读路径全部容缺失目录。
 
 #: 方案记录中作为"可重算输入"持久化、且允许被 recompute 覆盖的参数。
 RECHECK_PARAMS = ("target_total", "fixed_pretax", "vat_rate", "surtax_rate",
@@ -50,6 +53,25 @@ def _project_dir(dir_path: Path, record: dict[str, Any]) -> Path:
     return dir_path / _safe_folder(proj)
 
 
+def _iter_id_matches(folder: Path, rid: str):
+    """按 id 匹配目录下的方案文件（``<id>.json`` 或 ``<金额>_<id>.json``）。
+
+    为什么不用 ``folder.glob(f"*_{rid}.json")``：glob 模式里 ``*`` ``?`` ``[``
+    是元字符，plan_id 恰好含这些字符时会误匹配到**别的** id 的文件——load
+    取错方案事小，``_remove_any_id`` 顺着误匹配把别人的文件 unlink 事大。
+    改为全量枚举 ``*.json`` 后做纯字符串比较：id 只出现在比较侧、不进入
+    模式侧，任何 id 字符都按字面匹配。
+    """
+    try:
+        entries = folder.glob("*.json")
+    except OSError:
+        return
+    suffix = f"_{rid}.json"
+    for p in entries:
+        if p.name == f"{rid}.json" or p.name.endswith(suffix):
+            yield p
+
+
 def _find_plan_file(dir_path: Path, plan_id: str) -> Path | None:
     """在项目子目录与旧平铺目录中找同名方案文件，返回首个命中。"""
     # 旧平铺文件优先（同名同 id，可能是历史遗留）
@@ -64,9 +86,8 @@ def _find_plan_file(dir_path: Path, plan_id: str) -> Path | None:
             if cand.exists():
                 return cand
             # 新布局：方案文件命名为 "<报价金额>_<id>.json"，按 id 后缀匹配
-            match = list(folder.glob(f"*_{plan_id}.json"))
-            if match:
-                return match[0]
+            for match in _iter_id_matches(folder, plan_id):
+                return match
     return None
 
 
@@ -105,11 +126,24 @@ def _summary(rec: dict[str, Any], p: Path) -> dict[str, Any]:
     }
 
 
+def _is_plan_file_name(name: str) -> bool:
+    """同目录里的**非方案** JSON 不当方案读：projects.json（项目数据集）、
+    .groups.json（组索引）、``.`` 开头的隐藏/锁文件。它们也是 dict JSON，
+    混进方案列表会让 list_plans 冒出假方案。"""
+    if name.startswith("."):
+        return False
+    if name == "projects.json":
+        return False
+    return True
+
+
 def _iter_plan_files(dir_path: Path):
     """依次产出 (plan_file, record) ；兼容旧平铺与新的项目子目录两种布局。"""
     if not dir_path.exists():
         return
-    for p in dir_path.glob("*.json"):          # 旧平铺布局（含 projects.json 等）
+    for p in dir_path.glob("*.json"):          # 旧平铺布局（跳过 projects.json 等非方案）
+        if not _is_plan_file_name(p.name):
+            continue
         try:
             rec = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -118,6 +152,8 @@ def _iter_plan_files(dir_path: Path):
             yield p, rec
     for folder in sorted(x for x in dir_path.iterdir() if x.is_dir()):
         for p in folder.glob("*.json"):        # 新按项目归集布局
+            if not _is_plan_file_name(p.name):
+                continue
             try:
                 rec = json.loads(p.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
@@ -126,17 +162,26 @@ def _iter_plan_files(dir_path: Path):
                 yield p, rec
 
 
-def _remove_any_id(dir_path: Path, rid: str) -> None:
-    """删除任一布局下已存在的同 id 物理文件，保证一个方案只有一份。"""
+def _remove_any_id(dir_path: Path, rid: str, keep: Path | None = None) -> None:
+    """删除任一布局下已存在的同 id 物理文件，保证一个方案只有一份。
+
+    ``keep`` 指定的文件不删（save_plan 先写新文件后清理旧布局时传入，
+    因为新文件名 ``<金额>_<id>.json`` 同样命中 ``*_{id}.json`` glob）。
+    """
+    keep_resolved = keep.resolve() if keep is not None else None
     legacy = dir_path / f"{rid}.json"
     try:
-        if legacy.exists():
+        if legacy.exists() and (keep_resolved is None or legacy.resolve() != keep_resolved):
             legacy.unlink()
         if dir_path.exists():
             for folder in dir_path.iterdir():
-                for cand in [folder / f"{rid}.json", *folder.glob(f"*_{rid}.json")]:
+                if not folder.is_dir():
+                    continue
+                # 只删「确实属于本 id」的文件（见 _iter_id_matches：不用 glob 模式拼接 id）
+                for cand in _iter_id_matches(folder, rid):
                     try:
-                        if folder.is_dir() and cand.exists():
+                        if cand.exists() and (
+                                keep_resolved is None or cand.resolve() != keep_resolved):
                             cand.unlink()
                     except OSError:
                         pass
@@ -158,12 +203,13 @@ def save_plan(record: dict[str, Any], plan_id: str | None = None,
     stored = dict(record)
     stored["id"] = rid
     stored["saved_at"] = saved_at
-    _remove_any_id(dir_path, rid)
     target_dir = _project_dir(dir_path, stored)
     target_dir.mkdir(parents=True, exist_ok=True)
-    (target_dir / _plan_filename(stored, rid)).write_text(
-        json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    target = target_dir / _plan_filename(stored, rid)
+    # 先原子写新文件、后清理旧布局副本：中途崩溃最多留下一个重复副本
+    # （下次保存自愈），绝不会出现「旧的已删、新的没写上」的方案丢失。
+    atomic_write_text(target, json.dumps(stored, ensure_ascii=False, indent=2))
+    _remove_any_id(dir_path, rid, keep=target)
     return rid, saved_at
 
 

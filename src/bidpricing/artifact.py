@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .atomic_io import atomic_write_text
 from .states import CheckItem, Status
 
 #: 占位符黑名单——逐字采用路线 §7.1.1 断言 4 原文正则
@@ -93,8 +94,9 @@ def load_registry(path: Path) -> dict:
 
 
 def save_registry(path: Path, registry: dict) -> None:
-    path.write_text(
-        json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    # 注册表是所有闸门判定的输入，截断 JSON 会让整条校验链失明，必须原子写。
+    atomic_write_text(
+        path, json.dumps(registry, ensure_ascii=False, indent=2) + "\n"
     )
 
 

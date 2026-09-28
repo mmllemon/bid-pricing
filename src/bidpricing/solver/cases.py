@@ -25,11 +25,11 @@ from typing import Any, Iterable, Mapping
 from ..contracts.pricing_card import ResolvedParameters
 from .exactness import (
     DEFAULT_EPS_ABS,
-    DEFAULT_EPS_PRICE,
+    DEFAULT_EPS_REL_PRICE,
     ExactnessVerdict,
     check_exactness,
 )
-from .instance import Phase1Instance, SolutionCheck, check_solution
+from .instance import Phase1Instance, SolutionCheck, check_solution, resolve_eps_total
 
 SPEC_FILENAME = "phase1_exactness_spec.json"
 
@@ -139,7 +139,7 @@ def run_cases(
     resolved: ResolvedParameters,
     *,
     eps_abs: float = DEFAULT_EPS_ABS,
-    eps_price: float = DEFAULT_EPS_PRICE,
+    eps_rel_price: float = DEFAULT_EPS_REL_PRICE,
     only: str | None = None,
 ) -> list[CaseResult]:
     """跑全部（或指定）case 的条件层与见证层复算。"""
@@ -152,10 +152,10 @@ def run_cases(
             case.get("instance") or {}, source=str(case.get("title", ""))
         )
         verdict = check_exactness(
-            instance, resolved, eps_abs=eps_abs, eps_price=eps_price
+            instance, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price
         )
         mismatches = _compare_expected(case.get("expected") or {}, verdict)
-        witness = _run_witness(case, instance, resolved, eps_abs, eps_price)
+        witness = _run_witness(case, instance, resolved, eps_abs, eps_rel_price)
         results.append(
             CaseResult(
                 case_id=case_id,
@@ -205,14 +205,14 @@ def _run_witness(
     instance: Phase1Instance,
     resolved: ResolvedParameters,
     eps_abs: float,
-    eps_price: float,
+    eps_rel_price: float,
 ) -> WitnessCheck | None:
     witness = case.get("witness") or {}
     asserts = witness.get("assertions")
     if not asserts:
         return None
 
-    eps_total = _eps_total(instance, eps_abs, eps_price)
+    eps_total = _eps_total(instance, eps_abs, eps_rel_price)
     wrong = _solve_one(instance, witness.get("wrong_solution"), resolved, eps_total)
     right = _solve_one(instance, witness.get("right_solution"), resolved, eps_total)
 
@@ -289,7 +289,9 @@ def _evaluate_assertion(
 
 
 def _eps_total(
-    instance: Phase1Instance, eps_abs: float, eps_price: float
+    instance: Phase1Instance, eps_abs: float, eps_rel_price: float
 ) -> float:
+    # 公式唯一实现在 instance.resolve_eps_total（basis 取 B；
+    # B 缺失时按本层历史行为以 0 参与求值，不改变见证层语义）。
     base = instance.B if instance.B is not None else 0.0
-    return max(eps_abs, eps_price * base)
+    return resolve_eps_total(eps_abs, eps_rel_price, base)

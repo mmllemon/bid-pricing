@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .formulation import compute_lb_c5
-from .instance import Phase1Instance, Phase1Item
+from .instance import Phase1Instance, Phase1Item, resolve_eps_total
 from ..paths import config_dir
 from ..states import STATUS_PASS, STATUS_WARN, STATUS_FAIL, STATUS_BLOCKED, STATUS_SKIP
 
@@ -103,7 +103,9 @@ def resolve_tolerances(
     eps_abs = _take("eps_c1_abs")
     eps_price = _take("eps_price")
     if eps_abs is not None and eps_price is not None and P_star is not None:
-        resolved["eps_total"] = max(eps_abs, eps_price * P_star)
+        # 公式唯一实现在 instance.resolve_eps_total——本判定器的口径选择
+        # 是 basis = P*（与求解层的 B 是两种价额规模，见该函数 docstring）。
+        resolved["eps_total"] = resolve_eps_total(eps_abs, eps_price, P_star)
     else:
         missing.append("eps_total")
     return resolved, tuple(missing)

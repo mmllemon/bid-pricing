@@ -1385,6 +1385,15 @@ def check_backend(
         b08: list[str] = []
         if result.missing:
             b08.append(f"解缺变量 {list(result.missing)[:SAMPLE_LIMIT]}")
+        if result.evaluation.unevaluable:
+            # 不可判行：行系数引用的变量不在赋值里，编译侧对该行**没有**结论。
+            # 不得把「不可判」并进「违反」的归因文案——那是另一类故障
+            # （编译层漏声明变量），修法完全不同。未定态 ⇒ 不得 PASS。
+            b08.append(
+                f"编译侧存在不可判行 {list(result.evaluation.unevaluable)[:SAMPLE_LIMIT]}"
+                "（行系数引用的变量缺失于赋值）⇒ 不可判 ≠ 可行，须先补齐"
+                "变量声明/赋值再复判"
+            )
         if not result.evaluation.feasible:
             viol = [r.constraint_id for r in result.evaluation.violations()]
             band = [r.constraint_id for r in result.evaluation.tolerance_band_rows()]
@@ -1423,10 +1432,15 @@ def check_backend(
             )
         status_b08 = (
             STATUS_BLOCKED if (b08 and result.solution_check is not None
-                               and result.solution_check.tolerance_name
-                               and not result.solution_check.tolerance_resolved
-                               and result.evaluation.feasible
-                               and not result.missing)
+                               and (
+                                   (result.solution_check.tolerance_name
+                                    and not result.solution_check.tolerance_resolved
+                                    and result.evaluation.feasible
+                                    and not result.missing)
+                                   # 不可判行是未定态，不是「判违反」——按同源
+                                   # 规则②不得降级成 FAIL 式的断言，归 BLOCKED。
+                                   or bool(result.evaluation.unevaluable)
+                               ))
             else (STATUS_PASS if not b08 else STATUS_FAIL)
         )
         items.append(BackendCheck(

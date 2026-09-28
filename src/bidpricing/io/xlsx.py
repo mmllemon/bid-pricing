@@ -111,13 +111,30 @@ def _read_sheet_xml(zf: zipfile.ZipFile, target: str, sst: list[str]) -> list[li
     rows: list[list[str]] = []
     for r in root.iter(f"{NS}row"):
         cells: dict[int, str] = {}
+        # 列游标：显式 r 属性推进到该列，缺 r 的格子按位置递推（前一格 +1）。
+        # OOXML 规范中 <c r> 是**可选**属性，省略时按单元格出现顺序归位——
+        # 部分流式生成器不写 r；此前直接 _col_index("") 抛 ValueError 拒绝
+        # 整份文件，按规范递推才是正确读法。
+        cursor = 0
         for c in r.findall(f"{NS}c"):
-            ci = _col_index(c.get("r", ""))
+            ref = c.get("r")
+            if ref:
+                ci = _col_index(ref)
+            else:
+                ci = cursor
+            cursor = ci + 1
             t = c.get("t")
             v = c.find(f"{NS}v")
             is_ = c.find(f"{NS}is")
             if t == "s" and v is not None and v.text:
-                val = sst[int(v.text)]
+                try:
+                    val = sst[int(v.text)]
+                except (IndexError, ValueError) as exc:
+                    # sharedStrings 索引越界/非数字 = 文件损坏，带上下文上抛，
+                    # 由 load_workbook 归一为 XlsxError。
+                    raise ValueError(
+                        f"sharedStrings 索引非法（sheet={target}）：{v.text!r}（{exc}）"
+                    ) from exc
             elif t == "inlineStr" and is_ is not None:
                 val = "".join(x.text or "" for x in is_.iter(f"{NS}t"))
             elif v is not None:
@@ -131,7 +148,12 @@ def _read_sheet_xml(zf: zipfile.ZipFile, target: str, sst: list[str]) -> list[li
 
 
 def load_workbook(path: str | Path) -> Workbook:
-    """打开 xlsx 并读出全部工作表。任何 IO/XML 错误都归一为 :class:`XlsxError`。"""
+    """打开 xlsx 并读出全部工作表。任何 IO/XML/结构错误都归一为 :class:`XlsxError`。
+
+    归一面覆盖：zip 损坏（BadZipFile）、成员缺失（KeyError）、XML 畸形
+    （ParseError）、非法单元格引用与 sharedStrings 越界（ValueError /
+    IndexError）。调用方（boq.parse_listing 链路）只认 XlsxError 一种失败形态。
+    """
     p = Path(path)
     if not p.exists():
         raise XlsxError(f"文件不存在：{p}")
@@ -142,5 +164,5 @@ def load_workbook(path: str | Path) -> Workbook:
             for name, target in _sheet_entries(zf):
                 wb.sheets.append(Sheet(name=name, rows=_read_sheet_xml(zf, target, sst)))
             return wb
-    except (zipfile.BadZipFile, KeyError, ET.ParseError) as exc:
+    except (zipfile.BadZipFile, KeyError, ET.ParseError, IndexError, ValueError) as exc:
         raise XlsxError(f"无法解析 xlsx（{p.name}）: {exc}") from exc

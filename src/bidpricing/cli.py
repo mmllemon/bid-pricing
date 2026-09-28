@@ -38,6 +38,7 @@ from .artifact import (
     parse_records,
     save_registry,
 )
+from .atomic_io import atomic_write_text
 from .contracts.consistency import check_contract_consistency
 from .contracts.scope_impact import compare_scopes
 from .contracts.selector import ruleset_self_test, select_rule_set
@@ -664,9 +665,8 @@ def cmd_profit_check(args) -> int:
         spec_doc = json.loads(spec_path.read_text(encoding="utf-8"))
         spec_doc["frozen_at"] = _dt.now(_tz.utc).isoformat()
         spec_doc["frozen_by"] = args.actor
-        spec_path.write_text(
-            json.dumps(spec_doc, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8")
+        atomic_write_text(spec_path,
+                          json.dumps(spec_doc, ensure_ascii=False, indent=2) + "\n")
         print(f" ✓ 已冻结：frozen_at = {spec_doc['frozen_at']}"
               "（注意：制品内容已变，须重新 freeze --all 更新登记表 hash）")
 
@@ -1241,7 +1241,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="两侧结果的留痕 JSON（schema_id=phase12_parity_input_v1）。"
                             "不给 ⇒ 结论 BLOCKED 并具名 owner——**这不是「已通过」**，"
                             "也不是「不适用」")
-    p_p12.add_argument("--out", default="docs/phase12_parity_report.json",
+    p_p12.add_argument("--out", default=str(repo_root() / "docs" / "phase12_parity_report.json"),
                        help="报告落盘路径（生成物，勿手改）")
     p_p12.add_argument("--signoff", default="docs/reference_review_signoff.json",
                        help="T04-08 独立性签署文件")
@@ -1253,7 +1253,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_suite = sub.add_parser(
         "parity-suite",
         help="T04-04：从 golden_dataset_v1 生成对拍 input bundle（两条路径结果留痕）")
-    p_suite.add_argument("--out", default="docs/phase12_parity_bundle.json",
+    p_suite.add_argument("--out", default=str(repo_root() / "docs" / "phase12_parity_bundle.json"),
                          help="bundle 落盘路径（可复算输入，勿手改）")
     p_suite.add_argument("--json", action="store_true", help="输出 JSON")
     p_suite.set_defaults(func=cmd_parity_suite)
@@ -1288,7 +1288,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_cl.add_argument("--records", required=True,
                      help="闭环输入束 JSON（字段见 config/closed_loop_spec.json）")
-    p_cl.add_argument("--out", default="docs/closed_loop_report.json",
+    p_cl.add_argument("--out", default=str(repo_root() / "docs" / "closed_loop_report.json"),
                       help="报告落盘路径（生成物，勿手改）")
     p_cl.add_argument("--no-write", action="store_true",
                      help="只打印结论，不落盘")
@@ -1311,7 +1311,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_pr.add_argument("--rationale", default=None,
                      help="依据，**必填**（留痕四件之一；空 = 未声明）")
     p_pr.add_argument("--at", default=None, help="声明时间戳（缺省=当前 UTC）")
-    p_pr.add_argument("--out", default="docs/predicted_q1/predicted_q1.json",
+    p_pr.add_argument("--out", default=str(repo_root() / "docs" / "predicted_q1" / "predicted_q1.json"),
                       help="声明书落盘路径（已存在须 --replace，旧版先留版本）")
     p_pr.add_argument("--replace", action="store_true",
                       help="覆盖已存在的声明书（须已备份/提交旧版）")
@@ -2025,10 +2025,12 @@ def cmd_settlement_check(args) -> int:
             print(f"\n整体结论（P0）：{rep.verdict()}   含 P1：{rep.verdict_all()}")
         return 0 if rep.verdict() == "PASS" else 1
 
-    q0 = float(getattr(args, "q0", None) or spec["probe_grid"]["q0"])
-    q1 = float(getattr(args, "q1", None)
-               or spec["probe_grid"]["q0"] * 1.3)
-    p0 = float(getattr(args, "p0", None) or spec["probe_grid"]["p0"])
+    # `or 默认` 会把合法的 0（--q0 0 等边界输入）当「没传」吞掉，显式判 None。
+    _grid = spec["probe_grid"]
+    _q0, _q1, _p0 = getattr(args, "q0", None), getattr(args, "q1", None), getattr(args, "p0", None)
+    q0 = float(_q0) if _q0 is not None else float(_grid["q0"])
+    q1 = float(_q1) if _q1 is not None else float(_grid["q0"]) * 1.3
+    p0 = float(_p0) if _p0 is not None else float(_grid["p0"])
     ctx = ContractContext(
         rule_set_id=rule_id,
         overrides=overrides,
@@ -3487,9 +3489,21 @@ def cmd_validate_boq(args) -> int:
     }
 
     cdir = config_dir()
-    cls = _json.loads(
-        (cdir / "project_classification_table.json").read_text(encoding="utf-8"))
-    sel = _json.loads((cdir / "project_selection.json").read_text(encoding="utf-8"))
+    # 与 gate-check 同口径：缺声明文件/坏 JSON → 显式 BLOCKED，不裸抛 traceback
+    _cls_p = cdir / "project_classification_table.json"
+    if not _cls_p.exists():
+        print(f"■ 缺项目分类表：{_cls_p.name}（未定态不得放行 validate）")
+        return 1
+    _sel_p = cdir / "project_selection.json"
+    if not _sel_p.exists():
+        print(f"■ 缺项目选择落值：{_sel_p.name}（adjustment_scope 未选择，不得放行）")
+        return 1
+    try:
+        cls = _json.loads(_cls_p.read_text(encoding="utf-8"))
+        sel = _json.loads(_sel_p.read_text(encoding="utf-8"))
+    except _json.JSONDecodeError as e:
+        print(f"■ 项目配置 JSON 损坏：{e}")
+        return 1
     rules_cfg = load_validation_rules(cdir)
 
 
@@ -3617,8 +3631,8 @@ def cmd_cost_check(args) -> int:
         src["declared_evidence"] = evidence
         src["declared_by"] = args.actor or "UNKNOWN"
         src["declared_at"] = _dt.now(_tz.utc).isoformat()
-        spec_path.write_text(
-            _json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        atomic_write_text(spec_path,
+                          _json.dumps(spec, ensure_ascii=False, indent=2) + "\n")
         print(f" ✓ 已落值 c_i 来源 = {args.declare_source}"
               f"（声明人：{src['declared_by']}）")
         if evidence:
@@ -3645,9 +3659,8 @@ def cmd_cost_check(args) -> int:
             return 1
         spec = _json.loads(spec_path.read_text(encoding="utf-8"))
         spec["frozen_at"] = _dt.now(_tz.utc).isoformat()
-        spec_path.write_text(
-            _json.dumps(spec, ensure_ascii=False, indent=2) + _NL,
-            encoding="utf-8")
+        atomic_write_text(spec_path,
+                          _json.dumps(spec, ensure_ascii=False, indent=2) + _NL)
         print(f" ✓ 已冻结：frozen_at = {spec['frozen_at']}")
 
     from .validation.cost_basis import check_cost_input_tax
@@ -3705,8 +3718,8 @@ def cmd_qty_check(args) -> int:
         sens["status"] = "RESOLVED"
         sens["declared_by"] = args.actor or "UNKNOWN"
         sens["declared_at"] = _dt.now(_tz.utc).isoformat()
-        spec_path.write_text(
-            _json.dumps(spec, ensure_ascii=False, indent=2) + _NL, encoding="utf-8")
+        atomic_write_text(spec_path,
+                          _json.dumps(spec, ensure_ascii=False, indent=2) + _NL)
         print(f" ✓ 已落值敏感性义务 = {args.declare_sensitivity}"
               f"（声明人：{sens['declared_by']}）")
 
@@ -3722,8 +3735,8 @@ def cmd_qty_check(args) -> int:
             return 1
         spec = _json.loads(spec_path.read_text(encoding="utf-8"))
         spec["frozen_at"] = _dt.now(_tz.utc).isoformat()
-        spec_path.write_text(
-            _json.dumps(spec, ensure_ascii=False, indent=2) + _NL, encoding="utf-8")
+        atomic_write_text(spec_path,
+                          _json.dumps(spec, ensure_ascii=False, indent=2) + _NL)
         print(f" ✓ 已冻结：frozen_at = {spec['frozen_at']}")
 
     if spec_path.exists():

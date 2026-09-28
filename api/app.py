@@ -26,6 +26,7 @@ if str(SRC) not in sys.path:
 
 from bidpricing import project_overview, project_store
 from bidpricing import sqlite_store
+from bidpricing.atomic_io import atomic_write_text
 from bidpricing.deployment import log_event, safe_user, user_scope
 from bidpricing.import_preview import build_listing_preview
 from bidpricing.io.boq import assert_price_columns_present, parse_listing
@@ -93,16 +94,28 @@ def _export_xlsx(rec_result: dict, out_id: str) -> str | None:
     O7（治理审查 P1）：此前 optimize / recompute / rebuild 三处各自
     write_text + subprocess.run(node build_web_result.mjs)，参数完全一致。
     统一为一个单点，失败时在 rec_result 上挂 excel_export_warning（不抛异常）。
+
+    两个落盘动作均为**发布原子**：JSON 走 atomic_write_text；xlsx 先由 node
+    写到 .partial 临时名、check 成功后再 os.replace。读者要么看到旧文件、
+    要么看到完整新文件——并发写同 plan_id 不再可能产出半成品，
+    这也是 _SLOT_LOCK 得以缩小到「槽位读 + SQLite 写」的前提。
+
+    O5 沿袭：导出失败文案不回显 subprocess 的 stderr（含内部路径/命令行），
+    明细进服务端日志。
     """
     json_path = WEB_OUTPUT_DIR / f"{out_id}.json"
     xlsx_path = WEB_OUTPUT_DIR / f"{out_id}.xlsx"
-    json_path.write_text(json.dumps(rec_result, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp_xlsx = WEB_OUTPUT_DIR / f"{out_id}.xlsx.partial"
+    atomic_write_text(json_path, json.dumps(rec_result, ensure_ascii=False, indent=2))
     try:
-        subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(xlsx_path)],
+        subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(tmp_xlsx)],
                        cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
+        os.replace(tmp_xlsx, xlsx_path)
         return f"/api/quote/download/{out_id}"
     except (subprocess.SubprocessError, OSError) as exc:
-        rec_result["excel_export_warning"] = f"Excel 导出失败，仍可下载 JSON：{exc}"
+        tmp_xlsx.unlink(missing_ok=True)
+        log_event(LOG_DIR, CURRENT_USER, "export-xlsx", "ERROR", detail=repr(exc))
+        rec_result["excel_export_warning"] = "Excel 导出失败，仍可下载 JSON（明细见服务端日志）"
         return None
 
 
@@ -131,14 +144,27 @@ def _validate_quote_params(*, vat_rate, surtax_rate, target_total, fixed_pretax,
 
 
 async def _read_upload_limited(file: UploadFile, max_mb: int = _MAX_UPLOAD_MB) -> tuple[bytes | None, str | None]:
-    """读取 UploadFile 内容并检查体积；超限返回 (None, reason) 而 (data, None)。"""
-    data = await file.read()
+    """分块读取 UploadFile 并检查体积；超限立即中止返回 (None, reason)，正常返回 (data, None)。
+
+    分块的目的：此前 ``await file.read()`` 一次性把整个上传读进内存再查上限，
+    一个 2GB 的恶意上传会先吃满 2GB 内存才被拒绝。现在每读 1MB 核一次累计
+    体积，超限即刻中止，内存占用被封在上限 + 1MB 以内。
+    """
     limit_bytes = max_mb * 1024 * 1024
-    if len(data) > limit_bytes:
-        return None, (
-            f"上传文件超过 {_MAX_UPLOAD_MB} MB 上限"
-            f"（实际 {len(data) / 1024 / 1024:.2f} MB）"
-        )
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1 << 20)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit_bytes:
+            return None, (
+                f"上传文件超过 {_MAX_UPLOAD_MB} MB 上限"
+                f"（实际 ≥ {total / 1024 / 1024:.2f} MB）"
+            )
+        chunks.append(chunk)
+    data = b"".join(chunks)
     if not _is_xlsx_magic(data):
         return None, "上传文件格式错误：仅接受 .xlsx 文件（ZIP 魔数校验失败）"
     return data, None
@@ -226,19 +252,20 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8080", "http
 WEB_OUTPUT_DIR = user_scope(ROOT / "outputs" / "web-results", CURRENT_USER)
 WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-#: 槽位写入互斥锁：并发请求命中同组同策略槽位时，
-#: 「读槽位 → 写 json/xlsx → 落 SQLite → 回写槽位」序列须原子化。
-#: O4（治理审查 P0）：此前文件写入在 SQLite 锁之前，Windows 下 O_TRUNC 非原子，
-#: 并发可能产出半成品产物。参照 deployment.py 的 threading.Lock 模式。
+#: 槽位写入互斥锁：并发请求命中同组同策略槽位时，「读槽位 → 落 SQLite →
+#: 回写槽位」序列须原子化。
+#: O4（治理审查 P0）：文件写入此前在 SQLite 锁之前且非原子，并发可能产出
+#: 半成品产物。现在 json/xlsx 的落盘在 _export_xlsx 内已按「临时名 + os.replace」
+#: 发布原子（读者只会看到完整旧文件或完整新文件），本锁因此缩小到只保护
+#: 槽位指针的读改写与 SQLite 落库，不再跨越 60s 的 node 子进程。
 #:
-#: 已知局限（O4-c，部分修复）：
-#: (a) 已修（2026-09-27）：本锁是 **threading.Lock**，直接在 async 路由里 with 会阻塞
-#:     整个 event loop。现在 async 路由（optimize_quote）把锁内同步 IO 块包进
-#:     asyncio.to_thread，threading.Lock 只在 threadpool 线程上阻塞，event loop 不中断。
+#: 已知局限（O4-c）：
+#: (a) 本锁是 **threading.Lock**，async 路由中的锁内同步块包进 asyncio.to_thread，
+#:     threading.Lock 只在 threadpool 线程上阻塞，event loop 不中断。
 #: (b) 本锁不跨进程。**多 worker 部署（uvicorn --workers N）下失效**：每个 worker
-#:     各持一把锁，跨进程并发写同槽位仍可能产出半成品产物。当前部署是单 worker 进程
-#:     （未使用 --workers），此锁足够；若需多 worker，须把本锁换成 SQLite 事务或
-#:     外部锁（例如文件锁），并在部署手册中登记。
+#:     各持一把锁。当前部署是单 worker 进程（未使用 --workers），此锁足够；
+#:     若需多 worker，须把本锁换成 SQLite 事务或外部锁（例如文件锁），
+#:     并在部署手册中登记。
 _SLOT_LOCK = threading.Lock()
 
 
@@ -304,7 +331,9 @@ _CSP_HEADER = (
     "script-src 'self'; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; "
-    "connect-src 'self' http://127.0.0.1:8000"
+    # 前端 API_BASE 默认写 http://localhost:8000——CSP 源匹配按主机名字面量，
+    # localhost 与 127.0.0.1 是两个不同的源，缺哪一个就拦哪一个。
+    "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000"
 )
 
 
@@ -334,7 +363,10 @@ async def preview_quote(limit_file: UploadFile = File(...), cost_file: UploadFil
         cap_path.write_bytes(cap_data)
         cost_path.write_bytes(cost_data)
         try:
-            pid, matched = _parse_clean_match(cap_path, cost_path, proj_name)
+            # 解析含两份 xlsx 的全量读取（可达数千行），CPU 密集；
+            # 本路由是 async def，必须移出事件循环，否则求解期间全部请求停摆。
+            pid, matched = await asyncio.to_thread(
+                _parse_clean_match, cap_path, cost_path, proj_name)
         except Exception as exc:  # noqa: BLE001
             return _blocked_parse_error(exc, "/api/quote/preview")
         payload = build_listing_preview(matched, pid)
@@ -373,15 +405,15 @@ def _excel_filename(job_id: str) -> str:
 
 
 def _rebuild_xlsx(job_id: str) -> Path | None:
-    """从方案库中该 id 的结算结果重建导出文件；非方案 id 则返回 None。"""
+    """从方案库中该 id 的结算结果重建导出文件；非方案 id 则返回 None。
+
+    _export_xlsx 的落盘已发布原子（O4），与 optimize 并发重建同 plan_id
+    不会产出半成品，无需再持 _SLOT_LOCK。"""
     rec = load_plan(job_id)
     if not rec or not rec.get("result"):
         return None
+    _export_xlsx(rec["result"], job_id)
     xlsx_path = WEB_OUTPUT_DIR / f"{job_id}.xlsx"
-    # O4：与 optimize_quote 一致，写 json/xlsx 须持 _SLOT_LOCK，
-    # 防止下载时重建与 optimize 并发写同 plan_id 时 O_TRUNC 产出半成品 xlsx。
-    with _SLOT_LOCK:
-        _export_xlsx(rec["result"], job_id)
     return xlsx_path if xlsx_path.exists() else None
 
 
@@ -416,11 +448,17 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         cap_path.write_bytes(cap_data)
         cost_path.write_bytes(cost_data)
         try:
-            pid, matched = _parse_clean_match(cap_path, cost_path, proj_name)
+            # O4-c(a) 同类纪律的推广：解析（两份 xlsx 全量读取）与 MILP 求解
+            # 都是 CPU 密集同步块，本路由是 async def，二者必须移出事件循环，
+            # 否则一次求解期间 health/download/list 全部请求停摆。
+            pid, matched = await asyncio.to_thread(
+                _parse_clean_match, cap_path, cost_path, proj_name)
         except Exception as exc:  # noqa: BLE001
             return _blocked_parse_error(exc, "/api/quote/optimize")
         all_items = [{"item_id": row.item_id, "item_name": row.item_name, "unit": getattr(row, "unit", "") or "", "q0": row.q0, "q1_point": row.q1_point, "c_i": row.c_i, "cap": row.cap, "L": (float(row.cap) * ratio_min if row.cap is not None else 0.0), "U": (float(row.cap) * ratio_max if row.cap is not None else None)} for row in matched.items if row.q0 is not None or row.q1_point is not None]
-        result, payload, status_code = _run_resolve(all_items, params, low_policy, matched, tax_policy_override=tax_override, strategy=strategy)
+        result, payload, status_code = await asyncio.to_thread(
+            _run_resolve, all_items, params, low_policy, matched,
+            tax_policy_override=tax_override, strategy=strategy)
         if status_code != 200:
             # 非 PASS（如无可优化项或跨单位工程重复 item_id 导致 BLOCKED）直接返回，
             # 不继续取空 p_by_id 建明细（防止 KeyError 吞掉报错文案）。
@@ -441,13 +479,13 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
             effective_group_id = create_group(
                 proj_uuid or pid, proj_name, target_total=target_total)["group_id"]
         # 同组同策略槽位复用；未命中则新建 plan_id
-        # O4：「读槽位 → 写 json/xlsx → 落 SQLite → 回写槽位」序列须原子化，
-        # 防止并发请求命中同槽位时 O_TRUNC 产出半成品产物。
-        # O4-c(a)：本路由是 async def，threading.Lock 直接 with 会阻塞整个 event loop。
-        # 把锁内同步 IO 块（_export_xlsx 里 subprocess 调用最长 60s）包进
-        # asyncio.to_thread，threading.Lock 只在 threadpool 线程上阻塞，event loop 不中断。
+        # O4：文件落盘已在 _export_xlsx 内发布原子，本锁只保护「读槽位 →
+        # SQLite 落库 → 回写槽位」的指针一致性；锁内全是毫秒级 SQLite 操作，
+        # 慢的 preview/导出（最长 60s 子进程）在锁外执行，不再让其他槽位排队。
+        # O4-c(a)：async 路由里锁内同步块包进 asyncio.to_thread，
+        # threading.Lock 只在 threadpool 线程上阻塞，event loop 不中断。
         job_id: str | None = None
-        def _slot_ops_locked() -> JSONResponse:
+        def _slot_read_locked() -> JSONResponse | None:
             nonlocal job_id
             with _SLOT_LOCK:
                 job_id = find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
@@ -462,28 +500,37 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
                                                f"{group_info.get('project_id')!r}，拒绝以当前项目 "
                                                f"{proj_uuid!r} 写入"}
                         )
-                preview = build_listing_preview(matched, pid)
-                preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
-                preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
-                payload["plan_id"] = job_id
-                payload["group_id"] = effective_group_id
-                # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
-                excel_url = _export_xlsx(payload, job_id)
-                if excel_url:
-                    payload["excel_download_url"] = excel_url
+            return None
+
+        forbidden = await asyncio.to_thread(_slot_read_locked)
+        if forbidden is not None:
+            return forbidden
+        preview = build_listing_preview(matched, pid)
+        preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
+        preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
+        payload["plan_id"] = job_id
+        payload["group_id"] = effective_group_id
+        # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
+        excel_url = _export_xlsx(payload, job_id)
+        if excel_url:
+            payload["excel_download_url"] = excel_url
+
+        def _slot_write_locked() -> JSONResponse | None:
+            with _SLOT_LOCK:
                 try:
                     save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
                     upsert_slot(effective_group_id, strategy, job_id)
                 except (PlanOwnershipError, StoreWriteLockedError) as exc:
                     return JSONResponse(status_code=409, content={"status": "BLOCKED", "reason": str(exc)})
-            return JSONResponse(status_code=200, content=payload)
-        slot_response = await asyncio.to_thread(_slot_ops_locked)
-        if slot_response.status_code != 200:
-            return slot_response
+            return None
+
+        write_err = await asyncio.to_thread(_slot_write_locked)
+        if write_err is not None:
+            return write_err
         append_audit(CURRENT_USER, "quote.optimize", "PASS",
                      project_id=proj_uuid or pid, plan_id=job_id, group_id=effective_group_id,
                      objective=payload.get("objective"))
-        return slot_response
+        return JSONResponse(status_code=200, content=payload)
 
 
 @app.get("/api/project/list")
@@ -636,26 +683,37 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
     result, payload, status_code = _run_resolve(all_items, params, low_policy, None, tax_policy_override=tax_override, strategy=strategy)
     if status_code != 200:
         return JSONResponse(status_code=status_code, content=payload)
-    payload.update({"project_id": rec.get("name") or id, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "strategy": strategy})
+    # project_id 用方案的真实归属（与 optimize 的 proj_uuid or pid 同口径）；
+    # 此前误用方案 name（如「xxx（副本）」），前端预览头/门控会拿错值。
+    payload.update({"project_id": rec.get("project_id") or rec.get("project_name") or rec.get("name") or id, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "strategy": strategy})
     payload["plan_id"] = id
-    # O4：与 optimize_quote 一致，「导出 xlsx → 落 SQLite」序列须原子化，
-    # 防止重算与 optimize 并发写同 plan_id 时 O_TRUNC 产出半成品产物。
-    with _SLOT_LOCK:
-        # 先导出再落盘：保存的方案 result 须带 excel_download_url，否则打开方案时「下载 Excel」为 '#' 无反应
-        excel_url = _export_xlsx(payload, id)
-        if excel_url:
-            payload["excel_download_url"] = excel_url
-        merged = dict(rec)
-        merged["params"] = dict(params)
-        merged["result"] = payload
-        merged["strategy"] = strategy
+    # O4：文件落盘已在 _export_xlsx 内发布原子（临时名 + os.replace），
+    # 与 optimize 并发写同 plan_id 不会产出半成品，无需再持 _SLOT_LOCK。
+    # 先导出再落盘：保存的方案 result 须带 excel_download_url，否则打开方案时「下载 Excel」为 '#' 无反应
+    excel_url = _export_xlsx(payload, id)
+    if excel_url:
+        payload["excel_download_url"] = excel_url
+    merged = dict(rec)
+    merged["params"] = dict(params)
+    merged["result"] = payload
+    merged["strategy"] = strategy
+    # 归一化存储层异常（与 optimize_quote 同口径）：方案被定稿/归属冲突时
+    # 返回 409 业务错误，而不是让 StoreWriteLockedError 裸穿成 500。
+    try:
         save_plan(merged, plan_id=id)
+    except (PlanOwnershipError, StoreWriteLockedError) as exc:
+        return JSONResponse(status_code=409, content={"status": "BLOCKED", "reason": str(exc)})
     return JSONResponse(status_code=200, content=payload)
 
 
 @app.post("/api/project/delete")
 def project_delete(id: str) -> JSONResponse:
-    if not delete_plan(id):
+    try:
+        ok = delete_plan(id)
+    except StoreWriteLockedError as exc:
+        # 已定稿方案拒绝删除（A4 定稿锁）——归一为 409 业务错误而非裸 500
+        return JSONResponse(status_code=409, content={"status": "LOCKED", "reason": str(exc)})
+    if not ok:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
     return JSONResponse(status_code=200, content={"status": "PASS", "deleted": id})
 
@@ -744,6 +802,14 @@ def overview_list() -> JSONResponse:
     return JSONResponse(status_code=200, content={"status": "PASS", "projects": projects})
 
 
+#: 可编辑字段的显式清单。此前用 ``locals().items()`` 收集——现在恰好只有
+#: 形参所以能工作，但任何人在函数体前段新增一个局部变量，它就会静默混进
+#: 更新载荷。字段面显式声明，函数签名加字段时同步维护这里。
+_OVERVIEW_FIELDS = ("name", "short_name", "limit_total", "bid_open_date", "stage",
+                    "bid_amount", "bid_cost", "actual_cost", "actual_revenue",
+                    "settle_amount", "completed_at")
+
+
 @app.post("/api/project/overview/save")
 def overview_save(pid: str = Form(""), name: str = Form(""), short_name: str = Form(""),
                   limit_total: str = Form(""), bid_open_date: str = Form(""), stage: str = Form(""),
@@ -751,7 +817,10 @@ def overview_save(pid: str = Form(""), name: str = Form(""), short_name: str = F
                   actual_revenue: str = Form(""), settle_amount: str = Form(""),
                   completed_at: str = Form("")):
     """新建或编辑项目。pid 为空=新建，非空=覆盖编辑（同 id，不会静默覆盖别的项目）。"""
-    form = _overview_body(locals().items())
+    form = _overview_body(list(zip(_OVERVIEW_FIELDS, (
+        name, short_name, limit_total, bid_open_date, stage,
+        bid_amount, bid_cost, actual_cost, actual_revenue,
+        settle_amount, completed_at))))
     try:
         if pid.strip():
             rec = project_overview.update_project(pid.strip(), form)

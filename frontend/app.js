@@ -89,13 +89,17 @@ let currentPlanId = null;
 let plans = [];
 let lastResult = null;
 // 后端服务基址：单一配置点，换域名/环境只改这一处（下载与所有 API 调用共用）
-const API_BASE = 'http://localhost:8000';
+// 部署钩子：页面脚本前定义 window.__API_BASE__ 可覆盖；缺省同机开发端口。
+const API_BASE = window.__API_BASE__ || 'http://localhost:8000';
 
 // H-013：可选 API token——服务端启用 BIDPRICING_API_TOKEN 后，把 token 存入
 // localStorage('bidpricingApiToken')，此包装器为所有 /api 请求自动附加 Authorization。
 (() => {
+  // 幂等标记：index.html 同页加载 workbench 脚本时会叠第二层包装，
+  // 读两次 localStorage、headers 合并两次——功能上无害但属隐性耦合。
+  if (window.fetch && window.fetch.__tokenPatched) return;
   const _fetch = window.fetch.bind(window);
-  window.fetch = (input, init) => {
+  const patched = (input, init) => {
     const token = (localStorage.getItem('bidpricingApiToken') || '').trim();
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     if (token && url.startsWith(API_BASE)) {
@@ -105,6 +109,8 @@ const API_BASE = 'http://localhost:8000';
     }
     return _fetch(input, init);
   };
+  patched.__tokenPatched = true;
+  window.fetch = patched;
 })();
 let overviewProjects = [];   // 项目经营概览数据集（用于关联与定稿回写）
 let activeOverviewId = '';    // 当前关联的经营项目 id（非空才显示定稿回写按钮）
@@ -116,7 +122,7 @@ const fmt = (value, digits = 2) => {
   return n.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 };
 // 安全转义：所有来自 Excel / 用户输入的字符串在进入 innerHTML 前必须过 esc，防止清单注入。
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = (s) => window.gcEsc ? window.gcEsc(s) : String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));   // 指向共享转义器 js/escape.js（缺失时回退本地实现）
 const escList = (arr) => (arr || []).map(esc).join('、');
 
 function fillParams(params) {
@@ -215,6 +221,13 @@ function targetTotalVal() { return Number(numVal('targetTotal')); }
 
 // 警告：定稿只把投标报价金额写回项目经营概览，投标成本测算由用户在概览手动填写，不回写。
 async function finalizeToOverview(bidAmount, result) {
+  // 0/空/非数不进确认框：targetTotal 留空时 numVal 会回落 placeholder "0.00"，
+  // 手滑确认会把项目投标报价金额覆盖成 0 元。
+  const amt = Number(bidAmount);
+  if (!Number.isFinite(amt) || amt <= 0) {
+    setMessage('定稿回写取消：目标总报价为空或非正数，没有可写回的金额。请先填写有效的目标总报价。', 'error');
+    return;
+  }
   const ok = await new Promise(res => {
     const body = `将本次目标总报价 <b>${Number(bidAmount).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元写回为「${activeOverviewProjects && activeOverviewProjects[activeOverviewId] ? esc(activeOverviewProjects[activeOverviewId].name) : ''}」的投标报价金额？投标成本测算不随本次回写，请在「项目经营概览」中手动填写。`;
     const modal = document.createElement('div');
@@ -245,7 +258,7 @@ async function finalizeToOverview(bidAmount, result) {
       } catch (e) { /* 标记失败不阻断回写 */ }
     }
   } catch (error) {
-    setMessage(`定稿回写失败：${error.message}`, 'error');
+    setMessage(`定稿回写失败：${esc(error.message)}`, 'error');
   }
 }
 
@@ -279,7 +292,15 @@ async function loadBidProjectOptions() {
     apply();
     syncProjectGate();
     refreshPrepare();
-  } catch (e) { /* 后端未启动时静默降级为手动填写 */ }
+  } catch (e) {
+    // 静默降级会让用户分不清「后端没启动」和「没有项目」——下拉空着、
+    // 页面被门控锁死、无任何提示。显式留一条错误态。
+    const sel = document.querySelector('#projectId');
+    if (sel) {
+      sel.innerHTML = '<option value="">— 后端服务不可达（请确认 8000 端口服务已启动） —</option>';
+    }
+    setMessage('项目列表加载失败：' + (e && e.message ? esc(e.message) : '后端未启动'), 'error');
+  }
 }
 // 关联项目门控：未选择关联项目时，报价页全部按钮/输入框/下拉框不可交互（唯一例外：项目选择本身）
 function syncProjectGate() {
@@ -424,7 +445,7 @@ document.querySelector('#previewBtn').addEventListener('click', async () => {
     renderPreview(res);
     setMessage(`预览完成：限价 ${res.cap.rows} 行、成本 ${res.cost.rows} 行，可优化 ${res.optimizable_count} 项。`, 'success');
   } catch (error) {
-    setMessage(`预览失败：${error.message}`, 'error');
+    setMessage(`预览失败：${esc(error.message)}`, 'error');
   } finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = '预览导入资料'; }
 });
 
@@ -455,6 +476,17 @@ function buildOptimizeForm(strategy) {
 }
 // 单次 optimize 请求：返回 {result} 或抛 {message, hint}
 async function postOptimize(strategy) {
+  // 提交期间禁用「点算」：双击会对同一槽位并发两笔 optimize。
+  const calcBtns = document.querySelectorAll('#calculateBtn, .slot-act[data-calc]');
+  const prevDisabled = Array.from(calcBtns).map(b => b.disabled);
+  calcBtns.forEach(b => { b.disabled = true; });
+  try {
+    return await _postOptimizeInner(strategy);
+  } finally {
+    calcBtns.forEach((b, i) => { b.disabled = prevDisabled[i]; });
+  }
+}
+async function _postOptimizeInner(strategy) {
   const response = await fetch(API_BASE + '/api/quote/optimize', {method:'POST', body: buildOptimizeForm(strategy)});
   const result = await response.json();
   if (!response.ok || result.status !== 'PASS') {
@@ -500,7 +532,7 @@ document.querySelector('#calculateBtn').addEventListener('click', async () => {
     updateSchemeBalance();
     syncDockCta();
   } catch (error) {
-    setMessage(`计算失败：${error.message}${error.hint ? `<br>${esc(error.hint)}` : ''}`, 'error');
+    setMessage(`计算失败：${esc(error.message)}${error.hint ? `<br>${esc(error.hint)}` : ''}`, 'error');
   } finally { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = '识别文件并计算 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'; setDockBusy(false); }
 });
 
@@ -569,9 +601,18 @@ function currentProjectPlans() {
   return out;
 }
 
+// 请求序号防竞态：快速切换关联项目 / 方案 Tab 时，慢的旧响应不得把新状态
+// 回滚（项目 A→B 后方案中心显示 A 的组、右栏回到 A 的方案）。每个「响应落地
+// 即写全局态」的异步入口维护独立递增序号，落地前校验自己仍是最新请求，
+// 过期响应静默丢弃。
+let _groupsLoadSeq = 0;
+let _openSlotSeq = 0;
+let _projSwitchSeq = 0;
+
 // 拉取当前关联项目的方案组并渲染方案中心；无项目时清空并渲染空态。
 async function loadProjectGroups() {
   const pid = curProjectIdUuid();
+  const seq = ++_groupsLoadSeq;
   if (!pid) { groups = []; plans = []; renderHubCards(); return []; }
   // 首次加载（无缓存）时显示 skeleton，避免空白闪屏
   const body = document.querySelector('#planHubBody');
@@ -579,12 +620,14 @@ async function loadProjectGroups() {
   if (isInitial && body) body.innerHTML = _skeletonCards(3);
   try {
     const res = await (await fetch(API_BASE + '/api/group/list?project_id=' + encodeURIComponent(pid))).json();
+    if (seq !== _groupsLoadSeq) return groups;   // 已有更新的加载在途，丢弃旧响应
     groups = (res && res.groups) || [];
     plans = currentProjectPlans();
     renderHubCards();
     if (body) body.dataset.loaded = '1';
     return groups;
   } catch (error) {
+    if (seq !== _groupsLoadSeq) return groups;
     // F 修复：失败时也要清理 skeleton（否则 shimmer 永久残留）并把
     // dataset.loaded 置为已读，避免下次重试又回到骨架态。不重建卡片——
     // 直接展示错误态，比 renderHubCards 覆盖成“暂无方案组”更诚实。
@@ -592,7 +635,11 @@ async function loadProjectGroups() {
       body.dataset.loaded = '1';
       body.innerHTML = '<div class="ph-empty">方案组加载失败，请重试</div>';
     }
-    setMessage(`方案组加载失败：${error.message}`, 'error');
+    // 错误态下不留旧数据：否则方案 Tab/对比基准下拉仍基于上一轮的
+    // groups 工作，与界面上「加载失败」自相矛盾。
+    groups = []; plans = [];
+    renderHubCards();
+    setMessage(`方案组加载失败：${esc(error.message)}`, 'error');
     return [];
   }
 }
@@ -726,9 +773,9 @@ function bindHubGroupEvents() {
         const fd = new FormData(); fd.append('group_id', btn.dataset.copy);
         const res = await (await fetch(API_BASE + '/api/group/copy', { method:'POST', body: fd })).json();
         if (!res || res.status !== 'PASS') throw new Error(res.reason || '复制失败');
-        setMessage('已复制整组为「' + (((res.group || {}).group_name) || '') + '」。', 'success');
+        setMessage('已复制整组为「' + esc((((res.group || {}).group_name) || '')) + '」。', 'success');
         await refreshPlans();
-      } catch (error) { setMessage(`复制整组失败：${error.message}`, 'error'); }
+      } catch (error) { setMessage(`复制整组失败：${esc(error.message)}`, 'error'); }
     });
   });
   body.querySelectorAll('.phg-op[data-fin]').forEach(btn => {
@@ -741,7 +788,7 @@ function bindHubGroupEvents() {
         if (!res || res.status !== 'PASS') throw new Error(res.reason || '操作失败');
         setMessage(nowOn ? '已取消整组定稿。' : '已整组定稿锁定（组内槽位不可删改）。', 'success');
         await refreshPlans();
-      } catch (error) { setMessage(`定稿切换失败：${error.message}`, 'error'); }
+      } catch (error) { setMessage(`定稿切换失败：${esc(error.message)}`, 'error'); }
     });
   });
   body.querySelectorAll('.phg-op[data-del]').forEach(btn => {
@@ -759,7 +806,7 @@ function bindHubGroupEvents() {
         if (activeGroupId === gid) { activeGroupId = ''; activeGroup = null; syncSchemeSwitcher(); }
         setMessage('方案组已删除。', 'success');
         await refreshPlans();
-      } catch (error) { setMessage(`删除方案组失败：${error.message}`, 'error'); }
+      } catch (error) { setMessage(`删除方案组失败：${esc(error.message)}`, 'error'); }
     });
   });
 }
@@ -772,7 +819,10 @@ function beginGroupRename(groupId) {
   input.className = 'phg-rename-input'; input.maxLength = 60;
   input.value = g ? (g.group_name || '') : '';
   const render = () => { card.textContent = g ? (g.group_name || '') : ''; };
+  let _renameDone = false;
   const commit = async (save) => {
+    if (_renameDone) return;   // Enter 后 replaceWith 会触发 blur，Firefox 下双发 POST
+    _renameDone = true;
     const v = input.value.trim();
     render(); input.replaceWith(card);
     if (!save || !v || !g || v === g.group_name) return;
@@ -782,7 +832,7 @@ function beginGroupRename(groupId) {
       if (!res || res.status !== 'PASS') throw new Error(res.reason || '改名失败');
       setMessage('已重命名方案组。', 'success');
       await refreshPlans();
-    } catch (error) { setMessage(`重命名失败：${error.message}`, 'error'); render(); }
+    } catch (error) { setMessage(`重命名失败：${esc(error.message)}`, 'error'); render(); }
   };
   input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(true); else if (e.key === 'Escape') commit(false); });
   input.addEventListener('blur', () => commit(true));
@@ -809,15 +859,17 @@ async function runSlotCalc(groupId, strategy) {
     await refreshPlans();
     openGroupById(activeGroupId);
   } catch (error) {
-    setMessage(`测算失败：${error.message}${error.hint ? '<br>' + esc(error.hint) : ''}`, 'error');
+    setMessage(`测算失败：${esc(error.message)}${error.hint ? '<br>' + esc(error.hint) : ''}`, 'error');
     activeGroupId = prev;
   }
 }
 
 // 打开某槽位方案：/api/project/get 拉取后渲染右栏，并设定「当前组」上下文。
 async function openSlot(planId, group, opts = {}) {
+  const seq = ++_openSlotSeq;
   try {
     const res = await (await fetch(`${API_BASE}/api/project/get?id=${encodeURIComponent(planId)}`)).json();
+    if (seq !== _openSlotSeq) return;   // 用户已点开别的方案，丢弃旧响应
     if (!res || res.status !== 'PASS') throw new Error(res.reason || '方案不存在');
     const plan = res.plan;
     currentPlanId = plan.id;
@@ -858,7 +910,7 @@ async function openSlot(planId, group, opts = {}) {
       t.setAttribute('aria-selected', String(on));
     });
     updateSchemeBalance();
-  } catch (error) { setMessage(`打开方案失败：${error.message}`, 'error'); }
+  } catch (error) { setMessage(`打开方案失败：${esc(error.message)}`, 'error'); }
 }
 
 function findGroupIdByPlan(planId) {
@@ -906,7 +958,7 @@ async function runRecompute() {
     setMessage(`重算完成：竞争性预算 <b>${Number(result.competitive_budget).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元，结算调整后利润（不含增值税）<b>${Number(result.objective).toLocaleString('zh-CN',{minimumFractionDigits:2})}</b> 元。${costBasisNote(result)}${result.low_ratio_review_required ? '<br><strong>警告：存在低于50%的报价比率，未作出废标判定，以招标文件为准。</strong>' : ''}`, 'success');
     renderResult(result, { savedPlan: true });
     refreshPlans();
-  } catch (error) { setMessage(`重算失败：${error.message}`, 'error'); }
+  } catch (error) { setMessage(`重算失败：${esc(error.message)}`, 'error'); }
   finally { setDockBusy(false); }
 }
 
@@ -928,7 +980,7 @@ function compareHtml(res) {
     <tr><td><b>是否已计算</b></td>${ids.map(id => `<td>${get(id,'computed') ? '✓' : '<span style="color:var(--danger)">未计算</span>'}</td>`).join('')}</tr>
     <tr><td><b>优化项数</b></td>${ids.map(id => `<td>${get(id,'item_count') ?? '—'}</td>`).join('')}</tr>
     <tr><td><b>总利润（结算调整后·不含增值税）</b></td>${ids.map(id => `<td class="${(get(id,'objective') ?? 0) < 0 && get(id,'computed') ? 'loss-cell' : ''}">${get(id,'computed') ? fmt(get(id,'objective')) : '未计算'}</td>`).join('')}</tr>
-    <tr><td><b>亏损项（单项毛利<0）</b></td>${ids.map(id => `<td class="${get(id,'loss_items').length ? 'loss-cell' : ''}">${get(id,'loss_items').length ? lossCell(id) + `（${get(id,'loss_items').length}项）` : '—'}</td>`).join('')}</tr>
+    <tr><td><b>亏损项（单项毛利<0）</b></td>${ids.map(id => `<td class="${(get(id,'loss_items') || []).length ? 'loss-cell' : ''}">${(get(id,'loss_items') || []).length ? lossCell(id) + `（${(get(id,'loss_items') || []).length}项）` : '—'}</td>`).join('')}</tr>
     <tr><td><b>风险项（报价比率<50%）</b></td>${ids.map(id => `<td class="${get(id,'risk_items').length ? 'warn-cell' : ''}">${get(id,'risk_items').length ? riskCell(id) + `（${get(id,'risk_items').length}项）` : '—'}</td>`).join('')}</tr>
     <tr><td><b>单价 vs 基准 |Δ| 平均</b></td>${ids.map(id => `<td>${get(id,'avg_abs_price_delta') == null ? '—' : fmt(get(id,'avg_abs_price_delta'))}</td>`).join('')}</tr>
     </tbody></table></div>`;
@@ -1076,12 +1128,36 @@ function computeInputVat(result) {
 let dashItems = [];
 let dashFilter = 'all';
 let dashSortMargin = false;
+let dashPage = 0;                 // 明细表当前页（0 起）
+const DASH_PAGE_SIZE = 50;       // 每页行数：千行级清单也无需一次性建 DOM
 // 冻结列宽度同步：首列实测宽作为第二列 sticky left 偏移（列宽随内容变化，硬编码会错位）
 function syncFrozenCols() {
   const wrap = document.querySelector('.table-scroll');
   if (!wrap) return;
   const first = wrap.querySelector('tbody tr td:nth-child(1):not([colspan])');
   if (first) wrap.style.setProperty('--frozen-w', Math.ceil(first.getBoundingClientRect().width) + 'px');
+}
+
+function _renderDashPager(list) {
+  const pager = document.querySelector('#tablePager');
+  if (!pager) return;
+  const pageCount = Math.max(1, Math.ceil(list.length / DASH_PAGE_SIZE));
+  const cur = Math.min(dashPage, pageCount - 1) + 1;
+  const showBtns = pageCount > 1;
+  const bb = (pg, dis, label) => showBtns
+    ? '<button type="button" data-pg="' + pg + '"' + (dis ? ' disabled' : '') + ' style="border:1px solid var(--border);background:var(--surface-card);color:var(--text-secondary);border-radius:6px;padding:2px 8px;font-size:12px;cursor:' + (dis ? 'not-allowed' : 'pointer') + '">' + label + '</button>'
+    : '';
+  pager.innerHTML =
+    bb('prev', !showBtns || dashPage <= 0, '‹ 上页') +
+    '<span style="font-size:12px;color:var(--text-tertiary)">第 <b>' + cur + '</b> / ' + pageCount + ' 页</span>' +
+    bb('next', !showBtns || dashPage >= pageCount - 1, '下页 ›');
+  pager.querySelectorAll('button[data-pg]').forEach(b => {
+    b.addEventListener('click', () => {
+      if (b.disabled) return;
+      dashPage += (b.dataset.pg === 'next' ? 1 : -1);
+      renderDashTable();
+    });
+  });
 }
 
 function renderDashTable() {
@@ -1096,18 +1172,25 @@ function renderDashTable() {
   }
   if (dashSortMargin) list = list.slice().sort((a, b) => (Number(b['单项毛利'] ?? 0)) - (Number(a['单项毛利'] ?? 0)));
   if (count) count.textContent = `合计清单项: ${(dashItems || []).length} 项（显示 ${list.length}）`;
-  if (!list.length) { body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-tertiary);padding:24px">当前筛选无子目</td></tr>'; return; }
-  body.innerHTML = list.map(row => {
+  if (!list.length) { body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-tertiary);padding:24px">当前筛选无子目</td></tr>'; _renderDashPager(list); return; }
+  // 越界保护：筛选/排序后总行数变少，当前页可能越界——夹到最后一页。
+  const pageCount = Math.max(1, Math.ceil(list.length / DASH_PAGE_SIZE));
+  if (dashPage >= pageCount) dashPage = 0;
+  const pageRows = list.slice(dashPage * DASH_PAGE_SIZE, (dashPage + 1) * DASH_PAGE_SIZE);
+  _renderDashPager(list);
+  body.innerHTML = pageRows.map(row => {
     const ratio = Number(row['报价比率']);
     const qty = Number(row['工程量'] ?? 0);
     const quote = Number(row['最优报价单价'] ?? 0);
     const total = qty * quote;
-    const ratioPercent = (ratio * 100).toFixed(1);
+    // 比率缺失（NaN）显示 —，非法宽度让进度条静默空白——对齐同行 fmt 的 NaN→'—' 口径。
+    const ratioFinite = Number.isFinite(ratio);
+    const ratioPercent = ratioFinite ? (ratio * 100).toFixed(1) : '—';
     let tagClass = 'safe', tagLabel = '稳健平准';
     const mss = row['报价状态'];
     if (mss === 'MANUAL_REVIEW') { tagClass = 'risk'; tagLabel = '人工报价'; }
     else if (Number(row['单项毛利'] ?? 0) < 0 || ratio < 0.5) { tagClass = 'risk'; tagLabel = '需复核'; }
-    else if (ratio >= 0.92) { tagClass = 'early'; tagLabel = '早结倾斜 ' + ratioPercent + '%'; }
+    else if (ratioFinite && ratio >= 0.92) { tagClass = 'early'; tagLabel = '早结倾斜 ' + ratioPercent + '%'; }
     else { tagClass = 'safe'; tagLabel = '平准 ' + ratioPercent + '%'; }
     return `<tr>
       <td class="tabular cell-code">${esc(row['项目编码'] ?? '')}</td>
@@ -1117,7 +1200,7 @@ function renderDashTable() {
       <td class="cap num tabular">${fmt(row['最高限价'])}</td>
       <td class="cost num tabular">${fmt(row['有效成本单价'] ?? row['含税成本单价'])}</td>
       <td class="quote num tabular">${fmt(quote)}</td>
-      <td class="num tabular"><span class="ratio-pill-cell"><span class="mini-progress"><span class="mini-progress-fill" style="width:${Math.min(ratio * 100, 100)}%"></span></span><span>${ratioPercent}%</span></span></td>
+      <td class="num tabular"><span class="ratio-pill-cell"><span class="mini-progress"><span class="mini-progress-fill" style="width:${ratioFinite ? Math.min(ratio * 100, 100) : 0}%"></span></span><span>${ratioFinite ? ratioPercent + '%' : '—'}</span></span></td>
       <td class="num tabular cell-total">${fmt(total)}</td>
       <td><span class="status-tag ${tagClass}">${tagLabel}</span><span class="note-cell">${esc(row['说明'] ?? '')}</span></td>
     </tr>`;
@@ -1161,6 +1244,7 @@ function renderDashboard(result, { animate = true } = {}) {
   dashItems = (result && result.items) || [];
   dashFilter = 'all';
   dashSortMargin = false;
+  dashPage = 0;
   setDashboardVisible(true);
   const stage = document.querySelector('.canvas-column');
   if (stage) {
@@ -1320,7 +1404,7 @@ function bindFilters() {
       c.setAttribute('aria-pressed', c.classList.contains('active-drill') ? 'true' : 'false'));
   };
   const resetDrill = () => {
-    dashFilter = 'all'; dashSortMargin = false;
+    dashFilter = 'all'; dashSortMargin = false; dashPage = 0;
     document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
     document.querySelectorAll('.kpi-card').forEach(c => c.classList.remove('active-drill'));
     applyDrillAria();
@@ -1329,7 +1413,7 @@ function bindFilters() {
   document.querySelectorAll('.filter-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.filter-chip').forEach(c => { c.classList.toggle('active', c === btn); c.setAttribute('aria-selected', String(c === btn)); });
-      dashFilter = btn.dataset.filter;
+      dashFilter = btn.dataset.filter; dashPage = 0;
       renderDashTable(); syncDrillClear();
     });
   });
@@ -1345,9 +1429,9 @@ function bindFilters() {
   const total = document.querySelector('#kpiCardTotal');
   if (total) total.addEventListener('click', resetDrill);
   const margin = document.querySelector('#kpiCardMargin');
-  if (margin) margin.addEventListener('click', () => { dashSortMargin = !dashSortMargin; margin.classList.toggle('active-drill', dashSortMargin); applyDrillAria(); renderDashTable(); syncDrillClear(); });
+  if (margin) margin.addEventListener('click', () => { dashSortMargin = !dashSortMargin; dashPage = 0; margin.classList.toggle('active-drill', dashSortMargin); applyDrillAria(); renderDashTable(); syncDrillClear(); });
   const score = document.querySelector('#kpiCardScore');
-  if (score) score.addEventListener('click', () => { dashFilter = dashFilter === 'risk' ? 'all' : 'risk'; document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.filter === dashFilter)); score.classList.toggle('active-drill', dashFilter === 'risk'); applyDrillAria(); renderDashTable(); syncDrillClear(); });
+  if (score) score.addEventListener('click', () => { dashFilter = dashFilter === 'risk' ? 'all' : 'risk'; dashPage = 0; document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.filter === dashFilter)); score.classList.toggle('active-drill', dashFilter === 'risk'); applyDrillAria(); renderDashTable(); syncDrillClear(); });
 }
 
 // ---- 比率滑块：同步 ratioMin + 低价警报 ----
@@ -1497,8 +1581,14 @@ function fillStatusCapsule() {
 // ---- FAB 操作坞（P0 收敛为 3 键） ----
 function setDockBusy(busy) {
   document.querySelectorAll('.floating-dock .dock-btn').forEach(b => b.classList.toggle('dock-busy', busy));
-  if (busy) document.querySelectorAll('.floating-dock .dock-btn').forEach(b => b.setAttribute('aria-busy', 'true'));
-  else document.querySelectorAll('.floating-dock .dock-btn').forEach(b => b.removeAttribute('aria-busy'));
+  if (busy) {
+    // busy 只切 class/aria 不禁用的话，重算期间按钮仍可点（双击=并发两笔重算）。
+    document.querySelectorAll('.floating-dock .dock-btn').forEach(b => { b.setAttribute('aria-busy', 'true'); b.disabled = true; });
+  } else {
+    document.querySelectorAll('.floating-dock .dock-btn').forEach(b => b.removeAttribute('aria-busy'));
+    // 不盲目恢复可点：resting 态的 disabled 由 syncDockCta 按 dashActive/导出可用性裁决。
+    if (typeof syncDockCta === 'function') syncDockCta();
+  }
 }
 // 主 CTA 文案固定为「一键重新推演」：无结果=识别计算，有结果=按当前参数重算，路由逻辑在 bindDock 中
 function syncDockCta() {
@@ -1626,9 +1716,7 @@ const AUDIT_ACTIONS = {
   'project.overview.save': '保存项目概览', 'project.overview.finalize': '定稿并回写项目',
   'project.overview.delete': '删除项目概览',
 };
-function escapeHtml(v) {
-  return String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
+function escapeHtml(v) { return window.gcEsc ? window.gcEsc(v) : String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }   // 转义统一在 js/escape.js
 // 生成 skeleton loading HTML（审计日志 / 方案组 / 其他列表）
 function _skeletonRows(n = 6) {
   const cols = [1, 0.35, 0.2, 0.4, 0.35, 0.5]; // 各列宽度比例
@@ -1708,7 +1796,7 @@ function bindAudit() {
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     const modal = document.querySelector('#auditModal');
-    if (modal && modal.classList.contains('open')) closeAuditModal();
+    if (modal && modal.classList.contains('open') && _isTopmostModal('#auditModal')) closeAuditModal();
   });
 }
 // 宽度：默认 = 操作坞宽；可拖至 260~490 并存 localStorage(planHubWidth)
@@ -1765,12 +1853,21 @@ async function runHubCompare() {
     const res = await response.json();
     if (!response.ok || res.status !== 'PASS') throw new Error(res.reason || '对比失败');
     renderCompare(res);                         // 右栏 #compareStage 结果落点
-    setMessage(`对比完成：${res.plan_ids.length} 个方案。低于 50% 报价比率的为风险项，是否构成废标以招标文件为准。`, 'success');
-  } catch (error) { setMessage(`对比失败：${error.message}`, 'error'); }
+    setMessage(`对比完成：${(res.plan_ids || []).length} 个方案。低于 50% 报价比率的为风险项，是否构成废标以招标文件为准。`, 'success');
+  } catch (error) { setMessage(`对比失败：${esc(error.message)}`, 'error'); }
   finally { if (btn) btn.disabled = false; }
 }
 
 // ---- 焦点陷阱（a11y）：Tab 在模态框内循环，不跳到背景 ----
+// 叠层顶层判定：planHub / cmpModal / auditModal 可叠开，Escape 只关
+// **最顶层**——各处自注册的全局 Escape 处理互不感知，一次按键会把
+// 整叠全部关掉。DOM 顺序即叠放次序（后开的后 append）。
+function _isTopmostModal(sel) {
+  const openModals = document.querySelectorAll('#planHub.open, #cmpModal.open, #auditModal.open');
+  const mine = document.querySelector(sel);
+  return openModals.length > 0 && mine && openModals[openModals.length - 1] === mine;
+}
+
 // 三个模态框（planHub / cmpModal / auditModal）共享此工具，支持嵌套：
 // 用栈记录每个模态的触发元素，关闭顶层模态时把焦点还给被它打开的下层模态的触发元素；
 // 最后一个关闭时解锁 body 并把焦点还给最外层触发元素。
@@ -1818,14 +1915,15 @@ function bindPlanHub() {
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     const modal = document.querySelector('#cmpModal');
-    if (modal && modal.classList.contains('open')) { closeCompareModal(); return; }
+    if (modal && modal.classList.contains('open') && _isTopmostModal('#cmpModal')) { closeCompareModal(); return; }
     const hub = document.querySelector('#planHub');
-    if (hub && hub.classList.contains('open')) closePlanHub();
+    if (hub && hub.classList.contains('open') && _isTopmostModal('#planHub')) closePlanHub();
   });
 }
 
 // —— 全局项目上下文：#projectId 切换 → 加载该项目「定稿组(无则最近组)」最近槽位到右栏，或回到空态 ——
 async function onGlobalProjectChange() {
+  const seq = ++_projSwitchSeq;
   syncProjectGate();
   activeGroupId = ''; activeGroup = null; dashActive = false; lastResult = null;
   expandedGroups.clear(); hubSelected.clear();
@@ -1845,13 +1943,14 @@ async function onGlobalProjectChange() {
     return;
   }
   await loadProjectGroups();
+  if (seq !== _projSwitchSeq) return;   // 项目已再次切换，丢弃本次后续动作
   // 优先加载「已定稿组」；无定稿组时回退最近保存的组
   const target = groups.find(g => g.finalized) || groups[0];
   const slotPid = target ? recentSlotPlanId(target) : null;
   if (target && slotPid) await openSlot(slotPid, target);
   else {
     // 项目已选但暂无可用槽位 → 仅显示就绪空态，不显示空预览卡
-    const ps = document.querySelector('#previewStage'); if (ps) ps.classList.add('hidden');
+    const ps2 = document.querySelector('#previewStage'); if (ps2) ps2.classList.add('hidden');
     setDashboardVisible(false);
     renderHubCards(); syncSchemeSwitcher();
   }

@@ -113,12 +113,43 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+#: _SCHEMA 建立的对象清单：四表 + 六索引。探测要求**全部齐备**才跳过
+#: executescript——为什么连索引一起探：_SCHEMA 里混着 CREATE TABLE 与
+#: CREATE INDEX，只探表的话，「建了表但索引没建全」的库（历史版本或
+#: 建库中断）会被误判为完整而缺索引。全部 DDL 都是 IF NOT EXISTS，
+#: 多跑一次 executescript 只是慢一点，少跑则可能缺对象——探测宁严勿松。
+_SCHEMA_OBJECTS = (
+    ("table", "plan"), ("table", "plan_group"),
+    ("table", "plan_slot"), ("table", "audit_log"),
+    ("index", "idx_plan_project"), ("index", "idx_plan_saved"),
+    ("index", "idx_plan_amount"), ("index", "idx_group_project"),
+    ("index", "idx_audit_ts"), ("index", "idx_audit_action"),
+)
+
+
+def _schema_complete(conn: sqlite3.Connection) -> bool:
+    rows = conn.execute(
+        "SELECT type, name FROM sqlite_master WHERE type IN ('table','index')"
+    ).fetchall()
+    present = {(r["type"], r["name"]) for r in rows}
+    return all(obj in present for obj in _SCHEMA_OBJECTS)
+
+
 def _connect(db: Path | str | None) -> sqlite3.Connection:
     path = resolve_db_path(db)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
-    conn.executescript(_SCHEMA)
+    # busy_timeout：API 并发 / 迁移脚本会多连接写同一库，SQLite 默认遇锁
+    # 立即抛 database is locked；给 5s 重试窗口把短锁冲突变成等待而非报错。
+    conn.execute("PRAGMA busy_timeout=5000")
+    # foreign_keys：plan_slot.group_id 声明了 REFERENCES plan_group(group_id)，
+    # 不开此 PRAGMA 该外键只是摆设（SQLite 默认关闭外键强制）。
+    conn.execute("PRAGMA foreign_keys=ON")
+    # schema 一次化：每连接 executescript 全量建表是纯开销（且在写繁忙时
+    # 拉长持锁时间）；对象齐备即跳过，不齐备则全量补齐（幂等）。
+    if not _schema_complete(conn):
+        conn.executescript(_SCHEMA)
     return conn
 
 
@@ -175,6 +206,21 @@ def _row_to_record(row: sqlite3.Row) -> dict[str, Any]:
     return rec
 
 
+def _group_finalized(conn: sqlite3.Connection, plan_id: str) -> bool:
+    """该 plan 是否为**已定稿组**的槽位方案（整组锁的判定口径）。
+
+    锁的对象是组的**槽位**（契约原文：定稿=整组锁定、三槽位都不能删改），
+    不是组内全部 plan 行——组内不占槽位的副本/草稿不在锁内（「复制后改参
+    重算」是合法工作流）。只查 plan.finalized 行标志不够：group_finalize
+    只更新组行、不落槽位方案的标志，照抄行标志会绕过整组锁。
+    """
+    row = conn.execute(
+        "SELECT 1 FROM plan_slot ps JOIN plan_group g ON ps.group_id = g.group_id"
+        " WHERE ps.plan_id = ? AND g.finalized = 1 LIMIT 1",
+        (plan_id,)).fetchone()
+    return row is not None
+
+
 def save_plan(record: dict[str, Any], plan_id: str | None = None,
               db: Path | str | None = None,
               *, force: bool = False) -> tuple[str, str]:
@@ -184,7 +230,12 @@ def save_plan(record: dict[str, Any], plan_id: str | None = None,
 
     既有的 plan_id 受两道保护（对抗审查 A2/A4）：
     * 归属：既有行 project_id 与新记录不同 → PlanOwnershipError（整行接管拒绝）；
-    * 定稿锁：既有行 finalized=1 且 force=False → StoreWriteLockedError。
+      新记录 project_id 为 None/空同样拒绝（「拒绝清空归属」）——否则不带
+      project_id 的重算/草稿保存会把他人方案的归属静默抹掉，与跨项目接管
+      只差一步；
+    * 定稿锁：既有行 finalized=1 或其所属组 plan_group.finalized=1 且 force=False
+      → StoreWriteLockedError（组锁是**行标志的真相来源**：group_finalize 只更新
+      组行，不落槽位方案的 finalized 标志，只查行标志会绕过整组锁）。
     ``force=True`` 仅供库内迁移/测试等显式场景。
     """
     rid = plan_id or uuid.uuid4().hex
@@ -197,7 +248,13 @@ def save_plan(record: dict[str, Any], plan_id: str | None = None,
                 (plan_id,)).fetchone()
             if existing is not None:
                 old_pid, new_pid = existing["project_id"], record.get("project_id")
-                if old_pid and new_pid and old_pid != new_pid:
+                if old_pid and not (new_pid or "").strip():
+                    if not force:
+                        raise PlanOwnershipError(
+                            f"方案 {plan_id} 已归属项目 {old_pid!r}，"
+                            "新记录 project_id 为空——拒绝清空归属"
+                            "（需显式给出同一 project_id，或 force=True / 先删旧方案）")
+                elif old_pid and new_pid and old_pid != new_pid:
                     raise PlanOwnershipError(
                         f"方案 {plan_id} 已归属项目 {old_pid!r}，"
                         f"拒绝以项目 {new_pid!r} 的记录整行覆盖（需先删旧方案或新建方案）")
@@ -205,24 +262,11 @@ def save_plan(record: dict[str, Any], plan_id: str | None = None,
                     raise StoreWriteLockedError(
                         f"方案 {plan_id} 已定稿（整组锁定），拒绝写入；"
                         "请先取消定稿（mark_finalized(False) / group_finalize）")
-        rows = [{
-            "plan_id": rid,
-            "name": record.get("name"),
-            "project_id": record.get("project_id"),
-            "project_name": record.get("project_name"),
-            "group_id": record.get("group_id"),
-            "strategy": record.get("strategy") or "optimal",
-            "saved_at": saved_at,
-            "finalized": 1 if record.get("finalized") else 0,
-            "finalized_at": record.get("finalized_at"),
-            "is_copy": 1 if record.get("is_copy") else 0,
-            **{**{c: _param(record, c) for c in _PARAM_COLS},
-               **{f"{c}_json": _dump(record.get(c)) for c in _BLOB_COLS}},
-        }]
-        conn.executemany(
-            _UPSERT_SQL,
-            rows,
-        )
+                if not force and _group_finalized(conn, plan_id):
+                    raise StoreWriteLockedError(
+                        f"方案 {plan_id} 所属方案组已定稿（整组锁定），拒绝写入；"
+                        "请先 group_finalize(False) 取消组定稿")
+        _write_plan(conn, record, rid, saved_at)
         conn.commit()
     except Exception:
         conn.rollback()
@@ -230,6 +274,36 @@ def save_plan(record: dict[str, Any], plan_id: str | None = None,
     finally:
         conn.close()
     return rid, saved_at
+
+
+def _plan_row(record: dict[str, Any], rid: str, saved_at: str) -> dict[str, Any]:
+    """记录 dict → plan 表一行参数（save_plan 与 copy_group 共用，保证同构）。"""
+    return {
+        "plan_id": rid,
+        "name": record.get("name"),
+        "project_id": record.get("project_id"),
+        "project_name": record.get("project_name"),
+        "group_id": record.get("group_id"),
+        "strategy": record.get("strategy") or "optimal",
+        "saved_at": saved_at,
+        "finalized": 1 if record.get("finalized") else 0,
+        "finalized_at": record.get("finalized_at"),
+        "is_copy": 1 if record.get("is_copy") else 0,
+        **{**{c: _param(record, c) for c in _PARAM_COLS},
+           **{f"{c}_json": _dump(record.get(c)) for c in _BLOB_COLS}},
+    }
+
+
+def _write_plan(conn: sqlite3.Connection, record: dict[str, Any],
+                rid: str, saved_at: str) -> None:
+    """save_plan 的核心 upsert，连接由调用方持有（可复用于同一事务）。
+
+    与 save_plan 用**同一份** _UPSERT_SQL、同一份 _plan_row 装配——
+    抽成「传入连接」的形式是为了 copy_group 能把新组行、槽位、方案行
+    拷贝放进一个事务。归属/定稿守卫不在这里：copy_group 只写全新
+    plan_id（uuid），守卫（针对既有行）对副本不适用。
+    """
+    conn.executemany(_UPSERT_SQL, [_plan_row(record, rid, saved_at)])
 
 
 def _dump(v: Any) -> str | None:
@@ -287,8 +361,8 @@ def list_plans(db: Path | str | None = None) -> list[dict[str, Any]]:
 def delete_plan(plan_id: str, db: Path | str | None = None) -> bool:
     """删除一个方案行；不存在返回 False。
 
-    已定稿方案拒绝删除（StoreWriteLockedError）；删除时同步清空指向该方案的
-    槽位指针（回归 A4：槽位不再悬挂指向已删方案）。"""
+    已定稿方案或已定稿组的槽位方案拒绝删除（StoreWriteLockedError）；删除时
+    同步清空指向该方案的槽位指针（回归 A4：槽位不再悬挂指向已删方案）。"""
     conn = _connect(db)
     try:
         row = conn.execute(
@@ -298,6 +372,10 @@ def delete_plan(plan_id: str, db: Path | str | None = None) -> bool:
         if row["finalized"]:
             raise StoreWriteLockedError(
                 f"方案 {plan_id} 已定稿，拒绝删除；请先取消定稿")
+        if _group_finalized(conn, plan_id):
+            raise StoreWriteLockedError(
+                f"方案 {plan_id} 是已定稿方案组的槽位方案（整组锁定），"
+                "拒绝删除；请先 group_finalize(False) 取消组定稿")
         cur = conn.execute("DELETE FROM plan WHERE plan_id = ?", (plan_id,))
         conn.execute("UPDATE plan_slot SET plan_id = NULL, status = 'pending'"
                      " WHERE plan_id = ?", (plan_id,))
@@ -526,6 +604,25 @@ def find_group_by_plan_id(plan_id: str, db: Path | str | None = None) -> str | N
     return None
 
 
+def _write_slot(conn: sqlite3.Connection, group_id: str, strategy: str,
+                plan_id: str) -> None:
+    """upsert_slot 的核心写，连接由调用方持有（可复用于同一事务）。
+
+    与 upsert_slot 的 SQL 完全同构：槽位指到 plan_id 并标 computed，
+    同时刷新组行的 saved_at。"""
+    conn.execute(
+        "INSERT INTO plan_slot (group_id, letter, strategy, plan_id, status)"
+        " VALUES (?,?,?,?,'computed')"
+        " ON CONFLICT(group_id, letter) DO UPDATE SET"
+        " strategy=excluded.strategy, plan_id=excluded.plan_id, status='computed'",
+        (group_id, _slot_key(strategy), strategy, plan_id),
+    )
+    conn.execute(
+        "UPDATE plan_group SET saved_at = ? WHERE group_id = ?",
+        (_now_iso(), group_id),
+    )
+
+
 def upsert_slot(group_id: str, strategy: str, plan_id: str,
                 db: Path | str | None = None) -> bool:
     """把某组指定策略槽位指向 plan_id 并标 computed；组不存在返回 False。"""
@@ -537,17 +634,7 @@ def upsert_slot(group_id: str, strategy: str, plan_id: str,
         ).fetchone()
         if g is None:
             return False
-        conn.execute(
-            "INSERT INTO plan_slot (group_id, letter, strategy, plan_id, status)"
-            " VALUES (?,?,?,?,'computed')"
-            " ON CONFLICT(group_id, letter) DO UPDATE SET"
-            " strategy=excluded.strategy, plan_id=excluded.plan_id, status='computed'",
-            (group_id, _slot_key(strategy), strategy, plan_id),
-        )
-        conn.execute(
-            "UPDATE plan_group SET saved_at = ? WHERE group_id = ?",
-            (_now_iso(), group_id),
-        )
+        _write_slot(conn, group_id, strategy, plan_id)
         conn.commit()
         return True
     except Exception:
@@ -627,7 +714,11 @@ def copy_group(group_id: str, db: Path | str | None = None,
                group_name: str | None = None) -> dict[str, Any] | None:
     """复制整组为独立新组：深拷贝槽位方案行 + 槽位指针；新组可独立改参。
 
-    新组与槽位在同一事务写入；槽位指向拷贝出的新 plan 行（is_copy=1）。
+    新组行、空槽位、方案行拷贝、槽位指向全部落在**同一连接的同一事务**里：
+    中途任何一步异常即整体回滚，不留「有组无槽」「槽悬空指」的半拷贝状态
+    （旧实现先提交组+空槽、再逐方案跨事务拷贝，中途崩掉就是半拷贝）。
+    方案行写入复用 ``_write_plan``（与 save_plan 同一份 _UPSERT_SQL，同构），
+    槽位写入复用 ``_write_slot``（与 upsert_slot 同构）。
     """
     src = _load_group_row(group_id, db)
     if src is None:
@@ -636,6 +727,24 @@ def copy_group(group_id: str, db: Path | str | None = None,
     gid = uuid.uuid4().hex
     now = _now_iso()
     name = (group_name or "").strip() or f"{src['group_name']} · 副本"
+    # 写事务开始前预取全部源方案记录：读走各自的既有连接，事务里只做写，
+    # 避免写锁在手里时再开连接读库。
+    copies: list[tuple[str, dict[str, Any], str]] = []
+    for letter, s in src_slots.items():
+        pid = (s or {}).get("plan_id")
+        if not pid:
+            continue
+        rec = load_plan(pid, db)
+        if rec is None:
+            continue
+        rec["group_id"] = gid
+        rec["is_copy"] = True
+        # 副本不继承定稿（与 project_copy 同口径）：新组未定稿，
+        # 且副本若带 finalized=1 会触发定稿互斥取消源方案定稿（回归 A3）
+        rec["finalized"] = False
+        rec["finalized_at"] = None
+        # saved_at 口径与 save_plan 一致：记录自带优先，缺省才取当前时刻
+        copies.append((letter, rec, rec.get("saved_at") or _now_iso()))
     conn = _connect(db)
     try:
         conn.execute(
@@ -650,25 +759,17 @@ def copy_group(group_id: str, db: Path | str | None = None,
             " VALUES (?,?,?,NULL,'pending')",
             [(gid, letter, letter) for letter in _SLOT_LETTERS],
         )
+        for letter, rec, saved_at in copies:
+            # 与旧实现同口径：save_plan(rec) 不带 plan_id → 全新 uuid 主键
+            dup_id = uuid.uuid4().hex
+            _write_plan(conn, rec, dup_id, saved_at)
+            _write_slot(conn, gid, letter, dup_id)
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
-    # 深拷贝物理方案行 → 指向新组槽位（各自独占事务，原子性足够）
-    for letter, s in src_slots.items():
-        pid = (s or {}).get("plan_id")
-        if not pid:
-            continue
-        rec = load_plan(pid, db)
-        if rec is None:
-            continue
-        rec["group_id"] = gid
-        rec["is_copy"] = True
-        # 副本不继承定稿（与 project_copy 同口径）：新组未定稿，
-        # 且副本若带 finalized=1 会触发定稿互斥取消源方案定稿（回归 A3）
-        rec["finalized"] = False
-        rec["finalized_at"] = None
-        dup_id, _ = save_plan(rec, db=db)
-        upsert_slot(gid, letter, dup_id, db)
     return find_group_by_id(gid, db)
 
 

@@ -251,20 +251,42 @@ class RowEval:
     slack: float
     tolerance_name: str = ""
     tolerance_value: float | None = None
+    #: 该行是否可判。False = 行系数引用的变量在赋值 ``x`` 里缺失——此时
+    #: ``lhs``/``slack`` 不产出数值残差（恒 0），**不得**读成「该行恰好满足」；
+    #: 「不可判 ≠ 可行」，消费者必须把不可判行当作未定态处置（同源规则②）。
+    evaluable: bool = True
+    #: 不可判的原因（可判时为空串）——写明缺失了哪些变量，便于定位编译层漏声明。
+    non_evaluable_reason: str = ""
 
     @property
     def violation(self) -> float:
-        """符号无关的**违反量**：> 0 表示违反（与 ``slack`` 互为反号）。"""
+        """符号无关的**违反量**：> 0 表示违反（与 ``slack`` 互为反号）。
+
+        不可判行 ``slack`` 恒 0，故违反量也恒 0——**没有**数值残差可言，
+        与「违反量为 0 的可行行」靠 ``evaluable`` 标志区分。
+        """
         return max(0.0, -self.slack)
 
     @property
     def ok_exact(self) -> bool:
-        """严格算术判定（旧口径）。**不是可行性结论**，见类文档串。"""
+        """严格算术判定（旧口径）。**不是可行性结论**，见类文档串。
+
+        不可判行返回 False：拿不出残差就没资格宣称「按字面成立」。
+        """
+        if not self.evaluable:
+            return False
         return self.slack >= -ZERO_EPS
 
     @property
     def ok(self) -> bool:
-        """可行性判定：按该行**声明的**容差判；容差不可解析时退回严格算术。"""
+        """可行性判定：按该行**声明的**容差判；容差不可解析时退回严格算术。
+
+        不可判行返回 False——缺变量时把行判「可行」与判「违反」同样是
+        编造结论，但判「可行」会静默放行（更危险），故保守取 False；
+        消费方应先看 ``evaluable`` 再解读本值。
+        """
+        if not self.evaluable:
+            return False
         if self.tolerance_value is None:
             return self.ok_exact
         return self.violation <= self.tolerance_value + ZERO_EPS
@@ -291,6 +313,8 @@ class RowEval:
             "ok": self.ok,
             "ok_exact": self.ok_exact,
             "in_tolerance_band": self.in_tolerance_band,
+            "evaluable": self.evaluable,
+            "non_evaluable_reason": self.non_evaluable_reason,
         }
 
 
@@ -302,6 +326,11 @@ class Evaluation:
     feasible: bool
     rows: tuple[RowEval, ...]
     missing: tuple[str, ...]
+    #: 不可判行的 constraint_id——行引用的变量不在赋值里（编译层漏声明或
+    #: 赋值不完整）。与 ``missing``（声明变量的赋值缺口）分开记录：前者是
+    #: **行侧**的数据完整性问题，光看变量表发现不了。不可判 ⇒ 不可行性
+    #: 结论同样不可下（未定态不得降级），故计入 ``feasible``。
+    unevaluable: tuple[str, ...] = ()
 
     def violations(self) -> tuple[RowEval, ...]:
         return tuple(r for r in self.rows if not r.ok)
@@ -319,6 +348,7 @@ class Evaluation:
             "objective": self.objective,
             "feasible": self.feasible,
             "missing": list(self.missing),
+            "unevaluable": list(self.unevaluable),
             "rows": [r.to_dict() for r in self.rows],
         }
 
@@ -337,6 +367,14 @@ def evaluate(
 
     缺赋值 ⇒ 进 ``missing`` 并且**不可行**，不得把缺项当 0 静默累加。
 
+    **不可判行（2026-09-28）**：若某行系数引用的变量不在 ``x`` 里（编译层
+    漏声明该变量，或赋值不完整），该行**不产出数值残差**——此前
+    ``x.get(s, 0.0)`` 会把缺项按 0 累加，行被静默判「满足」，与本函数
+    「不得把缺项当 0」的契约自相矛盾。现在该行标 ``evaluable=False``
+    （原因写进 ``non_evaluable_reason``），计入 ``Evaluation.unevaluable``，
+    并使整体 ``feasible=False``：不可判 ≠ 可行（同源规则②）。变量齐全时
+    行为与旧实现逐位一致。
+
     ``tolerances``（可选）把**容差名 → 数值**的表交进来，使每行按其**声明的**
     容差判 ``ok``；不传则退回严格算术（旧口径），CC-07 的数值对账因此不受影响
     （它比的是 ``lhs`` 值，不是 ``ok`` 标志）。容差名的解析在本仓只有一个来源：
@@ -347,10 +385,29 @@ def evaluate(
         v.symbol for v in model.variables if v.symbol not in x
     )
     rows: list[RowEval] = []
+    unevaluable: list[str] = []
     for r in model.rows:
+        # 先查该行系数引用的变量是否都在赋值里——缺一个就整行不可判，
+        # 不得对缺项按 0 累加后给出一个看似合法的残差。
+        row_missing_syms = sorted({s for s, _c in r.coefficients if s not in x})
+        if row_missing_syms:
+            unevaluable.append(r.constraint_id)
+            rows.append(RowEval(
+                r.constraint_id, 0.0, r.sense, r.rhs, 0.0,
+                tolerance_name=r.tolerance,
+                tolerance_value=(
+                    None if tolerances is None else tolerances.get(r.tolerance)
+                ),
+                evaluable=False,
+                non_evaluable_reason=(
+                    "变量缺失不可判：行系数引用的 " + "、".join(row_missing_syms)
+                    + " 不在赋值中——不产出数值残差"
+                ),
+            ))
+            continue
         lhs = 0.0
         for s, c in r.coefficients:
-            lhs += c * float(x.get(s, 0.0))
+            lhs += c * float(x[s])
         if r.sense == "==":
             slack = -abs(lhs - r.rhs)
         elif r.sense == "<=":
@@ -373,9 +430,10 @@ def evaluate(
     violated = any(not r.ok for r in rows)
     return Evaluation(
         objective=objective,
-        feasible=not violated and not missing,
+        feasible=not violated and not missing and not unevaluable,
         rows=tuple(rows),
         missing=missing,
+        unevaluable=tuple(unevaluable),
     )
 
 
@@ -802,6 +860,14 @@ def to_pulp(model: CompiledModel) -> Any:
         safe = encode_symbol(v.symbol)
         if v.kind == "BINARY":
             var = pulp.LpVariable(safe, cat="Binary")
+            # 实测（PuLP 3.3.2）：cat="Binary" 的构造器**无视**传入的
+            # lowBound/upBound，强制改写为 [0,1]。而 formulation 对退化项的 z
+            # 声明了固定界 [0,0]/[1,1]（不固定 ⇒ 目标系数 0 且无约束的自由
+            # 二元变量 ⇒ 多最优解，「亏损项数」随求解器任意取值）。故界只能在
+            # 构造后覆写；spec 未声明时按二元语义落回 0/1。
+            if v.lower is not None or v.upper is not None:
+                var.lowBound = 0 if v.lower is None else float(v.lower)
+                var.upBound = 1 if v.upper is None else float(v.upper)
         else:
             var = pulp.LpVariable(
                 safe,
@@ -830,6 +896,24 @@ def to_pulp(model: CompiledModel) -> Any:
             prob += (expr <= r.rhs)
         else:
             prob += (expr >= r.rhs)
+    # 固定界且零目标系数、无行引用的变量（典型：退化判定固定的 z）会被 PuLP
+    # 从问题上**整个丢掉**——零系数项不注册，variables() 只从目标与约束派生。
+    # 编译器刻意保留固定变量（见 compile 的 DEGENERATE_FIXED 登记：解向量须
+    # 完整供校验器复核），导出层必须同样完整：显式注册孤儿变量，否则
+    # SolveResult.x 缺列、SV-04 以「变量缺失」BLOCK、CC-09 的变量集比对误报。
+    # _add_variables 是 variables() 自用的注册通道；接口变更时如实拒绝，
+    # 不代它发明注册方式。
+    present = {v.name for v in prob.variables()}
+    orphans = [var for var in xv.values() if var.name not in present]
+    if orphans:
+        add_vars = getattr(prob, "_add_variables", None)
+        if add_vars is None:
+            raise CompilerError(
+                f"PuLP {getattr(pulp, '__version__', '?')} 无 _add_variables "
+                f"注册通道：{[v.name for v in orphans]} 无法进入导出问题"
+                "（固定界/零系数变量会被静默丢列）——导出策略须随 PuLP 版本更新。"
+            )
+        add_vars(orphans)
     return prob
 
 
@@ -888,6 +972,16 @@ def extract_pulp_structure(prob: Any) -> dict[str, Any]:
         },
         "objective_constant": float(getattr(obj, "constant", 0.0) or 0.0),
         "variables": sorted(decode_symbol(v.name) for v in prob.variables()),
+        # 变量界（CC-09 比对用）：界丢失是最隐蔽的导出走样——固定界 [0,0]/[1,1]
+        # 的退化 z 丢界后变成自由变量，模型结构（行/sense/rhs）完全不变，
+        # 只有界能暴露它。
+        "variable_bounds": {
+            decode_symbol(v.name): [
+                getattr(v, "lowBound", None),
+                getattr(v, "upBound", None),
+            ]
+            for v in prob.variables()
+        },
     }
 
 
@@ -926,6 +1020,17 @@ class CompilerCheck:
 
 def _round(x: Any, nd: int = FINGERPRINT_ND) -> Any:
     return round(float(x), nd) if isinstance(x, (int, float)) else x
+
+
+def _bound_eq(got: Any, expected: Any) -> bool:
+    """变量界比较：None 只与 None 相等，数值按系数容差比。
+
+    界语义是「有没有」与「是多少」两层——把 None 当 0 比会把自由变量误报成
+    下界 0 的变量，反之会把丢界判成等值。
+    """
+    if got is None or expected is None:
+        return got is None and expected is None
+    return abs(float(got) - float(expected)) <= COEFF_ATOL
 
 
 def _fingerprint(rhs: Any, coefs: Iterable[tuple[str, float]]) -> tuple:
@@ -1314,12 +1419,28 @@ def check_compiled(
                     COEFF_ATOL + COEFF_RTOL * abs(v.objective_coeff)
                 ):
                     bad.append(f"{v.symbol}: 目标系数 {got} != {v.objective_coeff}")
+            # 变量界比对：界不在行/目标里，前面的结构指纹全绿也拦不住丢界。
+            # 固定界 [0,0]/[1,1]（退化 z）丢界后变量变自由 ⇒ 多最优解随求解器。
+            # 期望界按二元语义补默认：BINARY 未声明界即 [0,1]（与 to_pulp 同口径）。
+            for v in model.variables:
+                if v.kind == "BINARY":
+                    exp_lo = 0.0 if v.lower is None else float(v.lower)
+                    exp_hi = 1.0 if v.upper is None else float(v.upper)
+                else:
+                    exp_lo, exp_hi = v.lower, v.upper
+                got_lo, got_hi = struct["variable_bounds"].get(
+                    v.symbol, [None, None])
+                if not _bound_eq(got_lo, exp_lo) or not _bound_eq(got_hi, exp_hi):
+                    bad.append(
+                        f"{v.symbol}: 界 [{got_lo}, {got_hi}] != [{exp_lo}, {exp_hi}]"
+                        "（界丢失会让固定/限界约束失效）"
+                    )
             bad = [str(b) for b in bad[:SAMPLE_LIMIT]]
             items.append(CompilerCheck(
                 S, "CC-09 PuLP 后端结构等价",
                 STATUS_PASS if not bad else STATUS_FAIL,
                 ("导出的 PuLP 对象与 CompiledModel 结构一致"
-                 "（变量集/行系数多重集/sense/rhs/目标方向/目标常量/目标系数）"
+                 "（变量集/行系数多重集/sense/rhs/目标方向/目标常量/目标系数/变量界）"
                  if not bad else f"{len(bad)} 处不一致：{bad}"),
                 actual=bad, expected=[],
             ))

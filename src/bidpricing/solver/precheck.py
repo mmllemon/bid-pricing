@@ -262,6 +262,14 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
             c_missing.append(it.item_id)
         else:
             cost_total += it.c_i * q0
+# PC-06 口径注记（2026-09-28）：本处成本线按 **q0** 加权（Σ c_i·q0），而 LP 里
+# 的盈利门槛（C9b rhs、目标常量）按 **q1** 加权（Σ c_i·q1，见 compiler/formulation）。
+# q0 == q1 时两者数值一致；工程量偏差/变更签证导致 q0 ≠ q1 时，Phase 0 的
+# 「有效总价下界」与 LP 的成本口径**刻意不同**——预检查的是投标时点的
+# 成本底数（q0 = 投标工程量），LP 盈利门槛随结算量（q1）走。若未来裁定
+# 两处必须同基数，须同步改这里与 formulation.objective_constant 并复核
+# 全部 golden/parity 期望；在此之前，两边各自的制品判据（PC-06 / CC 系列）
+# 各自看守本侧口径，不互相冒充。
 
     if q_missing:
         missing.extend(f"q0:{i}" for i in q_missing)

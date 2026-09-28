@@ -35,6 +35,7 @@
     input.className = 'name-input';
     input.style.cssText = 'width:100%;max-width:150px;padding:2px 6px;border:1px solid var(--border-input);border-radius:8px;font-size:13px;font-weight:600;color:var(--text);background:var(--surface-card);font-family:var(--font);outline:none';
     input.addEventListener('focus', () => input.select());
+    const original = el.textContent;   // 取消时恢复，而不是把显示名清成「未命名」
     const commit = () => {
       const v = input.value.trim();
       if (v) localStorage.setItem(NAME_KEY, v);
@@ -43,7 +44,7 @@
     };
     const onKey = e => {
       if (e.key === 'Enter') commit();
-      else if (e.key === 'Escape') { input.value = ''; commit(); }
+      else if (e.key === 'Escape') { el.textContent = original; input.replaceWith(el); }
     };
     input.addEventListener('blur', commit);
     input.addEventListener('keydown', onKey);

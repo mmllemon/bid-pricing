@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from ..contracts.pricing_card import ResolvedParameters
+from .formulation import compute_lb_c5, merged_lower
+from .stability import group_by_platform
 from .instance import (
     PRICE_RESOLUTION,
     ROLE_OPTIMIZABLE,
@@ -30,6 +32,7 @@ from .instance import (
     STATUS_WARN,
     Phase1Instance,
     Phase1Item,
+    resolve_eps_total,
 )
 
 #: 判据编号——与 config/phase1_exactness_spec.json 的 conditions[].id 逐字一致。
@@ -57,7 +60,7 @@ EPS_R = 1e-6
 
 #: 精度默认值——**仅作函数缺省**，调用方（CLI）必须从 precision_profile 传入。
 DEFAULT_EPS_ABS = 0.01
-DEFAULT_EPS_PRICE = 1e-9
+DEFAULT_EPS_REL_PRICE = 1e-9
 
 
 @dataclass(frozen=True)
@@ -254,20 +257,21 @@ def _ec4(instance: Phase1Instance, resolved: ResolvedParameters) -> ConditionRes
 
 
 def _ec5(instance: Phase1Instance, resolved: ResolvedParameters) -> ConditionResult:
-    """非退化——r_eff 不存在「可容纳总价分配」的重复平台。"""
+    """非退化——r_eff 不存在「可容纳总价分配」的重复平台。
+
+    平台分组经由 ``stability.group_by_platform``（比较式唯一实现在
+    ``stability.same_bucket``）——此前这里手写 ``round(e/EPS_R)`` 分桶，
+    与 stability、phase1 三处口径各自为政（2026-09-28 收拢）。
+    """
     pairs = _items_with_r(instance, resolved)
-    groups: dict[float, list[Phase1Item]] = {}
-    for item, _r, e in pairs:
-        if e is None:
-            continue
-        key = round(e / EPS_R)
-        groups.setdefault(key, []).append(item)
+    judgeable = [(item, e) for item, _r, e in pairs if e is not None]
+    groups = group_by_platform(judgeable, lambda kv: kv[1], eps=EPS_R)
     platforms = []
-    for _key, members in groups.items():
+    for members in groups:
         if len(members) < 2:
             continue
         span = 0.0
-        for m in members:
+        for m, _e in members:
             lo = 0.0 if m.L is None else m.L * (m.q0 or 0.0)
             hi = None if m.U is None else m.U * (m.q0 or 0.0)
             if hi is None:
@@ -275,7 +279,7 @@ def _ec5(instance: Phase1Instance, resolved: ResolvedParameters) -> ConditionRes
                 break
             span += hi - lo
         if span > 0:
-            platforms.append(([m.item_id for m in members], span))
+            platforms.append(([m.item_id for m, _e in members], span))
 
     if platforms:
         desc = "、".join(f"{{{','.join(ids)}}}(可分配区间 {span:g})" for ids, span in platforms)
@@ -346,8 +350,26 @@ def _ec6(instance: Phase1Instance) -> ConditionResult:
     )
 
 
-def _ec7(instance: Phase1Instance, resolved: ResolvedParameters) -> ConditionResult:
-    """可行域非空且边界自洽——L <= U 且 B 落在加权边界内。"""
+def _ec7(
+    instance: Phase1Instance,
+    resolved: ResolvedParameters,
+    *,
+    eps_abs: float,
+    eps_rel_price: float,
+) -> ConditionResult:
+    """可行域非空且边界自洽——L <= U 且 B 落在加权边界内。
+
+    **P_min 口径（2026-09-28）**：改用 ``formulation.merged_lower``——箱型
+    合并的唯一实现，与 phase1 求解行、LP 形式化同一口径。此前这里用原始
+    ``item.L``（L 缺失记 0，不含 floor / lb_C5），会把「L 声明缺失但 lb_C5
+    抬了底」实例的 P_min 算低，B 低于真实下界和的不可行被放过，且 EC-7 与
+    solve_phase1 的 INFEASIBLE 判据（同用 merged_lower）会给出相反结论。
+
+    **边界容差**：从裸 1e-9 改为 ``instance.resolve_eps_total``——与 C1 比较
+    同源的具名口径。B 与 P_min 都是由 q0 加权的总价，量纲是元，用 1e-9 判
+    就是把浮点噪声当违约；容差过大漏判的风险由「与求解层同容差」兜底——
+    两侧对同一实例要么都说可行，要么都说不可行。
+    """
     bad_box = [(i.item_id, i.L, i.U) for i in instance.opt_items
                if i.L is not None and i.U is not None and i.L > i.U]
     if bad_box:
@@ -363,26 +385,35 @@ def _ec7(instance: Phase1Instance, resolved: ResolvedParameters) -> ConditionRes
             "实例未给出 B = P*_competitive——C1 不可复核（未定态，不得判 PASS）",
         )
 
+    # lb_C5 与 formulation / phase1 同参：P* 优先、缺失退 B；resolution 取
+    # 模块常量（formulation.build_formulation 的缺省同值）。floor 表不在本
+    # 判定器的输入里（判定「声明边界」而非「派生地板」），传 None 即只合并
+    # L 与 lb_C5——与 merged_lower 的唯一实现仍然一致。
+    P_ref = float(instance.P_star) if instance.P_star is not None else float(instance.B)
+    lb_c5 = compute_lb_c5(P_ref, eps_rel_price, PRICE_RESOLUTION)
+    eps_total = resolve_eps_total(eps_abs, eps_rel_price, instance.B)
+
     # 边界证书：只用**有限**上界的项求和；有空 cap 项时上界侧不可判（由 EC-9 记 WARN）
     lo = 0.0
     hi = 0.0
     hi_finite = True
     for item in instance.c1_scope_items:
         q0 = item.q0 or 0.0
-        lo += (item.L or 0.0) * q0
+        lb = merged_lower(item, lb_c5, None)
+        lo += (0.0 if lb is None else lb) * q0
         if item.U is None:
             hi_finite = False
         else:
             hi += item.U * q0
 
-    if instance.B < lo - 1e-9:
+    if instance.B < lo - eps_total:
         return ConditionResult(
             "EC-7", "EXACTNESS", "可行域非空且边界自洽", STATUS_FAIL,
             f"B = {instance.B:g} < P_min = {lo:g}——不可行，应走 §6.3 放弃投标"
             f"判据表（上调 P* 重新预检），不得借不平衡报价把不可行变成"
             f"「可行」（见 CE-07）",
         )
-    if hi_finite and instance.B > hi + 1e-9:
+    if hi_finite and instance.B > hi + eps_total:
         return ConditionResult(
             "EC-7", "EXACTNESS", "可行域非空且边界自洽", STATUS_FAIL,
             f"B = {instance.B:g} > P_max = {hi:g}——不可行（见 CE-07）",
@@ -398,7 +429,7 @@ def _ec7(instance: Phase1Instance, resolved: ResolvedParameters) -> ConditionRes
 def _ec8(
     instance: Phase1Instance,
     eps_abs: float,
-    eps_price: float,
+    eps_rel_price: float,
 ) -> ConditionResult:
     """舍入可调和性——舍入残差上界与 eps_total 的量级对比。"""
     if instance.B is None:
@@ -418,7 +449,8 @@ def _ec8(
 
     half = PRICE_RESOLUTION / 2.0
     bound = half * sum_q0
-    eps_total = max(eps_abs, eps_price * instance.B)
+    # 公式唯一实现在 instance.resolve_eps_total（basis 取 B）。
+    eps_total = resolve_eps_total(eps_abs, eps_rel_price, instance.B)
     if bound <= eps_total:
         return ConditionResult(
             "EC-8", "IMPLEMENTABILITY", "舍入可调和性", STATUS_PASS,
@@ -470,7 +502,7 @@ def check_exactness(
     resolved: ResolvedParameters,
     *,
     eps_abs: float = DEFAULT_EPS_ABS,
-    eps_price: float = DEFAULT_EPS_PRICE,
+    eps_rel_price: float = DEFAULT_EPS_REL_PRICE,
 ) -> ExactnessVerdict:
     """判定 ``instance`` 是否落在 Phase 1 精确子集内。
 
@@ -485,8 +517,8 @@ def check_exactness(
         _ec4(instance, resolved),
         _ec5(instance, resolved),
         _ec6(instance),
-        _ec7(instance, resolved),
-        _ec8(instance, eps_abs, eps_price),
+        _ec7(instance, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price),
+        _ec8(instance, eps_abs, eps_rel_price),
         _ec9(instance),
     ]
 

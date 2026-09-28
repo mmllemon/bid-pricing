@@ -29,7 +29,7 @@ from typing import Any, Callable
 from ..contracts.pricing_card import ResolvedParameters
 from .formulation import compute_lb_c5, merged_lower
 from .exactness import check_exactness
-from .instance import Phase1Instance, Phase1Item
+from .instance import Phase1Instance, Phase1Item, resolve_eps_total
 from .phase1 import (
     STATUS_FAIL as _EC_FAIL,
     STATUS_BLOCKED as _EC_BLOCKED,
@@ -141,13 +141,13 @@ def detect_structural_conflicts(
     *,
     floor_by_id: Mapping[str, float] | None = None,
     eps_abs: float = 0.01,
-    eps_price: float = 1e-9,
+    eps_rel_price: float = 1e-9,
     resolution: float = 0.01,
 ) -> tuple[StructuralConflict, ...]:
     """两层穷举（DG-02）：总价层 + 逐项箱层。量值全部由原始量重算。"""
     out: list[StructuralConflict] = []
     lb_c5 = compute_lb_c5(
-        instance.P_star if instance.P_star is not None else 0.0, eps_price, resolution
+        instance.P_star if instance.P_star is not None else 0.0, eps_rel_price, resolution
     )
 
     # ---- 逐项箱层：max(L_i, floor_i, lb_C5) > U_i（U 有限时）--------------
@@ -190,7 +190,8 @@ def detect_structural_conflicts(
                 hi_finite = False
             else:
                 p_max += float(it.U) * float(it.q0)
-        eps_total = max(eps_abs, eps_price * float(instance.B))
+        # 公式唯一实现在 instance.resolve_eps_total（basis 取 B）。
+        eps_total = resolve_eps_total(eps_abs, eps_rel_price, float(instance.B))
         b = float(instance.B)
         if p_min > b + eps_total:
             out.append(StructuralConflict(
@@ -233,7 +234,7 @@ def phase1_oracle(
     *,
     floor_by_id: Mapping[str, float] | None = None,
     eps_abs: float = 0.01,
-    eps_price: float = 1e-9,
+    eps_rel_price: float = 1e-9,
 ) -> Oracle:
     """内置预言机：三态映射（spec.oracle.phase1_builtin）。
 
@@ -244,7 +245,7 @@ def phase1_oracle(
     """
 
     def _oracle(inst: Phase1Instance) -> str:
-        verdict = check_exactness(inst, resolved, eps_abs=eps_abs, eps_price=eps_price)
+        verdict = check_exactness(inst, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price)
         ec7 = next(
             (c for c in verdict.conditions if c.id == "EC-7"), None
         )
@@ -262,7 +263,7 @@ def phase1_oracle(
         if other_denied:
             return UNKNOWN
         sol = solve_phase1(
-            inst, resolved, eps_abs=eps_abs, eps_price=eps_price,
+            inst, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price,
             floor_by_id=floor_by_id,
         )
         if sol.status == SOLUTION_OPTIMAL:
@@ -279,7 +280,7 @@ def milp_oracle(
     *,
     floor_by_id: Mapping[str, float] | None = None,
     eps_abs: float = 0.01,
-    eps_price: float = 1e-9,
+    eps_rel_price: float = 1e-9,
     backend_spec: Mapping[str, Any] | None = None,
     backend: Any = None,
 ) -> Oracle:
@@ -302,7 +303,7 @@ def milp_oracle(
     def _oracle(inst: Phase1Instance) -> str:
         try:
             fm = build_formulation(
-                inst, resolved, eps_abs=eps_abs, eps_price=eps_price,
+                inst, resolved, eps_abs=eps_abs, eps_rel_price=eps_rel_price,
                 floor_by_id=floor_by_id,
             )
             model = compile_model(fm, source="diagnose:milp_oracle")

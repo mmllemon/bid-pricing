@@ -244,7 +244,12 @@ def inputs_from_project(config_dir: Path | str) -> dict[str, Any]:
         try:
             data = json.loads(sel.read_text(encoding="utf-8"))
         except json.JSONDecodeError:  # pragma: no cover - 文件损坏应当向上暴露
-            data = {}
+            # 损坏 ≠ 未声明：静默落 {} 会把「配置坏了」伪装成「操作员还没选」。
+            # 这里保留容错（不阻断派生计算），但置一个可识别的哨兵结构，
+            # 让上层按「配置损坏」呈现而不是「未选择」。
+            data = {"options": {}, "_corrupt": True}
+        if data.get("_corrupt"):
+            out["loss_acceptance_note"] = "project_selection.json 损坏（JSON 解析失败），loss_acceptance 视为未声明"
         opt = ((data.get("options") or {}).get("loss_acceptance") or {})
         if "value" in opt:
             out["loss_acceptance"] = str(opt["value"])
@@ -770,7 +775,10 @@ def compute_derived(
         r_eff = None
         try:
             r_eff = instance.r_eff(item, resolved)
-        except Exception:  # pragma: no cover - 实例层应自行吞掉缺数据
+        except (KeyError, ValueError):
+            # 只吞「数据缺失/取值非法」类预期异常；AttributeError/TypeError
+            # 是实现 bug，吞掉会把编程错误伪装成「r_eff 算不出」，把排查
+            # 方向引向数据而不是代码——上抛让它炸在调用方眼前。
             r_eff = None
         if r_eff is None:
             reasons.append("r_eff 算不出（None，不降级为 0）")

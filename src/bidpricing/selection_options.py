@@ -38,6 +38,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .atomic_io import atomic_write_text
+
 # --------------------------------------------------------------- 来源标签
 
 SOURCE_CLI = "CLI"
@@ -317,10 +319,7 @@ def write_option(
         .isoformat(),
         "rationale": rationale,
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    atomic_write_text(path, json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
     return doc
 
 
@@ -330,10 +329,7 @@ def clear_option(path: Path, key: str) -> dict:
     doc = load_project_selection(path)
     options = doc.setdefault("options", {})
     options.pop(key, None)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    atomic_write_text(path, json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
     return doc
 
 

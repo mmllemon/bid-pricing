@@ -60,8 +60,13 @@ class GoldenParitySuiteTest(unittest.TestCase):
 
     def test_skipped_are_labelled_not_silently_ignored(self):
         joined = "\n".join(self.skipped)
+        # 「Phase2 非 OPTIMAL」类别不再出现（2026-09-28）：B_pos 含
+        # merged_lower > U_eff 的真不可行箱，此前 Phase1 自报 OPTIMAL、
+        # 由 Phase2 判不可行才跳过——正是 solve_phase1 缺 lower>upper
+        # 熔断时的自相矛盾路径。熔断后该不可行在 Phase1 即 BLOCKED，
+        # 落入「Phase1 非 OPTIMAL」类别。
         for fragment in ("negative 不参与对拍", "无两侧齐备可优化项",
-                         "Phase2 非 OPTIMAL", "Phase1 非 OPTIMAL"):
+                         "Phase1 非 OPTIMAL"):
             self.assertIn(fragment, joined, f"缺跳过留痕类别：{fragment}")
 
 

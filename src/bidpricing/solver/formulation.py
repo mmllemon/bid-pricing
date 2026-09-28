@@ -354,14 +354,18 @@ def c1_right_hand_side(instance: Phase1Instance) -> float:
     return float(instance.B)
 
 
-def compute_lb_c5(P_ref: float, eps_price: float, resolution: float) -> float:
+def compute_lb_c5(P_ref: float, eps_rel_price: float, resolution: float) -> float:
     """C5 的 LP 下界。
 
-    schema 写的是 ``p_i >= eps_price``，而 ``eps_price`` 是**相对量**（×P*）。
+    schema 写的是 ``p_i >= eps_price``，而该容差名下声明的是**相对量**（×P*）。
     P* = 1e6 时它只有 1e-3 元，舍入到 0.01 后变成零报价——**提交的报价会违反
     C5**。故 LP 下界必须与报价分辨率取大。
+
+    参数名 ``eps_rel_price``（2026-09-28 自 ``eps_price`` 更名）：与容差表里
+    「同名但已 ×P* 的绝对量」一名双义，是 DV-01/DV-02 类事故的现成入口；
+    签名层只收相对量，绝对量一律叫 ``eps_price``（见 verifier.EPS_Z_REL_NAME）。
     """
-    return max(float(eps_price) * float(P_ref), float(resolution))
+    return max(float(eps_rel_price) * float(P_ref), float(resolution))
 
 
 def build_formulation(
@@ -369,7 +373,7 @@ def build_formulation(
     resolved: ResolvedParameters,
     *,
     eps_abs: float = 0.01,
-    eps_price: float = 1e-9,
+    eps_rel_price: float = 1e-9,
     resolution: float = PRICE_RESOLUTION,
     theta: float | None = None,
     n_max: float | None = None,
@@ -386,7 +390,7 @@ def build_formulation(
     """
     B = c1_right_hand_side(instance)
     P_ref = float(instance.P_star) if instance.P_star is not None else B
-    lb_c5 = compute_lb_c5(P_ref, eps_price, resolution)
+    lb_c5 = compute_lb_c5(P_ref, eps_rel_price, resolution)
 
     active = tuple(sorted({c.upper() for c in instance.active_soft_constraints}))
     milp = "C7" in active
@@ -413,7 +417,9 @@ def build_formulation(
                 "q1": _f(item.q1_point),
                 "c_i": _f(item.c_i),
                 "lb": merged_lower(item, lb_c5, floor_by_id),
-                "ub": _f(item.U),            # None = 不限价（合法语义）
+                # U_eff：U 缺席时回退 cap（与 settlement_milp、phase1 同口径）；
+                # 仍为 None 才是真正的不限价（合法语义）。
+                "ub": _f(item.U_eff),
                 "r_eff": instance.r_eff(item, resolved),
             }
         )
@@ -937,7 +943,7 @@ def check_formulation(
     resolved: ResolvedParameters | None = None,
     constraint_schema: Mapping[str, Any] | None = None,
     precision_profile: Mapping[str, Any] | None = None,
-    eps_price: float = 1e-9,
+    eps_rel_price: float = 1e-9,
     eps_abs: float = 0.01,
 ) -> tuple[FormulationCheck, ...]:
     """把制品 ``formulation_checks`` 的 F 判据逐条喂给实现（双向锁定）。"""
@@ -1053,35 +1059,95 @@ def check_formulation(
             expected={"exempt_set": "N_free", "c2_rows": len(capped)},
         ))
 
-    # ---------------- F-06 C5 下界（用实现的 lb_c5）-----------------
+    # ---------------- F-06 C5 下界（want 必须有独立来源）-----------------
+    # 判据必须能被**错误实现否定**，否则就是恒真式。此前 want 是把
+    # ``max(eps_price·P*, resolution)`` 在手边再抄一遍、got 调 compute_lb_c5
+    # ——同一公式手写两遍、逐位相等，公式层面的认知错误两边同时错 ⇒ 无区分度；
+    # 且 impl_ok 只查 ``lb_c5 >= resolution``，挡不住 build 侧装配错误
+    # （P_ref 取错、eps_price 单位错——偏低的 lb 仍 ≥ resolution 照样 PASS）。
+    # 现在：公式只留在 compute_lb_c5 一处；want 的**参数来源**改为精度档案
+    # （eps_price.value / rounding.resolution，缺声明才回退调用方传参），
+    # 实现侧 lb_c5 逐位对撞「按实例 P_ref 独立重组的期望」。
     spec_res = None
+    declared_eps_price = None
+    declared_lb_c5 = None
     if precision_profile is not None:
         spec_res = (precision_profile.get("rounding") or {}).get("resolution")
+        ep = precision_profile.get("eps_price")
+        declared_eps_price = ep.get("value") if isinstance(ep, Mapping) else ep
+        # 档案若直接声明 lb_C5（顶层 lb_C5 / rounding.lb_c5），它就是实现侧
+        # 期望的第一来源——「声明 vs 实现」两个独立来源对撞。当前档案没有
+        # 该键；保留读取是为了档案把该值冻结后判据自动升级，不必改代码。
+        declared_lb_c5 = precision_profile.get(
+            "lb_C5", (precision_profile.get("rounding") or {}).get("lb_c5")
+        )
     if spec_res is None:
         items.append(FormulationCheck("T04-02A", "F-06 C5 下界不低于报价分辨率", STATUS_SKIP,
                                "精度档案未给出 rounding.resolution ⇒ SKIP"))
     else:
         probes: list[str] = []
-        ok = True
+        problems: list[str] = []
+        # want 的参数从档案重组：eps_price 取声明值（档案未声明才退调用方
+        # 传参）。若调用方传参与档案声明不一致，探针立即抓到——旧写法里
+        # 两份公式共用同一传参，这类漂移不可见。
+        want_eps = (
+            float(declared_eps_price) if declared_eps_price is not None
+            else float(eps_rel_price)
+        )
         for p_star in P_STAR_PROBES:
-            naive = float(eps_price) * float(p_star)
-            want = max(naive, float(spec_res))
-            # 判据检的是**实现报出的 lb_c5**，不是在手边重算——否则恒真
-            got = compute_lb_c5(p_star, eps_price, float(spec_res))
+            naive = float(eps_rel_price) * float(p_star)
+            want = compute_lb_c5(p_star, want_eps, float(spec_res))
+            # got 检的是**实现报出的值**（经过唯一实现函数），want 来自档案
+            # 重组——两侧来源不同，公式或装配错误都能否定
+            got = compute_lb_c5(p_star, eps_rel_price, float(spec_res))
             if abs(got - want) > 1e-12 or got < float(spec_res):
-                ok = False
+                problems.append(
+                    f"P*={p_star:g}: 期望 {want:.6g}，实现 {got:.6g}"
+                    + ("" if declared_eps_price is not None
+                       else "（档案未声明 eps_price，期望退用了调用方传参）"))
             probes.append(
                 f"P*={p_star:g}: 裸 eps·P*={naive:.3g} ⇒ lb={got:.3g}"
                 + ("（已抬到 resolution）" if naive < float(spec_res) else "")
             )
-        # 实现实际使用的 lb_c5 也必须 ≥ resolution
-        impl_ok = formulation.lb_c5 >= float(spec_res) - 1e-15
-        ok = ok and impl_ok
+        # 实现侧 lb_c5 的期望：档案声明值 > 按实例 P_ref 独立重组 > 退化为
+        # 弱口径（≥ resolution，仅无实例可用——此时装配错误无从对撞）。
+        expected_impl: float | None = None
+        expected_src = ""
+        if declared_lb_c5 is not None:
+            expected_impl = float(declared_lb_c5)
+            expected_src = "档案声明 lb_C5"
+        elif instance is not None and instance.B is not None:
+            # 与 build_formulation 同一条 P_ref 口径（P* 优先、缺失退 B），
+            # 但在这里**独立重组**：build 侧若把 P_ref 装配错（漏 P* 回退、
+            # 把 B 当 P*、乘错系数），逐位比对即可否定——只查 ≥ resolution
+            # 挡不住这类错误。
+            P_ref_impl = (
+                float(instance.P_star) if instance.P_star is not None
+                else float(instance.B)
+            )
+            expected_impl = compute_lb_c5(P_ref_impl, want_eps, float(spec_res))
+            expected_src = f"按实例 P_ref={P_ref_impl:g} 重组"
+        if expected_impl is not None:
+            impl_ok = abs(formulation.lb_c5 - expected_impl) <= 1e-12
+            if not impl_ok:
+                problems.append(
+                    f"实现 lb_c5={formulation.lb_c5:.6g} ≠ {expected_src}的期望 "
+                    f"{expected_impl:.6g}（装配错误？）")
+        else:
+            impl_ok = formulation.lb_c5 >= float(spec_res) - 1e-15
+        ok = not problems and impl_ok
+        detail = ("；".join(problems) + "；" if problems else "") + "; ".join(probes)
+        if expected_impl is not None:
+            detail += f"；实现 lb_c5={formulation.lb_c5:.6g}（期望 {expected_impl:.6g}）"
+        else:
+            detail += f"；实现 lb_c5={formulation.lb_c5:.6g}"
         items.append(FormulationCheck(
             "T04-02A", "F-06 C5 下界不低于报价分辨率",
             STATUS_PASS if ok else STATUS_FAIL,
-            "; ".join(probes) + f"；实现 lb_c5={formulation.lb_c5:.6g}",
-            actual=formulation.lb_c5, expected=f">= {spec_res}"))
+            detail,
+            actual=formulation.lb_c5,
+            expected=(expected_impl if expected_impl is not None
+                      else f">= {spec_res}")))
 
     # ---------------- F-07 / F-07b 系数来源与理由 -----------------
     unparsed: dict[str, list[str]] = {}

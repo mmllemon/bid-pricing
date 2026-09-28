@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 
 from .boq import ParsedRow
@@ -41,14 +42,24 @@ def _to_number(raw: str) -> tuple[float | None, str | None]:
 
     口径：去千分位逗号与空白、全角→半角。**不做**四舍五入（精度归一由输出层按
     field_schema 的 precision 执行）。
+    **非有限值拒绝**：``float`` 会成功解析 ``nan``/``inf``/``1e400``，而 NaN 与
+    任何数值比较恒为 False，会让限价/成本约束整体失效且绕过全部缺失判定
+    （NaN ≠ None ⇒ 不计 no_cap/missing）。清单来自外部招投标方，非有限值
+    一律按解析失败处理，进 numeric_errors 失败样本（值落 None），不猜。
+    含下划线数字（``1_000``，Python 字面量扩展）同样拒绝——真实清单不写这种形式。
     """
     s = _halfwidth((raw or "").strip()).replace(",", "").replace(" ", "")
     if not s:
         return None, None
+    if "_" in s:
+        return None, f"数值含下划线（非清单合法写法）：{raw!r}"
     try:
-        return float(s), None
+        v = float(s)
     except ValueError:
         return None, f"无法解析为数值：{raw!r}"
+    if not math.isfinite(v):
+        return None, f"非有限数值（nan/inf）：{raw!r}"
+    return v, None
 
 
 def _round(value: float | None, digits: int) -> float | None:

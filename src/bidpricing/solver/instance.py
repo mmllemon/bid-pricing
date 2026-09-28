@@ -41,8 +41,26 @@ PRICE_RESOLUTION = 0.01
 #: 会给出**错误归因**。
 BOX_TOLERANCE_NAME = "eps_price"
 
-#: C1 在行上声明的容差名（``max(eps_abs, eps_price·P*)``）。
+#: C1 在行上声明的容差名。其数值口径统一由 :func:`resolve_eps_total` 给出：
+#: ``max(eps_abs, eps_price·basis)``，其中 basis 是**调用方选择的价额规模**
+#: （求解层/体检层用 B，约束判定器用 P*——见该函数 docstring）。
 C1_TOLERANCE_NAME = "eps_total"
+
+
+def resolve_eps_total(eps_abs: float, eps_price: float, basis: float) -> float:
+    """C1 总容差的**唯一实现**：``max(eps_abs, eps_price·basis)``。
+
+    **为什么收拢到一个函数**：此前 phase1/exactness/diagnose（用 B）与
+    constraint_judge（用 P*）各自手写这个 max，公式一旦调整（比如换量纲、
+    加第三项）就得同步多处，漏一处就是同一个「eps_total」在两层口径分叉
+    （DV-01 的容差版）。本函数不裁决 basis 该取谁——那是调用方的口径选择
+    （B = 可竞争部分总价 vs P* = 参考价），函数只保证「公式只有一份」。
+
+    ``basis`` 传调用方已确认非 None 的价额规模；是否允许 None 由调用方按
+    自己的判据语义处置（多数判据在价额规模缺失时本就应 BLOCKED），本函数
+    不代为吞掉。
+    """
+    return max(float(eps_abs), float(eps_price) * float(basis))
 
 
 class Phase1InstanceError(ValueError):
@@ -72,6 +90,26 @@ class Phase1Item:
     @property
     def is_optimizable(self) -> bool:
         return self.role == ROLE_OPTIMIZABLE
+
+    @property
+    def U_eff(self) -> float | None:
+        """有效报价上界：``U`` 缺席时回退 ``cap``（U 的规范来源，见
+        derived_quantities_spec：cap = 招标限价清单综合单价）。
+
+        动机：U 与 cap 在 ``from_master`` 是两个独立列，「U 列整体缺席而
+        cap 有值」的数据形状此前在三条消费路径行为分叉——结算 MILP 有
+        cap 回退，phase1 解析解与 formulation 没有，后者会把每一项当
+        「不限价」（k* 停在 0、预算全压 r_eff 最高项且无上限），产出
+        极端不平衡报价且不触发任何检查。统一回退后，「U 与 cap 皆空」
+        才是真正的不限价。
+
+        判定层（verifier 的声明一致性、exactness 的 L>U 箱型检查等）
+        **不**用本属性——它们核的是「声明了什么」，声明值缺失本身就该
+        显形，回退会掩盖数据缺口。
+        """
+        if self.U is not None:
+            return self.U
+        return self.cap
 
     def r(self) -> float | None:
         """结算量比 ``q1/q0``；``q0`` 缺失或为 0 时返回 ``None``。"""
@@ -331,6 +369,13 @@ def check_solution(
             violations.append(f"{item.item_id}: q0 <= 0，r 无定义")
             continue
 
+        # ADR-0004：缺数据 ≠ 0。c_i 缺失时成本腿无法复核，不得静默按零成本
+        # 累加——否则「利润虚高」的解在本裁判下照样 feasible。Z 仍按 0 成本
+        # 记账（保持数值可复算），但 violation 已使整体判不可行，该 Z 不会
+        # 被误读成已核实的目标值。
+        if item.c_i is None:
+            violations.append(f"{item.item_id}: c_i 缺失，成本无法复核")
+
         revenue = settlement_revenue(
             item.q0, item.q1_point, p, instance.params.to_resolved(resolved), item.alpha
         )
@@ -350,9 +395,11 @@ def check_solution(
             violations.append(
                 f"{item.item_id}: p={p} < L={item.L}（按 {tol_name or '严格'} 容差 {eps_box:g}）"
             )
-        if item.U is not None and p > item.U + eps_box:
+        # U_eff：U 列缺席而 cap 有值时，超限价同样要报——否则不平衡解
+        # （全部预算压到一项、无上限约束）在这条复核里隐身。
+        if item.U_eff is not None and p > item.U_eff + eps_box:
             violations.append(
-                f"{item.item_id}: p={p} > U={item.U}（按 {tol_name or '严格'} 容差 {eps_box:g}）"
+                f"{item.item_id}: p={p} > U={item.U_eff}（按 {tol_name or '严格'} 容差 {eps_box:g}）"
             )
         if p <= 0:
             violations.append(f"{item.item_id}: p={p} <= 0（C5 单项报价不得为零）")

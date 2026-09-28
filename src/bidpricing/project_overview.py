@@ -64,7 +64,9 @@ def derive(proj: dict[str, Any]) -> dict[str, Any]:
     if bid_amount is not None and bid_cost is not None:
         gross = round(bid_amount - bid_cost, 2)
         p["gross_profit"] = gross
-        p["gross_margin"] = round(gross / bid_amount, 4) if bid_amount else None
+        # 分子分母都要非零才算毛利率：bid_amount=0 会 ZDD，bid_cost=0 通常代表"未填"不该得 100%。
+        # 同文件下 actual_yield 也用 truthiness 判分母，此处对齐口径避免两处漂移。
+        p["gross_margin"] = round(gross / bid_amount, 4) if bid_amount and bid_cost else None
     else:
         p["gross_profit"] = None
         p["gross_margin"] = None

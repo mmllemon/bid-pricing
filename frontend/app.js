@@ -584,7 +584,17 @@ async function loadProjectGroups() {
     renderHubCards();
     if (body) body.dataset.loaded = '1';
     return groups;
-  } catch (error) { setMessage(`方案组加载失败：${error.message}`, 'error'); return []; }
+  } catch (error) {
+    // F 修复：失败时也要清理 skeleton（否则 shimmer 永久残留）并把
+    // dataset.loaded 置为已读，避免下次重试又回到骨架态。不重建卡片——
+    // 直接展示错误态，比 renderHubCards 覆盖成“暂无方案组”更诚实。
+    if (body) {
+      body.dataset.loaded = '1';
+      body.innerHTML = '<div class="ph-empty">方案组加载失败，请重试</div>';
+    }
+    setMessage(`方案组加载失败：${error.message}`, 'error');
+    return [];
+  }
 }
 
 async function refreshPlans() {
@@ -1268,8 +1278,11 @@ function _bindTabArrowNav(selector) {
   document.querySelectorAll(selector).forEach(tab => {
     tab.addEventListener('keydown', e => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      e.preventDefault();
       const tabs = Array.from(document.querySelectorAll(selector)).filter(t => !t.disabled);
+      e.preventDefault();
+      // 当前 tab 处于 disabled 集合之外时 indexOf 得 -1，下方 modulo 自然环绕，
+      // 不额外处理。tabs.length === 0 时（全部 disabled）不做焦点切换，避免 tabs[NaN] undefined 时 .focus() 抛 TypeError。
+      if (!tabs.length) return;
       const idx = tabs.indexOf(tab);
       const next = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
       tabs[next].focus();

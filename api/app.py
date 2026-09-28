@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import asyncio
 import hashlib
 import re
 import json
@@ -230,11 +231,10 @@ WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 #: O4（治理审查 P0）：此前文件写入在 SQLite 锁之前，Windows 下 O_TRUNC 非原子，
 #: 并发可能产出半成品产物。参照 deployment.py 的 threading.Lock 模式。
 #:
-#: 已知局限（O4-c，2026-09-24 登记，未修）：
-#: (a) 本锁是 **threading.Lock**（进程内），在 async 路由内 with 会阻塞整个事件循环。
-#:     锁内子进程调用（node build_web_result.mjs，timeout=60s）期间，其它请求的
-#:     事件循环也被卡住。修法：改用 asyncio.Lock + asyncio.to_thread 包装 save_plan
-#:     / upsert_slot / _export_xlsx（都是同步 IO）。当前单 worker 部署可接受。
+#: 已知局限（O4-c，部分修复）：
+#: (a) 已修（2026-09-27）：本锁是 **threading.Lock**，直接在 async 路由里 with 会阻塞
+#:     整个 event loop。现在 async 路由（optimize_quote）把锁内同步 IO 块包进
+#:     asyncio.to_thread，threading.Lock 只在 threadpool 线程上阻塞，event loop 不中断。
 #: (b) 本锁不跨进程。**多 worker 部署（uvicorn --workers N）下失效**：每个 worker
 #:     各持一把锁，跨进程并发写同槽位仍可能产出半成品产物。当前部署是单 worker 进程
 #:     （未使用 --workers），此锁足够；若需多 worker，须把本锁换成 SQLite 事务或
@@ -443,37 +443,47 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         # 同组同策略槽位复用；未命中则新建 plan_id
         # O4：「读槽位 → 写 json/xlsx → 落 SQLite → 回写槽位」序列须原子化，
         # 防止并发请求命中同槽位时 O_TRUNC 产出半成品产物。
-        with _SLOT_LOCK:
-            job_id = find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
-            # 校验 group 归属（A2）：防止跨项目写入他人的方案组
-            if effective_group_id:
-                group_info = find_group_by_id(effective_group_id)
-                if group_info and proj_uuid and group_info.get("project_id") != proj_uuid:
-                    return JSONResponse(
-                        status_code=403,
-                        content={"status": "FORBIDDEN",
-                                 "reason": f"方案组 {effective_group_id} 归属项目 "
-                                           f"{group_info.get('project_id')!r}，拒绝以当前项目 "
-                                           f"{proj_uuid!r} 写入"}
-                    )
-            preview = build_listing_preview(matched, pid)
-            preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
-            preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
-            payload["plan_id"] = job_id
-            payload["group_id"] = effective_group_id
-            # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
-            excel_url = _export_xlsx(payload, job_id)
-            if excel_url:
-                payload["excel_download_url"] = excel_url
-            try:
-                save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
-                upsert_slot(effective_group_id, strategy, job_id)
-            except (PlanOwnershipError, StoreWriteLockedError) as exc:
-                return JSONResponse(status_code=409, content={"status": "BLOCKED", "reason": str(exc)})
+        # O4-c(a)：本路由是 async def，threading.Lock 直接 with 会阻塞整个 event loop。
+        # 把锁内同步 IO 块（_export_xlsx 里 subprocess 调用最长 60s）包进
+        # asyncio.to_thread，threading.Lock 只在 threadpool 线程上阻塞，event loop 不中断。
+        job_id: str | None = None
+        def _slot_ops_locked() -> JSONResponse:
+            nonlocal job_id
+            with _SLOT_LOCK:
+                job_id = find_slot_plan_id(effective_group_id, strategy) or uuid.uuid4().hex
+                # 校验 group 归属（A2）：防止跨项目写入他人的方案组
+                if effective_group_id:
+                    group_info = find_group_by_id(effective_group_id)
+                    if group_info and proj_uuid and group_info.get("project_id") != proj_uuid:
+                        return JSONResponse(
+                            status_code=403,
+                            content={"status": "FORBIDDEN",
+                                     "reason": f"方案组 {effective_group_id} 归属项目 "
+                                               f"{group_info.get('project_id')!r}，拒绝以当前项目 "
+                                               f"{proj_uuid!r} 写入"}
+                        )
+                preview = build_listing_preview(matched, pid)
+                preview["cap"]["hash_sha256"] = hashlib.sha256(cap_path.read_bytes()).hexdigest()[:16]
+                preview["cost"]["hash_sha256"] = hashlib.sha256(cost_path.read_bytes()).hexdigest()[:16]
+                payload["plan_id"] = job_id
+                payload["group_id"] = effective_group_id
+                # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
+                excel_url = _export_xlsx(payload, job_id)
+                if excel_url:
+                    payload["excel_download_url"] = excel_url
+                try:
+                    save_plan({"name": proj_name, "project_id": proj_uuid or pid, "project_name": proj_name, "group_id": effective_group_id, "strategy": strategy, "params": dict(params), "all_items": all_items, "preview": preview, "result": payload}, plan_id=job_id)
+                    upsert_slot(effective_group_id, strategy, job_id)
+                except (PlanOwnershipError, StoreWriteLockedError) as exc:
+                    return JSONResponse(status_code=409, content={"status": "BLOCKED", "reason": str(exc)})
+            return JSONResponse(status_code=200, content=payload)
+        slot_response = await asyncio.to_thread(_slot_ops_locked)
+        if slot_response.status_code != 200:
+            return slot_response
         append_audit(CURRENT_USER, "quote.optimize", "PASS",
                      project_id=proj_uuid or pid, plan_id=job_id, group_id=effective_group_id,
                      objective=payload.get("objective"))
-        return JSONResponse(status_code=200, content=payload)
+        return slot_response
 
 
 @app.get("/api/project/list")

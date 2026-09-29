@@ -155,6 +155,89 @@ class TestCertificate(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# 成本线口径裁定（ADR-0030 D9）：门槛按 q0；结算量线落证书作信息量
+# ---------------------------------------------------------------------------
+
+class TestCostCaliberD9(unittest.TestCase):
+    """手算钉值（simple 探针）：
+
+    Σ c_i·q0 = 600·2000 + 400·1000 + 300·500 = 1,750,000 ⇒ q0 线 1.05× = 1,837,500；
+    Σ c_i·q1 = 600·2200 + 400·1000 + 300·400 = 1,840,000 ⇒ 结算线 1.05× = 1,932,000。
+    """
+
+    def test_settlement_line_is_informational_not_in_eff(self):
+        """结算量成本线落值但不进 P*_eff——门槛值与 q1 无关。"""
+        cert = build_certificate(make_inputs())
+        self.assertAlmostEqual(
+            cert.cost_line_settlement,
+            1.05 * (600.0 * 2200.0 + 400.0 * 1000.0 + 300.0 * 400.0), places=6)
+        # q1 变 ⇒ 结算线变，eff terms / P*_eff 纹丝不动
+        probe = phase1_simple_probe_instance()
+        inst = replace(probe, items=(
+            replace(probe.items[0], q1_point=4400.0),) + probe.items[1:])
+        cert2 = build_certificate(make_inputs(inst))
+        self.assertAlmostEqual(cert2.cost_line_settlement,
+                               cert.cost_line_settlement + 1.05 * 600.0 * 2200.0,
+                               places=6)
+        self.assertEqual(cert2.eff_terms["cost_line"],
+                         cert.eff_terms["cost_line"])
+        self.assertEqual(cert2.p_star_eff, cert.p_star_eff)
+
+    def test_pc06_pass_carries_caliber_note_when_q0_ne_q1(self):
+        rep = run(make_inputs())
+        v = rep.of("PC-06")
+        self.assertEqual(v.status, STATUS_PASS)
+        self.assertIn("口径注记", v.detail)
+        self.assertIn("ADR-0030 D9", v.detail)
+        self.assertIn("1,837,500.00", v.detail)   # 投标量线 (1+π)Σc·q0
+        self.assertIn("1,932,000.00", v.detail)   # 结算量线 (1+π)Σc·q1
+
+    def test_no_caliber_note_when_lines_match(self):
+        """q1 ≡ q0 ⇒ 两线相等 ⇒ 无注记（注记只在真量差时出现）。"""
+        probe = phase1_simple_probe_instance()
+        inst = replace(probe, items=tuple(
+            replace(it, q1_point=it.q0) for it in probe.items))
+        cert = build_certificate(make_inputs(inst))
+        self.assertAlmostEqual(cert.cost_line_settlement,
+                               cert.eff_terms["cost_line"], places=6)
+        v = run(make_inputs(inst)).of("PC-06")
+        self.assertEqual(v.status, STATUS_PASS)
+        self.assertNotIn("口径注记", v.detail)
+
+    def test_settlement_line_none_when_q1_point_missing(self):
+        """成本项缺 q1_point ⇒ 结算线不落值（≠0）+ note 具名；门槛不受影响。"""
+        probe = phase1_simple_probe_instance()
+        inst = replace(probe, items=(
+            replace(probe.items[0], q1_point=None),) + probe.items[1:])
+        cert = build_certificate(make_inputs(inst))
+        self.assertIsNone(cert.cost_line_settlement)
+        self.assertTrue(any("q1_point" in n and "S-MID" in n
+                            for n in cert.notes))
+        # q0 口径门槛照常落值、照常判定
+        self.assertAlmostEqual(cert.eff_terms["cost_line"], COST_LINE, places=6)
+        v = run(make_inputs(inst)).of("PC-06")
+        self.assertEqual(v.status, STATUS_PASS)
+        self.assertNotIn("口径注记", v.detail)
+
+    def test_q0_missing_blocks_eff_terms_not_partial_sums(self):
+        """q0 缺 ⇒ 三 term 整体不落值（部分和会静默虚低），PC-05/06 BLOCKED。"""
+        item = replace(phase1_simple_probe_instance().items[0], q0=None)
+        inst = replace(phase1_simple_probe_instance(),
+                       items=(item,) + phase1_simple_probe_instance().items[1:])
+        cert = build_certificate(make_inputs(inst))
+        self.assertIsNone(cert.p_min)
+        self.assertIsNone(cert.p_max)
+        self.assertIsNone(cert.p_star_eff)
+        self.assertEqual(cert.eff_terms, {"model_lower": None,
+                                          "cost_line": None,
+                                          "cap_floor": None})
+        rep = run(make_inputs(inst))
+        self.assertEqual(rep.of("PC-05").status, STATUS_BLOCKED)
+        self.assertEqual(rep.of("PC-06").status, STATUS_BLOCKED)
+        self.assertEqual(rep.overall, STATUS_BLOCKED)
+
+
+# ---------------------------------------------------------------------------
 # 判据区分性（§6.2 逐行）
 # ---------------------------------------------------------------------------
 

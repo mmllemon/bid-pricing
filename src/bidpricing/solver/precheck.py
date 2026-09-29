@@ -117,6 +117,11 @@ class PrecheckCertificate:
     eff_terms: dict[str, float | None] = field(default_factory=dict)
     #: ΔP = max(0, P*_eff − P*)
     delta_p: float | None = None
+    #: 结算量成本线 (1+π)·Σ c_i·q1_i——**信息量，不进 P*_eff**（口径裁定
+    #: ADR-0030 D9：门槛判据留在投标量 q0 口径；此字段让 q0≠q1 的量差
+    #: 在证书上可见，LP 盈利门槛按结算量口径由 C9b 看守）。
+    #: 缺任一成本项的 q1_point ⇒ None（缺数据 ≠ 0，ADR-0004）。
+    cost_line_settlement: float | None = None
     #: 缺失输入的具名清单（BLOCKED 理由的可审计来源）
     missing: tuple[str, ...] = ()
     inputs_used: frozenset[str] = frozenset()
@@ -212,6 +217,7 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
     q_missing: list[str] = []
     floor_missing: list[str] = []
     c_missing: list[str] = []
+    q1_missing: list[str] = []
     cap_empty: list[str] = []
 
     p_min = 0.0
@@ -221,6 +227,7 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
     model_lower = 0.0
     cap_total = 0.0
     cost_total = 0.0
+    cost_total_q1 = 0.0
 
     for it in opt:
         q0 = it.q0
@@ -262,14 +269,17 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
             c_missing.append(it.item_id)
         else:
             cost_total += it.c_i * q0
-# PC-06 口径注记（2026-09-28）：本处成本线按 **q0** 加权（Σ c_i·q0），而 LP 里
-# 的盈利门槛（C9b rhs、目标常量）按 **q1** 加权（Σ c_i·q1，见 compiler/formulation）。
-# q0 == q1 时两者数值一致；工程量偏差/变更签证导致 q0 ≠ q1 时，Phase 0 的
-# 「有效总价下界」与 LP 的成本口径**刻意不同**——预检查的是投标时点的
-# 成本底数（q0 = 投标工程量），LP 盈利门槛随结算量（q1）走。若未来裁定
-# 两处必须同基数，须同步改这里与 formulation.objective_constant 并复核
-# 全部 golden/parity 期望；在此之前，两边各自的制品判据（PC-06 / CC 系列）
-# 各自看守本侧口径，不互相冒充。
+            if it.q1_point is None:
+                q1_missing.append(it.item_id)
+            else:
+                inputs_used.add(f"{it.item_id}.q1_point")
+                cost_total_q1 += it.c_i * it.q1_point
+# 口径裁定（ADR-0030 D9，2026-09-28）：成本线门槛按 **q0** 加权（Σ c_i·q0），
+# 与被比较对象 P* = Σ q0·p 同基数，不等式内部口径自洽；LP 的盈利门槛
+# （C9b rhs、目标常量）按 **q1** 加权（Σ c_i·q1，见 compiler/formulation），
+# 两侧同为结算口径——**两边不等式各自自洽，互不冒充**。q1 是预测
+# （ADR-0012），不得作为 Phase 0 硬门槛的确定值；q0≠q1 的量差经
+# cost_line_settlement（结算量成本线，信息量）在证书上可见。
 
     if q_missing:
         missing.extend(f"q0:{i}" for i in q_missing)
@@ -319,10 +329,16 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
     terms: dict[str, float | None] = {"model_lower": None, "cost_line": None,
                                       "cap_floor": None}
     eff_missing: list[str] = []
+    cost_line_settlement: float | None = None
+
+    if q_missing:
+        # 缺 q0 的项在上面被整体跳过 ⇒ 三 term（全为 q0 加权求和）都是部分和，
+        # 部分和会静默虚低下界——整体不落值，与 p_min/p_max 同纪律。
+        eff_missing.append("q0（有项缺投标量，三项求和均为部分和）")
 
     if floor_missing:
         eff_missing.append("μ/floor（OI-DQ-A）")
-    else:
+    elif not q_missing:
         terms["model_lower"] = model_lower
 
     pi = inputs.pi_target
@@ -332,8 +348,17 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
         eff_missing.append("π_target（key 存在取值为空）")
     elif c_missing:
         eff_missing.append("c_i")
+    elif q_missing:
+        pass  # 成本线随 q0 缺项整体不落值（上方已具名）
     else:
         terms["cost_line"] = (1.0 + float(pi)) * cost_total
+        # 结算量成本线（信息量，不进 P*_eff，ADR-0030 D9）：
+        # 缺 q1_point ⇒ 不落值（缺数据 ≠ 0），仅记 note，不阻断门槛。
+        if q1_missing:
+            notes.append("结算量成本线未落值（信息量）：缺 q1_point："
+                         + "、".join(q1_missing) + "。")
+        else:
+            cost_line_settlement = (1.0 + float(pi)) * cost_total_q1
 
     alpha = inputs.alpha_cap
     if alpha is _UNSET:
@@ -342,6 +367,8 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
         eff_missing.append("α_cap（key 存在取值为空）")
     elif capped_only:
         eff_missing.append("α_cap 已声明但存在空 cap 项（声明与数据矛盾）")
+    elif q_missing:
+        pass  # 同上：cap_floor 亦是 q0 加权求和，不落部分和
     else:
         terms["cap_floor"] = (1.0 - float(alpha)) * cap_total
 
@@ -366,6 +393,7 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
         p_star_eff=p_star_eff,
         eff_terms=terms,
         delta_p=delta_p,
+        cost_line_settlement=cost_line_settlement,
         missing=tuple(missing),
         inputs_used=frozenset(inputs_used),
         notes=tuple(notes),
@@ -375,6 +403,22 @@ def build_certificate(inputs: PrecheckInputs) -> PrecheckCertificate:
 # ---------------------------------------------------------------------------
 # 判定：PC-01..PC-08（§6.2）
 # ---------------------------------------------------------------------------
+
+def _cost_caliber_note(cert: PrecheckCertificate, eps_total: float) -> str:
+    """q0≠q1 量差的可见性注记（ADR-0030 D9）。
+
+    门槛判据本身留在投标量 q0 口径（与 P* = Σ q0·p 同基数）；当结算量
+    成本线已落值且与 q0 线差异超出 eps_total 时，把两条线并排写进判定
+    文案——量差是数据事实，沉默才是缺陷（ADR-0007）。
+    """
+    q0_line = cert.eff_terms.get("cost_line")
+    q1_line = cert.cost_line_settlement
+    if q0_line is None or q1_line is None or abs(q1_line - q0_line) <= eps_total:
+        return ""
+    return (f"；【口径注记】投标量成本线 (1+π)Σc·q0 = {q0_line:,.2f}，"
+            f"结算量成本线 (1+π)Σc·q1 = {q1_line:,.2f}"
+            "——本判定按 q0 口径，LP 盈利门槛按 q1（ADR-0030 D9）")
+
 
 def judge_precheck(
     inputs: PrecheckInputs,
@@ -495,14 +539,15 @@ def judge_precheck(
         _add("PC-06", STATUS_BLOCKED, inst.P_star, cert.p_star_eff,
              "eps_total 未解析。")
     else:
+        caliber_note = _cost_caliber_note(cert, eps_total)
         if inst.P_star < cert.p_star_eff - eps_total:
             feasibility_fails += 1
             _add("PC-06", STATUS_FAIL, inst.P_star, cert.p_star_eff,
                  f"P* 低于有效总价下界，ΔP = {cert.delta_p:,.2f} 元 ⇒ INFEASIBLE"
-                 "（P* 定得过低：上调 P* 重新预检，§6.3）。")
+                 "（P* 定得过低：上调 P* 重新预检，§6.3）。" + caliber_note)
         else:
             _add("PC-06", STATUS_PASS, inst.P_star, cert.p_star_eff,
-                 f"P* ≥ P*_eff（ΔP = {cert.delta_p:,.2f}）")
+                 f"P* ≥ P*_eff（ΔP = {cert.delta_p:,.2f}）" + caliber_note)
 
     # ---- PC-07 模型自相矛盾 ------------------------------------------------
     t1 = cert.eff_terms.get("model_lower")

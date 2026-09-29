@@ -47,6 +47,8 @@ PYTHONPATH=src python -m bidpricing.cli ruleset-select --contract-date 2026-03-0
 
 脚本先对解释器做**能力探测**：真跑一次 `import ssl,venv`，逐个候选试过去（跳过 `WindowsApps` 下的 0 字节应用执行别名占位符，以及 `_ssl` 加载失败的残缺安装），而不是只看文件是否存在。首次运行在仓库内 `.venv` 建隔离环境并从 `requirements-web.txt` 装依赖（不污染系统 Python）；随后启动「后端 8000 + 前端 8080」，**必须探到 `/api/health` 与首页都返回 200 才报成功**；按 `Ctrl+C` 停止。服务日志写入 `outputs/logs/`，缺 node 时 Excel 导出降级（JSON 结果仍可下载）。
 
+端口默认 8000/8080，被其他应用占用时无需改脚本，先设环境变量再运行：`$env:BIDPRICING_BACKEND_PORT = '8001'`、`$env:BIDPRICING_FRONTEND_PORT = '8081'`。脚本起服务前会**预检端口占用**并报出占用者（进程名 + PID）；探活通过后还会**校验服务进程确为本脚本拉起**——防止「绑定失败静默退出、外来服务代答 200」的假成功。
+
 若机器上没有可用 Python（典型症状：报 `Python was not found ... Microsoft Store`），任选一种修法：
 
 1. 「设置 > 应用 > 高级应用设置 > 应用执行别名」里关闭 `python.exe` / `python3.exe`（那两个 0 字节占位符会顶掉真正的 Python）；

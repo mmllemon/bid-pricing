@@ -157,6 +157,63 @@ class RunScriptStartupHonestyTest(unittest.TestCase):
         )
 
 
+class RunScriptPortHardeningTest(unittest.TestCase):
+    """端口加固（2026-09-29）：预检占用 / 探活后校验进程存活 / 端口可覆盖。
+
+    背景：8080 被本机 CAD 阅读器（CADReader.exe）占用过。http.server 绑定失败
+    会静默退出，而探活 GET / 可能被占用方的 HTTP 服务答 200 —— 旧版会打印
+    「成功」而前端实际没起来，正好绕过「探到 200 才报成功」的假成功防线。
+    """
+
+    def setUp(self) -> None:
+        self.text = SCRIPT.read_text(encoding="utf-8-sig")
+
+    def test_ports_overridable_via_env(self) -> None:
+        """端口撞车时必须能换端口而不改脚本；覆盖值须做合法性校验。"""
+        for env in ("BIDPRICING_BACKEND_PORT", "BIDPRICING_FRONTEND_PORT"):
+            self.assertIn(env, self.text, f"缺少端口覆盖变量 {env}")
+        self.assertIn(
+            "[int]::TryParse",
+            self.text,
+            "环境变量给的端口必须校验（1-65535），不能直接转 int 冒异常。",
+        )
+
+    def test_port_occupancy_checked_before_spawn(self) -> None:
+        """起服务前必须预检端口占用并报出占用者，不能等探活误导。"""
+        pre = self.text.find("Assert-PortFree")
+        spawn = self.text.find("Start-Process")
+        self.assertNotEqual(pre, -1, "缺少端口预检（Assert-PortFree）")
+        self.assertNotEqual(spawn, -1)
+        self.assertLess(
+            pre, spawn, "端口预检必须发生在 Start-Process 之前：占用就明说谁占的。")
+        self.assertIn(
+            "Get-NetTCPConnection",
+            self.text,
+            "预检须真实查询监听端口（Get-NetTCPConnection），不得只凭探活。",
+        )
+
+    def test_probe_success_verifies_spawned_process_alive(self) -> None:
+        """探活 200 可能由占用同端口的外来服务答出——须校验自己拉起的进程还活着。"""
+        backend_guards = list(re.finditer(r"\$backend\.HasExited", self.text))
+        frontend_guards = list(re.finditer(r"\$frontend\.HasExited", self.text))
+        self.assertGreaterEqual(
+            len(backend_guards), 2,
+            "后端至少两处 HasExited：探活失败分支（报退出码）+ 探活成功后的假成功拦截。")
+        self.assertGreaterEqual(
+            len(frontend_guards), 1,
+            "前端探活通过后必须校验 $frontend 存活，否则外来服务可代答 200。")
+        banner = self.text.find('Write-Host "  frontend: ')
+        self.assertGreater(
+            banner, frontend_guards[-1].start(),
+            "假成功拦截必须先于成功横幅。")
+
+    def test_false_success_guard_precedes_success_banner(self) -> None:
+        banner = self.text.find('Write-Host "  frontend: ')
+        guard = self.text.find("假成功拦截")
+        self.assertNotEqual(guard, -1, "缺少假成功拦截文案")
+        self.assertLess(guard, banner, "假成功拦截必须出现在成功横幅之前。")
+
+
 class RunScriptNativeCommandTest(unittest.TestCase):
     """原生命令的 stderr 陷阱：Stop 偏好会把 pip 的警告升级成终止错误。"""
 

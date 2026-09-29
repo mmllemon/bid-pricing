@@ -19,6 +19,11 @@
 #      stderr 升级成**终止性错误**，脚本会在装依赖中途直接暴毙。所有原生命令统一走 Invoke-Native。
 #   5) 启动后必须真的探到 HTTP 200 才允许打印成功，杜绝「假成功」。
 #   6) Wait-Process 的 -Id 只能出现一次，多进程必须传数组；写成 -Id $a -Id $b 会参数绑定失败。
+#   7) 端口三重防护：预检占用 / 探活后校验进程存活 / 端口可覆盖。8080 是常见的
+#      应用/代理端口（实测被 CAD 阅读器占用过）：http.server 绑定失败会静默退出，
+#      而探活 GET / 可能被占用方的 HTTP 服务答 200 —— 打印「成功」而前端实际没起来。
+#      故起服务前先查端口占用并明说占用者；探活通过后还须确认是自己拉起的进程
+#      还活着；端口可用 BIDPRICING_BACKEND_PORT / BIDPRICING_FRONTEND_PORT 覆盖。
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -235,9 +240,46 @@ if (-not (Test-Mods $SolverMods)) {
 $LogDir = Join-Path $Root "outputs\logs"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
-# --- start backend 8000 ---
-$BackendPort = 8000
-$FrontendPort = 8080
+# ============================================================================
+# 端口：默认 8000/8080，可用环境变量覆盖（端口被其他应用占用时无需改脚本）
+# ============================================================================
+function Get-PortOrDefault {
+    param([string]$EnvName, [int]$Default)
+    $raw = [Environment]::GetEnvironmentVariable($EnvName)
+    if (-not $raw) { return $Default }
+    $p = 0
+    if (-not [int]::TryParse($raw.Trim(), [ref]$p) -or $p -lt 1 -or $p -gt 65535) {
+        Write-Host "[ERR] 环境变量 $EnvName='$raw' 不是合法端口（1-65535）。" -ForegroundColor Red
+        exit 1
+    }
+    return $p
+}
+
+function Assert-PortFree {
+    param([int]$Port, [string]$Label, [string]$EnvName)
+    try {
+        $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+    }
+    catch {
+        Write-Host "[WARN] 无法预检端口占用（Get-NetTCPConnection 不可用），跳过预检。" -ForegroundColor Yellow
+        return
+    }
+    if ($conn) {
+        $procName = ""
+        try { $procName = (Get-Process -Id $conn.OwningProcess -ErrorAction Stop).ProcessName } catch { }
+        Write-Host "[ERR] $Label 端口 $Port 已被占用：PID $($conn.OwningProcess)（$procName）。" -ForegroundColor Red
+        Write-Host "      换端口无需改脚本：`$env:$EnvName = '<端口>' 后重跑。"
+        exit 1
+    }
+}
+
+$BackendPort  = Get-PortOrDefault "BIDPRICING_BACKEND_PORT" 8000
+$FrontendPort = Get-PortOrDefault "BIDPRICING_FRONTEND_PORT" 8080
+Assert-PortFree $BackendPort  "后端" "BIDPRICING_BACKEND_PORT"
+Assert-PortFree $FrontendPort "前端" "BIDPRICING_FRONTEND_PORT"
+
+# --- start backend ---
 $env:PYTHONPATH = "src"
 $env:PYTHONUNBUFFERED = "1"
 
@@ -282,8 +324,21 @@ if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/api/health" 60)) {
     Stop-Both
     exit 1
 }
+if ($backend.HasExited) {
+    # 探活 200 可能由占用同端口的外来服务答出——自己拉起的进程死了就不许报成功。
+    Write-Host "[ERR] /api/health 有 200 应答，但本脚本拉起的后端进程已退出——应答来自占用 $BackendPort 的其他服务（假成功拦截）。" -ForegroundColor Red
+    Stop-Both
+    exit 1
+}
 if (-not (Wait-HttpOk "http://127.0.0.1:$FrontendPort/" 20)) {
     Write-Host "[ERR] 前端 20s 内未就绪（http://127.0.0.1:$FrontendPort/）。" -ForegroundColor Red
+    Write-Host "      日志：outputs\logs\frontend.err.log" -ForegroundColor Yellow
+    Stop-Both
+    exit 1
+}
+if ($frontend.HasExited) {
+    # 同上：200 应答可能来自占用方而非本脚本拉起的前端。
+    Write-Host "[ERR] 首页有 200 应答，但本脚本拉起的前端进程已退出——应答来自占用 $FrontendPort 的其他服务（假成功拦截）。" -ForegroundColor Red
     Write-Host "      日志：outputs\logs\frontend.err.log" -ForegroundColor Yellow
     Stop-Both
     exit 1

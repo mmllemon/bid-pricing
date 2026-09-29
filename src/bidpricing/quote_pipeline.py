@@ -170,7 +170,17 @@ def run_quote_pipeline(
         return QuotePipelineResult("BLOCKED", target_total, None, {}, {}, None, None, (), f"主流程输入或规则解析失败: {exc}", warnings)
     if solution.status != SOLUTION_OPTIMAL:
         return QuotePipelineResult("BLOCKED", target_total, budget, dict(solution.p_by_id), {}, None, solution.status, (), solution.reason, warnings, plan.multiplier, tuple(plan.trace_dicts()))
-    checked = check_solution(instance, solution.p_by_id, resolved, eps_total=0.01, tolerances={"eps_price": 1e-9})
+    # 容差走 precision_profile 解析，不硬编码（与 run_settlement_adjusted_quote_pipeline
+    # 同一口径）：此前 eps_total=0.01 / eps_price=1e-9 写死，profile 调参后会与
+    # 求解/判定层的容差脱节——「预检与判定共用同一 eps_total」被悄悄破坏。
+    try:
+        _spec = load_backend_spec(Path(config_dir))
+        _profile = json.loads((Path(config_dir) / "precision_profile.json").read_text(encoding="utf-8"))
+        _vspec = load_verifier_spec(Path(config_dir))
+        _tolerances, _ = resolve_tolerances(_profile, _vspec, P_ref=target_total)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return QuotePipelineResult("BLOCKED", target_total, budget, dict(solution.p_by_id), {}, None, solution.status, (), f"精度档案不可解析，约束复验无法进行: {exc}", warnings, plan.multiplier, tuple(plan.trace_dicts()))
+    checked = check_solution(instance, solution.p_by_id, resolved, eps_total=_tolerances.get("eps_total"), tolerances=_tolerances)
     if not checked.feasible:
         return QuotePipelineResult("FAIL", target_total, budget, dict(solution.p_by_id), {}, checked.Z, solution.status, tuple(checked.violations), "求解结果约束复验失败", warnings, plan.multiplier, tuple(plan.trace_dicts()))
     line_amounts = {item.item_id: money(float(item.q0) * float(solution.p_by_id[item.item_id])) for item in instance.items}

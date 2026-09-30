@@ -7,6 +7,9 @@ import hashlib
 import re
 import json
 import os
+import urllib.parse
+import urllib.request
+import http.cookiejar
 import subprocess
 import sys
 import tempfile
@@ -352,6 +355,75 @@ async def _csp_guard(request, call_next):
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "bidpricing"}
+
+
+# ===== 长江现货金属价格代理（工具箱「拉取长江现货」按钮用）=====
+# 数据源：ccmn.cn 公开 AJAX 端点 POST /shop/historyData/getCorpStmarketPriceList，无需登录。
+# 返回体：{"success": true, "body": {"priceList": [{productSortName, avgPrice, minPrice, maxPrice, publishDate}...]}}
+# 注意：该端点的 publishDate 参数实际不生效，恒返回最新一日数据；以 priceList[].publishDate 为准。
+_CCMN_AJAX = "https://www.ccmn.cn/shop/historyData/getCorpStmarketPriceList"
+_CCMN_PAGE = "https://www.ccmn.cn/cjxh.shtml"
+_CCMN_MARKET_VMID = "40288092327140f601327141c0560001"  # 长江现货
+_CCMN_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+
+
+def _ccmn_spot_prices() -> dict:
+    """抓取长江现货 1#铜 / A00铝均价。返回 {"cu": 元/吨, "al": 元/吨, "date": "YYYY-MM-DD"}。"""
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    try:  # 先访问报价页拿 session cookie；拿不到也不致命，继续调 AJAX
+        opener.open(urllib.request.Request(_CCMN_PAGE, headers={"User-Agent": _CCMN_UA}), timeout=15).read()
+    except Exception:
+        pass
+    form = urllib.parse.urlencode({
+        "marketVmid": _CCMN_MARKET_VMID,
+        "publishDate": time.strftime("%Y-%m-%d"),
+        "flag": "1",
+        "productVmid": "",
+    }).encode()
+    last_err: Exception | None = None
+    for _ in range(3):
+        try:
+            req = urllib.request.Request(_CCMN_AJAX, data=form, headers={
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Referer": _CCMN_PAGE,
+                "Origin": "https://www.ccmn.cn",
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json, text/javascript, */*",
+                "User-Agent": _CCMN_UA,
+            })
+            with opener.open(req, timeout=20) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(1.5)
+    else:
+        raise RuntimeError(f"ccmn AJAX 请求失败（3 次重试）: {last_err}")
+    if not payload.get("success"):
+        raise RuntimeError(f"ccmn 返回业务失败: {payload.get('msg')}")
+    items = (payload.get("body") or {}).get("priceList") or []
+    want = {"1#铜": "cu", "A00铝": "al"}
+    out: dict = {}
+    for it in items:
+        key = want.get(str(it.get("productSortName", "")).strip())
+        if key and it.get("avgPrice"):
+            out[key] = round(float(it["avgPrice"]), 2)
+            out.setdefault("date", str(it.get("publishDate", ""))[:10])
+    if "cu" not in out or "al" not in out:
+        raise RuntimeError("ccmn 返回中未找到 1#铜 / A00铝")
+    return out
+
+
+@app.get("/api/metal-prices")
+def metal_prices() -> JSONResponse:
+    """工具箱用：拉取当日长江现货 1#铜 / A00铝均价（经后端代理 ccmn.cn 公开报价接口）。"""
+    try:
+        d = _ccmn_spot_prices()
+    except Exception as e:
+        return JSONResponse(status_code=502, content={"status": "FAIL", "error": str(e)})
+    return JSONResponse(status_code=200, content={"status": "PASS", **d})
 
 
 @app.post("/api/quote/preview")

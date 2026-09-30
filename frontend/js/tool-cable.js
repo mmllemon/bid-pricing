@@ -15,6 +15,8 @@
   const METAL_DENSITY = { cu: 8.89, al: 2.70 };
   /* 其他材料系数建议值（按电压等级分档；可按厂家询价调整） */
   const VOLT_MAT = { lv: 0.30, mv: 0.40, hv: 0.50 };
+  /* 后端基地址：与 app.js 一致，页面脚本前定义 window.__API_BASE__ 可覆盖 */
+  const API_BASE = window.__API_BASE__ || 'http://localhost:8000';
 
   function parseSpec(text) {
     // 「3×240」「3×240+2×120」「5×16」→ Σ(芯数×截面)；无法解析返回 0
@@ -89,6 +91,25 @@
       if (inp) inp.value = v;
     });
     recalcCable();
+  });
+  /* 拉取长江现货价：经后端代理 ccmn.cn 公开报价接口，写入铜/铝参数 */
+  $('#cFetchPrice').addEventListener('click', async () => {
+    const btn = $('#cFetchPrice'), st = $('#cPriceStatus');
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = '拉取中…';
+    try {
+      const r = await fetch(API_BASE + '/api/metal-prices');
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.status !== 'PASS') throw new Error((d && d.error) || ('HTTP ' + r.status));
+      if (d.cu) $('#cCu').value = d.cu;
+      if (d.al) $('#cAl').value = d.al;
+      recalcCable();
+      st.textContent = `已更新（${d.date || '当日'}长江现货）：1#铜 ${fmt(d.cu, 0)} / A00铝 ${fmt(d.al, 0)} 元/吨`;
+    } catch (e) {
+      st.textContent = '拉取失败：' + e.message + '。请确认后端已启动（run.ps1），或手动输入。';
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
   });
   cableBody.insertAdjacentHTML('beforeend', cableRowHtml());
   cableBody.insertAdjacentHTML('beforeend', cableRowHtml());

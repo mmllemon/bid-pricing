@@ -103,8 +103,9 @@
           <label class="field"><span class="field-label" data-tip="企业管理费＋利润，按厂家口径">管理及利润率 (%)</span><input id="cMgr" class="tabular" type="number" min="0" step="0.5" value="10" /></label>
           <label class="field"><span class="field-label">增值税率 (%)</span><input id="cVat" class="tabular" type="number" min="0" step="0.5" value="13" /></label>
           <label class="field"><span class="field-label" data-tip="其他材料系数建议值：0.6/1kV 取 0.30，8.7/15kV 取 0.40，26/35kV 取 0.50，可按厂家询价调整；切换后整表该系数同步更新，仍可逐行改">电压等级</span><select id="cVolt"><option value="lv">0.6/1kV</option><option value="mv" selected>8.7/15kV</option><option value="hv">26/35kV</option></select></label>
+          <label class="field"><span class="field-label" data-tip="经后端代理调用长江有色金属网公开报价接口（ccmn.cn），写入当日长江现货 1#铜 / A00铝均价；需后端服务运行中">现货价</span><span><button type="button" class="btn-secondary" id="cFetchPrice">⟳ 拉取长江现货</button></span></label>
         </div>
-        <div class="hint" style="margin:-6px 0 12px;">参考价（2026-09-30）：长江现货 1#铜 111,540 元/吨、A00 铝 24,030 元/吨——铜价波动大，使用前请按当日现货更新上方输入。</div>
+        <div class="hint" style="margin:-6px 0 12px;"><span id="cPriceStatus">参考价（2026-09-30）：长江现货 1#铜 111,540 元/吨、A00 铝 24,030 元/吨</span>——铜价波动大，可点击「拉取长江现货」按当日现货更新，或手动修改上方输入。</div>
 
         <div class="tool-table-wrap">
           <table class="tool-table" id="cableTable">

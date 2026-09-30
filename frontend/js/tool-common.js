@@ -10,6 +10,12 @@
     const v = parseFloat(el && el.value);
     return isFinite(v) ? v : 0;
   };
+  /* 非负钳制：几何输入（挖深/沟宽/长度等）填负数时标红并按 0 参与计算，避免负工程量 */
+  window.toolNonNeg = function (el) {
+    const v = window.toolNum(el);
+    if (el && el.classList) el.classList.toggle('invalid', v < 0);
+    return v < 0 ? 0 : v;
+  };
   /* HTML 转义（把用户输入拼回 value="..." / 文本节点时用） */
   window.toolEsc = function (s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({

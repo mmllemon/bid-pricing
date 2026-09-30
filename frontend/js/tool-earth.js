@@ -72,7 +72,8 @@
     let tDig = 0, tBack = 0, tSur = 0, total = 0;
     earthBody.querySelectorAll('tr').forEach(tr => {
       const g = k => num(tr.querySelector(`[data-k="${k}"]`));
-      const len = g('len'), a = g('a'), h = g('h');
+      const gn = k => window.toolNonNeg(tr.querySelector(`[data-k="${k}"]`));  // 几何量：负数标红按0算
+      const len = gn('len'), a = gn('a'), h = gn('h'), deduct = gn('deduct');
       const rule = readRules()[+tr.querySelector('[data-k="soil"]').value] || readRules()[0];
       const mode = tr.querySelector('[data-k="mode"]').value;
       const custom = tr.querySelector('[data-k="mCustom"]');
@@ -81,7 +82,7 @@
       if (mode === 'none') {
         mEff = 0; mNote = '<span class="off">直槽</span>';
       } else if (mode === 'custom') {
-        mEff = num(custom); mNote = '<span class="off">自定</span>';
+        mEff = window.toolNonNeg(custom); mNote = '<span class="off">自定</span>';
       } else {
         mEff = h > rule.start ? rule.m : 0;
         mNote = h > rule.start ? '' : `<span class="off">未达 ${rule.start}m</span>`;
@@ -89,7 +90,7 @@
       tr.querySelector('.eff-m').innerHTML = `${mEff.toFixed(2)} ${mNote}`;
 
       const dig = len * (a + mEff * h) * h;
-      const back = Math.max(0, dig - len * g('deduct'));
+      const back = Math.max(0, dig - len * deduct);
       const surplus = dig - back;             // + 余方外运 / − 借方（天然方）
       const haulVol = surplus >= 0 ? surplus * loose : Math.abs(surplus);  // 外运按虚方，借方按天然方
       total += dig * pDig + back * pBack + haulVol * pHaul;
@@ -98,9 +99,6 @@
       tr.querySelector('.v-back').textContent = fmt(back, 1);
       tr.querySelector('.v-surplus').textContent = fmt(surplus, 1);
     });
-    $('#earthDig').textContent = fmt(tDig, 1);
-    $('#earthBack').textContent = fmt(tBack, 1);
-    $('#earthSurplus').textContent = fmt(tSur, 1);
     $('#mDig').textContent = fmt(tDig, 1);
     $('#mBack').textContent = fmt(tBack, 1);
     $('#mSurplus').textContent = fmt(tSur, 1);
@@ -190,8 +188,8 @@
         t('.eff-m'), t('.v-dig'), t('.v-back'), t('.v-surplus')].join('\t'));
     });
     lines.push(['合计', '', '', '', '', '', '', '', '',
-      $('#earthDig').textContent.trim(), $('#earthBack').textContent.trim(),
-      $('#earthSurplus').textContent.trim()].join('\t'));
+      $('#mDig').textContent.trim(), $('#mBack').textContent.trim(),
+      $('#mSurplus').textContent.trim()].join('\t'));
     lines.push(['估算合价(元)', $('#mTotal').textContent.trim()].join('\t'));
     return lines.join('\n');
   }

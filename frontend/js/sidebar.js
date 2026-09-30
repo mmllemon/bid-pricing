@@ -1,3 +1,81 @@
+/* ===== 侧栏结构：4 个工具页共用，JS 统一渲染（改一处即全站生效） ===== */
+(function () {
+  var slot = document.getElementById('sidebarSlot');
+  if (!slot) return;   // 非工具页（如 index.html）保持静态侧栏不动
+  slot.outerHTML = `
+    <button class="sb-toggle" id="sbToggle" aria-label="打开导航菜单" aria-expanded="false">
+      <svg class="ic-burger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <svg class="ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div class="sb-backdrop" id="sbBackdrop"></div>
+
+    <!-- ===== 侧边栏（结构与 index.html 同构；跨页用 <a>） ===== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg>
+        </div>
+        <div class="brand-text">
+          <strong>工程智算</strong>
+          <small>工程项目智能决策平台</small>
+        </div>
+      </div>
+
+      <nav class="nav-scroll" aria-label="功能模块">
+        <div class="nav-group">
+          <div class="nav-group-title">工作台</div>
+          <a class="nav-item" href="./index.html#workbench">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            <span>个人工作台</span>
+          </a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">核心功能</div>
+          <a class="nav-item" href="./index.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h5M8 17h8"/></svg>
+            <span>投标报价</span>
+          </a>
+          <a class="nav-item" href="./index.html#cost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M5 9l7-7 7 7M5 15l7 7 7-7"/></svg>
+            <span>实施成本</span>
+          </a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">项目管理</div>
+          <a class="nav-item" href="./index.html#ledger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v12H4z"/><path d="M8 9h6M8 13h8M8 17h5"/></svg>
+            <span>项目台账</span>
+          </a>
+          <a class="nav-item" href="./index.html#settlement">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>结算管理</span>
+          </a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">工具箱</div>
+          <a class="nav-item active" href="./tools.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h.01M12 11h.01M15 11h.01M9 14h.01M12 14h.01M15 14h.01M9 17h6"/></svg>
+            <span>速算工具箱</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="user-block">
+          <div class="avatar" id="userAvatar">U</div>
+          <div class="user-meta">
+            <span class="user-name" id="userName">本机用户</span>
+            <span class="user-scope">本地工作台</span>
+          </div>
+        </div>
+        <div class="version-line">v0.1 · 单机版</div>
+      </div>
+    </aside>`;
+})();
+
 /* ===== 侧栏交互：窄屏抽屉 + 用户名编辑 =====
  * 从 app.js 拆出，完全独立——只碰侧栏 DOM + localStorage。
  */

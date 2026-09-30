@@ -46,17 +46,19 @@
       <td><input class="num" data-k="qty" type="number" min="0" step="1" value="${esc(d.qty ?? 1)}"></td>
       <td><input class="num" data-k="loss" type="number" min="0" step="0.1" value="${esc(d.loss ?? 1.0)}"></td>
       <td><input class="num" data-k="matRatio" type="number" min="0" step="0.05" value="${esc(matDef)}" title="其他材料+制费 ÷ 导体成本"></td>
+      <td class="num row-cu">—</td>
       <td class="num row-pnex">—</td>
       <td class="num row-ptax">—</td>
       <td class="num row-total">0.00</td>
-      <td><button type="button" class="row-del" title="删除本行" aria-label="删除本行">×</button></td>
+      <td class="row-actions"><button type="button" class="row-copy" title="复制本行" aria-label="复制本行">⧉</button><button type="button" class="row-del" title="删除本行" aria-label="删除本行">×</button></td>
     </tr>`;
   }
 
   function recalcCable() {
     const cuPrice = num($('#cCu')), alPrice = num($('#cAl'));
     const k = num($('#cK')) || 1, mgr = num($('#cMgr')) / 100, vat = num($('#cVat')) / 100;
-    let total = 0;
+    const Y = v => '¥ ' + fmt(v);   // 金额统一带 ¥（与土方/水井页一致）
+    let total = 0, nexTotal = 0;
     cableBody.querySelectorAll('tr').forEach(tr => {
       const g = k2 => num(tr.querySelector(`[data-k="${k2}"]`));
       const metal = tr.querySelector('[data-k="metal"]').value;
@@ -71,12 +73,16 @@
       const calcLen = (g('len') + g('pullPts') * g('pullLen')) * g('qty');
       const sum = pTax * calcLen * (1 + g('loss') / 100);
       total += sum;
+      nexTotal += pNex * calcLen * (1 + g('loss') / 100);
 
-      tr.querySelector('.row-pnex').textContent = areaSum > 0 ? fmt(pNex) : '—';
-      tr.querySelector('.row-ptax').textContent = areaSum > 0 ? fmt(pTax) : '—';
-      tr.querySelector('.row-total').textContent = fmt(sum);
+      const ok = areaSum > 0;
+      tr.querySelector('.row-cu').textContent = ok ? fmt(cuCost) : '—';
+      tr.querySelector('.row-pnex').textContent = ok ? Y(pNex) : '—';
+      tr.querySelector('.row-ptax').textContent = ok ? Y(pTax) : '—';
+      tr.querySelector('.row-total').textContent = Y(sum);
     });
-    $('#cableTotal').textContent = fmt(total);
+    $('#cableNexTotal').textContent = Y(nexTotal);
+    $('#cableTotal').textContent = Y(total);
   }
 
   /* ---------- 自动保存 / 恢复（刷新不丢） ---------- */
@@ -119,17 +125,20 @@
       '管理及利润率(%)', p('cMgr'), '增值税率(%)', p('cVat'),
       '电压等级', $('#cVolt').selectedOptions[0].textContent].join('\t'));
     lines.push(['型号规格', '材质', '规格', '单长(m)', '预留处数', '每处预留(m)', '根数',
-      '损耗率(%)', '其他材料系数', '不含税(元/m)', '含税(元/m)', '合价(元)'].join('\t'));
+      '损耗率(%)', '其他材料系数', '导体成本(元/m)', '不含税(元/m)', '含税(元/m)', '合价(元)'].join('\t'));
     cableBody.querySelectorAll('tr').forEach(tr => {
       const g = k => { const el = tr.querySelector(`[data-k="${k}"]`); return el ? el.value : ''; };
       const t = c => { const el = tr.querySelector(c); return el ? el.textContent.trim() : ''; };
+      const mny = c => t(c).replace(/¥/g, '').trim();   // TSV 保持纯数字，方便 Excel 计算
       if (!g('spec') && !g('model')) return;   // 空行不导出
       lines.push([g('model'), g('metal') === 'al' ? '铝' : '铜', g('spec'), g('len'),
         g('pullPts'), g('pullLen'), g('qty'), g('loss'), g('matRatio'),
-        t('.row-pnex'), t('.row-ptax'), t('.row-total')].join('\t'));
+        t('.row-cu'), mny('.row-pnex'), mny('.row-ptax'), mny('.row-total')].join('\t'));
     });
-    lines.push(['合计（含税）', '', '', '', '', '', '', '', '', '', '',
-      $('#cableTotal').textContent.trim()].join('\t'));
+    lines.push(['合计（不含税）', '', '', '', '', '', '', '', '', '',
+      $('#cableNexTotal').textContent.replace(/¥/g, '').trim(), '', ''].join('\t'));
+    lines.push(['合计（含税）', '', '', '', '', '', '', '', '', '', '', '',
+      $('#cableTotal').textContent.replace(/¥/g, '').trim()].join('\t'));
     return lines.join('\n');
   }
   async function copyCableResult(btn) {
@@ -149,6 +158,14 @@
   cableBody.addEventListener('click', (e) => {
     const del = e.target.closest('.row-del');
     if (del) { del.closest('tr').remove(); recalcCable(); saveSoon(); }
+    const cp = e.target.closest('.row-copy');
+    if (cp) {   // 复制行：同规格不同长度高频场景，插在源行下方
+      const src = cp.closest('tr');
+      const d = {};
+      src.querySelectorAll('[data-k]').forEach(el => { d[el.dataset.k] = el.value; });
+      src.insertAdjacentHTML('afterend', cableRowHtml(d));
+      recalcCable(); saveSoon();
+    }
   });
   ['cCu', 'cAl', 'cK', 'cMgr', 'cVat'].forEach(id =>
     $('#' + id).addEventListener('input', () => { recalcCable(); saveSoon(); }));
@@ -187,6 +204,8 @@
     cableBody.insertAdjacentHTML('beforeend', cableRowHtml());
     cableBody.insertAdjacentHTML('beforeend', cableRowHtml());
   }
+  /* 电压等级接项目自定义下拉（毛玻璃组件），与土方页放坡口径视觉统一；恢复在初始化之前 */
+  if (typeof initCustomSelect === 'function') initCustomSelect('#cVolt');
   recalcCable();
   window.addEventListener('pagehide', saveNow);
 })();

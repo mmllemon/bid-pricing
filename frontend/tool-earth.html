@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>工程智算 · 挖方与回填速算</title>
+  <link rel="stylesheet" href="./styles.css?v=2026-09-23-qd26" />
+  <link rel="stylesheet" href="./quote-dashboard.css?v=2026-09-23-qd47" />
+  <link rel="stylesheet" href="./tools.css?v=2026-09-29-tl3" />
+  <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
+  <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- 窄屏抽屉式侧栏：汉堡按钮 + 遮罩（宽屏隐藏） -->
+    <button class="sb-toggle" id="sbToggle" aria-label="打开导航菜单" aria-expanded="false">
+      <svg class="ic-burger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <svg class="ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div class="sb-backdrop" id="sbBackdrop"></div>
+
+    <!-- ===== 侧边栏（结构与 index.html 同构；跨页用 <a>） ===== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg>
+        </div>
+        <div class="brand-text">
+          <strong>工程智算</strong>
+          <small>工程项目智能决策平台</small>
+        </div>
+      </div>
+
+      <nav class="nav-scroll" aria-label="功能模块">
+        <div class="nav-group">
+          <div class="nav-group-title">工作台</div>
+          <a class="nav-item" href="./index.html#workbench">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            <span>个人工作台</span>
+          </a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">核心功能</div>
+          <a class="nav-item" href="./index.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h5M8 17h8"/></svg>
+            <span>投标报价</span>
+          </a>
+          <a class="nav-item" href="./index.html#cost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M5 9l7-7 7 7M5 15l7 7 7-7"/></svg>
+            <span>实施成本</span>
+          </a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">项目管理</div>
+          <a class="nav-item" href="./index.html#ledger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v12H4z"/><path d="M8 9h6M8 13h8M8 17h5"/></svg>
+            <span>项目台账</span>
+          </a>
+          <a class="nav-item" href="./index.html#settlement">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>结算管理</span>
+          </a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-title">工具箱</div>
+          <a class="nav-item active" href="./tools.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h.01M12 11h.01M15 11h.01M9 14h.01M12 14h.01M15 14h.01M9 17h6"/></svg>
+            <span>速算工具箱</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="user-block">
+          <div class="avatar" id="userAvatar">U</div>
+          <div class="user-meta">
+            <span class="user-name" id="userName">本机用户</span>
+            <span class="user-scope">本地工作台</span>
+          </div>
+        </div>
+        <div class="version-line">v0.1 · 单机版</div>
+      </div>
+    </aside>
+
+    <!-- ===== 主内容区 ===== -->
+    <main class="main-content">
+      <div class="breadcrumb"><a href="./tools.html" class="crumb-link">工具箱</a> <span>/</span> 挖方与回填速算</div>
+
+      <!-- ================= 挖方与回填速算 ================= -->
+      <section class="card tool-card" id="tool-earth">
+        <div class="card-head">
+          <span class="card-title"><span class="title-dot"></span>挖方与回填速算</span>
+          <span class="card-subtitle">挖方 V = L × (a + m·h) × h（梯形断面）；回填 = 挖方 − 管位占置</span>
+        </div>
+
+        <div class="tool-grid" style="margin-bottom:12px;">
+          <label class="field"><span class="field-label" data-tip="全线统一的人工挖沟槽综合单价">挖方单价 (元/m³)</span><input id="eDig" class="tabular" type="number" min="0" step="0.5" value="48" /></label>
+          <label class="field"><span class="field-label">回填夯实单价 (元/m³)</span><input id="eBack" class="tabular" type="number" min="0" step="0.5" value="38" /></label>
+          <label class="field"><span class="field-label" data-tip="余方外运与借方内运按同一运费口径估算">余方外运/借方 (元/m³)</span><input id="eHaul" class="tabular" type="number" min="0" step="0.5" value="42" /></label>
+        </div>
+
+        <div class="chip-row" role="group" aria-label="放坡口径">
+          <label class="field" style="min-width:210px;"><span class="field-label">放坡口径（规则集）</span>
+            <select id="eRuleSet">
+              <option value="arch" selected>建筑定额（全国统一定额口径）</option>
+              <option value="power">电力定额（占位值，请核对）</option>
+              <option value="muni">市政定额（占位值，请核对）</option>
+            </select>
+          </label>
+          <table class="tool-table" id="ruleTable" style="min-width:420px;">
+            <thead>
+              <tr><th>土壤类别</th><th style="width:110px">放坡系数 1:m</th><th style="width:130px">放坡起点深度 (m)</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>一、二类土</td><td><input class="num" data-rule="0" data-f="m" type="number" min="0" max="2" step="0.01" value="0.50"></td><td><input class="num" data-rule="0" data-f="start" type="number" min="0" step="0.1" value="1.2"></td></tr>
+              <tr><td>三类土</td><td><input class="num" data-rule="1" data-f="m" type="number" min="0" max="2" step="0.01" value="0.33"></td><td><input class="num" data-rule="1" data-f="start" type="number" min="0" step="0.1" value="1.5"></td></tr>
+              <tr><td>四类土</td><td><input class="num" data-rule="2" data-f="m" type="number" min="0" max="2" step="0.01" value="0.25"></td><td><input class="num" data-rule="2" data-f="start" type="number" min="0" step="0.1" value="2.0"></td></tr>
+            </tbody>
+          </table>
+          <span class="hint" id="eRuleHint">系数与起点可直接修改，按你实际所套定额核对；未达起点深度按直槽。</span>
+        </div>
+
+        <div class="tool-table-wrap">
+          <table class="tool-table" id="earthTable">
+            <thead>
+              <tr>
+                <th style="min-width:110px">段名 / 桩号</th>
+                <th>长度 L (m)</th>
+                <th>沟底宽 a (m)</th>
+                <th>挖深 h (m)</th>
+                <th>土壤类别</th>
+                <th>放坡方式</th>
+                <th style="width:76px">自定 m</th>
+                <th data-tip="管体/基础占置体积（延米），从本段回填中扣减；直埋电缆通常不扣">管位占置 (m³/m)</th>
+                <th class="num">有效 m</th>
+                <th class="num">挖方 (m³)</th>
+                <th class="num">回填 (m³)</th>
+                <th class="num">余方 (m³)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="earthRows"></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="9">合计</td>
+                <td class="num" id="earthDig">0.0</td>
+                <td class="num" id="earthBack">0.0</td>
+                <td class="num" id="earthSurplus">0.0</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="result-strip">
+          <div class="metric"><span class="metric-label">总挖方</span><strong><span id="mDig">0.0</span> m³</strong></div>
+          <div class="metric"><span class="metric-label">总回填（夯实）</span><strong><span id="mBack">0.0</span> m³</strong></div>
+          <div class="metric"><span class="metric-label">余方（+外运 / −借方）</span><strong><span id="mSurplus">0.0</span> m³</strong></div>
+          <div class="metric"><span class="metric-label">估算合价</span><strong>¥ <span id="mTotal">0.00</span></strong></div>
+        </div>
+        <div class="action-row">
+          <button type="button" class="btn-secondary" id="earthAdd">＋ 加一段</button>
+          <span class="hint">每段「管位占置」在本行内以延米体积扣回填；放坡按上方所选口径的系数与起点执行；沟底宽建议 = 管群布置宽 + 2 × 工作面。未做虚实方折算：回填按压实方、余方按天然方，借方场景请自行乘以折算系数。</span>
+        </div>
+      </section>
+
+      <p class="hint" style="margin:6px 0 30px;">
+        本页为速算参考，不替代工程量清单计价规范（GB 50500）的正式算量与组价流程；工程量以施工图与现场计量为准。
+      </p>
+    </main>
+  </div>
+
+  <script src="./js/sidebar.js?v=2026-09-23-split1"></script>
+  <script src="./js/dropdown.js?v=2026-09-23-split1"></script>
+  <script src="./js/tool-common.js?v=2026-09-29-tl3"></script>
+  <script src="./js/tool-earth.js?v=2026-09-29-tl6"></script>
+</body>
+</html>

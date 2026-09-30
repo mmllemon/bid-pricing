@@ -1,0 +1,206 @@
+/* ===== 速算工具箱（tools.html）专属样式 =====
+ * 只补工具页需要的行内表格 / 指标条 / 预设 chips；
+ * 卡片、字段、按钮、侧栏全部复用 styles.css 与 quote-dashboard.css 的 token 与类。
+ */
+
+a.nav-item { text-decoration: none; color: inherit; }
+
+/* 面包屑里的返回链接 */
+.crumb-link { color: var(--accent); text-decoration: none; }
+.crumb-link:hover { text-decoration: underline; }
+
+.tool-card { margin-bottom: 18px; scroll-margin-top: 16px; }
+
+/* ===== 工具箱落地页：卡片墙 ===== */
+.tool-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px; margin-bottom: 8px;
+}
+.tool-card-link {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 20px 20px 16px;
+  border: 1px solid var(--border); border-radius: var(--radius-card);
+  background: var(--surface-card); box-shadow: var(--shadow-card);
+  text-decoration: none; color: inherit;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.tool-card-link:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 6px 20px var(--accent-muted);
+}
+.tool-card-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-muted); color: var(--accent);
+}
+.tool-card-icon svg { width: 22px; height: 22px; }
+.tool-card-link h2 {
+  margin: 0; font-size: 15.5px; font-weight: 700; color: var(--text);
+  display: flex; align-items: baseline; gap: 8px;
+}
+.tool-card-link h2 small {
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  background: var(--accent-muted); border-radius: 999px; padding: 2px 8px;
+}
+.tool-card-link p {
+  margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--text-tertiary);
+  flex: 1;
+}
+.tool-card-go {
+  font-size: 12.5px; font-weight: 600; color: var(--accent);
+}
+.tool-card-link:hover .tool-card-go { text-decoration: underline; }
+
+/* 字段网格：井体等成组参数 */
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; }
+/* 独立字段接入 initCustomSelect 后，.cs 的 min-width 须让位于网格列宽 */
+.tool-grid .cs { min-width: 0; }
+
+/* 行内可编辑表格 */
+.tool-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-control); }
+.tool-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 760px; }
+.tool-table th {
+  background: var(--surface-nested); text-align: left; font-weight: 600;
+  color: var(--text-tertiary); padding: 7px 8px; white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.tool-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.tool-table tbody tr:last-child td { border-bottom: none; }
+.tool-table input, .tool-table select {
+  width: 100%; min-width: 60px; padding: 5px 7px;
+  border: 1px solid var(--border-input); border-radius: 7px;
+  font: inherit; font-size: 12.5px;
+  background: var(--surface-card); color: var(--text);
+}
+/* 表内原生 select 与 .field select 同一控件语言：无原生框 + 单一来源箭头 */
+.tool-table select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 24px;
+  background-image: var(--select-arrow); background-repeat: no-repeat;
+  background-position: right 7px center; background-size: 12px;
+  cursor: pointer;
+}
+.tool-table input:focus, .tool-table select:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+.tool-table .num { text-align: right; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+/* 计算式列：小字、可换行 */
+.tool-table .fx { font-size: 11px; color: var(--text-tertiary); white-space: normal; min-width: 150px; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+/* 单价单元格：输入框 + 单位后缀 */
+.tool-table .price-cell { display: flex; align-items: center; gap: 4px; }
+.tool-table .price-cell input { flex: 1; min-width: 46px; }
+.tool-table .unit-suffix { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+.tool-table tfoot td { font-weight: 700; background: var(--surface-nested); }
+.tool-table tfoot .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+.row-del {
+  border: none; background: transparent; color: var(--text-tertiary);
+  font-size: 15px; line-height: 1; padding: 5px 7px; border-radius: 6px; cursor: pointer;
+}
+.row-del:hover { color: var(--danger); background: var(--danger-soft); }
+
+/* 有效放坡系数小字 */
+.eff-m { font-size: 11px; color: var(--text-tertiary); }
+.eff-m .off { opacity: .65; }
+
+/* 结果指标条 */
+.result-strip { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.metric {
+  flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-control);
+  background: var(--surface-nested);
+}
+.metric-label { font-size: 11.5px; color: var(--text-tertiary); }
+.metric strong { font-size: 17px; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+/* 井型预设 chips */
+.chip-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.chip {
+  border: 1px solid var(--border-input); background: var(--surface-card);
+  color: var(--text); font: inherit; font-size: 12.5px;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* ===== 已存井库 ===== */
+.well-lib { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.well-lib-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.well-lib-save { display: flex; gap: 8px; margin-bottom: 10px; }
+.well-lib-save input {
+  flex: 1; max-width: 320px; padding: 7px 10px;
+  border: 1px solid var(--border-input); border-radius: 8px;
+  font: inherit; font-size: 13px; background: var(--surface-card); color: var(--text);
+}
+.well-lib-save input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-muted); }
+.well-lib-list { display: flex; flex-direction: column; gap: 6px; }
+.well-lib-empty { font-size: 12.5px; color: var(--text-tertiary); padding: 8px 0; }
+.well-item {
+  border: 1px solid var(--border); border-radius: var(--radius-control);
+  background: var(--surface-nested);
+}
+.well-item-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px;
+}
+.well-item-name {
+  border: none; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--text);
+}
+.well-item-name:hover { color: var(--accent); text-decoration: underline; }
+.well-item-digest { flex: 1; min-width: 180px; font-size: 12px; color: var(--text-tertiary); }
+.well-item-total { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.well-item-time { font-size: 11.5px; color: var(--text-tertiary); }
+.well-act {
+  border: none; background: none; padding: 3px 8px; border-radius: 6px;
+  font: inherit; font-size: 12px; color: var(--accent); cursor: pointer;
+}
+.well-act:hover { background: var(--accent-muted); }
+.well-act.danger { color: var(--danger); }
+.well-act.danger:hover { background: var(--danger-soft); }
+.well-rename-input {
+  width: 200px; padding: 3px 8px;
+  border: 1px solid var(--accent); border-radius: 7px;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--text);
+  background: var(--surface-card); outline: none;
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+.well-detail { border-top: 1px dashed var(--border); padding: 10px 12px 12px; }
+.well-detail table { width: 100%; max-width: 640px; border-collapse: collapse; font-size: 12px; }
+.well-detail th { text-align: left; font-weight: 600; color: var(--text-tertiary); padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.well-detail td { padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.well-detail td.num, .well-detail th.num { text-align: right; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.well-detail .well-detail-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.well-detail .well-detail-total { font-size: 13px; font-weight: 700; }
+
+/* ===== 井体示意（SVG 平面 + 剖面） ===== */
+.well-viz-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 16px 0 8px; }
+.well-viz { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .well-viz { grid-template-columns: 1fr; } }
+.well-viz-pane { border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-card); padding: 8px 8px 4px; }
+.well-viz-title { font-size: 12px; font-weight: 600; color: var(--text-tertiary); margin-bottom: 2px; }
+.well-viz-svg svg { width: 100%; height: auto; display: block; }
+.wv-wall { fill: color-mix(in srgb, var(--accent) 16%, var(--surface-card)); stroke: var(--border-input); stroke-width: 1; }
+.wv-void { fill: var(--page-bg); stroke: var(--border-input); stroke-width: 1; }
+.wv-conc { fill: color-mix(in srgb, var(--accent) 10%, var(--surface-card)); stroke: var(--border-input); stroke-width: 1; }
+.wv-pad { fill: var(--surface-nested); stroke: var(--border-input); stroke-width: 1; stroke-dasharray: 2 2; }
+.wv-dashed { fill: none; stroke: var(--text-tertiary); stroke-width: 1; stroke-dasharray: 4 3; }
+.wv-rebar { stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 3; fill: none; }
+.wv-dim { cursor: pointer; }
+.wv-dim line, .wv-dim polygon { stroke: var(--text-tertiary); stroke-width: 1; fill: var(--text-tertiary); }
+.wv-dim text { fill: var(--text-secondary); font-size: 10px; text-anchor: middle; dominant-baseline: middle; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.wv-dim:hover text, .wv-label:hover { fill: var(--accent); font-weight: 600; }
+.wv-label { fill: var(--text-secondary); font-size: 10px; text-anchor: middle; dominant-baseline: middle; cursor: pointer; }
+.well-viz .wv-wall, .well-viz .wv-conc, .well-viz .wv-pad { cursor: pointer; }
+.tool-grid .flash, .well-viz-flash {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-muted) !important;
+  transition: none;
+}
+
+@media (max-width: 720px) {
+  .tool-grid { grid-template-columns: repeat(2, 1fr); }
+  .metric strong { font-size: 15px; }
+}

@@ -234,6 +234,15 @@ details.spec .hint { margin: 6px 0; }
   .metric strong { font-size: 15px; }
 }
 
+/* ===== 排管断面图 ===== */
+.dv-duct { fill: var(--page-bg); stroke: var(--border-input); stroke-width: 1; }
+.dv-spare { fill: none; stroke: var(--text-tertiary); stroke-width: 1; stroke-dasharray: 4 3; }
+
+/* ===== 跨工具交接横幅（排管 → 土方） ===== */
+.handoff-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--border-input); border-radius: var(--radius-control); background: color-mix(in srgb, var(--accent) 8%, var(--surface-card)); font-size: 13px; }
+.handoff-banner[hidden] { display: none; }
+.handoff-banner strong { font-variant-numeric: tabular-nums; }
+
 /* 参数分组小标题（占满 grid 整行） */
 .tool-subhead {
   grid-column: 1 / -1;
@@ -258,7 +267,7 @@ details.spec .hint { margin: 6px 0; }
   .sidebar, .sb-toggle, .sb-backdrop, .sidebar-foot { display: none !important; }
   .app-shell { display: block; }
   .main-content { padding: 0; margin: 0; max-width: none; }
-  .action-row, .tool-card-go, .well-lib, .chip-row .chip,
+  .action-row, .tool-card-go, .well-lib, .chip-row .chip, .handoff-banner,
   .breadcrumb, #sbToggle { display: none !important; }
   .card { box-shadow: none; break-inside: avoid; margin-bottom: 14px; }
   .tool-table-wrap { overflow: visible; }

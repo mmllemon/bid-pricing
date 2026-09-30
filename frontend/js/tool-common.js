@@ -64,4 +64,25 @@
       } catch (e2) { return false; }
     }
   };
+  /* 跨工具交接：单槽位 localStorage（如排管断面 → 土方工具的沟底宽）。
+   * 发送方 toolHandoff.send(kind, payload)，接收方 take(kind) 读取，
+   * 应用/忽略后 clear()。kind 冲突时后发覆盖先发。 */
+  window.toolHandoff = {
+    KEY: 'bidpricing.handoff.v1',
+    send(kind, payload) {
+      try { localStorage.setItem(this.KEY, JSON.stringify({ kind, at: Date.now(), payload })); }
+      catch (e) { /* 隐私模式等写失败时静默跳过 */ }
+    },
+    take(kind) {
+      try {
+        const raw = localStorage.getItem(this.KEY);
+        if (!raw) return null;
+        const o = JSON.parse(raw);
+        return (o && o.kind === kind) ? o : null;
+      } catch (e) { return null; }
+    },
+    clear() {
+      try { localStorage.removeItem(this.KEY); } catch (e) {}
+    }
+  };
 })();

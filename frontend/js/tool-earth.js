@@ -222,6 +222,31 @@
   ['eDig', 'eBack', 'eHaul', 'eLoose'].forEach(id =>
     $('#' + id).addEventListener('input', () => { recalcEarth(); saveSoon(); }));
 
+  /* ---------- 跨工具交接：排管断面 → 沟底宽 ----------
+   * 排管页「送入土方工具」后，本页顶部出现横幅；「应用」新建一段并填入沟底宽 a。 */
+  (function () {
+    const H = window.toolHandoff;
+    if (!H) return;
+    const h = H.take('duct');
+    if (!h || !h.payload) return;
+    const banner = $('#ductBanner'), txt = $('#ductBannerText');
+    if (!banner || !txt) return;
+    const w = parseFloat(h.payload.width);
+    if (!isFinite(w) || w <= 0) { H.clear(); return; }
+    txt.innerHTML = `排管工具推荐沟底宽 <strong>${w.toFixed(2)} m</strong>（${window.toolEsc(h.payload.label || '')}）`;
+    banner.hidden = false;
+    const done = () => { banner.hidden = true; H.clear(); };
+    $('#ductApply').addEventListener('click', () => {
+      earthBody.insertAdjacentHTML('beforeend', earthRowHtml({ name: h.payload.label || '', a: w.toFixed(2) }));
+      recalcEarth();
+      saveSoon();
+      done();
+      const last = earthBody.lastElementChild;
+      if (last && typeof last.scrollIntoView === 'function') last.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    $('#ductIgnore').addEventListener('click', done);
+  })();
+
   /* ---------- 启动：恢复存档（无存档则建两个空行） ---------- */
   if (!applyState(window.toolStore.load(STORE_KEY))) {
     earthBody.insertAdjacentHTML('beforeend', earthRowHtml());

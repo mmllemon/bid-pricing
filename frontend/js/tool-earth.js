@@ -106,8 +106,16 @@
   }
 
   // 口径切换：把预设值载入口径表（载入后仍可逐格改）
+  // 电力/市政为建筑定额占位值，切换时强制确认，防止直接套用
+  let lastRuleKey = 'arch';
   $('#eRuleSet').addEventListener('change', () => {
-    const key = $('#eRuleSet').value;
+    const sel = $('#eRuleSet');
+    const key = sel.value;
+    if (key !== 'arch' && key !== lastRuleKey) {
+      const ok = window.confirm('电力/市政定额各省市差异大，当前载入的是建筑定额占位值——必须按你实际所套定额逐格核对修改。\n\n确定要切换吗？');
+      if (!ok) { sel.value = lastRuleKey; if (sel.__cs) sel.__cs.refresh(); return; }
+    }
+    lastRuleKey = key;
     const rs = RULE_PRESETS[key] || RULE_PRESETS.arch;
     rs.forEach((r, i) => {
       $(`#ruleTable input[data-rule="${i}"][data-f="m"]`).value = r.m;

@@ -13,6 +13,8 @@
 
   const cableBody = $('#cableRows');
   const METAL_DENSITY = { cu: 8.89, al: 2.70 };
+  /* 其他材料系数建议值（按电压等级分档；可按厂家询价调整） */
+  const VOLT_MAT = { lv: 0.30, mv: 0.40, hv: 0.50 };
 
   function parseSpec(text) {
     // 「3×240」「3×240+2×120」「5×16」→ Σ(芯数×截面)；无法解析返回 0
@@ -26,6 +28,7 @@
   }
 
   function cableRowHtml() {
+    const matDef = (VOLT_MAT[$('#cVolt').value] ?? 0.30).toFixed(2);
     return `<tr>
       <td><input type="text" placeholder="如 YJV22-8.7/15kV"></td>
       <td><select data-k="metal"><option value="cu" selected>铜</option><option value="al">铝</option></select></td>
@@ -35,7 +38,7 @@
       <td><input class="num" data-k="pullLen" type="number" min="0" step="0.1" value="0"></td>
       <td><input class="num" data-k="qty" type="number" min="0" step="1" value="1"></td>
       <td><input class="num" data-k="loss" type="number" min="0" step="0.1" value="1.0"></td>
-      <td><input class="num" data-k="matRatio" type="number" min="0" step="0.05" value="0.30" title="其他材料+制费 ÷ 导体成本"></td>
+      <td><input class="num" data-k="matRatio" type="number" min="0" step="0.05" value="${matDef}" title="其他材料+制费 ÷ 导体成本"></td>
       <td class="num row-pnex">—</td>
       <td class="num row-ptax">—</td>
       <td class="num row-total">0.00</td>
@@ -78,6 +81,15 @@
     if (del) { del.closest('tr').remove(); recalcCable(); }
   });
   ['cCu', 'cAl', 'cK', 'cMgr', 'cVat'].forEach(id => $('#' + id).addEventListener('input', recalcCable));
+  /* 电压等级切换：其他材料系数按建议值分档，整表同步（仍可逐行改） */
+  $('#cVolt').addEventListener('change', () => {
+    const v = (VOLT_MAT[$('#cVolt').value] ?? 0.30).toFixed(2);
+    cableBody.querySelectorAll('tr').forEach(tr => {
+      const inp = tr.querySelector('[data-k="matRatio"]');
+      if (inp) inp.value = v;
+    });
+    recalcCable();
+  });
   cableBody.insertAdjacentHTML('beforeend', cableRowHtml());
   cableBody.insertAdjacentHTML('beforeend', cableRowHtml());
   recalcCable();

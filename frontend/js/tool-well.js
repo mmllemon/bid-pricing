@@ -687,7 +687,8 @@
     if (lastSteelEstKg > 0) {
       const diff = total - lastSteelEstKg;
       const pct = (diff / lastSteelEstKg * 100).toFixed(0);
-      cmpEl.textContent = `含钢量法 ${fmt(lastSteelEstKg, 0)} kg vs 主体按图 ${fmt(total, 0)} kg（${diff >= 0 ? '+' : ''}${fmt(diff, 0)} / ${pct}%）· 未含盖板钢筋 ${fmt(coverTotal, 0)} kg`;
+      const warn = Math.abs(diff / lastSteelEstKg) >= 0.15 ? ' ⚠ 差异较大，请以钢筋逐根表为准' : '';
+      cmpEl.textContent = `含钢量法 ${fmt(lastSteelEstKg, 0)} kg vs 主体按图 ${fmt(total, 0)} kg（${diff >= 0 ? '+' : ''}${fmt(diff, 0)} / ${pct}%）· 未含盖板钢筋 ${fmt(coverTotal, 0)} kg${warn}`;
     } else cmpEl.textContent = '';
   }
 

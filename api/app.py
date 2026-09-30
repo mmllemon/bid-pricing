@@ -247,7 +247,11 @@ def _low_price_guard(params: dict, low_policy: dict) -> JSONResponse | None:
     return None
 
 app = FastAPI(title="工程智算报价 API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
+# 本机单机版：放行 localhost/127.0.0.1 的任意端口来源（前端端口可覆盖，见 run.ps1）。
+# 之前白名单写死端口：前端换端口（如 8080→8081 避让占用）就整站 CORS 拒绝、
+# 前端误报「后端服务不可达」。安全边界是 API Token / 目录级隔离，不是 CORS。
+app.add_middleware(CORSMiddleware,
+                   allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
                    allow_methods=["GET", "POST"], allow_headers=["Authorization", "X-API-Token", "Content-Type", "Accept"])
 WEB_OUTPUT_DIR = user_scope(ROOT / "outputs" / "web-results", CURRENT_USER)
 WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

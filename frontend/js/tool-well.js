@@ -1,18 +1,19 @@
-/* ===== 电缆井工程量速算 =====
- * 井体 = 主井室（矩形，净空 L×W×D）＋ n 个支井室（净空 Lb×Wb，同深同壁厚）。
- * 转角井=支室接主室端部、三通井=接侧向、四通井=两侧各一——三者墙体代数相同，
- * 仅支室数与预设尺寸不同，故统一按「主室闭环 − 开口 + 支室 U 形」中心线法：
- *   中心线净长 = 2(L+t)+2(W+t) + n×(2Lb+t)
- *   井壁 V = 中心线净长 × D × t
- *   板面积 = (L+2t)(W+2t) + n×(Wb+2t)(Lb+t/2)      支室板自主室板边外挑
- *   垫层   = 板平面每边外扩 100mm
- *   外缘周长 = 2(L+2t)+2(W+2t) + n×(2Lb+t)
- *   内缘周长 = 2(L+W) + n×2Lb
- *   模板 = 混凝土井壁: 2×中心线净长×D（内+外侧）＋ 外缘×底板厚 ＋ 顶板底模
- *          砖砌井壁: 仅 底板侧模 ＋ 顶板底模
- *   抹面 = (内缘 + 外缘) × D
- *   钢筋 = 混凝土构件 × 含钢量（含钢量法估算）；砖砌井壁不计井壁筋
- */
+  /* ===== 电缆井工程量速算 =====
+   * 井体 = 主井室（矩形，净空 L×W×D）＋ n 个支井室（净空 Lb×Wb，同深同壁厚）。
+   * 转角井=支室接主室端部、三通井=接侧向、四通井=两侧各一——三者墙体代数相同，
+   * 仅支室数与预设尺寸不同，故统一按「主室闭环 − 开口 + 支室 U 形」中心线法：
+   *   中心线净长 = 2(L+t)+2(W+t) + n×(2Lb+t)
+   *   井壁 V = 中心线净长 × D × t
+   *   板面积 = (L+2t)(W+2t) + n×(Wb+2t)(Lb+t/2)      支室板自主室板边外挑
+   *   垫层   = 板平面每边外扩 100mm
+   *   外缘周长 = 2(L+2t)+2(W+2t) + n×(2Lb+t)
+   *   内缘周长 = 2(L+W) + n×2Lb
+   *   模板 = 混凝土井壁: 2×中心线净长×D（内+外侧）＋ 外缘×底板厚 ＋ 顶板底模
+   *          砖砌井壁: 仅 底板侧模 ＋ 顶板底模
+   *   抹面 = (内缘 + 外缘) × D
+   *   钢筋 = 混凝土构件 × 含钢量（含钢量法估算）；砖砌井壁不计井壁筋；
+   *          盖板钢筋按「块数×每块根数」进钢筋逐根表（盖板组），与主体布筋分列
+   */
 (function () {
   'use strict';
 
@@ -37,12 +38,11 @@
     { key: 'top',       label: '混凝土顶板 C30',   unit: 'm³', price: 560, dec: 3 },
     { key: 'topRebar',  label: '├ 顶板钢筋',       unit: 'kg', price: 5.0, dec: 1, rebar: 'top' },
     { key: 'shaft',     label: '井筒砖砌',         unit: 'm³', price: 420, dec: 3 },
-    { key: 'form',      label: '模板（接触面）',   unit: 'm²', price: 65,  dec: 2 },
+    { key: 'form',      label: '模板（井壁内＋外、底板外侧、井座外侧）', unit: 'm²', price: 65,  dec: 2 },
     { key: 'render',    label: '抹面（内＋外壁）', unit: 'm²', price: 25,  dec: 2 },
     { key: 'coverSlab', label: '盖板混凝土 C30（预制）', unit: 'm³', price: 620, dec: 3 },
-    { key: 'coverRebar', label: '盖板钢筋 φ14', unit: 'kg', price: 5.0, dec: 1 },
     { key: 'coverAngle', label: '盖板包边角钢 L50×5（每块）', unit: 'm', price: 38, dec: 2 },
-    { key: 'jkAngle', label: '接口角钢 L50×5（墙顶一圈）', unit: 'm', price: 38, dec: 2 },
+    { key: 'jkAngle', label: '接口角钢 L50×5（井座内侧上＋下两圈）', unit: 'm', price: 38, dec: 2 },
     { key: 'cover',     label: '井盖（重型球墨）', unit: '套', price: 850, dec: 0 },
     { key: 'ladder',    label: '爬梯',             unit: '副', price: 160, dec: 0 },
   ];
@@ -85,9 +85,21 @@
     const outerP = 2 * (L + 2 * t) + 2 * (W + 2 * t) + nB * (2 * Lb + t);
     const innerP = 2 * (L + W) + nB * 2 * Lb;
 
-    // 墙顶外唇（盖板外侧升至地面的条带，宽=85+15=100，高=板厚+坐浆15）
+    // 井座（盖板外侧升至地面的条带，宽=85+15=100，高=板厚+坐浆15）
     const lipW = num($('#wLipW')), lipH = num($('#wLipH'));
     const lipV = outerP * lipW * lipH;
+    // 接口角钢（井座内侧、同平面位置两圈）：
+    // 上圈=井座内侧上边；下圈=井座与井壁结合处；平面位置相同，
+    // 均=井座内侧周界（外缘每边内缩井座宽 lipW，含支室外露段）：
+    //   主井室 2(L+2t−2lipW)＋2(W+2t−2lipW)；支室每间 (2Lb+t) 各内缩 4lipW
+    const jkIn = Math.max(0, 2 * (L + 2 * t - 2 * lipW) + 2 * (W + 2 * t - 2 * lipW))
+        + nB * Math.max(0, 2 * Lb + t - 4 * lipW);
+    const jkTop = jkIn;
+    const jkLower = jkIn;
+    // 井座外侧面积（井座模板）：井座条带外边缘周长（外缘每边外扩 lipW，含支室外露段）× 井座高
+    const lipOuterP = 2 * (L + 2 * t + 2 * lipW) + 2 * (W + 2 * t + 2 * lipW)
+        + nB * (2 * Lb + t + 4 * lipW);
+    const lipForm = (lipW > 0 && lipH > 0) ? lipOuterP * lipH : 0;
     const concQty = {
       base: slabA * baseT,
       wall: clNet * D * t + lipV,
@@ -108,7 +120,9 @@
     const brSlab = nB ? `＋${nB}×(${f2(Wb + 2 * t)}×${f2(Lb + t / 2)})` : '';
     const brPad = nB ? `＋${nB}×(${f2(Wb + 2 * t + 2 * po)}×${f2(Lb + t / 2 + po)})` : '';
     const brCL = nB ? `＋${nB}×(${f2(2 * Lb)}＋${f2(t)})` : '';
-    const lipFx = lipV > 0 ? `＋外唇${f2(outerP)}×${f2(lipW)}×${f2(lipH)}` : '';
+    const lipFx = lipV > 0 ? `＋井座${f2(outerP)}×${f2(lipW)}×${f2(lipH)}` : '';
+    const lipFormFx = lipForm > 0 ? `＋${f2(lipOuterP)}×${f2(lipH)}（井座外侧）` : '';
+    const slabFormFx = topT > 0 ? `＋${f2(slabA)}（现浇顶板底）` : '';
     const fx = [
       `(${f2(L + 2 * t + 0.2)}×${f2(W + 2 * t + 0.2)})×${f2(padT)}${brPad}`,
       `(${f2(L + 2 * t)}×${f2(W + 2 * t)})×${f2(baseT)}${brSlab}`,
@@ -119,13 +133,12 @@
       `(${f2(L + 2 * t)}×${f2(W + 2 * t)})×${f2(topT)}${brSlab}`,
       (cT2 > 0 && cN > 0 ? '⚠ ' : '') + `${f2(concQty.top)}×${f2(rebarRatio.top)}`,
       `π×(${f2(sD)}＋${f2(sT)})×${f2(sH)}×${f2(sT)}`,
-      isConc ? `2×${f2(clNet)}×${f2(D)}＋${f2(outerP)}×${f2(baseT)}＋${f2(slabA)}`
-             : `${f2(outerP)}×${f2(baseT)}＋${f2(slabA)}`,
+      isConc ? `2×${f2(clNet)}×${f2(D)}${lipFormFx}＋${f2(outerP)}×${f2(baseT)}${slabFormFx}`
+             : `${f2(outerP)}×${f2(baseT)}${lipFormFx}${slabFormFx}`,
       `(${f2(innerP)}＋${f2(outerP)})×${f2(D)}`,
       `${f2(cN)}×(${f2(cL)}×${f2(cW)})×${f2(cT2)}`,
-      `${f2(cN)}×(${f2(cMN)}×${f2(cML / 1000)}＋${f2(cDN)}×${f2(cDL / 1000)})`,
       `${f2(cN)}×${f2(cEL / 1000)} m`,
-      `${f2(innerP)} m（墙顶接口一圈）`,
+      `${f2(jkTop)}＋${f2(jkLower)} m（上＋下圈同位置=井座内侧周界，外缘内缩${f2(lipW)}）`,
       `${count} 套`,
       `${count} 副`,
     ];
@@ -138,12 +151,11 @@
         case 'wall':   return concQty.wall;
         case 'top':    return concQty.top;
         case 'shaft':  return Math.PI * (sD + sT) * sH * sT;
-        case 'form':   return (isConc ? 2 * clNet * D : 0) + outerP * baseT + slabA;
+        case 'form':   return (isConc ? 2 * clNet * D : 0) + outerP * baseT + lipForm + (topT > 0 ? slabA : 0);   // 接触面积：井壁内＋外（砖砌不支模）＋底板外侧＋井座外侧（lipW>0）＋现浇顶板底
         case 'render': return (innerP + outerP) * D;
         case 'coverSlab':  return cN * cL * cW * cT2;
-        case 'coverRebar': return cN * (cMN * cML + cDN * cDL) / 1000;
         case 'coverAngle': return cN * cEL / 1000;
-        case 'jkAngle':    return innerP;   // 墙顶与盖板接口一圈
+        case 'jkAngle':    return jkTop + jkLower;   // 井座内侧同位置两圈=外缘内缩 lipW 周界（含支室）
         case 'cover':
         case 'ladder': return 1;
         default:       return 0;
@@ -177,7 +189,10 @@
    * 示意图非施工图：两图比例各自独立，随参数实时重绘。
    * 图元与尺寸标注带 data-focus，点击定位并高亮对应输入框。
    */
-  const fnum = v => String(+(+v).toFixed(2));
+  const fnum = v => (+v).toFixed(2);
+
+  /* 盖板钢筋直径（φ14，与 A-5 口径一致）；定义在头部：recalcWell 首调早于钢筋段落，须可引用 */
+  const COVER_REBAR_D = 14;
 
   function svgDim(x1, y1, x2, y2, label, focus) {
     const hor = Math.abs(y2 - y1) < 0.01;
@@ -212,16 +227,17 @@
     g += `<rect class="wv-void" x="${ox + t * s}" y="${oy + t * s}" width="${L * s}" height="${W * s}"/>`;
     if (nB > 0) g += `<rect class="wv-void" data-focus="wLb" x="${ox + (t + bx) * s}" y="${oy + (W + t) * s}" width="${Wb * s}" height="${Lb * s}"/>`;
     if (nB === 2) g += `<rect class="wv-void" data-focus="wLb" x="${ox + (t + bx) * s}" y="${oy - Lb * s}" width="${Wb * s}" height="${Lb * s}"/>`;
-    // 井筒（俯视投影，虚线圆）
+    // 井筒（俯视投影，虚线圆，位于主井室中心）
     if (sD > 0 && sH > 0) {   // 井筒高 0 = 无井筒，平面不画投影圆
       const r = (sD / 2 + sT) * s;
-      g += `<circle class="wv-dashed" data-focus="wShaftD" cx="${ox + footW * s / 2}" cy="${oy + t * s / 2}" r="${r}"/>`;
-      g += `<text class="wv-label" data-focus="wShaftD" x="${ox + footW * s / 2}" y="${oy + t * s / 2 - r - 5}">φ${fnum(sD)}</text>`;
+      const ccx = ox + footW * s / 2, ccy = oy + footH * s / 2;
+      g += `<circle class="wv-dashed" data-focus="wShaftD" cx="${ccx}" cy="${ccy}" r="${r}"/>`;
+      g += `<text class="wv-label" data-focus="wShaftD" x="${ccx}" y="${ccy - r - 5}">φ${fnum(sD)}</text>`;
     }
-    // 尺寸
+    // 尺寸（净长/净宽跨净空起讫，线与数值一致）
     const dimY = oy - 12 - (nB === 2 ? Lb * s : 0);
-    g += svgDim(ox, dimY, ox + footW * s, dimY, fnum(L), 'wL');
-    g += svgDim(ox - 16, oy, ox - 16, oy + footH * s, fnum(W), 'wW');
+    g += svgDim(ox + t * s, dimY, ox + (L + t) * s, dimY, fnum(L), 'wL');
+    g += svgDim(ox - 16, oy + t * s, ox - 16, oy + (W + t) * s, fnum(W), 'wW');
     g += `<text class="wv-label" data-focus="wT" x="${ox + 8}" y="${oy + footH * s - 8}">壁 t=${fnum(t)}</text>`;
     if (nB > 0) {
       g += svgDim(ox + (t + bx) * s, oy + (W + t + Lb) * s + 14, ox + (t + bx + Wb) * s, oy + (W + t + Lb) * s + 14, fnum(Wb), 'wWb');
@@ -244,7 +260,7 @@
     const stackH = topT + 0.015 + D + baseT + padT + sH;
     const s = Math.min(300 / Math.max(footW, 0.1), 240 / Math.max(stackH, 0.1), 110);
     const cx = 210, ox = cx - footW * s / 2, pox = cx - padW * s / 2;
-    const yG = 28 + sH * s;                        // 地面 = 盖板顶 = 外唇顶
+    const yG = 28 + sH * s;                        // 地面 = 盖板顶 = 井座顶
     const yCoverBot = yG + topT * s;               // 盖板底
     const ySeat = yCoverBot + Math.max(0, lipH - topT) * s;   // 搁置台顶（坐浆 15 之下）
     const yBot = ySeat + D * s;                    // 底板顶
@@ -255,15 +271,16 @@
       g += `<rect class="wv-dashed" data-focus="wShaftH" x="${cx - (sD / 2 + sT) * s}" y="${yG - sH * s}" width="${(sD + 2 * sT) * s}" height="${sH * s}"/>`;
     }
     g += `<rect class="wv-conc" data-focus="wTopT" x="${covX}" y="${yG}" width="${covW}" height="${topT * s}"/>`;
-    if (rT > 0) g += `<line class="wv-rebar" x1="${covX + 3}" y1="${yG + topT * s / 2}" x2="${covX + covW - 3}" y2="${yG + topT * s / 2}"/>`;
-    if (topT * s > 16) g += `<text class="wv-label" data-focus="wTopT" x="${cx}" y="${yG + topT * s / 2 + 3}">盖板 ${fnum(topT)}</text>`;
-    const yWT = ySeat;
+    if (rT > 0 && topT > 0) g += `<line class="wv-rebar" x1="${covX + 3}" y1="${yG + topT * s / 2}" x2="${covX + covW - 3}" y2="${yG + topT * s / 2}"/>`;
+    if (topT > 0 && topT * s > 12) g += `<text class="wv-label" data-focus="wTopT" x="${cx}" y="${yG + topT * s / 2 + 3}">盖板 ${fnum(topT)}</text>`;
+    const yLipBot = Math.max(ySeat, yCoverBot);   // 井座底（lipH ≤ topT 时不外凸，坐浆消失）
+    const sitH = Math.max(0, lipH - topT);      // 坐浆厚 = 井座高出盖板的部分
     const wallPoly = (pts) => `<polygon class="wv-wall" data-focus="wT" points="${pts}"/>`;
-    g += wallPoly(`${ox},${yG} ${ox + lipW * s},${yG} ${ox + lipW * s},${yWT} ${ox + t * s},${yWT} ${ox + t * s},${yBot} ${ox},${yBot}`);
-    g += wallPoly(`${ox + footW * s - lipW * s},${yG} ${ox + footW * s},${yG} ${ox + footW * s},${yBot} ${ox + footW * s - t * s},${yBot} ${ox + footW * s - t * s},${yWT} ${ox + footW * s - lipW * s},${yWT}`);
-    if (lipH > topT) {
-      g += `<line class="wv-mortar" x1="${covX}" y1="${yCoverBot + 0.0075 * s}" x2="${ox + t * s}" y2="${yCoverBot + 0.0075 * s}"/>`;
-      g += `<line class="wv-mortar" x1="${ox + footW * s - t * s}" y1="${yCoverBot + 0.0075 * s}" x2="${covX + covW}" y2="${yCoverBot + 0.0075 * s}"/>`;
+    g += wallPoly(`${ox},${yG} ${ox + lipW * s},${yG} ${ox + lipW * s},${yLipBot} ${ox + t * s},${yLipBot} ${ox + t * s},${yBot} ${ox},${yBot}`);
+    g += wallPoly(`${ox + footW * s - lipW * s},${yG} ${ox + footW * s},${yG} ${ox + footW * s},${yBot} ${ox + footW * s - t * s},${yBot} ${ox + footW * s - t * s},${yLipBot} ${ox + footW * s - lipW * s},${yLipBot}`);
+    if (sitH > 0) {
+      g += `<line class="wv-mortar" x1="${covX}" y1="${yCoverBot + sitH * s / 2}" x2="${ox + t * s}" y2="${yCoverBot + sitH * s / 2}"/>`;
+      g += `<line class="wv-mortar" x1="${ox + footW * s - t * s}" y1="${yCoverBot + sitH * s / 2}" x2="${covX + covW}" y2="${yCoverBot + sitH * s / 2}"/>`;
     }
     // 接口角钢/锚筋不画示意（工程量在钢筋逐根表与构件表中）
     if (isConc && rW > 0) {
@@ -271,19 +288,26 @@
         g += `<line class="wv-rebar" x1="${x}" y1="${yG + 3}" x2="${x}" y2="${yBot - 3}"/>`;
       });
       [ox + t * s - 2, ox + footW * s - t * s + 2].forEach(x => {
-        g += `<line class="wv-rebar" x1="${x}" y1="${yWT + 3}" x2="${x}" y2="${yBot - 3}"/>`;
+        g += `<line class="wv-rebar" x1="${x}" y1="${yLipBot + 3}" x2="${x}" y2="${yBot - 3}"/>`;
       });
     }
-    if (D * s > 18) g += `<text class="wv-label" data-focus="wT" x="${ox + t * s + 4}" y="${(yWT + yBot) / 2}" text-anchor="start">井壁</text>`;
+    if (D * s > 18) g += `<text class="wv-label" data-focus="wT" x="${ox + t * s + 4}" y="${(yLipBot + yBot) / 2}" text-anchor="start">井壁</text>`;
     if (lipW > 0 && lipH > 0) {
-      g += `<text class="wv-label" data-focus="wLipW" x="${ox + lipW * s / 2}" y="${yG + lipH * s / 2}">外唇</text>`;
-      g += `<text class="wv-label" data-focus="wLipW" x="${(covX + ox + t * s) / 2}" y="${ySeat - 3}">搁置台</text>`;
+      g += `<text class="wv-label" data-focus="wLipW" x="${ox + lipW * s / 2}" y="${(yG + yLipBot) / 2}">井座</text>`;
     }
-    g += svgDim(ox + footW * s + 14, yCoverBot, ox + footW * s + 14, yBot, fnum(D), 'wD');
-    g += svgDim(ox - 16, yG, ox - 16, ySeat, fnum(lipH), 'wLipH');
-    g += svgDim(ox - 16, ySeat, ox - 16, yBot, fnum(D - Math.max(0, lipH - topT)), 'wD');
+    g += svgDim(ox + footW * s + 14, yLipBot, ox + footW * s + 14, yBot, fnum(D), 'wD');
+    if (lipH > 0) g += svgDim(ox - 16, yG, ox - 16, yLipBot, fnum(lipH), 'wLipH');
     g += svgDim(pox - 12, yBot, pox - 12, yBaseBot, fnum(baseT), 'wBaseT');
     g += svgDim(pox - 12, yBaseBot, pox - 12, yPadBot, fnum(padT), 'wPadT');
+    // 垫层 / 底板实体
+    if (padT > 0) {
+      g += `<rect class="wv-pad" data-focus="wPadT" x="${pox}" y="${yBaseBot}" width="${padW * s}" height="${padT * s}"/>`;
+      if (padT * s > 12) g += `<text class="wv-label" data-focus="wPadT" x="${cx}" y="${yBaseBot + padT * s / 2 + 3}">垫层 ${fnum(padT)}</text>`;
+    }
+    if (baseT > 0) {
+      g += `<rect class="wv-conc" data-focus="wBaseT" x="${ox}" y="${yBot}" width="${footW * s}" height="${baseT * s}"/>`;
+      if (baseT * s > 14) g += `<text class="wv-label" data-focus="wBaseT" x="${cx}" y="${yBot + baseT * s / 2 + 3}">底板 ${fnum(baseT)}</text>`;
+    }
     $('#wellSectSvg').innerHTML =
       `<svg viewBox="0 0 420 ${yPadBot + 26}" role="img" aria-label="井体剖面示意">${g}</svg>`;
   }
@@ -502,16 +526,19 @@
       if (rec.params[id] === undefined) return;   // 旧存档缺新键 → 保留现值
       el.value = rec.params[id];
     });
-    // 单价还原（表内行）；井壁价写回当前材料那份
-    rec.prices.forEach((p, i) => {
+    // 单价还原（表内行）；井壁价写回当前材料那份。
+    // 兼容旧井库快照：其 prices 含已移除的「盖板钢筋 φ14」行（旧 index 11），载入前剔除对齐
+    let prices = rec.prices;
+    if (prices.length > WELL_UNIT.length) prices = prices.slice(0, 11).concat(prices.slice(12));
+    prices.forEach((p, i) => {
       const inp = $(`#wellRows input[data-p="${i}"]`);
       if (inp) inp.value = p;
     });
     const wallI = rowIdx('wall');
     if (WELL_UNIT[wallI].priceConc !== undefined) {
-      WELL_UNIT[wallI][rec.params.wMat === 'conc' ? 'priceConc' : 'priceBrick'] = rec.prices[wallI];
+      WELL_UNIT[wallI][rec.params.wMat === 'conc' ? 'priceConc' : 'priceBrick'] = prices[wallI];
     }
-    // 钢筋逐根表还原
+    // 钢筋逐根表还原（主体布筋；盖板组由 c* 参数自动重生成）
     if (Array.isArray(rec.rebar) && rec.rebar.length) {
       rebarBody.innerHTML = rec.rebar.map(r => rebarRowHtml(r)).join('');
     }
@@ -573,8 +600,11 @@
   /* ==================== 钢筋逐根表（按图实算口径） ====================
    * 依据图纸钢筋表 + 间距标注逐根计：根数 = 布置范围÷间距+1（可手改），
    * 重量 = 根数 × 单根长 × (d²×0.00617)。与含钢量法三行互相对账。
+   * 盖板钢筋（预制盖板）单列一组：随盖板参数自动重算（kg），与主体布筋分开计。
    */
   const rebarUnitKgPerM = d => 0.00617 * d * d;
+  var coverRebarBody;   // 提前声明：recalcWell 首次调用早于下方赋值（规避 const TDZ）
+  coverRebarBody = $('#rebarCoverRows');
 
   function rebarRowHtml(r) {
     r = r || {};
@@ -605,6 +635,30 @@
     })).filter(r => r.no || r.len > 0);
   }
 
+  /* 盖板钢筋（预制盖板 φ14）：随 c* 参数自动生成两行，与主体布筋分组区分 */
+  function renderCoverRebarRows() {
+    if (!coverRebarBody) return;
+    const cN = num($('#cCount')), cMN = num($('#cMainN')), cML = num($('#cMainL'));
+    const cDN = num($('#cDistN')), cDL = num($('#cDistL'));
+    const w = 0.00617 * COVER_REBAR_D * COVER_REBAR_D;   // 内联计算：本函数会先于 rebarUnitKgPerM 声明处被首调
+    const row = (no, lenMm, n, note) => `<tr class="rebar-cov">
+      <td>${no}</td>
+      <td>φ${COVER_REBAR_D}</td>
+      <td class="num">${lenMm || 0}</td>
+      <td class="num">${fmt(w, 3)}</td>
+      <td class="num off">—</td>
+      <td class="num off">—</td>
+      <td class="num">${n || 0}</td>
+      <td class="num row-kg">${fmt(n * (lenMm || 0) / 1000 * w, 1)}</td>
+      <td class="cov-note">${note}</td>
+      <td></td>
+    </tr>`;
+    coverRebarBody.innerHTML =
+      `<tr class="rebar-grp"><td colspan="10">盖板钢筋（预制盖板，随上方参数自动生成 · φ${COVER_REBAR_D}）</td></tr>`
+      + row('盖①', cML, cN * cMN, `块数 ${cN || 0} × 每块主筋 ${cMN || 0} 根`)
+      + row('盖②', cDL, cN * cDN, `块数 ${cN || 0} × 每块分布筋 ${cDN || 0} 根`);
+  }
+
   function recalcRebar() {
     if (!rebarBody) return;
     let total = 0;
@@ -618,14 +672,22 @@
       tr.querySelector('.row-tw').textContent = fmt(tw, 3);
       tr.querySelector('.row-kg').textContent = fmt(kg, 1);
     });
+    // 盖板钢筋组：随 c* 参数重生成并重算
+    renderCoverRebarRows();
+    let coverTotal = 0;
+    if (coverRebarBody) coverRebarBody.querySelectorAll('tr.rebar-cov').forEach(tr => {
+      coverTotal += Number(String(tr.querySelector('.row-kg').textContent).replace(/,/g, '')) || 0;
+    });
     const count = Math.max(1, num($('#wCount')) || 1);
     $('#rebarTotal').textContent = fmt(total, 1) + ' kg';
-    $('#rebarTotalAll').textContent = fmt(total * count, 1) + ' kg';
+    const covEl = $('#rebarCoverTotal');
+    if (covEl) covEl.textContent = fmt(coverTotal, 1) + ' kg';
+    $('#rebarTotalAll').textContent = fmt((total + coverTotal) * count, 1) + ' kg';
     const cmpEl = $('#rebarCmp');
     if (lastSteelEstKg > 0) {
       const diff = total - lastSteelEstKg;
       const pct = (diff / lastSteelEstKg * 100).toFixed(0);
-      cmpEl.textContent = `含钢量法 ${fmt(lastSteelEstKg, 0)} kg（按图 ${diff >= 0 ? '+' : ''}${fmt(diff, 0)} / ${pct}%）`;
+      cmpEl.textContent = `含钢量法 ${fmt(lastSteelEstKg, 0)} kg vs 主体按图 ${fmt(total, 0)} kg（${diff >= 0 ? '+' : ''}${fmt(diff, 0)} / ${pct}%）· 未含盖板钢筋 ${fmt(coverTotal, 0)} kg`;
     } else cmpEl.textContent = '';
   }
 
@@ -712,7 +774,9 @@
   buildRebarDefaults();
 
   function buildRebarDefaults() {
-    // 默认载入 A-5 示例（可清空或手改；井库存取会覆盖）
+    // 默认载入 A-5 示例（可清空或手改；井库存取会覆盖）；盖板组随 c* 参数生成
     rebarBody.innerHTML = A5_PRESET.map(rebarRowHtml).join('');
+    renderCoverRebarRows();
+    recalcRebar();
   }
 })();

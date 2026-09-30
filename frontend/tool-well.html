@@ -126,8 +126,8 @@
           <label class="field"><span class="field-label">井筒高 (m)</span><input id="wShaftH" class="tabular" type="number" min="0" step="0.05" value="0.60" /></label>
           <label class="field"><span class="field-label">井筒壁厚 (m)</span><input id="wShaftT" class="tabular" type="number" min="0" step="0.005" value="0.115" /></label>
           <label class="field"><span class="field-label">座数</span><input id="wCount" class="tabular" type="number" min="1" step="1" value="1" /></label>
-          <label class="field"><span class="field-label" data-tip="盖板外侧升至地面的墙顶条带（85+15=100），并入井壁体积；无则填 0">墙顶外唇宽 (m)</span><input id="wLipW" class="tabular" type="number" min="0" step="0.01" value="0" /></label>
-          <label class="field"><span class="field-label" data-tip="外唇顶(≈地面)至盖板底的高度 = 板厚 + 坐浆 15（A-5 为 0.135）">墙顶外唇高 (m)</span><input id="wLipH" class="tabular" type="number" min="0" step="0.005" value="0" /></label>
+          <label class="field"><span class="field-label" data-tip="盖板外侧升至地面的井座条带（85+15=100），并入井壁体积；无则填 0">井座宽 (m)</span><input id="wLipW" class="tabular" type="number" min="0" step="0.01" value="0" /></label>
+          <label class="field"><span class="field-label" data-tip="井座顶(≈地面)至盖板底的高度 = 板厚 + 坐浆 15（A-5 为 0.135）">井座高 (m)</span><input id="wLipH" class="tabular" type="number" min="0" step="0.005" value="0" /></label>
           <label class="field"><span class="field-label" data-tip="底板钢筋含量，按构件混凝土体积估">底板含钢量 (kg/m³)</span><input id="wRebarBase" class="tabular" type="number" min="0" step="5" value="90" /></label>
           <label class="field"><span class="field-label" data-tip="井壁钢筋含量；井壁为砖砌时自动不计">井壁含钢量 (kg/m³)</span><input id="wRebarWall" class="tabular" type="number" min="0" step="5" value="100" /></label>
           <label class="field"><span class="field-label" data-tip="顶板钢筋含量，按构件混凝土体积估">顶板含钢量 (kg/m³)</span><input id="wRebarTop" class="tabular" type="number" min="0" step="5" value="95" /></label>
@@ -185,13 +185,13 @@
           </table>
         </div>
         <div class="action-row">
-          <span class="hint">钢筋按<b>含钢量法</b>估算（仅混凝土构件；砖砌井壁不计井壁筋），综合单价在表内按 元/kg 修改；抹面按内壁＋外壁合计；模板仅计混凝土构件接触面（砖砌井壁不支模）；井盖按重型球墨铸铁 1 套/座、爬梯 1 副/座估算。</span>
+          <span class="hint">钢筋按<b>含钢量法</b>估算（仅混凝土构件；砖砌井壁不计井壁筋），综合单价在表内按 元/kg 修改；抹面按内壁＋外壁合计；模板按接触面积＝井壁内＋外侧（砖砌不支模）＋底板外侧＋井座外侧（井座宽&gt;0 时）＋现浇顶板底；井盖按重型球墨铸铁 1 套/座、爬梯 1 副/座估算。</span>
         </div>
 
         <!-- ===== 钢筋逐根表（按图实算口径，与含钢量法互相对账） ===== -->
         <div class="well-lib-head" style="margin-top:14px;">
           <span class="card-title"><span class="title-dot"></span>钢筋逐根表（按图实算）</span>
-          <span class="hint">填直径/单根长/布置范围/间距 → 根数自动推导（可手改）；重量按 d²×0.00617 自动计。与上方含钢量法互相对账。</span>
+          <span class="hint">主体布筋：填直径/单根长/布置范围/间距 → 根数自动推导（可手改）；重量按 d²×0.00617 自动计，与含钢量法互相对账。盖板钢筋：随「预制盖板」参数自动生成两行（块数×每块根数），与主体布筋分组分列。</span>
         </div>
         <div class="tool-table-wrap">
           <table class="tool-table" id="rebarTable">
@@ -210,15 +210,21 @@
               </tr>
             </thead>
             <tbody id="rebarRows"></tbody>
+            <tbody id="rebarCoverRows"></tbody>
             <tfoot>
               <tr>
-                <td colspan="7">单座合计</td>
+                <td colspan="7">主体布筋·单座合计</td>
                 <td class="num" id="rebarTotal">0.0 kg</td>
                 <td id="rebarCmp" class="num" style="color:var(--text-tertiary);white-space:normal"></td>
                 <td></td>
               </tr>
               <tr>
-                <td colspan="7">× 座数合计</td>
+                <td colspan="7">盖板钢筋·单座合计</td>
+                <td class="num" id="rebarCoverTotal">0.0 kg</td>
+                <td></td><td></td>
+              </tr>
+              <tr>
+                <td colspan="7">× 座数合计（主体＋盖板）</td>
                 <td class="num" id="rebarTotalAll">0.0 kg</td>
                 <td></td><td></td>
               </tr>
@@ -227,7 +233,7 @@
         </div>
         <div class="action-row">
           <button type="button" class="btn-secondary" id="rebarAdd">＋ 加一根</button>
-          <button type="button" class="btn-secondary" id="rebarPreset">载入示例：A-5 工作井 ①~⑧</button>
+          <button type="button" class="btn-secondary" id="rebarPreset">载入示例：A-5 工作井 ①~⑧（主体布筋）</button>
           <button type="button" class="btn-secondary" id="rebarDerive">按井参数推导典型配筋</button>
           <span class="hint">根数 = 布置范围 ÷ 间距 + 1（自动），可手改；「按井参数推导」按典型配筋模式生成（保护层按 20mm，U 形筋单根长为近似值 ⚠ 须按图纸钢筋表核对）。A-5 示例值来自工作井图二。</span>
         </div>

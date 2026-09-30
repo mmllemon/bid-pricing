@@ -194,6 +194,11 @@ a.nav-item { text-decoration: none; color: inherit; }
 .wv-dim:hover text, .wv-label:hover { fill: var(--accent); font-weight: 600; }
 .wv-label { fill: var(--text-secondary); font-size: 10px; text-anchor: middle; dominant-baseline: middle; cursor: pointer; }
 .well-viz .wv-wall, .well-viz .wv-conc, .well-viz .wv-pad { cursor: pointer; }
+/* 钢筋逐根表：盖板钢筋分组（自动行，区别于主体布筋可编辑行） */
+#rebarTable tr.rebar-grp td { background: var(--surface-nested); font-weight: 600; font-size: 12px; color: var(--text-tertiary); }
+#rebarTable tr.rebar-cov td { color: var(--text-secondary); }
+#rebarTable tr.rebar-cov .off { opacity: .5; }
+#rebarTable tr.rebar-cov .cov-note { color: var(--text-tertiary); }
 .tool-grid .flash, .well-viz-flash {
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 3px var(--accent-muted) !important;

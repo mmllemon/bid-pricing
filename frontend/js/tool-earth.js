@@ -65,6 +65,7 @@
 
   function recalcEarth() {
     const pDig = num($('#eDig')), pBack = num($('#eBack')), pHaul = num($('#eHaul'));
+    const loose = num($('#eLoose')) || 1;   // 天然密实方→虚方换算系数
     let tDig = 0, tBack = 0, tSur = 0, total = 0;
     earthBody.querySelectorAll('tr').forEach(tr => {
       const g = k => num(tr.querySelector(`[data-k="${k}"]`));
@@ -86,8 +87,9 @@
 
       const dig = len * (a + mEff * h) * h;
       const back = Math.max(0, dig - len * g('deduct'));
-      const surplus = dig - back;             // + 余方外运 / − 借方
-      total += dig * pDig + back * pBack + Math.abs(surplus) * pHaul;
+      const surplus = dig - back;             // + 余方外运 / − 借方（天然方）
+      const haulVol = surplus >= 0 ? surplus * loose : Math.abs(surplus);  // 外运按虚方，借方按天然方
+      total += dig * pDig + back * pBack + haulVol * pHaul;
       tDig += dig; tBack += back; tSur += surplus;
       tr.querySelector('.v-dig').textContent = fmt(dig, 1);
       tr.querySelector('.v-back').textContent = fmt(back, 1);
@@ -99,6 +101,7 @@
     $('#mDig').textContent = fmt(tDig, 1);
     $('#mBack').textContent = fmt(tBack, 1);
     $('#mSurplus').textContent = fmt(tSur, 1);
+    $('#mSurplusLoose').textContent = fmt(tSur > 0 ? tSur * loose : 0, 1);
     $('#mTotal').textContent = fmt(total);
   }
 
@@ -128,7 +131,7 @@
     const del = e.target.closest('.row-del');
     if (del) { del.closest('tr').remove(); recalcEarth(); }
   });
-  ['eDig', 'eBack', 'eHaul'].forEach(id => $('#' + id).addEventListener('input', recalcEarth));
+  ['eDig', 'eBack', 'eHaul', 'eLoose'].forEach(id => $('#' + id).addEventListener('input', recalcEarth));
   earthBody.insertAdjacentHTML('beforeend', earthRowHtml());
   earthBody.insertAdjacentHTML('beforeend', earthRowHtml());
   recalcEarth();

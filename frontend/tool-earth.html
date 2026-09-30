@@ -100,6 +100,7 @@
           <label class="field"><span class="field-label" data-tip="全线统一的人工挖沟槽综合单价">挖方单价 (元/m³)</span><input id="eDig" class="tabular" type="number" min="0" step="0.5" value="48" /></label>
           <label class="field"><span class="field-label">回填夯实单价 (元/m³)</span><input id="eBack" class="tabular" type="number" min="0" step="0.5" value="38" /></label>
           <label class="field"><span class="field-label" data-tip="余方外运与借方内运按同一运费口径估算">余方外运/借方 (元/m³)</span><input id="eHaul" class="tabular" type="number" min="0" step="0.5" value="42" /></label>
+          <label class="field"><span class="field-label" data-tip="天然密实方→虚方换算：一、二类土约 1.30，三类土约 1.35，四类土约 1.50；按所套定额调整。余方外运按虚方计，借方按天然方计">虚方换算系数</span><input id="eLoose" class="tabular" type="number" min="1" step="0.01" value="1.30" /></label>
         </div>
 
         <div class="chip-row" role="group" aria-label="放坡口径">
@@ -157,12 +158,13 @@
         <div class="result-strip">
           <div class="metric"><span class="metric-label">总挖方</span><strong><span id="mDig">0.0</span> m³</strong></div>
           <div class="metric"><span class="metric-label">总回填（夯实）</span><strong><span id="mBack">0.0</span> m³</strong></div>
-          <div class="metric"><span class="metric-label">余方（+外运 / −借方）</span><strong><span id="mSurplus">0.0</span> m³</strong></div>
+          <div class="metric"><span class="metric-label">余方（+外运 / −借方，天然方）</span><strong><span id="mSurplus">0.0</span> m³</strong></div>
+          <div class="metric"><span class="metric-label">余方外运（虚方）</span><strong><span id="mSurplusLoose">0.0</span> m³</strong></div>
           <div class="metric"><span class="metric-label">估算合价</span><strong>¥ <span id="mTotal">0.00</span></strong></div>
         </div>
         <div class="action-row">
           <button type="button" class="btn-secondary" id="earthAdd">＋ 加一段</button>
-          <span class="hint">每段「管位占置」在本行内以延米体积扣回填；放坡按上方所选口径的系数与起点执行；沟底宽建议 = 管群布置宽 + 2 × 工作面。未做虚实方折算：回填按压实方、余方按天然方，借方场景请自行乘以折算系数。</span>
+          <span class="hint">每段「管位占置」在本行内以延米体积扣回填；放坡按上方所选口径的系数与起点执行；沟底宽建议 = 管群布置宽 + 2 × 工作面。挖方/余方为天然密实方；余方外运按虚方计（余方×虚方换算系数），借方按天然方计；回填按压实方。</span>
         </div>
       </section>
 

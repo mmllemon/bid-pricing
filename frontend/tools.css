@@ -209,3 +209,37 @@ a.nav-item { text-decoration: none; color: inherit; }
   .tool-grid { grid-template-columns: repeat(2, 1fr); }
   .metric strong { font-size: 15px; }
 }
+
+/* 参数分组小标题（占满 grid 整行） */
+.tool-subhead {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 -2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.tool-subhead::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.tool-subhead:first-child { margin-top: 0; }
+
+/* 打印：只留结果，隐藏导航与操作区 */
+@media print {
+  .sidebar, .sb-toggle, .sb-backdrop, .sidebar-foot { display: none !important; }
+  .app-shell { display: block; }
+  .main-content { padding: 0; margin: 0; max-width: none; }
+  .action-row, .tool-card-go, .well-lib, .chip-row .chip,
+  .breadcrumb, #sbToggle { display: none !important; }
+  .card { box-shadow: none; break-inside: avoid; margin-bottom: 14px; }
+  .tool-table-wrap { overflow: visible; }
+  .tool-table { font-size: 11px; }
+  .well-viz { break-inside: avoid; }
+  .hint { font-size: 10.5px; }
+  input, select, button { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

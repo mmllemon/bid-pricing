@@ -772,6 +772,37 @@
     const del = e.target.closest('.row-del');
     if (del) { del.closest('tr').remove(); recalcRebar(); }
   });
+  /* ---------- 复制工程量表（TSV，可直接粘贴到 Excel） ---------- */
+  function buildWellTsv() {
+    const lines = [];
+    const wName = $('#wName').value.trim();
+    lines.push('电缆井工程量速算' + (wName ? '（' + wName + '）' : ''));
+    lines.push(['构件/项目', '工程量', '单位', '计算式', '参考单价(元)', '合价(元)'].join('\t'));
+    document.querySelectorAll('#wellRows tr').forEach(tr => {
+      const cells = tr.querySelectorAll('td');
+      if (cells.length < 6) return;
+      const priceInput = cells[4].querySelector('input');
+      lines.push([
+        cells[0].textContent.trim(),
+        cells[1].textContent.trim(),
+        cells[2].textContent.trim(),
+        cells[3].textContent.trim().replace(/\s+/g, ' '),
+        priceInput ? priceInput.value : '',
+        cells[5].textContent.trim(),
+      ].join('\t'));
+    });
+    lines.push(['合计', '', '', '', '',
+      document.querySelector('#wellTotal').textContent.trim()].join('\t'));
+    return lines.join('\n');
+  }
+  $('#wellCopy').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const ok = await window.toolCopyText(buildWellTsv());
+    const old = btn.textContent;
+    btn.textContent = ok ? '已复制 ✓' : '复制失败';
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  });
+
   buildRebarDefaults();
 
   function buildRebarDefaults() {

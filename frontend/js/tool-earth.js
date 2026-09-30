@@ -38,23 +38,26 @@
 
   const earthBody = $('#earthRows');
 
-  function earthRowHtml() {
+  function earthRowHtml(d) {
+    d = d || {};
+    const esc = window.toolEsc;
+    const soilIdx = ['0', '1', '2'].includes(String(d.soil)) ? String(d.soil) : '0';
+    const mode = ['spec', 'none', 'custom'].includes(d.mode) ? d.mode : 'spec';
     const soilOpts = ['一、二类土', '三类土', '四类土']
-      .map((n, i) => `<option value="${i}"${i === 0 ? ' selected' : ''}>${n}</option>`)
+      .map((n, i) => `<option value="${i}"${String(i) === soilIdx ? ' selected' : ''}>${n}</option>`)
+      .join('');
+    const modeOpts = [['spec', '按定额放坡'], ['none', '直槽不放坡'], ['custom', '自定系数']]
+      .map(([v, n]) => `<option value="${v}"${v === mode ? ' selected' : ''}>${n}</option>`)
       .join('');
     return `<tr>
-      <td><input type="text" placeholder="如 1# 路 K0+000"></td>
-      <td><input class="num" data-k="len" type="number" min="0" step="0.1" placeholder="0"></td>
-      <td><input class="num" data-k="a" type="number" min="0" step="0.05" placeholder="0"></td>
-      <td><input class="num" data-k="h" type="number" min="0" step="0.05" placeholder="0"></td>
+      <td><input type="text" data-k="name" placeholder="如 1# 路 K0+000" value="${esc(d.name)}"></td>
+      <td><input class="num" data-k="len" type="number" min="0" step="0.1" placeholder="0" value="${esc(d.len ?? '')}"></td>
+      <td><input class="num" data-k="a" type="number" min="0" step="0.05" placeholder="0" value="${esc(d.a ?? '')}"></td>
+      <td><input class="num" data-k="h" type="number" min="0" step="0.05" placeholder="0" value="${esc(d.h ?? '')}"></td>
       <td><select data-k="soil">${soilOpts}</select></td>
-      <td><select data-k="mode">
-        <option value="spec" selected>按定额放坡</option>
-        <option value="none">直槽不放坡</option>
-        <option value="custom">自定系数</option>
-      </select></td>
-      <td><input class="num" data-k="mCustom" type="number" min="0" step="0.01" value="0.5" disabled></td>
-      <td><input class="num" data-k="deduct" type="number" min="0" step="0.01" value="0" title="管位/基础占置体积（延米），从本段回填中扣减"></td>
+      <td><select data-k="mode">${modeOpts}</select></td>
+      <td><input class="num" data-k="mCustom" type="number" min="0" step="0.01" value="${esc(d.mCustom ?? 0.5)}"${mode === 'custom' ? '' : ' disabled'}></td>
+      <td><input class="num" data-k="deduct" type="number" min="0" step="0.01" value="${esc(d.deduct ?? 0)}" title="管位/基础占置体积（延米），从本段回填中扣减"></td>
       <td class="num eff-m">—</td>
       <td class="num v-dig">0.0</td>
       <td class="num v-back">0.0</td>
@@ -123,28 +126,113 @@
     });
     $('#eRuleHint').textContent = RULE_HINT[key] || RULE_HINT.arch;
     recalcEarth();
+    saveSoon();
   });
-  $('#ruleTable').addEventListener('input', recalcEarth);
+  /* ---------- 自动保存 / 恢复（刷新不丢） ---------- */
+  const STORE_KEY = 'tool-earth';
+  function collectState() {
+    const params = {};
+    ['eDig', 'eBack', 'eHaul', 'eLoose'].forEach(id => { params[id] = $('#' + id).value; });
+    const rows = [];
+    earthBody.querySelectorAll('tr').forEach(tr => {
+      const o = {};
+      tr.querySelectorAll('[data-k]').forEach(el => { o[el.dataset.k] = el.value; });
+      rows.push(o);
+    });
+    return { params, ruleSet: $('#eRuleSet').value, rules: readRules(), rows };
+  }
+  function applyState(s) {
+    if (!s) return false;
+    try {
+      Object.entries(s.params || {}).forEach(([id, v]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = v;
+      });
+      /* 放坡口径：恢复规则集选择 + 口径表逐格值（恢复在自定义下拉初始化之前） */
+      const key = (s.ruleSet && RULE_PRESETS[s.ruleSet]) ? s.ruleSet : 'arch';
+      $('#eRuleSet').value = key;
+      lastRuleKey = key;
+      (RULE_PRESETS[key] || RULE_PRESETS.arch).forEach((r, i) => {
+        const saved = s.rules && s.rules[i];
+        $(`#ruleTable input[data-rule="${i}"][data-f="m"]`).value = saved ? saved.m : r.m;
+        $(`#ruleTable input[data-rule="${i}"][data-f="start"]`).value = saved ? saved.start : r.start;
+      });
+      $('#eRuleHint').textContent = RULE_HINT[key] || RULE_HINT.arch;
+      earthBody.innerHTML = '';
+      (s.rows && s.rows.length ? s.rows : [{}, {}]).forEach(r => {
+        earthBody.insertAdjacentHTML('beforeend', earthRowHtml(r));
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  const saveNow = () => window.toolStore.save(STORE_KEY, collectState());
+  const saveSoon = window.toolDebounce(saveNow, 500);
+
+  /* ---------- 复制结果（TSV，可直接粘贴到 Excel） ---------- */
+  function buildEarthTsv() {
+    const p = id => $('#' + id).value;
+    const soilNames = ['一、二类土', '三类土', '四类土'];
+    const modeNames = { spec: '按定额放坡', none: '直槽不放坡', custom: '自定系数' };
+    const lines = [];
+    lines.push('挖方与回填速算');
+    lines.push(['挖方单价(元/m³)', p('eDig'), '回填夯实单价(元/m³)', p('eBack'),
+      '余方外运/借方(元/m³)', p('eHaul'), '虚方换算系数', p('eLoose'),
+      '放坡口径', $('#eRuleSet').selectedOptions[0].textContent].join('\t'));
+    lines.push(['段名/桩号', '长度L(m)', '沟底宽a(m)', '挖深h(m)', '土壤类别', '放坡方式',
+      '自定m', '管位占置(m³/m)', '有效m', '挖方(m³)', '回填(m³)', '余方(m³)'].join('\t'));
+    earthBody.querySelectorAll('tr').forEach(tr => {
+      const g = k => { const el = tr.querySelector(`[data-k="${k}"]`); return el ? el.value : ''; };
+      const t = c => { const el = tr.querySelector(c); return el ? el.textContent.replace(/\s+/g, ' ').trim() : ''; };
+      if (!g('name') && !g('len') && !g('a') && !g('h')) return;   // 空行不导出
+      lines.push([g('name'), g('len'), g('a'), g('h'),
+        soilNames[+g('soil')] || '', modeNames[g('mode')] || '',
+        g('mode') === 'custom' ? g('mCustom') : '', g('deduct'),
+        t('.eff-m'), t('.v-dig'), t('.v-back'), t('.v-surplus')].join('\t'));
+    });
+    lines.push(['合计', '', '', '', '', '', '', '', '',
+      $('#earthDig').textContent.trim(), $('#earthBack').textContent.trim(),
+      $('#earthSurplus').textContent.trim()].join('\t'));
+    lines.push(['估算合价(元)', $('#mTotal').textContent.trim()].join('\t'));
+    return lines.join('\n');
+  }
+  async function copyEarthResult(btn) {
+    const ok = await window.toolCopyText(buildEarthTsv());
+    const old = btn.textContent;
+    btn.textContent = ok ? '已复制 ✓' : '复制失败';
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  }
+
+  /* ---------- 事件 ---------- */
+  $('#ruleTable').addEventListener('input', () => { recalcEarth(); saveSoon(); });
   $('#earthAdd').addEventListener('click', () => {
     earthBody.insertAdjacentHTML('beforeend', earthRowHtml());
+    saveSoon();
   });
+  $('#earthCopy').addEventListener('click', (e) => copyEarthResult(e.currentTarget));
   earthBody.addEventListener('input', (e) => {
     if (e.target.matches('[data-k="mode"]')) {
       const row = e.target.closest('tr');
       row.querySelector('[data-k="mCustom"]').disabled = e.target.value !== 'custom';
     }
     recalcEarth();
+    saveSoon();
   });
   earthBody.addEventListener('click', (e) => {
     const del = e.target.closest('.row-del');
-    if (del) { del.closest('tr').remove(); recalcEarth(); }
+    if (del) { del.closest('tr').remove(); recalcEarth(); saveSoon(); }
   });
-  ['eDig', 'eBack', 'eHaul', 'eLoose'].forEach(id => $('#' + id).addEventListener('input', recalcEarth));
-  earthBody.insertAdjacentHTML('beforeend', earthRowHtml());
-  earthBody.insertAdjacentHTML('beforeend', earthRowHtml());
+  ['eDig', 'eBack', 'eHaul', 'eLoose'].forEach(id =>
+    $('#' + id).addEventListener('input', () => { recalcEarth(); saveSoon(); }));
+
+  /* ---------- 启动：恢复存档（无存档则建两个空行） ---------- */
+  if (!applyState(window.toolStore.load(STORE_KEY))) {
+    earthBody.insertAdjacentHTML('beforeend', earthRowHtml());
+    earthBody.insertAdjacentHTML('beforeend', earthRowHtml());
+  }
   recalcEarth();
   // 放坡口径接项目自定义下拉（毛玻璃组件）；行内土类/放坡方式保持原生+统一箭头
   if (typeof initCustomSelect === 'function') {
     initCustomSelect('#eRuleSet');
   }
+  window.addEventListener('pagehide', saveNow);
 })();

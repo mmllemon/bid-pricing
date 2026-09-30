@@ -6,7 +6,7 @@
   <title>工程智算 · 电缆井工程量速算</title>
   <link rel="stylesheet" href="./styles.css?v=2026-09-23-qd26" />
   <link rel="stylesheet" href="./quote-dashboard.css?v=2026-09-23-qd47" />
-  <link rel="stylesheet" href="./tools.css?v=2026-09-29-tl3" />
+  <link rel="stylesheet" href="./tools.css?v=2026-09-30-tl4" />
   <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
   <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css" />
 </head>
@@ -105,6 +105,7 @@
         </div>
 
         <div class="tool-grid">
+          <div class="tool-subhead">井室尺寸</div>
           <label class="field"><span class="field-label">井位 / 编号</span><input id="wName" type="text" placeholder="如 J1" /></label>
           <label class="field"><span class="field-label">净长 L (m)</span><input id="wL" class="tabular" type="number" min="0" step="0.05" value="2.0" /></label>
           <label class="field"><span class="field-label">净宽 W (m)</span><input id="wW" class="tabular" type="number" min="0" step="0.05" value="1.5" /></label>
@@ -118,17 +119,19 @@
           </label>
           <label class="field"><span class="field-label" data-tip="支井室净长（垂直于所接井壁方向）">支室净长 Lb (m)</span><input id="wLb" class="tabular" type="number" min="0" step="0.05" value="1.8" disabled /></label>
           <label class="field"><span class="field-label" data-tip="支井室净宽（沿所接井壁方向的开口宽度）">支室净宽 Wb (m)</span><input id="wWb" class="tabular" type="number" min="0" step="0.05" value="2.0" disabled /></label>
+          <label class="field"><span class="field-label">座数</span><input id="wCount" class="tabular" type="number" min="1" step="1" value="1" /></label>
+          <div class="tool-subhead">构造做法</div>
           <label class="field"><span class="field-label">底板厚 (m)</span><input id="wBaseT" class="tabular" type="number" min="0" step="0.01" value="0.20" /></label>
           <label class="field"><span class="field-label">垫层厚 (m)</span><input id="wPadT" class="tabular" type="number" min="0" step="0.01" value="0.10" /></label>
-          <label class="field"><span class="field-label" data-tip="垫层比底板每边加宽的值；与底板平齐填 0（A-5 图纸为 100）">垫层外挑宽 (m/边)</span><input id="wPadOut" class="tabular" type="number" min="0" step="0.01" value="0.1" /></label>
+          <label class="field"><span class="field-label" data-tip="垫层比底板每边加宽的值；与底板平齐填 0（图纸标注 100mm 时填 0.10）">垫层外挑宽 (m/边)</span><input id="wPadOut" class="tabular" type="number" min="0" step="0.01" value="0.1" /></label>
           <label class="field"><span class="field-label" data-tip="现浇顶板/盖板厚；用预制盖板时填 0（勿与盖板块数同时计，否则重复）">顶板厚 (m)</span><input id="wTopT" class="tabular" type="number" min="0" step="0.01" value="0.15" /></label>
           <label class="field"><span class="field-label">井筒内径 (m)</span><input id="wShaftD" class="tabular" type="number" min="0" step="0.05" value="0.70" /></label>
           <label class="field"><span class="field-label">井筒高 (m)</span><input id="wShaftH" class="tabular" type="number" min="0" step="0.05" value="0.60" /></label>
           <label class="field"><span class="field-label">井筒壁厚 (m)</span><input id="wShaftT" class="tabular" type="number" min="0" step="0.005" value="0.115" /></label>
-          <label class="field"><span class="field-label">座数</span><input id="wCount" class="tabular" type="number" min="1" step="1" value="1" /></label>
-          <label class="field"><span class="field-label" data-tip="盖板外侧升至地面的井座条带（85+15=100），并入井壁体积；无则填 0">井座宽 (m)</span><input id="wLipW" class="tabular" type="number" min="0" step="0.01" value="0" /></label>
-          <label class="field"><span class="field-label" data-tip="井座顶(≈地面)至盖板底的高度 = 板厚 + 坐浆 15（A-5 为 0.135）">井座高 (m)</span><input id="wLipH" class="tabular" type="number" min="0" step="0.005" value="0" /></label>
-          <label class="field"><span class="field-label" data-tip="底板钢筋含量，按构件混凝土体积估">底板含钢量 (kg/m³)</span><input id="wRebarBase" class="tabular" type="number" min="0" step="5" value="90" /></label>
+          <label class="field"><span class="field-label" data-tip="盖板外侧升至地面的井座条带（85mm+15mm=100mm），并入井壁体积；无则填 0">井座宽 (m)</span><input id="wLipW" class="tabular" type="number" min="0" step="0.01" value="0" /></label>
+          <label class="field"><span class="field-label" data-tip="井座顶(≈地面)至盖板底的高度 = 板厚 120mm + 坐浆 15mm（A-5 合计 0.135m）">井座高 (m)</span><input id="wLipH" class="tabular" type="number" min="0" step="0.005" value="0" /></label>
+          <div class="tool-subhead">钢筋含量（按构件混凝土体积估）</div>
+          <label class="field"><span class="field-label">底板含钢量 (kg/m³)</span><input id="wRebarBase" class="tabular" type="number" min="0" step="5" value="90" /></label>
           <label class="field"><span class="field-label" data-tip="井壁钢筋含量；井壁为砖砌时自动不计">井壁含钢量 (kg/m³)</span><input id="wRebarWall" class="tabular" type="number" min="0" step="5" value="100" /></label>
           <label class="field"><span class="field-label" data-tip="顶板钢筋含量，按构件混凝土体积估">顶板含钢量 (kg/m³)</span><input id="wRebarTop" class="tabular" type="number" min="0" step="5" value="95" /></label>
         </div>
@@ -136,7 +139,7 @@
         <!-- ===== 预制盖板（有预制盖板时填写；无则块数填 0） ===== -->
         <div class="well-lib-head" style="margin-top:14px;">
           <span class="card-title"><span class="title-dot"></span>预制盖板</span>
-          <span class="hint">预填值为 A-5 工作井口径（1800×500×120，3000÷500 推定 6 块；每块主筋 5φ14＋分布 18φ14，包边角钢按整圈 4600——均按图改）。</span>
+          <span class="hint">预填值为 A-5 工作井口径（1800×500×120mm，3000÷500 推定 6 块；每块主筋 5φ14＋分布 18φ14，包边角钢按整圈 4600——均按图改）。</span>
         </div>
         <div class="tool-grid">
           <label class="field"><span class="field-label" data-tip="无预制盖板的井填 0，三行工程量即归零">盖板块数</span><input id="cCount" class="tabular" type="number" min="0" step="1" value="0" /></label>
@@ -185,6 +188,7 @@
           </table>
         </div>
         <div class="action-row">
+          <button type="button" class="btn-secondary" id="wellCopy">复制工程量表</button>
           <span class="hint">钢筋按<b>含钢量法</b>估算（仅混凝土构件；砖砌井壁不计井壁筋），综合单价在表内按 元/kg 修改；抹面按内壁＋外壁合计；模板按接触面积＝井壁内＋外侧（砖砌不支模）＋底板外侧＋井座外侧（井座宽&gt;0 时）＋现浇顶板底；井盖按重型球墨铸铁 1 套/座、爬梯 1 副/座估算。</span>
         </div>
 
@@ -260,7 +264,7 @@
 
   <script src="./js/sidebar.js?v=2026-09-23-split1"></script>
   <script src="./js/dropdown.js?v=2026-09-23-split1"></script>
-  <script src="./js/tool-common.js?v=2026-09-29-tl3"></script>
-  <script src="./js/tool-well.js?v=2026-09-29-tl23"></script>
+  <script src="./js/tool-common.js?v=2026-09-30-tl4"></script>
+  <script src="./js/tool-well.js?v=2026-09-30-tl24"></script>
 </body>
 </html>

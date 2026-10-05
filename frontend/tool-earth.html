@@ -6,7 +6,7 @@
   <title>工程智算 · 挖方与回填速算</title>
   <link rel="stylesheet" href="./styles.css?v=2026-09-23-qd26" />
   <link rel="stylesheet" href="./quote-dashboard.css?v=2026-09-23-qd47" />
-  <link rel="stylesheet" href="./tools.css?v=2026-09-30-duct" />
+  <link rel="stylesheet" href="./tools.css?v=2026-09-30-form5" />
   <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
   <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css" />
 </head>
@@ -27,10 +27,10 @@
         </div>
 
         <div class="tool-grid" style="margin-bottom:12px;">
-          <label class="field"><span class="field-label" data-tip="全线统一的人工挖沟槽综合单价">挖方单价 (元/m³)</span><input id="eDig" class="tabular" type="number" min="0" step="0.5" value="48" /></label>
-          <label class="field"><span class="field-label">回填夯实单价 (元/m³)</span><input id="eBack" class="tabular" type="number" min="0" step="0.5" value="38" /></label>
-          <label class="field"><span class="field-label" data-tip="余方外运与借方内运按同一运费口径估算">余方外运/借方 (元/m³)</span><input id="eHaul" class="tabular" type="number" min="0" step="0.5" value="42" /></label>
-          <label class="field"><span class="field-label" data-tip="天然密实方→虚方换算：一、二类土约 1.30，三类土约 1.35，四类土约 1.50；按所套定额调整。余方外运按虚方计，借方按天然方计">虚方换算系数</span><input id="eLoose" class="tabular" type="number" min="1" step="0.01" value="1.30" /></label>
+          <label class="field" data-tip="全线统一的人工挖沟槽综合单价"><span class="field-label">挖方单价</span><input id="eDig" class="tabular" type="number" min="0" step="0.5" value="48" /><span class="unit-suffix">元/m³</span></label>
+          <label class="field"><span class="field-label">回填夯实单价</span><input id="eBack" class="tabular" type="number" min="0" step="0.5" value="38" /><span class="unit-suffix">元/m³</span></label>
+          <label class="field" data-tip="余方外运与借方内运按同一运费口径估算"><span class="field-label">余方外运/借方</span><input id="eHaul" class="tabular" type="number" min="0" step="0.5" value="42" /><span class="unit-suffix">元/m³</span></label>
+          <label class="field" data-tip="天然密实方→虚方换算：一、二类土约 1.30，三类土约 1.35，四类土约 1.50；按所套定额调整。余方外运按虚方计，借方按天然方计"><span class="field-label">虚方换算系数</span><input id="eLoose" class="tabular" type="number" min="1" step="0.01" value="1.30" /></label>
         </div>
 
         <div class="chip-row" role="group" aria-label="放坡口径">

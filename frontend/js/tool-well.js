@@ -73,7 +73,7 @@
     const nB = parseInt($('#wBrN').value, 10) || 0;
     const Lb = num($('#wLb')), Wb = num($('#wWb'));
     const baseT = num($('#wBaseT')), padT = num($('#wPadT')), topT = num($('#wTopT'));
-    const sD = num($('#wShaftD')), sH = num($('#wShaftH')), sT = num($('#wShaftT'));
+    const { on: shaftOn, sD, sH, sT } = shaftParams();
     const count = Math.max(1, num($('#wCount')) || 1);
     const isConc = $('#wMat').value === 'conc';
 
@@ -132,7 +132,7 @@
       (cT2 > 0 && cN > 0 ? '⚠ 与预制盖板重复？' : '') +
       `(${f2(L + 2 * t)}×${f2(W + 2 * t)})×${f2(topT)}${brSlab}`,
       (cT2 > 0 && cN > 0 ? '⚠ ' : '') + `${f2(concQty.top)}×${f2(rebarRatio.top)}`,
-      `π×(${f2(sD)}＋${f2(sT)})×${f2(sH)}×${f2(sT)}`,
+      shaftOn ? `π×(${f2(sD)}＋${f2(sT)})×${f2(sH)}×${f2(sT)}` : '—（未计入井筒）',
       isConc ? `2×${f2(clNet)}×${f2(D)}${lipFormFx}＋${f2(outerP)}×${f2(baseT)}${slabFormFx}`
              : `${f2(outerP)}×${f2(baseT)}${lipFormFx}${slabFormFx}`,
       `(${f2(innerP)}＋${f2(outerP)})×${f2(D)}`,
@@ -210,7 +210,7 @@
     const L = num($('#wL')), W = num($('#wW')), t = num($('#wT'));
     const nB = parseInt($('#wBrN').value, 10) || 0;
     const Lb = num($('#wLb')), Wb = num($('#wWb'));
-    const sD = num($('#wShaftD')), sH = num($('#wShaftH')), sT = num($('#wShaftT'));
+    const { sD, sH, sT } = shaftParams();
     const footW = L + 2 * t, footH = W + 2 * t;
     const botD = nB > 0 ? Lb + t : 0, topD = nB === 2 ? Lb + t : 0;
     const contW = footW, contH = footH + botD + topD;
@@ -251,7 +251,7 @@
     const W = num($('#wW')), t = num($('#wT'));
     const D = num($('#wD'));
     const baseT = num($('#wBaseT')), padT = num($('#wPadT')), topT = num($('#wTopT'));
-    const sD = num($('#wShaftD')), sH = num($('#wShaftH')), sT = num($('#wShaftT'));
+    const { sD, sH, sT } = shaftParams();
     const nB = parseInt($('#wBrN').value, 10) || 0;
     const isConc = $('#wMat').value === 'conc';
     const rW = num($('#wRebarWall')), rT = num($('#wRebarTop'));
@@ -346,6 +346,19 @@
     const off = $('#wBrN').value === '0';
     $('#wLb').disabled = off; $('#wWb').disabled = off;
   }
+  /* 井筒：选做项。开关关闭时三参数一律按 0 取值（工程量与平面/剖面示意同步归零），
+   * 输入框置灰但保留原填值，重新勾上即恢复 —— 省掉"每口井手动填 0"这一步。 */
+  function shaftParams() {
+    const on = $('#wShaftOn').checked;
+    return on
+      ? { on, sD: num($('#wShaftD')), sH: num($('#wShaftH')), sT: num($('#wShaftT')) }
+      : { on, sD: 0, sH: 0, sT: 0 };
+  }
+  function syncShaftInputs() {
+    const off = !$('#wShaftOn').checked;
+    ['wShaftD', 'wShaftH', 'wShaftT'].forEach(id => { $('#' + id).disabled = off; });
+    $('#wShaftOn').closest('.tool-group').classList.toggle('off', off);
+  }
   // 几何参数输入 → 只重算文本格，不动表内单价输入框
   ['wL', 'wW', 'wD', 'wT', 'wMat', 'wBrN', 'wLb', 'wWb',
    'wBaseT', 'wPadT', 'wTopT', 'wShaftD', 'wShaftH', 'wShaftT', 'wCount',
@@ -356,6 +369,7 @@
   ['wLipW', 'wLipH', 'wPadOut', 'cCount', 'cLen', 'cW', 'cT',
    'cMainN', 'cMainL', 'cDistN', 'cDistL', 'cEdgeL'].forEach(id => $('#' + id).addEventListener('input', recalcWell));
   $('#wBrN').addEventListener('change', syncBranchInputs);
+  $('#wShaftOn').addEventListener('change', () => { syncShaftInputs(); recalcWell(); });
   // 材料切换时，井壁单价换到对应那份（用户改过的价分别保留）
   $('#wMat').addEventListener('change', () => {
     const isConc = $('#wMat').value === 'conc';
@@ -375,6 +389,7 @@
   });
   buildWellTable();
   syncBranchInputs();
+  syncShaftInputs();
   recalcWell();
   // 独立字段接项目自定义下拉（毛玻璃组件）；表内 select 保持原生+统一箭头
   if (typeof initCustomSelect === 'function') {
@@ -436,6 +451,7 @@
       const el = $('#' + id);
       params[id] = el.type === 'number' ? num(el) : el.value;
     });
+    params.wShaftOn = $('#wShaftOn').checked;   // 复选框 checked 态（el.value 恒为 "on"，不能走上面那套取值）
     const prices = WELL_UNIT.map((u, i) => num($(`#wellRows input[data-p="${i}"]`)));
     const mat = $('#wMat').value;
     if (WELL_UNIT[rowIdx('wall')].priceConc !== undefined) {
@@ -526,6 +542,8 @@
       if (rec.params[id] === undefined) return;   // 旧存档缺新键 → 保留现值
       el.value = rec.params[id];
     });
+    // 井筒开关：旧存档没有该键 → 按"计入"还原，与当时算出的口径一致
+    $('#wShaftOn').checked = rec.params.wShaftOn !== false;
     // 单价还原（表内行）；井壁价写回当前材料那份。
     // 兼容旧井库快照：其 prices 含已移除的「盖板钢筋 φ14」行（旧 index 11），载入前剔除对齐
     let prices = rec.prices;
@@ -543,6 +561,7 @@
       rebarBody.innerHTML = rec.rebar.map(r => rebarRowHtml(r)).join('');
     }
     syncBranchInputs();
+    syncShaftInputs();
     recalcWell();
     expandedId = null;
     renderLib();

@@ -6,7 +6,7 @@
   <title>工程智算 · 电缆井工程量速算</title>
   <link rel="stylesheet" href="./styles.css?v=2026-09-23-qd26" />
   <link rel="stylesheet" href="./quote-dashboard.css?v=2026-09-23-qd47" />
-  <link rel="stylesheet" href="./tools.css?v=2026-09-30-p2" />
+  <link rel="stylesheet" href="./tools.css?v=2026-09-30-form5" />
   <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
   <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css" />
 </head>
@@ -34,36 +34,57 @@
           <span class="hint">参考净空，请按标准图集 / 施工图核对后修改。</span>
         </div>
 
-        <div class="tool-grid">
+        <div class="tool-group">
           <div class="tool-subhead">井室尺寸</div>
+          <div class="tool-grid">
           <label class="field"><span class="field-label">井位 / 编号</span><input id="wName" type="text" placeholder="如 J1" /></label>
-          <label class="field"><span class="field-label">净长 L (m)</span><input id="wL" class="tabular" type="number" min="0" step="0.05" value="2.0" /></label>
-          <label class="field"><span class="field-label">净宽 W (m)</span><input id="wW" class="tabular" type="number" min="0" step="0.05" value="1.5" /></label>
-          <label class="field"><span class="field-label" data-tip="底板顶至盖板底的井壁净高；若你量的是到地面/盖板顶，须先扣除盖板厚与坐浆缝">净深 D (m)</span><input id="wD" class="tabular" type="number" min="0" step="0.05" value="2.0" /></label>
-          <label class="field"><span class="field-label">井壁厚 t (m)</span><input id="wT" class="tabular" type="number" min="0" step="0.005" value="0.24" /></label>
+          <label class="field"><span class="field-label">净长 L</span><input id="wL" class="tabular" type="number" min="0" step="0.05" value="2.0" /><span class="unit-suffix">m</span></label>
+          <label class="field"><span class="field-label">净宽 W</span><input id="wW" class="tabular" type="number" min="0" step="0.05" value="1.5" /><span class="unit-suffix">m</span></label>
+          <label class="field" data-tip="底板顶至盖板底的井壁净高；若你量的是到地面/盖板顶，须先扣除盖板厚与坐浆缝"><span class="field-label">净深 D</span><input id="wD" class="tabular" type="number" min="0" step="0.05" value="2.0" /><span class="unit-suffix">m</span></label>
+          <label class="field"><span class="field-label">井壁厚 t</span><input id="wT" class="tabular" type="number" min="0" step="0.005" value="0.24" /><span class="unit-suffix">m</span></label>
           <label class="field"><span class="field-label">井壁材料</span>
-            <select id="wMat"><option value="brick" selected>砖砌（M10 水泥砂浆）</option><option value="conc">混凝土（C30）</option></select>
+            <select id="wMat"><option value="brick" selected>砖砌</option><option value="conc">混凝土</option></select>
           </label>
-          <label class="field"><span class="field-label" data-tip="转角井=1（端部接出）、三通井=1（侧向接出）、四通井=2；直线井=0">支室数</span>
-            <select id="wBrN"><option value="0" selected>0（直线）</option><option value="1">1（转角/三通）</option><option value="2">2（四通）</option></select>
+          <label class="field" data-tip="转角井=1（端部接出）、三通井=1（侧向接出）、四通井=2；直线井=0"><span class="field-label">支室数</span>
+            <select id="wBrN"><option value="0" selected>0 直线</option><option value="1">1 转角</option><option value="2">2 四通</option></select>
           </label>
-          <label class="field"><span class="field-label" data-tip="支井室净长（垂直于所接井壁方向）">支室净长 Lb (m)</span><input id="wLb" class="tabular" type="number" min="0" step="0.05" value="1.8" disabled /></label>
-          <label class="field"><span class="field-label" data-tip="支井室净宽（沿所接井壁方向的开口宽度）">支室净宽 Wb (m)</span><input id="wWb" class="tabular" type="number" min="0" step="0.05" value="2.0" disabled /></label>
+          <label class="field" data-tip="支井室净长（垂直于所接井壁方向）"><span class="field-label">支室净长 Lb</span><input id="wLb" class="tabular" type="number" min="0" step="0.05" value="1.8" disabled /><span class="unit-suffix">m</span></label>
+          <label class="field" data-tip="支井室净宽（沿所接井壁方向的开口宽度）"><span class="field-label">支室净宽 Wb</span><input id="wWb" class="tabular" type="number" min="0" step="0.05" value="2.0" disabled /><span class="unit-suffix">m</span></label>
           <label class="field"><span class="field-label">座数</span><input id="wCount" class="tabular" type="number" min="1" step="1" value="1" /></label>
+          </div>
+        </div>
+
+        <div class="tool-group">
           <div class="tool-subhead">构造做法</div>
-          <label class="field"><span class="field-label">底板厚 (m)</span><input id="wBaseT" class="tabular" type="number" min="0" step="0.01" value="0.20" /></label>
-          <label class="field"><span class="field-label">垫层厚 (m)</span><input id="wPadT" class="tabular" type="number" min="0" step="0.01" value="0.10" /></label>
-          <label class="field"><span class="field-label" data-tip="垫层比底板每边加宽的值；与底板平齐填 0（图纸标注 100mm 时填 0.10）">垫层外挑宽 (m/边)</span><input id="wPadOut" class="tabular" type="number" min="0" step="0.01" value="0.1" /></label>
-          <label class="field"><span class="field-label" data-tip="现浇顶板/盖板厚；用预制盖板时填 0（勿与盖板块数同时计，否则重复）">顶板厚 (m)</span><input id="wTopT" class="tabular" type="number" min="0" step="0.01" value="0.15" /></label>
-          <label class="field"><span class="field-label">井筒内径 (m)</span><input id="wShaftD" class="tabular" type="number" min="0" step="0.05" value="0.70" /></label>
-          <label class="field"><span class="field-label">井筒高 (m)</span><input id="wShaftH" class="tabular" type="number" min="0" step="0.05" value="0.60" /></label>
-          <label class="field"><span class="field-label">井筒壁厚 (m)</span><input id="wShaftT" class="tabular" type="number" min="0" step="0.005" value="0.115" /></label>
-          <label class="field"><span class="field-label" data-tip="盖板外侧升至地面的井座条带（85mm+15mm=100mm），并入井壁体积；无则填 0">井座宽 (m)</span><input id="wLipW" class="tabular" type="number" min="0" step="0.01" value="0" /></label>
-          <label class="field"><span class="field-label" data-tip="井座顶(≈地面)至盖板底的高度 = 板厚 120mm + 坐浆 15mm（A-5 合计 0.135m）">井座高 (m)</span><input id="wLipH" class="tabular" type="number" min="0" step="0.005" value="0" /></label>
+          <div class="tool-grid">
+          <label class="field"><span class="field-label">底板厚</span><input id="wBaseT" class="tabular" type="number" min="0" step="0.01" value="0.20" /><span class="unit-suffix">m</span></label>
+          <label class="field"><span class="field-label">垫层厚</span><input id="wPadT" class="tabular" type="number" min="0" step="0.01" value="0.10" /><span class="unit-suffix">m</span></label>
+          <label class="field" data-tip="垫层比底板每边加宽的值；与底板平齐填 0（图纸标注 100mm 时填 0.10）"><span class="field-label">垫层外挑宽</span><input id="wPadOut" class="tabular" type="number" min="0" step="0.01" value="0.1" /><span class="unit-suffix">m/边</span></label>
+          <label class="field" data-tip="现浇顶板/盖板厚；用预制盖板时填 0（勿与盖板块数同时计，否则重复）"><span class="field-label">顶板厚</span><input id="wTopT" class="tabular" type="number" min="0" step="0.01" value="0.15" /><span class="unit-suffix">m</span></label>
+          <label class="field" data-tip="盖板外侧升至地面的井座条带（85mm+15mm=100mm），并入井壁体积；无则填 0"><span class="field-label">井座宽</span><input id="wLipW" class="tabular" type="number" min="0" step="0.01" value="0" /><span class="unit-suffix">m</span></label>
+          <label class="field" data-tip="井座顶(≈地面)至盖板底的高度 = 板厚 120mm + 坐浆 15mm（A-5 合计 0.135m）"><span class="field-label">井座高</span><input id="wLipH" class="tabular" type="number" min="0" step="0.005" value="0" /><span class="unit-suffix">m</span></label>
+          </div>
+        </div>
+
+        <div class="tool-group">
+          <div class="tool-subhead">
+            <label class="sw"><input id="wShaftOn" type="checkbox" /><span>计入井筒</span></label>
+            <span class="hint">默认不计入（按无井筒计算），无需再手动填 0；需要时勾上，三个参数的原填值仍在框内。</span>
+          </div>
+          <div class="tool-grid">
+          <label class="field"><span class="field-label">井筒内径</span><input id="wShaftD" class="tabular" type="number" min="0" step="0.05" value="0.70" /><span class="unit-suffix">m</span></label>
+          <label class="field"><span class="field-label">井筒高</span><input id="wShaftH" class="tabular" type="number" min="0" step="0.05" value="0.60" /><span class="unit-suffix">m</span></label>
+          <label class="field"><span class="field-label">井筒壁厚</span><input id="wShaftT" class="tabular" type="number" min="0" step="0.005" value="0.115" /><span class="unit-suffix">m</span></label>
+          </div>
+        </div>
+
+        <div class="tool-group">
           <div class="tool-subhead">钢筋含量（按构件混凝土体积估）</div>
-          <label class="field"><span class="field-label">底板含钢量 (kg/m³)</span><input id="wRebarBase" class="tabular" type="number" min="0" step="5" value="90" /></label>
-          <label class="field"><span class="field-label" data-tip="井壁钢筋含量；井壁为砖砌时自动不计">井壁含钢量 (kg/m³)</span><input id="wRebarWall" class="tabular" type="number" min="0" step="5" value="100" /></label>
-          <label class="field"><span class="field-label" data-tip="顶板钢筋含量，按构件混凝土体积估">顶板含钢量 (kg/m³)</span><input id="wRebarTop" class="tabular" type="number" min="0" step="5" value="95" /></label>
+          <div class="tool-grid">
+          <label class="field"><span class="field-label">底板含钢量</span><input id="wRebarBase" class="tabular" type="number" min="0" step="5" value="90" /><span class="unit-suffix">kg/m³</span></label>
+          <label class="field" data-tip="井壁钢筋含量；井壁为砖砌时自动不计"><span class="field-label">井壁含钢量</span><input id="wRebarWall" class="tabular" type="number" min="0" step="5" value="100" /><span class="unit-suffix">kg/m³</span></label>
+          <label class="field" data-tip="顶板钢筋含量，按构件混凝土体积估"><span class="field-label">顶板含钢量</span><input id="wRebarTop" class="tabular" type="number" min="0" step="5" value="95" /><span class="unit-suffix">kg/m³</span></label>
+          </div>
         </div>
 
         <!-- ===== 预制盖板（有预制盖板时填写；无则块数填 0） ===== -->
@@ -71,16 +92,18 @@
           <span class="card-title"><span class="title-dot"></span>预制盖板</span>
           <span class="hint">预填值为 A-5 工作井口径（1800×500×120mm，3000÷500 推定 6 块；每块主筋 5φ14＋分布 18φ14，包边角钢按整圈 4600——均按图改）。</span>
         </div>
-        <div class="tool-grid">
-          <label class="field"><span class="field-label" data-tip="无预制盖板的井填 0，三行工程量即归零">盖板块数</span><input id="cCount" class="tabular" type="number" min="0" step="1" value="0" /></label>
-          <label class="field"><span class="field-label">单块长 (m)</span><input id="cLen" class="tabular" type="number" min="0" step="0.05" value="1.8" /></label>
-          <label class="field"><span class="field-label">单块宽 (m)</span><input id="cW" class="tabular" type="number" min="0" step="0.05" value="0.5" /></label>
-          <label class="field"><span class="field-label">板厚 (m)</span><input id="cT" class="tabular" type="number" min="0" step="0.01" value="0.12" /></label>
+        <div class="tool-group">
+          <div class="tool-grid">
+          <label class="field" data-tip="无预制盖板的井填 0，三行工程量即归零"><span class="field-label">盖板块数</span><input id="cCount" class="tabular" type="number" min="0" step="1" value="0" /></label>
+          <label class="field"><span class="field-label">单块长</span><input id="cLen" class="tabular" type="number" min="0" step="0.05" value="1.8" /><span class="unit-suffix">m</span></label>
+          <label class="field"><span class="field-label">单块宽</span><input id="cW" class="tabular" type="number" min="0" step="0.05" value="0.5" /><span class="unit-suffix">m</span></label>
+          <label class="field"><span class="field-label">板厚</span><input id="cT" class="tabular" type="number" min="0" step="0.01" value="0.12" /><span class="unit-suffix">m</span></label>
           <label class="field"><span class="field-label">每块主筋根数</span><input id="cMainN" class="tabular" type="number" min="0" step="1" value="5" /></label>
-          <label class="field"><span class="field-label">主筋单长 (mm)</span><input id="cMainL" class="tabular" type="number" min="0" step="10" value="1900" /></label>
+          <label class="field"><span class="field-label">主筋单长</span><input id="cMainL" class="tabular" type="number" min="0" step="10" value="1900" /><span class="unit-suffix">mm</span></label>
           <label class="field"><span class="field-label">每块分布筋根数</span><input id="cDistN" class="tabular" type="number" min="0" step="1" value="18" /></label>
-          <label class="field"><span class="field-label">分布筋单长 (mm)</span><input id="cDistL" class="tabular" type="number" min="0" step="10" value="460" /></label>
-          <label class="field"><span class="field-label" data-tip="按大样：角钢在盖板两承压端，2×500=1000；若整圈包边则 2×(长+宽)=4600">每块包边角钢长 (mm)</span><input id="cEdgeL" class="tabular" type="number" min="0" step="50" value="1000" /></label>
+          <label class="field"><span class="field-label">分布筋单长</span><input id="cDistL" class="tabular" type="number" min="0" step="10" value="460" /><span class="unit-suffix">mm</span></label>
+          <label class="field" data-tip="按大样：角钢在盖板两承压端，2×500=1000；若整圈包边则 2×(长+宽)=4600"><span class="field-label">每块包边角钢长</span><input id="cEdgeL" class="tabular" type="number" min="0" step="50" value="1000" /><span class="unit-suffix">mm</span></label>
+          </div>
         </div>
 
         <!-- ===== 井体示意：平面 + 剖面（随参数实时重绘，图元可点击定位输入框） ===== -->
@@ -201,6 +224,6 @@
   <script src="./js/sidebar.js?v=2026-09-30-p2"></script>
   <script src="./js/dropdown.js?v=2026-09-23-split1"></script>
   <script src="./js/tool-common.js?v=2026-09-30-p2"></script>
-  <script src="./js/tool-well.js?v=2026-09-30-tl24"></script>
+  <script src="./js/tool-well.js?v=2026-09-30-tl25"></script>
 </body>
 </html>

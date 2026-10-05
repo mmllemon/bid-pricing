@@ -6,7 +6,7 @@
   <title>工程智算 · 排管断面布置</title>
   <link rel="stylesheet" href="./styles.css?v=2026-09-23-qd26" />
   <link rel="stylesheet" href="./quote-dashboard.css?v=2026-09-23-qd47" />
-  <link rel="stylesheet" href="./tools.css?v=2026-09-30-duct" />
+  <link rel="stylesheet" href="./tools.css?v=2026-09-30-form5" />
   <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
   <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css" />
 </head>
@@ -28,25 +28,25 @@
 
         <div class="tool-grid" style="margin-bottom:12px;">
           <div class="tool-subhead">断面孔数</div>
-          <label class="field"><span class="field-label" data-tip="需要敷设的电缆回路数">回路数 n</span><input id="dCircuits" class="tabular" type="number" min="1" step="1" value="2" /></label>
-          <label class="field"><span class="field-label" data-tip="每回路占用孔数：10kV 三相分管敷设一般取 3">每回路孔数</span><input id="dPerCircuit" class="tabular" type="number" min="1" step="1" value="3" /></label>
-          <label class="field"><span class="field-label" data-tip="备用孔（含通信/监测光缆、散热管孔等）；默认 n+2，可手动改，改后不再随回路数联动">备用孔（默认 n+2）</span><input id="dSpare" class="tabular" type="number" min="0" step="1" value="4" /></label>
+          <label class="field" data-tip="需要敷设的电缆回路数"><span class="field-label">回路数 n</span><input id="dCircuits" class="tabular" type="number" min="1" step="1" value="2" /></label>
+          <label class="field" data-tip="每回路占用孔数：10kV 三相分管敷设一般取 3"><span class="field-label">每回路孔数</span><input id="dPerCircuit" class="tabular" type="number" min="1" step="1" value="3" /></label>
+          <label class="field" data-tip="备用孔（含通信/监测光缆、散热管孔等）；默认 n+2，可手动改，改后不再随回路数联动"><span class="field-label">备用孔</span><input id="dSpare" class="tabular" type="number" min="0" step="1" value="4" /></label>
           <label class="field"><span class="field-label">排列方式</span>
             <select id="dLayout">
-              <option value="auto" selected>自动（按标准表匹配）</option>
-              <option value="manual">手动指定行×列</option>
+              <option value="auto" selected>自动</option>
+              <option value="manual">手动</option>
             </select>
           </label>
           <label class="field" id="dRowsWrap" hidden><span class="field-label">行数（层数）</span><input id="dRows" class="tabular" type="number" min="1" step="1" value="2" /></label>
           <label class="field" id="dColsWrap" hidden><span class="field-label">列数</span><input id="dCols" class="tabular" type="number" min="1" step="1" value="4" /></label>
 
           <div class="tool-subhead">管材</div>
-          <label class="field"><span class="field-label" data-tip="保护管外径；10kV 保护管内径一般 150mm，常用 CPVC/MPP 管外径约 160mm">管外径 D (mm)</span><input id="dD" class="tabular" type="number" min="0" step="1" value="160" /></label>
+          <label class="field" data-tip="保护管外径；10kV 保护管内径一般 150mm，常用 CPVC/MPP 管外径约 160mm"><span class="field-label">管外径 D</span><input id="dD" class="tabular" type="number" min="0" step="1" value="160" /><span class="unit-suffix">mm</span></label>
 
           <div class="tool-subhead">构造尺寸（可按图集调整）</div>
-          <label class="field"><span class="field-label" data-tip="并列管之间净距，规范要求不小于 20mm">管净距 (mm)</span><input id="dGap" class="tabular" type="number" min="0" step="1" value="20" /></label>
-          <label class="field"><span class="field-label" data-tip="最外层管外壁至混凝土包封边缘的厚度，常见做法 50mm，请按设计图集核对">包封保护层 (mm)</span><input id="dCover" class="tabular" type="number" min="0" step="1" value="50" /></label>
-          <label class="field"><span class="field-label" data-tip="包封边缘至沟槽底每侧的施工工作面，常用 300mm">每侧工作面 (mm)</span><input id="dWork" class="tabular" type="number" min="0" step="10" value="300" /></label>
+          <label class="field" data-tip="并列管之间净距，规范要求不小于 20mm"><span class="field-label">管净距</span><input id="dGap" class="tabular" type="number" min="0" step="1" value="20" /><span class="unit-suffix">mm</span></label>
+          <label class="field" data-tip="最外层管外壁至混凝土包封边缘的厚度，常见做法 50mm，请按设计图集核对"><span class="field-label">包封保护层</span><input id="dCover" class="tabular" type="number" min="0" step="1" value="50" /><span class="unit-suffix">mm</span></label>
+          <label class="field" data-tip="包封边缘至沟槽底每侧的施工工作面，常用 300mm"><span class="field-label">每侧工作面</span><input id="dWork" class="tabular" type="number" min="0" step="10" value="300" /><span class="unit-suffix">mm</span></label>
         </div>
         <p class="hint" id="dWarn" hidden style="color:#b3261e;"></p>
 

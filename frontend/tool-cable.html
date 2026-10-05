@@ -6,7 +6,7 @@
   <title>工程智算 · 电缆价格速算</title>
   <link rel="stylesheet" href="./styles.css?v=2026-09-23-qd26" />
   <link rel="stylesheet" href="./quote-dashboard.css?v=2026-09-23-qd47" />
-  <link rel="stylesheet" href="./tools.css?v=2026-09-30-p2" />
+  <link rel="stylesheet" href="./tools.css?v=2026-09-30-form5" />
   <!-- 字体：MiSans VF（小米 MiSans 字体，免费商用授权，按官方切片子集化） -->
   <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css" />
 </head>
@@ -27,13 +27,13 @@
         </div>
 
         <div class="tool-grid" style="margin-bottom:12px;">
-          <label class="field"><span class="field-label" data-tip="按当日现货价更新（如长江有色 / 我的钢铁网）">铜价 (元/吨)</span><input id="cCu" class="tabular" type="number" min="0" step="100" value="111540" /></label>
-          <label class="field"><span class="field-label" data-tip="按当日现货价更新（如长江有色）">铝价 (元/吨)</span><input id="cAl" class="tabular" type="number" min="0" step="100" value="24030" /></label>
-          <label class="field"><span class="field-label" data-tip="导体绞入率与截面公差的综合系数，常用 1.01~1.03">导体用量系数</span><input id="cK" class="tabular" type="number" min="0.9" step="0.01" value="1.02" /></label>
-          <label class="field"><span class="field-label" data-tip="企业管理费＋利润，按厂家口径">管理及利润率 (%)</span><input id="cMgr" class="tabular" type="number" min="0" step="0.5" value="10" /></label>
-          <label class="field"><span class="field-label">增值税率 (%)</span><input id="cVat" class="tabular" type="number" min="0" step="0.5" value="13" /></label>
-          <label class="field"><span class="field-label" data-tip="其他材料系数建议值：0.6/1kV 取 0.30，8.7/15kV 取 0.40，26/35kV 取 0.50，可按厂家询价调整；切换后整表该系数同步更新，仍可逐行改">电压等级</span><select id="cVolt"><option value="lv">0.6/1kV</option><option value="mv" selected>8.7/15kV</option><option value="hv">26/35kV</option></select></label>
-          <label class="field"><span class="field-label" data-tip="经后端代理调用长江有色金属网公开报价接口（ccmn.cn），写入当日长江现货 1#铜 / A00铝均价；需后端服务运行中">现货价</span><span><button type="button" class="btn-secondary" id="cFetchPrice">⟳ 拉取长江现货</button></span></label>
+          <label class="field" data-tip="按当日现货价更新（如长江有色 / 我的钢铁网）"><span class="field-label">铜价</span><input id="cCu" class="tabular" type="number" min="0" step="100" value="111540" /><span class="unit-suffix">元/吨</span></label>
+          <label class="field" data-tip="按当日现货价更新（如长江有色）"><span class="field-label">铝价</span><input id="cAl" class="tabular" type="number" min="0" step="100" value="24030" /><span class="unit-suffix">元/吨</span></label>
+          <label class="field" data-tip="导体绞入率与截面公差的综合系数，常用 1.01~1.03"><span class="field-label">导体用量系数</span><input id="cK" class="tabular" type="number" min="0.9" step="0.01" value="1.02" /></label>
+          <label class="field" data-tip="企业管理费＋利润，按厂家口径"><span class="field-label">管理及利润率</span><input id="cMgr" class="tabular" type="number" min="0" step="0.5" value="10" /><span class="unit-suffix">%</span></label>
+          <label class="field"><span class="field-label">增值税率</span><input id="cVat" class="tabular" type="number" min="0" step="0.5" value="13" /><span class="unit-suffix">%</span></label>
+          <label class="field" data-tip="其他材料系数建议值：0.6/1kV 取 0.30，8.7/15kV 取 0.40，26/35kV 取 0.50，可按厂家询价调整；切换后整表该系数同步更新，仍可逐行改"><span class="field-label">电压等级</span><select id="cVolt"><option value="lv">0.6/1kV</option><option value="mv" selected>8.7/15kV</option><option value="hv">26/35kV</option></select></label>
+          <label class="field act" data-tip="经后端代理调用长江有色金属网公开报价接口（ccmn.cn），写入当日长江现货 1#铜 / A00铝均价；需后端服务运行中"><span class="field-label">现货价</span><span><button type="button" class="btn-secondary" id="cFetchPrice">⟳ 拉取长江现货</button></span></label>
         </div>
         <div class="hint" style="margin:-6px 0 12px;"><span id="cPriceStatus">参考价（2026-09-30）：长江现货 1#铜 111,540 元/吨、A00 铝 24,030 元/吨</span>——铜价波动大，可点击「拉取长江现货」按当日现货更新，或手动修改上方输入。</div>
 

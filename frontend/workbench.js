@@ -65,23 +65,23 @@ const CONFIG = {
 
   // 快速记录按钮（点了直接给对应模块新建）
   quickAdd: [
-    { label:"记打卡", icon:"check",    module:"checkin", tint:"#eef3ec", color:"var(--module-1)" },
-    { label:"记待办", icon:"list",     module:"todo",    tint:"#efeee8", color:"var(--accent)" },
-    { label:"记项目", icon:"chart",    module:"biz",     tint:"#e7eef7", color:"var(--module-2)" },
+    { label:"记打卡", icon:"check",    module:"checkin", tint:"var(--ui-white)", color:"var(--module-1)" },
+    { label:"记待办", icon:"list",     module:"todo",    tint:"var(--ui-white)", color:"var(--accent)" },
+    { label:"记项目", icon:"chart",    module:"biz",     tint:"var(--ui-white)", color:"var(--module-2)" },
   ],
 
   // ============ 模块定义 ============
   modules: [
-    { key:"biz", name:"项目经营概览", icon:"chart", tint:"#e7eef7", color:"var(--module-2)", type:"biz", desc:"从后端方案库读取项目报价与结算利润",
+    { key:"biz", name:"项目经营概览", icon:"chart", tint:"var(--ui-white)", color:"var(--module-2)", type:"biz", desc:"从后端方案库读取项目报价与结算利润",
       seed:[] },
-    { key:"todo", name:"今日计划", icon:"list", tint:"#efeee8", color:"var(--accent)", type:"todo", desc:"任务清单与进度追踪",
-      priorities:[ {key:"P0",label:"重要",color:"#f7ebe9",text:"#ba4a38"}, {key:"P1",label:"一般",color:"#f8f1e7",text:"#c97a2b"}, {key:"P2",label:"随手",color:"#e8efe9",text:"#4d7c59"} ],
+    { key:"todo", name:"今日计划", icon:"list", tint:"var(--ui-white)", color:"var(--accent)", type:"todo", desc:"任务清单与进度追踪",
+      priorities:[ {key:"P0",label:"重要",color:"var(--ui-orange)",text:"var(--ui-black)"}, {key:"P1",label:"一般",color:"var(--ui-yellow)",text:"var(--ui-black)"}, {key:"P2",label:"随手",color:"var(--ui-white)",text:"var(--ui-black)"} ],
       seed:[ {id:11,title:"完成英语核心词汇 30min",priority:"P0",done:false,note:"积累词汇量，稳步提升英语能力"},
              {id:12,title:"发布 1 篇笔记 / 视频",priority:"P1",done:false,note:""},
              {id:13,title:"整理今日工作纪要",priority:"P2",done:true,note:""} ] },
-    { key:"checkin", name:"习惯打卡", icon:"leaf", tint:"#eef3ec", color:"var(--module-1)", type:"checkin", desc:"补品·护肤·早睡等每日打卡",
+    { key:"checkin", name:"习惯打卡", icon:"leaf", tint:"var(--ui-white)", color:"var(--module-1)", type:"checkin", desc:"补品·护肤·早睡等每日打卡",
       seed:[ {id:21,title:"喝够 8 杯水",log:{}}, {id:22,title:"23:30 前睡觉",log:{}}, {id:23,title:"维生素 / 补品",log:{}} ] },
-    { key:"record", name:"记录", icon:"pen", tint:"#f1eef4", color:"var(--module-5)", type:"note", desc:"文字·摘录·随手记",
+    { key:"record", name:"记录", icon:"pen", tint:"var(--ui-white)", color:"var(--module-5)", type:"note", desc:"文字·摘录·随手记",
       moods:["灵感","收藏","备忘"],
       seed:[ {id:71,title:"随手记录一条",content:"写下你的灵感、摘录或备忘。",mood:"备忘",date:isoToday()} ] },
   ],
@@ -219,11 +219,10 @@ function trendSVG(series){
     return [x,y];
   });
   const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-  const area=line+` L ${padX+innerW} ${h-padBot} L ${padX} ${h-padBot} Z`;
   const dots=pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.2" fill="var(--surface-card)" stroke="var(--module-2)" stroke-width="2"/>`).join('');
+  // DESIGN §3.2 禁止渐变：已移除原 area 的 linearGradient 面积填充，只保留折线 + 数据点
   return `<svg class="trend-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
-    <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--module-2)" stop-opacity=".22"/><stop offset="1" stop-color="var(--module-2)" stop-opacity="0"/></linearGradient></defs>
-    <path d="${area}" fill="url(#tg)"/><path d="${line}" fill="none" stroke="var(--module-2)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
+    <path d="${line}" fill="none" stroke="var(--module-2)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
 }
 
 /* ---------- HOME (Bento 复杂仪表盘) ---------- */
@@ -322,8 +321,8 @@ function pomoTileHTML(){
   const r=64,c=2*Math.PI*r,off=c*(1-pomo.remain/pomo.total);
   return `<div class="pomo b4"><div><div class="pen">POMODORO · 25 / 5</div><div class="pzh">专注番茄钟</div></div>
     <div class="ring-wrap"><svg width="150" height="150" viewBox="0 0 150 150">
-      <circle cx="75" cy="75" r="${r}" fill="none" stroke="rgba(244,243,240,.14)" stroke-width="7"/>
-      <circle id="pomo-fg" cx="75" cy="75" r="${r}" fill="none" stroke="#e6b877" stroke-width="7" stroke-linecap="round"
+      <circle cx="75" cy="75" r="${r}" fill="none" stroke="var(--ui-white)" stroke-opacity=".18" stroke-width="7"/>
+      <circle id="pomo-fg" cx="75" cy="75" r="${r}" fill="none" stroke="var(--ui-orange)" stroke-width="7" stroke-linecap="round"
         stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>
       <div class="ptime"><span class="t" id="pomo-time">${pad2(Math.floor(pomo.remain/60))}:${pad2(pomo.remain%60)}</span><span class="s" id="pomo-status">${pomo.running?'专注中':'保持专注'}</span></div></div>
     <div class="pctl"><button class="primary" id="pomo-toggle">${pomo.running?'暂停':'开始'}</button><button id="pomo-reset">重置</button></div>

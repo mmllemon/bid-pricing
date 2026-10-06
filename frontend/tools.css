@@ -6,10 +6,10 @@
 a.nav-item { text-decoration: none; color: inherit; }
 
 /* 面包屑里的返回链接 */
-.crumb-link { color: var(--accent); text-decoration: none; }
+.crumb-link { color: var(--text); text-decoration: none; }
 .crumb-link:hover { text-decoration: underline; }
 
-.tool-card { margin-bottom: 18px; scroll-margin-top: 16px; }
+.tool-card { margin-bottom: 16px; scroll-margin-top: 16px; }
 
 /* ===== 工具箱落地页：卡片墙 ===== */
 .tool-cards {
@@ -19,20 +19,18 @@ a.nav-item { text-decoration: none; color: inherit; }
 .tool-card-link {
   display: flex; flex-direction: column; gap: 10px;
   padding: 20px 20px 16px;
-  border: 1px solid var(--border); border-radius: var(--radius-card);
-  background: var(--surface-card); box-shadow: var(--shadow-card);
+  border: var(--line-strong); border-radius: 0;
+  background: var(--ui-white);
   text-decoration: none; color: inherit;
-  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  transition: border-color var(--dur-base) var(--ease-out), background var(--dur-base) var(--ease-out);
 }
 .tool-card-link:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 6px 20px var(--accent-muted);
+  border-color: var(--ui-orange);
 }
 .tool-card-icon {
-  width: 40px; height: 40px; border-radius: 10px;
+  width: 40px; height: 40px; border-radius: 0;
   display: flex; align-items: center; justify-content: center;
-  background: var(--accent-muted); color: var(--accent);
+  background: var(--ui-white); border: var(--line-thin); color: var(--text);
 }
 .tool-card-icon svg { width: 22px; height: 22px; }
 .tool-card-link h2 {
@@ -40,15 +38,15 @@ a.nav-item { text-decoration: none; color: inherit; }
   display: flex; align-items: baseline; gap: 8px;
 }
 .tool-card-link h2 small {
-  font-size: 11px; font-weight: 600; color: var(--accent);
-  background: var(--accent-muted); border-radius: 999px; padding: 2px 8px;
+  font-size: 12px; font-weight: 600; color: var(--text);
+  background: var(--ui-white); border: var(--line-thin); border-radius: 0; padding: 2px 8px;
 }
 .tool-card-link p {
   margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--text-tertiary);
   flex: 1;
 }
 .tool-card-go {
-  font-size: 12.5px; font-weight: 600; color: var(--accent);
+  font-size: 12.5px; font-weight: 600; color: var(--text);
 }
 .tool-card-link:hover .tool-card-go { text-decoration: underline; }
 
@@ -60,7 +58,7 @@ a.nav-item { text-decoration: none; color: inherit; }
  * 不取更大值是留住宽屏下的列数（1440 视口仍能排 5 列，不致一行只吊 1 个字段）。 */
 .tool-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
-  gap: 6px 18px; align-items: center;
+  gap: 6px 16px; align-items: center;
 }
 /* 独立字段接入 initCustomSelect 后，.cs 的 min-width 须让位于网格列宽 */
 .tool-grid .cs { min-width: 0; }
@@ -79,7 +77,7 @@ a.nav-item { text-decoration: none; color: inherit; }
 }
 .tool-grid .field input:not([type=checkbox]) { width: 88px; padding: 5px 9px; }
 /* 单位后缀：从标签括号里挪出来，紧贴数值框，标签因此更短更好扫 */
-.tool-grid .unit-suffix { font-size: 11.5px; color: var(--text-tertiary); white-space: nowrap; }
+.tool-grid .unit-suffix { font-size: 12px; color: var(--text-tertiary); white-space: nowrap; }
 /* 下拉框与数值框同宽：都落在网格第 2 轨（88px），标签轨与控件轨逐列对齐。
  * 88px 内可用文字宽仅约 56px，故收窄内边距、缩小箭头、字号降到 12.5px
  * （与左侧标签同级），并同步精简选项文案——否则文字换行会顶掉对齐。 */
@@ -99,7 +97,7 @@ a.nav-item { text-decoration: none; color: inherit; }
  * 于是上一组末行的空单元格与下一组直接贴上，分组界线看不出来。
  * 每组自带网格后，末行留白被面板边界收住，分组一眼可辨。 */
 .tool-group {
-  border: 1px solid var(--border); border-radius: var(--radius-control);
+  border: var(--line-thin); border-radius: 0;
   background: var(--surface-nested); padding: 10px 12px 12px;
 }
 .tool-group + .tool-group { margin-top: 10px; }
@@ -120,7 +118,7 @@ a.nav-item { text-decoration: none; color: inherit; }
 .tool-group.off .tool-grid { opacity: .55; }
 
 /* 行内可编辑表格 */
-.tool-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-control); }
+.tool-table-wrap { overflow-x: auto; border: var(--line-thin); border-radius: 0; }
 .tool-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 760px; }
 .tool-table th {
   background: var(--surface-nested); text-align: left; font-weight: 600;
@@ -131,7 +129,7 @@ a.nav-item { text-decoration: none; color: inherit; }
 .tool-table tbody tr:last-child td { border-bottom: none; }
 .tool-table input, .tool-table select {
   width: 100%; min-width: 60px; padding: 5px 7px;
-  border: 1px solid var(--border-input); border-radius: 7px;
+  border: var(--line-thin); border-radius: 0;
   font: inherit; font-size: 12.5px;
   background: var(--surface-card); color: var(--text);
 }
@@ -144,30 +142,29 @@ a.nav-item { text-decoration: none; color: inherit; }
   cursor: pointer;
 }
 .tool-table input:focus, .tool-table select:focus {
-  outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-muted);
+  outline: 2px solid var(--ui-orange); outline-offset: 1px; border-color: var(--ui-black);
 }
 .tool-table .num { text-align: right; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 /* 计算式列：小字、可换行 */
-.tool-table .fx { font-size: 11px; color: var(--text-tertiary); white-space: normal; min-width: 150px; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.tool-table .fx { font-size: 12px; color: var(--text-tertiary); white-space: normal; min-width: 150px; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 /* 单价单元格：输入框 + 单位后缀 */
 .tool-table .price-cell { display: flex; align-items: center; gap: 4px; }
 .tool-table .price-cell input { flex: 1; min-width: 46px; }
-.tool-table .unit-suffix { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+.tool-table .unit-suffix { font-size: 12px; color: var(--text-tertiary); white-space: nowrap; }
 .tool-table tfoot td { font-weight: 700; background: var(--surface-nested); }
 .tool-table tfoot .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 
 .row-del {
   border: none; background: transparent; color: var(--text-tertiary);
-  font-size: 15px; line-height: 1; padding: 5px 7px; border-radius: 6px; cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 5px 7px; border-radius: 0; cursor: pointer;
 }
-.row-del:hover { color: var(--danger); background: var(--danger-soft); }
+.row-del:hover { color: var(--text); background: var(--ui-yellow); }
 .row-actions { white-space: nowrap; }
 .row-copy {
   border: none; background: transparent; color: var(--text-tertiary);
-  font-size: 14px; line-height: 1; padding: 5px 6px; border-radius: 6px; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 5px 6px; border-radius: 0; cursor: pointer;
 }
-.row-copy:hover { color: var(--accent, #2f7cf6); background: rgba(47,124,246,.12); }
+.row-copy:hover { color: var(--text); background: var(--ui-yellow); }
 
 /* 负数输入标红（按 0 参与计算） */
 input.invalid, select.invalid {
@@ -178,53 +175,54 @@ input.invalid, select.invalid {
 /* 可折叠「口径说明」：收拢偏长的 hint */
 details.spec { margin: 4px 0 12px; }
 details.spec > summary {
-  cursor: pointer; color: var(--text-secondary, #666); font-size: 12px;
+  cursor: pointer; color: var(--text-secondary); font-size: 12px;
   list-style: none; display: inline-flex; align-items: center; gap: 4px;
 }
 details.spec > summary::-webkit-details-marker { display: none; }
-details.spec > summary::before { content: "▸"; font-size: 10px; transition: transform .15s; }
+details.spec > summary::before { content: "▸"; font-size: 12px; transition: transform var(--dur-base) var(--ease-out); }
 details.spec[open] > summary::before { transform: rotate(90deg); }
-details.spec > summary:hover { color: var(--text-primary, #222); }
+details.spec > summary:hover { color: var(--text); }
 details.spec .hint { margin: 6px 0; }
 
 /* 有效放坡系数小字 */
-.eff-m { font-size: 11px; color: var(--text-tertiary); }
+.eff-m { font-size: 12px; color: var(--text-tertiary); }
 .eff-m .off { opacity: .65; }
 
 /* 结果指标条 */
 .result-strip { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
 .metric {
   flex: 1 1 150px; display: flex; flex-direction: column; gap: 4px;
-  padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-control);
+  padding: 10px 16px; border: var(--line-thin); border-radius: 0;
   background: var(--surface-nested);
 }
-.metric-label { font-size: 11.5px; color: var(--text-tertiary); }
+.metric-label { font-size: 12px; color: var(--text-tertiary); }
 .metric strong { font-size: 17px; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 
 /* 井型预设 chips */
 .chip-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .chip {
-  border: 1px solid var(--border-input); background: var(--surface-card);
+  border: var(--line-thin); background: var(--ui-white);
   color: var(--text); font: inherit; font-size: 12.5px;
-  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  padding: 5px 12px; border-radius: 0; cursor: pointer;
 }
-.chip:hover { border-color: var(--accent); color: var(--accent); }
-.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chip:hover { border-color: var(--ui-orange); color: var(--text); }
+.chip:focus-visible { outline: 2px solid var(--ui-orange); outline-offset: 2px; }
+.chip.on { background: var(--ui-orange); border-color: var(--ui-black); color: var(--text); }
 
 /* ===== 已存井库 ===== */
-.well-lib { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.well-lib { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border); }
 .well-lib-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .well-lib-save { display: flex; gap: 8px; margin-bottom: 10px; }
 .well-lib-save input {
   flex: 1; max-width: 320px; padding: 7px 10px;
-  border: 1px solid var(--border-input); border-radius: 8px;
-  font: inherit; font-size: 13px; background: var(--surface-card); color: var(--text);
+  border: var(--line-thin); border-radius: 0;
+  font: inherit; font-size: 13px; background: var(--ui-white); color: var(--text);
 }
-.well-lib-save input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-muted); }
+.well-lib-save input:focus { outline: 2px solid var(--ui-orange); outline-offset: 1px; border-color: var(--ui-black); }
 .well-lib-list { display: flex; flex-direction: column; gap: 6px; }
 .well-lib-empty { font-size: 12.5px; color: var(--text-tertiary); padding: 8px 0; }
 .well-item {
-  border: 1px solid var(--border); border-radius: var(--radius-control);
+  border: var(--line-thin); border-radius: 0;
   background: var(--surface-nested);
 }
 .well-item-row {
@@ -235,23 +233,22 @@ details.spec .hint { margin: 6px 0; }
   border: none; background: none; padding: 0; cursor: pointer;
   font: inherit; font-size: 13px; font-weight: 700; color: var(--text);
 }
-.well-item-name:hover { color: var(--accent); text-decoration: underline; }
+.well-item-name:hover { color: var(--text); text-decoration: underline; }
 .well-item-digest { flex: 1; min-width: 180px; font-size: 12px; color: var(--text-tertiary); }
 .well-item-total { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
-.well-item-time { font-size: 11.5px; color: var(--text-tertiary); }
+.well-item-time { font-size: 12px; color: var(--text-tertiary); }
 .well-act {
-  border: none; background: none; padding: 3px 8px; border-radius: 6px;
-  font: inherit; font-size: 12px; color: var(--accent); cursor: pointer;
+  border: none; background: none; padding: 3px 8px; border-radius: 0;
+  font: inherit; font-size: 12px; color: var(--text); cursor: pointer;
 }
-.well-act:hover { background: var(--accent-muted); }
-.well-act.danger { color: var(--danger); }
-.well-act.danger:hover { background: var(--danger-soft); }
+.well-act:hover { background: var(--surface-soft); }
+.well-act.danger { color: var(--text); }
+.well-act.danger:hover { background: var(--surface-soft); }
 .well-rename-input {
   width: 200px; padding: 3px 8px;
-  border: 1px solid var(--accent); border-radius: 7px;
+  border: 1px solid var(--ui-orange); border-radius: 0;
   font: inherit; font-size: 13px; font-weight: 700; color: var(--text);
-  background: var(--surface-card); outline: none;
-  box-shadow: 0 0 0 3px var(--accent-muted);
+  background: var(--ui-white); outline: 2px solid var(--ui-orange); outline-offset: 1px;
 }
 .well-detail { border-top: 1px dashed var(--border); padding: 10px 12px 12px; }
 .well-detail table { width: 100%; max-width: 640px; border-collapse: collapse; font-size: 12px; }
@@ -264,20 +261,35 @@ details.spec .hint { margin: 6px 0; }
 /* ===== 井体示意（SVG 平面 + 剖面） ===== */
 .well-viz-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 16px 0 8px; }
 .well-viz { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 900px) { .well-viz { grid-template-columns: 1fr; } }
-.well-viz-pane { border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-card); padding: 8px 8px 4px; }
+/* 1280 而非 1024：1025–1420 区间两栏每栏只有 356–504px，图必被裁（1100px 时藏 148px）只能横向拖；
+   1280 是既有档位（styles.css / quote-dashboard.css / workbench.css 同档），不新增第 5 档。 */
+@media (max-width: 1280px) { .well-viz { grid-template-columns: 1fr; } }
+/* min-width:0：栅格子项默认 min-width:auto 会被 svg 托底宽度顶开，导致整页横向溢出，
+   必须显式归零才能让 .well-viz-svg 自己滚动。 */
+.well-viz-pane { border: var(--line-thin); border-radius: 0; background: var(--ui-white); padding: 8px 8px 4px; min-width: 0; }
 .well-viz-title { font-size: 12px; font-weight: 600; color: var(--text-tertiary); margin-bottom: 2px; }
-.well-viz-svg svg { width: 100%; height: auto; display: block; }
-.wv-wall { fill: color-mix(in srgb, var(--accent) 16%, var(--surface-card)); stroke: var(--border-input); stroke-width: 1; }
-.wv-void { fill: var(--page-bg); stroke: var(--border-input); stroke-width: 1; }
-.wv-conc { fill: color-mix(in srgb, var(--accent) 10%, var(--surface-card)); stroke: var(--border-input); stroke-width: 1; }
-.wv-pad { fill: var(--surface-nested); stroke: var(--border-input); stroke-width: 1; stroke-dasharray: 2 2; }
+.well-viz-svg { overflow-x: auto; }
+/* 下方标注字号是 SVG 用户单位（10 单位 / viewBox 宽 420），渲染 px = 10 × 容器宽 ÷ viewBox 宽，
+   完全随容器缩放，所以两头都要设界：
+   · min-width 托底（缩放 ≥1.2 → 标注 ≥12px）：多出的宽度在 .well-viz-svg 内横向滚动，
+     兜住窄屏（390px 容器 296 → 不托底只有 7.05px）与 1281–1420 两栏残留带（1366px 仍差 23px）；
+   · max-width 封顶 640px：≤1280 单栏后容器可达 922px，不封顶会胀到 724px 高、标注 21.95px，
+     封顶后 15.24px；margin:0 auto 让图在栏内居中（否则右侧空 282px）。
+   点击定位走 e.target.closest，与缩放/滚动无关，不受影响。 */
+.well-viz-svg svg { width: 100%; max-width: 640px; min-width: 504px; margin: 0 auto; height: auto; display: block; }  /* min-width 504 = 1.2 × 420（井体两图） */
+#ductSvg svg { min-width: 528px; }                                                 /* 1.2 × 440（排管断面） */
+.wv-wall { fill: var(--ui-yellow); stroke: var(--ui-black); stroke-width: 1; }
+.wv-void { fill: var(--ui-white); stroke: var(--ui-black); stroke-width: 1; }
+.wv-conc { fill: var(--ui-white); stroke: var(--ui-black); stroke-width: 1; }
+.wv-pad { fill: var(--ui-white); stroke: var(--ui-black); stroke-width: 1; stroke-dasharray: 2 2; }
 .wv-dashed { fill: none; stroke: var(--text-tertiary); stroke-width: 1; stroke-dasharray: 4 3; }
-.wv-rebar { stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 3; fill: none; }
+.wv-rebar { stroke: var(--ui-orange); stroke-width: 1.4; stroke-dasharray: 5 3; fill: none; }
 .wv-dim { cursor: pointer; }
 .wv-dim line, .wv-dim polygon { stroke: var(--text-tertiary); stroke-width: 1; fill: var(--text-tertiary); }
+/* 注意：下面两处 10px 是 SVG 用户单位（绘图坐标），不是渲染 px，随 viewBox 等比缩放。
+   已在 .well-viz-svg svg 上按 1.2 × viewBox 宽设 min-width 托底，实测各视口渲染字号均 ≥12px。 */
 .wv-dim text { fill: var(--text-secondary); font-size: 10px; text-anchor: middle; dominant-baseline: middle; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
-.wv-dim:hover text, .wv-label:hover { fill: var(--accent); font-weight: 600; }
+.wv-dim:hover text, .wv-label:hover { fill: var(--ui-black); font-weight: 600; }
 .wv-label { fill: var(--text-secondary); font-size: 10px; text-anchor: middle; dominant-baseline: middle; cursor: pointer; }
 .well-viz .wv-wall, .well-viz .wv-conc, .well-viz .wv-pad { cursor: pointer; }
 /* 钢筋逐根表：盖板钢筋分组（自动行，区别于主体布筋可编辑行） */
@@ -286,12 +298,12 @@ details.spec .hint { margin: 6px 0; }
 #rebarTable tr.rebar-cov .off { opacity: .5; }
 #rebarTable tr.rebar-cov .cov-note { color: var(--text-tertiary); }
 .tool-grid .flash, .well-viz-flash {
-  border-color: var(--accent) !important;
-  box-shadow: 0 0 0 3px var(--accent-muted) !important;
+  border-color: var(--ui-orange) !important;
+  outline: 2px solid var(--ui-orange) !important; outline-offset: 1px;
   transition: none;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .tool-grid { grid-template-columns: repeat(2, 1fr); }
   .metric strong { font-size: 15px; }
 }
@@ -305,7 +317,7 @@ details.spec .hint { margin: 6px 0; }
 .dv-spare { fill: none; stroke: var(--text-tertiary); stroke-width: 1; stroke-dasharray: 4 3; }
 
 /* ===== 跨工具交接横幅（排管 → 土方） ===== */
-.handoff-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--border-input); border-radius: var(--radius-control); background: color-mix(in srgb, var(--accent) 8%, var(--surface-card)); font-size: 13px; }
+.handoff-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 16px; border: var(--line-thin); border-left: 4px solid var(--ui-yellow); border-radius: 0; background: var(--ui-white); font-size: 13px; }
 .handoff-banner[hidden] { display: none; }
 .handoff-banner strong { font-variant-numeric: tabular-nums; }
 
@@ -335,10 +347,10 @@ details.spec .hint { margin: 6px 0; }
   .main-content { padding: 0; margin: 0; max-width: none; }
   .action-row, .tool-card-go, .well-lib, .chip-row .chip, .handoff-banner,
   .breadcrumb, #sbToggle { display: none !important; }
-  .card { box-shadow: none; break-inside: avoid; margin-bottom: 14px; }
+  .card { break-inside: avoid; margin-bottom: 16px; }
   .tool-table-wrap { overflow: visible; }
-  .tool-table { font-size: 11px; }
+  .tool-table { font-size: 12px; }
   .well-viz { break-inside: avoid; }
-  .hint { font-size: 10.5px; }
+  .hint { font-size: 12px; }
   input, select, button { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

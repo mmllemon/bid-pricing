@@ -26,7 +26,7 @@
           <div class="nav-group-title">工作台</div>
           <a class="nav-item" href="./index.html#workbench">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-            <span>个人工作台</span>
+            <span>个人工作台</span><span class="nav-num">W-00</span>
           </a>
         </div>
 
@@ -34,11 +34,11 @@
           <div class="nav-group-title">核心功能</div>
           <a class="nav-item" href="./index.html">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h5M8 17h8"/></svg>
-            <span>投标报价</span>
+            <span>投标报价</span><span class="nav-num">Q-01</span>
           </a>
           <a class="nav-item" href="./index.html#cost">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M5 9l7-7 7 7M5 15l7 7 7-7"/></svg>
-            <span>实施成本</span>
+            <span>实施成本</span><span class="nav-num">C-02</span>
           </a>
         </div>
 
@@ -46,11 +46,11 @@
           <div class="nav-group-title">项目管理</div>
           <a class="nav-item" href="./index.html#ledger">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v12H4z"/><path d="M8 9h6M8 13h8M8 17h5"/></svg>
-            <span>项目台账</span>
+            <span>项目台账</span><span class="nav-num">L-04</span>
           </a>
           <a class="nav-item" href="./index.html#settlement">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            <span>结算管理</span>
+            <span>结算管理</span><span class="nav-num">S-05</span>
           </a>
         </div>
 
@@ -58,7 +58,7 @@
           <div class="nav-group-title">工具箱</div>
           <a class="nav-item active" href="./tools.html">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h.01M12 11h.01M15 11h.01M9 14h.01M12 14h.01M15 14h.01M9 17h6"/></svg>
-            <span>速算工具箱</span>
+            <span>速算工具箱</span><span class="nav-num">T-06</span>
           </a>
         </div>
       </nav>
@@ -111,7 +111,7 @@
     input.type = 'text'; input.maxLength = 20;
     input.value = el.textContent;
     input.className = 'name-input';
-    input.style.cssText = 'width:100%;max-width:150px;padding:2px 6px;border:1px solid var(--border-input);border-radius:8px;font-size:13px;font-weight:600;color:var(--text);background:var(--surface-card);font-family:var(--font);outline:none';
+    input.style.cssText = 'width:100%;max-width:150px;padding:2px 6px;border:1px solid var(--border-input);border-radius:0;font-size:13px;font-weight:600;color:var(--text);background:var(--surface-card);font-family:var(--font)';
     input.addEventListener('focus', () => input.select());
     const original = el.textContent;   // 取消时恢复，而不是把显示名清成「未命名」
     const commit = () => {

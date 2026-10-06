@@ -1,6 +1,7 @@
 const quoteView = document.querySelector('#quoteView');
 const moduleView = document.querySelector('#moduleView');
 const workbenchView = document.querySelector('#workbenchView');
+const agentView = document.querySelector('#agentView');
 const modulePages = {
   cost: { icon: '◫', title: '实施成本', subtitle: '归集项目执行阶段的人工、材料、机械和分包成本。', phase: 'Phase 3 · 实施成本', cards: [['成本计划', '建立目标成本与责任成本基线'], ['成本归集', '按清单、合同和实际发生额归集成本'], ['成本偏差', '对比预算成本与实际成本，定位超支项目']] },
   ledger: { icon: '▤', title: '项目台账', subtitle: '统一维护项目基本信息、合同信息和关键节点。', phase: 'Phase 4 · 项目台账', cards: [['项目档案', '集中查看项目基本信息与合同状态'], ['节点跟踪', '记录开工、完工、验收和付款节点'], ['经营指标', '汇总合同额、成本、回款和利润指标']] },
@@ -10,11 +11,20 @@ function showModule(module) {
   if (module === 'workbench') {
     quoteView.classList.add('hidden'); moduleView.classList.add('hidden');
     workbenchView.classList.remove('hidden');
+    if (agentView) agentView.classList.add('hidden');
     if (window.__wbResurface) window.__wbResurface(); // 切回工作台即重渲染（经营概览重新拉取）
     location.hash = 'workbench';
     return;
   }
+  if (module === 'agent') {
+    quoteView.classList.add('hidden'); moduleView.classList.add('hidden');
+    workbenchView.classList.add('hidden');
+    if (agentView) { agentView.classList.remove('hidden'); if (window.__agentResurface) window.__agentResurface(); }
+    location.hash = 'agent';
+    return;
+  }
   workbenchView.classList.add('hidden');
+  if (agentView) agentView.classList.add('hidden');
   const page = modulePages[module];
   if (!page) { quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); return; }
   quoteView.classList.add('hidden'); moduleView.classList.remove('hidden');
@@ -28,7 +38,7 @@ function selectModule(module) {
   // 操作坞只挂在「投标报价」页；其余页面隐藏（各模块后续接入各自专属操作坞）
   const dock = document.querySelector('.floating-dock');
   if (dock) dock.classList.toggle('hidden', module !== 'quote');
-  if (module === 'quote') { location.hash = ''; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); }
+  if (module === 'quote') { location.hash = ''; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); if (agentView) agentView.classList.add('hidden'); }
   else showModule(module);
 }
 function closeOverlays() {
@@ -1606,6 +1616,12 @@ function syncDockCta() {
     expBtn.disabled = !(lastResult && lastResult.excel_download_url);
     expBtn.setAttribute('aria-disabled', expBtn.disabled ? 'true' : 'false');
   }
+  // 方案中心 / 审计日志：无前提的常驻入口，不参与结果态门控；busy 结束后必须恢复可点，
+  // 否则会在任何一次计算之后被 setDockBusy 永久置灰（只能刷新页面恢复）。
+  ['#diffDrawerBtn', '#auditDockBtn'].forEach(sel => {
+    const b = document.querySelector(sel);
+    if (b) b.disabled = false;
+  });
 }
 function bindDock() {
   const calc = document.querySelector('#dockCalcBtn');
@@ -1975,7 +1991,7 @@ async function onGlobalProjectChange() {
   // 初始模块选择：放到宏任务里执行，保证在所有模块级声明（含 hubView/hubSelected）就绪后再调用
   // selectModule → closeOverlays → closePlanHub，避免初始化早期读到 TDZ 中的变量。
   setTimeout(() => {
-    if (location.hash) { const h = location.hash.slice(1); if (h === 'workbench' || h === 'quote' || modulePages[h]) selectModule(h); }
+    if (location.hash) { const h = location.hash.slice(1); if (h === 'workbench' || h === 'agent' || h === 'quote' || modulePages[h]) selectModule(h); }
     else selectModule('workbench');
   }, 0);
 })();

@@ -1,0 +1,123 @@
+name: CI
+
+# 目的：把「闸门是代码，不是约定」落到**每次提交**上。
+#
+# 本仓早已有三套机械判据（gate-check / contract-check / unittest），但此前没有任何
+# 自动运行点。后果是实测过的：2026-09-20 一次制品改动使 Gate 0b 因 hash 失配静默
+# 失效，半个月无人发现——判据写得再机械，没人跑就等于没有。
+#
+# 两档依赖，对应本项目声明的两种运行环境：
+#   minimal —— 零第三方依赖（README 的硬约束：标准库即可运行）
+#   solver  —— 装配 PuLP + HiGHS，使 T04-02B/C 的 CC-09 / BB-* 判据由 SKIP 转实跑
+# 两档都必须绿：只跑有依赖的那档，会把「零依赖」这条硬约束悄悄丢掉。
+#
+# 不在此处做的三件事（有意）：
+#   1. 不跑 `status --write`：它会现场跑全套测试并改写 docs/STATE.md，属交互动作，不是 CI 判据。
+#   2. 不装 Node/前端依赖：workbench-app / workbench-server 是增值组件，其构建失败不该阻断主应用。
+#   3. 不锁 Windows runner：中文 Windows（GBK 控制台）的编码问题已由
+#      tests/test_status.py::CliEncodingTest 用 PYTHONIOENCODING=gbk:strict 复现覆盖。
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 显式钉住编码。CLI 会打印 ✓ / ⁺ / 中文，在非 UTF-8 控制台上曾整条命令崩掉；
+  # 代码侧已有兜底（src/bidpricing/cli/main.py::harden_streams + status.run_tests），
+  # 这里再加一道，保证 CI 日志本身可读。
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
+  PYTHONPATH: src
+
+jobs:
+  mechanical-checks:
+    name: 机械判据（${{ matrix.deps }} 依赖档）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        deps: [minimal, solver]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 装配第三方依赖（仅 solver 档）
+        if: matrix.deps == 'solver'
+        run: |
+          python -m pip install --upgrade pip
+          # 与 requirements-web.txt 同口径：PuLP 4.0 会移除 PULP_CBC_CMD，
+          # 故上界必须钉在 <4，否则候选后端会随版本静默失效。
+          pip install "pulp>=3.3,<4" "highspy>=1.11,<2"
+
+      - name: 依赖档自述（防止把 SKIP 读成 PASS）
+        run: |
+          python - <<'PY'
+          def probe(name):
+              try:
+                  mod = __import__(name)
+                  print(f"{name}: 已装配 {getattr(mod, '__version__', '(无版本号)')}")
+              except ImportError as exc:
+                  print(f"{name}: 未装配 —— 相关判据将判 SKIP（不是 PASS）：{exc}")
+          probe("pulp")
+          probe("highspy")
+          PY
+
+      # 退出码语义：gate-check 只在 **Gate 0a 未通过**时返回 1。
+      # 这是刻意设计——Gate 0b 只挡 WP4 求解层，业务口径未就位不该让 WP1/WP2/WP3 的
+      # 开发被判红。所以 Gate 0b 的契约完整性由下面那条独立判据负责。
+      - name: Gate 0 机械判据（退出码＝Gate 0a）
+        run: python -m bidpricing.cli gate-check --contract-date 2026-03-01
+
+      - name: 契约制品完整性（注册表hash == 制品内容）
+        run: |
+          python - <<'PY'
+          from bidpricing.artifact import compute_artifact_hash, load_registry, parse_records
+          from bidpricing.paths import GATE0_REGISTRY, config_dir
+
+          cfg = config_dir()
+          registry = load_registry(cfg / GATE0_REGISTRY)
+          failures, skipped = [], []
+          for gate in ("gate_0a", "gate_0b"):
+              for rec in parse_records(registry, gate):
+                  if rec.is_enum or not rec.artifact_path:
+                      continue
+                  if not rec.hash:
+                      skipped.append(f"{gate}.{rec.key}: 未冻结（Gate 门禁自有判据）")
+                      continue
+                  path = cfg / rec.artifact_path
+                  if not path.exists():
+                      failures.append(f"{gate}.{rec.key}: 制品文件缺失 {path}")
+                      continue
+                  actual = compute_artifact_hash(path)
+                  if actual != rec.hash:
+                      failures.append(
+                          f"{gate}.{rec.key}: 注册表声明 {rec.hash} != 制品内容 {actual}"
+                          "（制品被改动未重新冻结 → 契约失效）")
+          for s in skipped:
+              print(f"[SKIP] {s}")
+          for f in failures:
+              print(f"■ [FAIL] {f}")
+          print(f"\n制品完整性：{len(failures)} 项失配，{len(skipped)} 项未冻结。")
+          raise SystemExit(1 if failures else 0)
+          PY
+
+      - name: 跨制品一致性（说法是否自相矛盾）
+        run: python -m bidpricing.cli contract-check
+
+      - name: 规则集指纹自检
+        run: python -m bidpricing.cli ruleset-selftest
+
+      - name: 全量测试
+        run: python -m unittest discover -s tests -t .

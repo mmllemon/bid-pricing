@@ -23,6 +23,9 @@ frontend/node_modules/
 
 # ---- 环境与本地文件 ----
 .env
+# vendored 工作台（lshu）：凭证与运行期数据库不入库（结构见 .env.example）
+workbench-server/.env.local
+workbench-server/data/
 *.pdf
 .trae/
 .workbuddy/

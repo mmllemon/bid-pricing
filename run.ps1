@@ -1,5 +1,8 @@
 ﻿# bid-pricing one-click launcher (Windows PowerShell 5.1+)
-# 启动后端 8000 + 前端 8080 + agent 8010（Pi Durable 边车，可选，BIDPRICING_AGENT_PORT 可覆盖）；首次运行在仓库 .venv 内建隔离环境并装依赖；Ctrl+C 停止全部。
+# 启动后端 8000 + 前端 8080 + agent 8010（Pi Durable 边车，可选，BIDPRICING_AGENT_PORT 可覆盖）
+# + lshu 个人工作台 3456（边车，可选，BIDPRICING_WORKBENCH_PORT 可覆盖；
+#   代码取仓库内 workbench-app/（React 前端）+ workbench-server/（Express 后端），不再指向 skill 安装目录）；
+# 首次运行在仓库 .venv 内建隔离环境并装依赖；Ctrl+C 停止全部。
 #
 # ⚠ 本文件必须保存为「UTF-8 with BOM」。
 #   Windows PowerShell 5.1 对**无 BOM** 的 .ps1 按系统 ANSI（中文 Windows = GBK）解码。
@@ -24,6 +27,16 @@
 #      而探活 GET / 可能被占用方的 HTTP 服务答 200 —— 打印「成功」而前端实际没起来。
 #      故起服务前先查端口占用并明说占用者；探活通过后还须确认是自己拉起的进程
 #      还活着；端口可用 BIDPRICING_BACKEND_PORT / BIDPRICING_FRONTEND_PORT 覆盖。
+#   8) WORKBENCH_UPSTREAM 必须在**起后端进程之前**设好：api/wb_proxy.py 在 import 时
+#      读它（默认 127.0.0.1:3456），后端拉起后再改只能影响新进程，反代仍指向旧地址。
+#   9) lshu 工作台要跑 src/index.ts（node --import tsx），不能跑 dist/index.js：
+#      那份 dist 由 moduleResolution=bundler 的 tsc 产出，相对导入不带扩展名，
+#      普通 node 按 ESM 解析会 ERR_MODULE_NOT_FOUND —— 它的 npm start 本身就是坏的。
+#  10) lshu 工作台是**仓库内 vendored 代码**（workbench-app/ + workbench-server/），
+#      故本脚本要负责它的「依赖安装 / 前端构建 / 启动」三段，且全部按增值组件处理：
+#      Node 缺失、产物构建失败、端口被外来服务占用，一律只告警不阻断主应用。
+#      注意 3456 上回答 /api/health 的是**同一个 Express 进程**（SPA 与 API 同进程），
+#      前端 dist 由它在请求期读盘，故重建产物后无需重启。
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -279,6 +292,39 @@ $FrontendPort = Get-PortOrDefault "BIDPRICING_FRONTEND_PORT" 8080
 Assert-PortFree $BackendPort  "后端" "BIDPRICING_BACKEND_PORT"
 Assert-PortFree $FrontendPort "前端" "BIDPRICING_FRONTEND_PORT"
 
+# ============================================================================
+# lshu-workbench 边车：解析目录与端口，并**提前**把反代上游告诉后端。
+# WORKBENCH_UPSTREAM 必须在起后端进程之前设置：api/wb_proxy.py 在模块 import 时
+# 读取它（默认 http://127.0.0.1:3456），后端一旦拉起再改就晚了。
+# 目录是**仓库内 vendored 代码**（收编后不再指向 skill 安装目录）：
+#   workbench-app/     React 前端，构建产物 dist/ 由 Express 在请求期读盘
+#   workbench-server/  Express 后端（SPA 与 API 同进程），入口是 TS 源码
+# 端口优先级：BIDPRICING_WORKBENCH_PORT > workbench-server\.env.local 的 PORT > 3456。
+# ============================================================================
+$WbAppDir = Join-Path $Root "workbench-app"
+$WbBackendDir = Join-Path $Root "workbench-server"
+$WbDist = Join-Path $WbAppDir "dist"
+$WbDataDir = Join-Path $Root "outputs\workbench-data"
+# 入口是 TS 源码而不是 dist：该 skill 的 tsconfig 用 moduleResolution=bundler，
+# tsc 产出的 dist 里全是无扩展名的相对导入（import './bootstrapEnv'），
+# 普通 node 按 ESM 规则解析必然 ERR_MODULE_NOT_FOUND —— 即它自己的 npm start 就是坏的。
+# 故用 tsx 直跑 src/index.ts（原 skill 的 Start.ps1 亦如此）。
+$WbEntry = Join-Path $WbBackendDir "src\index.ts"
+$WbTsx = Join-Path $WbBackendDir "node_modules\tsx"
+$WbEnvFile = Join-Path $WbBackendDir ".env.local"
+
+$WbPort = 3456
+if ($env:BIDPRICING_WORKBENCH_PORT) {
+    $WbPort = Get-PortOrDefault "BIDPRICING_WORKBENCH_PORT" 3456
+}
+elseif (Test-Path -LiteralPath $WbEnvFile) {
+    # 与后端读同一份配置，避免「脚本探一个端口、服务绑另一个端口」的静默错位
+    $wm = [regex]::Match((Get-Content -LiteralPath $WbEnvFile -Raw), '(?m)^\s*PORT\s*=\s*"?(\d+)"?')
+    if ($wm.Success) { $WbPort = [int]$wm.Groups[1].Value }
+}
+
+$env:WORKBENCH_UPSTREAM = "http://127.0.0.1:$WbPort"
+
 # --- start backend ---
 $env:PYTHONPATH = "src"
 $env:PYTHONUNBUFFERED = "1"
@@ -346,6 +392,86 @@ else {
     }
 }
 
+# ============================================================================
+# lshu-workbench 实例（个人工作台，默认 3456）
+# 同为增值组件：任何故障只告警跳过，不阻断主应用。
+# 有意不用 Assert-PortFree 预检：3456 若被「已在跑的工作台」占用，探活会通过
+# → 按「复用外来实例」处理；被别的服务占用则探活失败 → 告警跳过。
+# 代码是仓库内 vendored（workbench-app/ + workbench-server/），故本段含
+# 「依赖安装 → 前端构建 → 启动」三步，任一步失败都只放弃本组件、不影响主应用。
+# ============================================================================
+$workbench = $null
+$npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+
+function Invoke-WbNpm {
+    # npm 是原生命令，必须走 Invoke-Native：否则 stderr 警告会被 Stop 升级成终止错误
+    param([string]$WorkDir, [string[]]$ArgList, [string]$What)
+    if (-not $npmCmd) {
+        Write-Host "[WARN] npm 不可用，$What 无法执行（不影响主应用）。" -ForegroundColor Yellow
+        return $false
+    }
+    Push-Location $WorkDir
+    try { $r = Invoke-Native -Exe $npmCmd.Source -ArgList $ArgList -Capture }
+    finally { Pop-Location }
+    if ($r.Code -ne 0) {
+        Write-Host "[WARN] $What 失败，跳过个人工作台（不影响主应用）。npm 输出：" -ForegroundColor Yellow
+        @($r.Text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3) |
+            ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow }
+        return $false
+    }
+    return $true
+}
+
+if (-not $nodeCmd) {
+    Write-Host "[WARN] node 不可用，跳过个人工作台（不影响主应用）。" -ForegroundColor Yellow
+}
+elseif (-not (Test-Path -LiteralPath $WbEntry)) {
+    Write-Host "[WARN] 未找到工作台后端入口 $WbEntry，跳过（该组件为仓库内 workbench-server/）。" -ForegroundColor Yellow
+}
+else {
+    $wbOk = $true
+    # 依赖：前后端各自独立 node_modules，两者都不入库，故全新克隆必装。
+    if (-not (Test-Path (Join-Path $WbBackendDir "node_modules"))) {
+        Write-Host "==> workbench: 安装后端依赖（npm install，可能要一会儿）..." -ForegroundColor Cyan
+        $wbOk = Invoke-WbNpm -WorkDir $WbBackendDir -ArgList @("install", "--no-audit", "--no-fund") -What "工作台后端依赖安装"
+    }
+    if ($wbOk -and -not (Test-Path (Join-Path $WbAppDir "node_modules"))) {
+        Write-Host "==> workbench: 安装前端依赖（npm install，可能要一会儿）..." -ForegroundColor Cyan
+        $wbOk = Invoke-WbNpm -WorkDir $WbAppDir -ArgList @("install", "--no-audit", "--no-fund") -What "工作台前端依赖安装"
+    }
+    if ($wbOk -and -not (Test-Path -LiteralPath $WbTsx)) {
+        Write-Host "[WARN] 工作台后端缺少 tsx 运行时（$WbTsx），跳过（在该目录跑 npm install 可补齐）。" -ForegroundColor Yellow
+        $wbOk = $false
+    }
+    # 前端产物：Express 只在请求期读 workbench-app/dist，缺了页面就 404。
+    # 仅在缺失时构建（构建慢）；源码改过后需自行 npm run build，与「重建无需重启」配套。
+    if ($wbOk -and -not (Test-Path -LiteralPath $WbDist)) {
+        Write-Host "==> workbench: 构建前端产物（npm run build）..." -ForegroundColor Cyan
+        if ((-not (Invoke-WbNpm -WorkDir $WbAppDir -ArgList @("run", "build") -What "工作台前端构建")) -or
+            -not (Test-Path -LiteralPath $WbDist)) {
+            Write-Host "[WARN] 工作台前端产物不可用（$WbDist），跳过个人工作台（不影响主应用）。" -ForegroundColor Yellow
+            $wbOk = $false
+        }
+    }
+    if ($wbOk) {
+        # dotenv 不覆盖已存在的 process.env：显式设 PORT 是让「脚本探的端口」与
+        # 「服务实际绑的端口」强制一致（脚本从 .env.local 读到的默认值此时无所谓）。
+        $env:PORT = "$WbPort"
+        # 工作台自有数据库必须落在本项目 outputs\ 下，不得写进仓库外路径（收编要求）。
+        # workbench-server/src/db.ts 以 WORKBENCH_DATA_DIR 为根，缺省是包内 data/。
+        $env:WORKBENCH_DATA_DIR = $WbDataDir
+        Write-Host "==> workbench http://127.0.0.1:$WbPort/api/health  ..."
+        $workbench = Start-Process -FilePath $nodeCmd.Source `
+            -ArgumentList @("--import", "tsx", "src/index.ts") `
+            -WorkingDirectory $WbBackendDir -PassThru -NoNewWindow `
+            -RedirectStandardOutput (Join-Path $LogDir "workbench.out.log") `
+            -RedirectStandardError (Join-Path $LogDir "workbench.err.log")
+        # 子进程已拿到环境快照，立即复原，避免这两个泛用名污染后续同级进程
+        Remove-Item Env:\PORT -ErrorAction SilentlyContinue
+        Remove-Item Env:\WORKBENCH_DATA_DIR -ErrorAction SilentlyContinue
+    }
+}
+
 # --- 启动后真实探测：没探到就不许打印成功 ---
 function Wait-HttpOk {
     param([string]$Url, [int]$TimeoutSec)
@@ -362,9 +488,10 @@ function Wait-HttpOk {
 }
 
 function Stop-All {
-    # -Id 只能出现一次；多进程传数组。$agent 未启动时为 $null，过滤掉。
+    # -Id 只能出现一次；多进程传数组。未启动的边车（$agent / $workbench）为 $null，过滤掉。
     $ids = @($backend.Id, $frontend.Id)
     if ($agent) { $ids = @($ids + $agent.Id) }
+    if ($workbench) { $ids = @($ids + $workbench.Id) }
     Stop-Process -Id @($ids) -Force -ErrorAction SilentlyContinue
 }
 
@@ -410,10 +537,26 @@ if ($agent) {
     }
 }
 
+# workbench（边车）：语义同 agent。注意 3456 上若跑的是「已在用的工作台」，
+# 探活会通过——此时不复用也不报错，只是 Ctrl+C 不会停它。
+if ($workbench) {
+    if (Wait-HttpOk "http://127.0.0.1:$WbPort/api/health" 30) {
+        if ($workbench.HasExited) {
+            Write-Host "[WARN] :$WbPort/api/health 已有人应答，但本拉起的工作台进程已退出——复用在跑的实例（Ctrl+C 时不会停它）。" -ForegroundColor Yellow
+            $workbench = $null
+        }
+    } else {
+        Write-Host "[WARN] 个人工作台 30s 内未就绪，已跳过（不影响主应用）。日志：outputs\logs\workbench.err.log" -ForegroundColor Yellow
+        Stop-Process -Id @($workbench.Id) -Force -ErrorAction SilentlyContinue
+        $workbench = $null
+    }
+}
+
 Write-Host ""
 Write-Host "  frontend: http://127.0.0.1:$FrontendPort" -ForegroundColor Green
 Write-Host "  backend:  http://127.0.0.1:$BackendPort/api/health" -ForegroundColor Green
 if ($agent) { Write-Host "  agent:    http://127.0.0.1:$AgentPort/health  (Pi Durable 边车)" -ForegroundColor Green }
+if ($workbench) { Write-Host "  workbench: http://127.0.0.1:$WbPort/  (个人工作台；母项目 #workbench 以 iframe 嵌入本地址)" -ForegroundColor Green }
 Write-Host "  logs:     outputs\logs\*.log" -ForegroundColor DarkGray
 Write-Host "Press Ctrl+C to stop all services ..." -ForegroundColor DarkGray
 
@@ -422,6 +565,7 @@ try {
     # 写成 -Id $a -Id $b 会以「多次指定了参数 Id」参数绑定失败，停止路径直接报错。
     $ids = @($backend.Id, $frontend.Id)
     if ($agent) { $ids = @($ids + $agent.Id) }
+    if ($workbench) { $ids = @($ids + $workbench.Id) }
     Wait-Process -Id @($ids) -ErrorAction SilentlyContinue
 }
 catch [System.Management.Automation.PipelineStoppedException] {

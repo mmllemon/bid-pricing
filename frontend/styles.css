@@ -70,6 +70,20 @@ button{font-family:var(--font)}
 .nav-num{margin-left:auto;font-family:var(--font-pixel);font-size:12px;letter-spacing:.04em;color:var(--text-tertiary)}
 .nav-item.active .nav-num{color:var(--ui-black)}
 
+/* ---------- 工作台二级折叠（P-W8：9 页并入外层，全站只有一条竖栏） ----------
+   父行 = 折叠开关（右侧 chevron），二级项缩进一档表示层级。
+   不使用 display:none 之外的隐藏技巧；字号与父行一致（14px），
+   因为像素字体只在 12px 网格整数倍上清晰，缩进已足够表达层级。 */
+.nav-parent .nav-chev{width:14px;height:14px;flex-shrink:0;margin-left:8px;transition:transform var(--dur-fast)}
+.nav-parent.is-collapsed .nav-chev{transform:rotate(-90deg)}
+/* 子项处于激活态时给父行一条橙色竖标（硬 inset，无模糊），收起状态下也能看出当前在哪 */
+.nav-parent.has-active{box-shadow:inset 4px 0 0 var(--ui-orange)}
+/* 树状线 + 缩进表达层级；二级项更紧凑，避免 16 项把侧栏撑到一屏之外 */
+.nav-sublist{margin-left:12px;padding-left:10px;border-left:var(--line-thin)}
+.nav-sublist.is-collapsed{display:none}
+.nav-sub{padding-top:7px;padding-bottom:7px;margin-bottom:4px}
+.nav-sub svg{width:16px;height:16px}
+
 /* 底部用户区 + 版本号 */
 .sidebar-foot{padding:12px 16px 16px;border-top:var(--line-thin)}
 .user-block{display:flex;align-items:center;gap:10px;margin-bottom:9px}
@@ -142,8 +156,10 @@ button{font-family:var(--font)}
 .table-wrap tbody tr:hover>td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
 .table-wrap tbody tr.selected>td:first-child{box-shadow:inset 4px 0 0 var(--ui-orange)}
 
-/* ---------- 个人工作台（深度集成，原生渲染于本页） ---------- */
+/* ---------- 个人工作台（宿主壳：内容由 React 版工作台 :3456 以 iframe 提供） ---------- */
 .workbench-view{min-height:60vh}
+.workbench-view .wb-frame{display:block;width:100%;height:calc(100vh - 104px);min-height:520px;border:0;background:var(--ui-white)}
+@media (max-width:560px){.workbench-view .wb-frame{height:calc(100vh - 152px)}}
 .card-head h2{font-size:16px;font-weight:700;margin:0;letter-spacing:-.01em}
 .card-head p{font-size:12px;color:var(--text-secondary);margin:3px 0 0;text-align:right}
 

@@ -230,8 +230,9 @@
 .note-cell{font-size:12px;color:var(--text-secondary);margin-left:6px}
 
 /* ---------- 常驻悬浮操作坞 ---------- */
+/* right 由 32px 让到 92px：给右下角 AI 助手 FAB（48px 宽 + 12px 间距）腾位，两者不重叠。 */
 .floating-dock{
-  position:fixed;bottom:24px;right:32px;z-index:var(--z-floating);
+  position:fixed;bottom:24px;right:92px;z-index:var(--z-floating);
   background:var(--ui-white);
   border:var(--line-strong);border-radius:0;padding:6px 10px;
   display:flex;align-items:center;gap:8px;
@@ -461,7 +462,8 @@
   .kpi-row{grid-template-columns:repeat(2,1fr)}
 }
 @media (max-width:768px){
-  .floating-dock{left:50%;right:auto;transform:translateX(50%);bottom:16px}
+  /* 操作坞在窄屏居中、并抬到 FAB 上方（FAB 占 bottom:24~72），避免与其重叠遮挡 */
+  .floating-dock{left:50%;right:auto;transform:translateX(-50%);bottom:84px}
   .kpi-row{grid-template-columns:1fr}
   .intake-grid{grid-template-columns:1fr}
   .table-section{padding:16px}

@@ -3,3 +3,6 @@ uvicorn[standard]>=0.30,<1
 python-multipart>=0.0.9,<1
 pulp>=3.3,<4
 highspy>=1.11,<2
+# 工作台域（api/wb_local.py）用 zoneinfo 校验 IANA 时区并推导「当地日期」；
+# Windows 没有系统时区库，缺它时 available_timezones() 为空集。
+tzdata>=2024.1

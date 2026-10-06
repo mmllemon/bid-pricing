@@ -1,30 +1,80 @@
 const quoteView = document.querySelector('#quoteView');
 const moduleView = document.querySelector('#moduleView');
 const workbenchView = document.querySelector('#workbenchView');
-const agentView = document.querySelector('#agentView');
+// 个人工作台已由 React 版（workbench-server :3456，与 SPA 同进程）接管；
+// 母项目侧只保留一个同页 iframe 宿主。P-W8 起工作台 9 页并入外层侧栏作二级折叠项，
+// 父 :8080 与子 :3456 跨源，二级路由靠 postMessage 双向同步。
+const WB_ORIGIN = window.__WORKBENCH_ORIGIN__ || 'http://127.0.0.1:3456';
+function mountWorkbenchFrame() {
+  const frame = workbenchView && workbenchView.querySelector('iframe');
+  if (frame && !frame.getAttribute('src')) {
+    wbReady = false;      // 重新挂载/刷新后必须重新握手，否则会把导航消息发给还没监听的文档
+    wbSyncedSub = null;
+    frame.setAttribute('src', WB_ORIGIN + '/');
+  }
+}
+
+// ---- hash 语义（P-W8）----
+// '#workbench' / '#workbench/<sub>' → 工作台（无 sub 视为根页 '/'）；其余仍是单段模块名。
+// 本函数是 hash 的唯一解析入口，运行中改 hash 与首次加载都走它，避免两处兜底不一致。
+function parseHash(raw) {
+  const h = raw || '';
+  if (h === 'workbench' || h.indexOf('workbench/') === 0) {
+    return { module: 'workbench', sub: h.length > 'workbench/'.length ? '/' + h.slice('workbench/'.length) : '/' };
+  }
+  return { module: h || 'workbench', sub: null };
+}
+
+// ---- 与工作台 iframe 的通信（跨源）----
+// 安全：入站消息必须同时满足 origin 与 source；出站一律指定 targetOrigin，禁用 '*'。
+let wbReady = false;        // 子页是否已完成挂载握手
+let wbSyncedSub = null;     // 已与子页达成一致的二级路由，用于切断「父→子→父」回声
+let pendingWbNav = null;    // 子页 ready 之前发出的导航请求，先入队再 flush
+function wbFrame() { return workbenchView && workbenchView.querySelector('iframe'); }
+function wbAllows(to) { return (window.WB_NAV || []).some(item => item.to === to); }
+function wbNavigate(to) {
+  if (to === wbSyncedSub) return;                 // 已一致，不必重发
+  const frame = wbFrame();
+  if (!frame || !wbReady) { pendingWbNav = to; return; }
+  wbSyncedSub = to;
+  frame.contentWindow.postMessage({ __wb: 'nav', to: to }, WB_ORIGIN);
+}
+window.addEventListener('message', event => {
+  if (event.origin !== WB_ORIGIN) return;
+  const frame = wbFrame();
+  if (!frame || event.source !== frame.contentWindow) return;
+  const msg = event.data || {};
+  if (msg.__wb === 'ready') {
+    wbReady = true;
+    const to = pendingWbNav || parseHash(location.hash.slice(1)).sub || '/';
+    pendingWbNav = null;
+    wbNavigate(to);
+    return;
+  }
+  // 反向通道：子页内部改路由 → 外层高亮与父 hash 跟随（to 必须在外层清单白名单内）
+  if (msg.__wb === 'route' && typeof msg.to === 'string' && wbAllows(msg.to)) {
+    wbSyncedSub = msg.to;                         // 先记账：随后的 showModule→wbNavigate 即成为空操作
+    const target = 'workbench' + (msg.to === '/' ? '' : msg.to);
+    syncNavActive('workbench', msg.to);
+    if (location.hash.slice(1) !== target) location.hash = target;
+  }
+});
 const modulePages = {
   cost: { icon: '◫', title: '实施成本', subtitle: '归集项目执行阶段的人工、材料、机械和分包成本。', phase: 'Phase 3 · 实施成本', cards: [['成本计划', '建立目标成本与责任成本基线'], ['成本归集', '按清单、合同和实际发生额归集成本'], ['成本偏差', '对比预算成本与实际成本，定位超支项目']] },
   ledger: { icon: '▤', title: '项目台账', subtitle: '统一维护项目基本信息、合同信息和关键节点。', phase: 'Phase 4 · 项目台账', cards: [['项目档案', '集中查看项目基本信息与合同状态'], ['节点跟踪', '记录开工、完工、验收和付款节点'], ['经营指标', '汇总合同额、成本、回款和利润指标']] },
   settlement: { icon: '◴', title: '结算管理', subtitle: '跟踪变更签证、过程计量和最终结算数据。', phase: 'Phase 5 · 结算管理', cards: [['变更签证', '登记变更原因、金额和审批状态'], ['过程计量', '管理申报工程量与审核工程量'], ['结算审核', '核对合同价、调整项和最终结算金额']] },
 };
-function showModule(module) {
+function showModule(module, sub) {
   if (module === 'workbench') {
     quoteView.classList.add('hidden'); moduleView.classList.add('hidden');
     workbenchView.classList.remove('hidden');
-    if (agentView) agentView.classList.add('hidden');
-    if (window.__wbResurface) window.__wbResurface(); // 切回工作台即重渲染（经营概览重新拉取）
-    location.hash = 'workbench';
-    return;
-  }
-  if (module === 'agent') {
-    quoteView.classList.add('hidden'); moduleView.classList.add('hidden');
-    workbenchView.classList.add('hidden');
-    if (agentView) { agentView.classList.remove('hidden'); if (window.__agentResurface) window.__agentResurface(); }
-    location.hash = 'agent';
+    mountWorkbenchFrame(); // 首次显示才挂载 iframe（打开报价页时不必拉起工作台静态资源）
+    const to = sub || '/';
+    location.hash = 'workbench' + (to === '/' ? '' : to);   // '#workbench' 或 '#workbench/todos'
+    wbNavigate(to);                                        // 二级路由转给 iframe（未 ready 时入队）
     return;
   }
   workbenchView.classList.add('hidden');
-  if (agentView) agentView.classList.add('hidden');
   const page = modulePages[module];
   if (!page) { quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); return; }
   quoteView.classList.add('hidden'); moduleView.classList.remove('hidden');
@@ -32,30 +82,45 @@ function showModule(module) {
   location.hash = module;
   moduleView.querySelector('.module-back').addEventListener('click', () => selectModule('quote'));
 }
-function selectModule(module) {
+// 侧栏高亮：一级项按 data-module，工作台二级项按 data-wb-to（P-W8）。
+// 父行只反映「是否处于工作台」，自身不参与高亮（它的 active 会与子项抢视觉焦点）。
+function syncNavActive(module, sub) {
+  document.querySelectorAll('.nav-item').forEach(item => {
+    if (item.dataset.wbTo !== undefined) item.classList.toggle('active', module === 'workbench' && item.dataset.wbTo === (sub || '/'));
+    else item.classList.toggle('active', item.dataset.module === module);
+  });
+  const parent = document.getElementById('wbNavParent');
+  if (parent) parent.classList.toggle('has-active', module === 'workbench');
+}
+function selectModule(module, sub) {
   closeOverlays();  // 切页即关闭报价页弹层（方案中心/对比/审计），避免跨页面残留
-  document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.module === module));
+  syncNavActive(module, sub);
   // 操作坞只挂在「投标报价」页；其余页面隐藏（各模块后续接入各自专属操作坞）
   const dock = document.querySelector('.floating-dock');
   if (dock) dock.classList.toggle('hidden', module !== 'quote');
   // 报价页写 'quote' 而不是清空 hash：清空后 URL 变 ...index.html#，此时 location.hash 是空字符串，
   // 刷新会命中 initDashboard 的「无 hash → 默认个人工作台」分支，把报价页弹回工作台。
   // 各模块统一写自己的名字，刷新即可原地恢复。
-  if (module === 'quote') { location.hash = 'quote'; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); if (agentView) agentView.classList.add('hidden'); }
-  else showModule(module);
+  if (module === 'quote') { location.hash = 'quote'; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); }
+  else showModule(module, sub);
 }
 function closeOverlays() {
   if (typeof closePlanHub === 'function') closePlanHub();
   if (typeof closeCompareModal === 'function') closeCompareModal();
   if (typeof closeAuditModal === 'function') closeAuditModal();
 }
-document.querySelectorAll('.nav-item').forEach(button => {
+// 只绑定带 data-module 的导航项：侧栏由 js/sidebar.js 在更早的 <script> 里同步渲染完成，
+// 此处解析时节点已就绪。action 项（AI 助手，data-agent-open）不归本文件管，由 agent-panel.js 绑定。
+document.querySelectorAll('.nav-item[data-module]').forEach(button => {
   button.addEventListener('click', () => selectModule(button.dataset.module));
 });
 // hash 被清空（手动删地址栏片段）或收到空值时回落到默认落地页。
-// 兜底值必须与 initDashboard 的「无 hash → selectModule('workbench')」保持一致，
+// 兜底值集中在 parseHash（空值 → 工作台根页），与 initDashboard 的初始判定同源，
 // 否则「首次加载无 hash」和「运行中把 hash 清空」会落到两个不同页面。
-window.addEventListener('hashchange', () => selectModule(location.hash.slice(1) || 'workbench'));
+window.addEventListener('hashchange', () => {
+  const p = parseHash(location.hash.slice(1));
+  selectModule(p.module, p.sub);
+});
 // 初始模块选择延后到 initDashboard 内执行：此时 hubView/hubSelected 等模块级 let 已就绪，
 // 避免在文件顶部同步调用 selectModule → closeOverlays → closePlanHub 读到 TDZ 中的 hubView。
 
@@ -1997,7 +2062,7 @@ async function onGlobalProjectChange() {
   // 初始模块选择：放到宏任务里执行，保证在所有模块级声明（含 hubView/hubSelected）就绪后再调用
   // selectModule → closeOverlays → closePlanHub，避免初始化早期读到 TDZ 中的变量。
   setTimeout(() => {
-    if (location.hash) { const h = location.hash.slice(1); if (h === 'workbench' || h === 'agent' || h === 'quote' || modulePages[h]) selectModule(h); }
-    else selectModule('workbench');
+    const p = parseHash(location.hash.slice(1));
+    if (p.module === 'workbench' || p.module === 'quote' || modulePages[p.module]) selectModule(p.module, p.sub);
   }, 0);
 })();

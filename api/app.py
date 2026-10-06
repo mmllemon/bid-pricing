@@ -48,6 +48,10 @@ from bidpricing.quote_resolve import run_resolve
 from bidpricing.quote_strategies import STRATEGIES
 from bidpricing.validation.low_price_policy import DISPOSITION_NOTE
 
+from api.wb_local import router as wb_local_router
+from api.wb_proxy import router as wb_router
+from api.wb_todos import router as wb_todos_router
+
 # H-012 多用户隔离（不鉴权，仅目录级）：以运行账号作为命名空间，各用户方案互不相见。
 # 方案与方案组统一落到 SQLite，库文件沿用按用户重定向的 PROJECTS_DIR 模型。
 CURRENT_USER = safe_user(os.environ.get("USERNAME") or os.environ.get("USER") or "default")
@@ -255,7 +259,8 @@ app = FastAPI(title="工程智算报价 API", version="0.1.0")
 # 前端误报「后端服务不可达」。安全边界是 API Token / 目录级隔离，不是 CORS。
 app.add_middleware(CORSMiddleware,
                    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
-                   allow_methods=["GET", "POST"], allow_headers=["Authorization", "X-API-Token", "Content-Type", "Accept"])
+                   allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+                   allow_headers=["Authorization", "X-API-Token", "Content-Type", "Accept"])
 WEB_OUTPUT_DIR = user_scope(ROOT / "outputs" / "web-results", CURRENT_USER)
 WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -355,6 +360,18 @@ async def _csp_guard(request, call_next):
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "bidpricing"}
+
+
+# ===== 工作台域本地实现（D-2 收编侧）=====
+# 必须先于 wb_proxy 注册：FastAPI 按注册顺序匹配，已收编的 /api/wb/<path> 由这里
+# 命中，未被收编的路径才落到下面的兜底反代。前端契约不变。
+app.include_router(wb_todos_router)
+app.include_router(wb_local_router)
+
+# ===== lshu-workbench 过渡期反代（D-2 strangler fig）=====
+# /api/wb/<path> → Express(:3456)/api/<path>。逐模块 Python 收编后，在 wb_local 里
+# 注册同路径的本地实现即可短路，前端契约不变。
+app.include_router(wb_router)
 
 
 # ===== 长江现货金属价格代理（工具箱「拉取长江现货」按钮用）=====

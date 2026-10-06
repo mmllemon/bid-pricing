@@ -262,7 +262,7 @@ details.spec .hint { margin: 6px 0; }
 .well-viz-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 16px 0 8px; }
 .well-viz { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 /* 1280 而非 1024：1025–1420 区间两栏每栏只有 356–504px，图必被裁（1100px 时藏 148px）只能横向拖；
-   1280 是既有档位（styles.css / quote-dashboard.css / workbench.css 同档），不新增第 5 档。 */
+   1280 是既有档位（styles.css / quote-dashboard.css 同档），不新增第 5 档。 */
 @media (max-width: 1280px) { .well-viz { grid-template-columns: 1fr; } }
 /* min-width:0：栅格子项默认 min-width:auto 会被 svg 托底宽度顶开，导致整页横向溢出，
    必须显式归零才能让 .well-viz-svg 自己滚动。 */

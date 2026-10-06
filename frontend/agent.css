@@ -1,16 +1,45 @@
 /* ===== AI 测算助手（Pi Durable 边车 8010） =====
- * 遵循全站设计系统：暖纸底 surface-card / 16px radius-card / shadow-card /
- * 12px 字号红线 / 语义 z 与状态色。
+ * 全站悬浮：FAB + 面板 + 模型设置抽屉，DOM 由 agent-panel.js 运行时注入。
+ * 遵循全站设计系统：白底 surface-card / 0 圆角 / 无模糊阴影 / 12px 字号红线 / 语义 z 与状态色。
  */
 
-.agent-view{min-height:60vh;display:flex;flex-direction:column}
+/* ---------- 悬浮入口 FAB（48×48，橙底黑框，全站右下角） ---------- */
+.agent-fab{
+  position:fixed;bottom:24px;right:32px;z-index:var(--z-floating);
+  width:48px;height:48px;display:grid;place-items:center;cursor:pointer;
+  background:var(--ui-orange);color:var(--ui-black);
+  border:var(--line-strong);border-radius:0;padding:0;
+  transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out);
+}
+.agent-fab svg{width:22px;height:22px}
+.agent-fab:hover{background:var(--ui-yellow)}
+.agent-fab[aria-expanded="true"]{background:var(--ui-black);color:var(--ui-white)}
 
-/* ---------- 页面头（与其他模块页一致：面包屑 + 大标题 + 右侧操作） ---------- */
-.agent-page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px}
-.agent-page-header .head-left{display:flex;flex-direction:column;gap:6px}
-.agent-page-header h1{font-size:36px;font-weight:400;margin:0;letter-spacing:0}
-.agent-page-sub{color:var(--text-secondary);font-size:12px;margin:0}
-.agent-page-actions{display:flex;align-items:center;gap:10px}
+/* ---------- 悬浮面板（FAB 正上方，fixed 定位，不参与任何页面的视图切换） ---------- */
+.agent-panel{
+  position:fixed;right:32px;bottom:84px;z-index:calc(var(--z-floating) + 1);
+  width:400px;max-width:calc(100vw - 64px);
+  height:min(620px, calc(100vh - 132px));
+  display:flex;flex-direction:column;overflow:hidden;
+  background:var(--surface-card);border:var(--line-strong);border-radius:0;
+  animation:agentIn var(--dur-base) var(--ease-out);
+}
+.agent-panel-head{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-bottom:var(--line-thin);background:var(--surface-card);
+}
+.agent-panel-title{
+  font-size:14px;font-weight:700;letter-spacing:0;margin-right:auto;white-space:nowrap;
+}
+.agent-panel-close{
+  width:30px;height:30px;display:grid;place-items:center;cursor:pointer;flex-shrink:0;
+  background:var(--surface-card);border:var(--line-thin);border-radius:0;color:var(--text);
+}
+.agent-panel-close svg{width:14px;height:14px}
+.agent-panel-close:hover{background:var(--surface-soft)}
+/* 面板内是限高容器：聊天区自己滚动，不再沿用整页版的 100vh 计算与 520px 最小高 */
+.agent-panel .agent-shell{min-height:0;flex:1}
+.agent-panel .agent-chat{max-height:none;min-height:0;flex:1;padding:16px 16px 12px}
 
 /* 状态药丸：● 在线 + 模型名 */
 .agent-status-pill{
@@ -235,6 +264,9 @@
   .agent-chat{padding:16px 16px}
   .agent-msg{max-width:92%}
   .agent-approval{max-width:100%}
+  /* 面板改为近满宽；底部抬到 80px，与报价页居中的操作坞错开 */
+  .agent-panel{left:16px;right:16px;width:auto;bottom:80px;height:min(560px, calc(100vh - 120px))}
+  .agent-settings-btn{padding:0 8px}
 }
 
 /* ============================================================
@@ -244,11 +276,11 @@
    不覆盖：.agent-chat / .agent-msg 正文与 .agent-msg.err 错误提示、
    .agent-welcome p、.ap-args（工具参数 JSON）、.agent-settings label /
    .chk / .as-test，以及 textarea / select / input 输入内容
-   （§5.1 第 203 行，#agentView 是 AI 对话页，聊天正文必须保持可读）。
+   （§5.1 第 203 行，AI 对话正文必须保持可读）。
    规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
    本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
    ============================================================ */
-.agent-page-header h1,   /* 页面 H1 */
+.agent-panel-title,      /* 面板标题 */
 .agent-status-pill,      /* 状态药丸 */
 .agent-settings-btn,     /* 按钮 */
 .agent-send,

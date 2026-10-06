@@ -22,6 +22,13 @@ from bidpricing.io.boq import (
 from bidpricing.io.clean import clean_listing_rows
 from bidpricing.io.xlsx import XlsxError, load_workbook
 
+# 双形态导入：`discover -s tests` 把 tests/ 当顶层（平铺模块），
+# `discover -s tests -t .` 把它当包（包内相对导入）。两种跑法都要能用。
+try:
+    from ._real_sample import require_registered_sample
+except ImportError:  # pragma: no cover - 取决于 discover 的 top-level
+    from _real_sample import require_registered_sample
+
 REPO = Path(__file__).resolve().parents[1]
 REAL_CAP = REPO.parent / "真实案件示例" / "中标限价" / (
     "西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx"
@@ -266,10 +273,17 @@ class ReaderTest(unittest.TestCase):
 
 @unittest.skipUnless(REAL_CAP.exists(), "真实样本不在本机（跳过，不视为失败）")
 class RealFileSmokeTest(unittest.TestCase):
-    """真实配对样本冒烟：数量与对账口径与已固化的 pair.json 交叉印证。"""
+    """真实配对样本冒烟：数量与对账口径与已固化的 pair.json 交叉印证。
+
+    样本是**仓外文件**：先按 T01-05 登记表复算限价侧版本指纹，被替换时
+    **跳过并说明原因**，而不是把「样本换了版本」报成三条 ``83 != 84``
+    的解析器回归（实测踩过：样本由 84 行版被换成 83 行版）。
+    报价侧未登记导入、无比对基准，故尚无版本守卫——见 ``tests/_real_sample.py``。
+    """
 
     @classmethod
     def setUpClass(cls):
+        require_registered_sample(REAL_CAP, "cap")
         cls.cap = parse_listing(REAL_CAP, "XIYONG-L")
         cls.bid = parse_listing(REAL_BID, "XIYONG-L")
 

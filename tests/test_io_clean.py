@@ -19,6 +19,13 @@ from bidpricing.io.clean import (
     clean_listing_rows,
 )
 
+# 双形态导入：`discover -s tests` 把 tests/ 当顶层（平铺模块），
+# `discover -s tests -t .` 把它当包（包内相对导入）。两种跑法都要能用。
+try:
+    from ._real_sample import require_registered_sample
+except ImportError:  # pragma: no cover - 取决于 discover 的 top-level
+    from _real_sample import require_registered_sample
+
 
 def _row(**over) -> ParsedRow:
     base = dict(
@@ -114,11 +121,14 @@ class CleanListingTest(unittest.TestCase):
             clean_listing_rows([], "bid")
 
     def test_real_file_smoke(self):
-        """真实文件冒烟：84 行全通过（含限价独有 no_cap 项 03B015 / 03B016），脚手架搭拆 cap 空 → no_cap。"""
+        """真实文件冒烟：84 行全通过（含限价独有 no_cap 项 03B015 / 03B016），脚手架搭拆 cap 空 → no_cap。
+
+        样本是仓外文件，先用导入登记表复算版本指纹：被替换时**跳过并说明**，
+        而不是抛一条 ``83 != 84``（那会把「样本换了版本」读成解析器回归）。
+        """
         src = (Path(__file__).resolve().parents[1].parent / "真实案件示例" / "中标限价" /
                "西永L分区公立学校（暂定名）一期工程等项目配电工程.xlsx")
-        if not src.exists():
-            self.skipTest("真实样本文件不在本机")
+        require_registered_sample(src, "cap")
         from bidpricing.io.boq import parse_listing
         report = parse_listing(str(src), "XIYONG-L")
         rows, rep = clean_listing_rows(report.rows, "cap")

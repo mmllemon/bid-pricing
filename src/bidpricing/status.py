@@ -303,20 +303,35 @@ def collect_advisories(root: Path) -> list[str]:
 
 
 def run_tests(root: Path, timeout: int = 180) -> dict:
-    """现场运行测试套件。不接受缓存结果——缓存会撒谎。"""
+    """现场运行测试套件。不接受缓存结果——缓存会撒谎。
+
+    子进程输出**显式**按 UTF-8 读写（``encoding`` + ``errors`` + 传
+    ``PYTHONIOENCODING`` 给孩子进程）：``text=True`` 缺省按本机 locale 解码，
+    而 unittest 的报告含中文用例名/中文失败说明。在中文 Windows（控制台
+    CP=936）上，父进程按 GBK 解 UTF-8 字节 → 读取线程抛 UnicodeDecodeError →
+    ``out.stdout`` 变成 ``None`` → 紧接着的字符串拼接直接 TypeError，
+    **整条 ``status`` 命令崩掉，状态快照根本生成不出来**。
+
+    这条坑的教训与其它判据同源：不显式指定编码，等于把「能不能生成快照」
+    交给运行环境的区域设置。显式指定后，控制台是 GBK 还是 UTF-8 都一样。
+    """
     try:
         out = subprocess.run(
             [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
             cwd=str(root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
-            env={**_env(), "PYTHONPATH": "src"},
+            env={**_env(), "PYTHONPATH": "src", "PYTHONIOENCODING": "utf-8"},
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return {"ran": None, "ok": None, "detail": f"无法运行：{exc}"}
 
-    blob = out.stdout + out.stderr
+    # 读取线程异常时子进程对象仍会返回，但两个流可能是 None——不设兜底就会在
+    # 拼接处抛 TypeError，把「子进程没读成」伪装成「状态模块自身坏了」。
+    blob = (out.stdout or "") + (out.stderr or "")
     m = re.search(r"Ran (\d+) tests?", blob)
     count = int(m.group(1)) if m else None
     return {
@@ -355,15 +370,23 @@ def collect(
     gate = evaluate_gate_0(registry, cfg, selection)
 
     artifacts = []
-    for rec in parse_records(registry, "gate_0a"):
-        artifacts.append(
-            {
-                "key": rec.key,
-                "kind": rec.kind,
-                "hash": rec.hash or "",
-                "frozen_at": rec.frozen_at or "",
-            }
-        )
+    # 两个闸门都要列。只列 Gate 0a 会让 Gate 0b 的制品（成本口径/税口径/桥接表/
+    # q^1 声明…）在交接文档里**完全看不到 hash**——而它们恰恰是「业务口径会不会
+    # 悄悄改掉」的判据所在。kind=approvals 等非版本化记录不入表（它们没有待校验的
+    # 内容 hash，列出来只会让「未冻结」这四个字失去含义）。
+    for gate_key in ("gate_0a", "gate_0b"):
+        for rec in parse_records(registry, gate_key):
+            if rec.kind not in ("versioned", "enum"):
+                continue
+            artifacts.append(
+                {
+                    "key": rec.key,
+                    "gate": gate_key,
+                    "kind": rec.kind,
+                    "hash": rec.hash or "",
+                    "frozen_at": rec.frozen_at or "",
+                }
+            )
 
     tasks_raw = load_tasks(root)
     tasks = tasks_raw.get("tasks", [])
@@ -396,6 +419,12 @@ def collect(
         "git": collect_git(),
         "gates": gate["summary"],
         "gate_0a_items": gate["gate_0a"]["items"],
+        # 其余闸门的逐条判据也要进快照：只写「Gate 0b = BLOCKED」而不写被什么挡住，
+        # 接手者仍得自己复跑 gate-check 才知道原因——那等于把快照最有价值的一半
+        # 留在了命令输出里（本次实测：Gate 0b 的阻塞项是一条制品 hash 失配，
+        # 快照完全没体现，而它正是那半个月潜伏不报的那个问题）。
+        "gate_0b_items": gate["gate_0b"]["items"],
+        "phase_0_input_gate_items": gate["phase_0_input_gate"]["items"],
         "artifacts": artifacts,
         "tests": tests,
         "contract_consistency": contract_consistency,
@@ -633,9 +662,38 @@ def render(snap: dict, *, state_path: Path | None = None) -> str:
             "",
         ]
 
-    L += ["---", "", "## 三、契约制品冻结表", "", "| 制品 key | 类型 | hash | 冻结时间 |", "|---|---|---|---|"]
+    # 其余闸门的阻塞明细。旧快照只写状态不写原因，接手者必须自己复跑 gate-check
+    # 才能回答「被什么挡住」——而快照的全部意义就是免去这一步。明细取不到时
+    # 明说「未采集」，不静默留白（本仓对「未定态」的一贯口径）。
+    for gate_key, gate_label in (
+        ("gate_0b", "Gate 0b"),
+        ("phase_0_input_gate", "Phase 0 输入门"),
+    ):
+        if snap["gates"].get(gate_key) != "BLOCKED":
+            continue
+        blocked = [
+            i for i in (snap.get(f"{gate_key}_items") or [])
+            if i.get("status") == "BLOCKED"
+        ]
+        if not blocked:
+            L += [
+                f"**{gate_label} 为 BLOCKED，但明细未采集** —— 请运行 "
+                "`gate-check` 查看阻塞项。",
+                "",
+            ]
+            continue
+        L += [f"**{gate_label} 阻塞项：**", ""]
+        for b in blocked:
+            L.append(f"- `{b['item']}` — {b['reason']}")
+        L.append("")
+
+    L += ["---", "", "## 三、契约制品冻结表", "",
+          "| 制品 key | 闸门 | 类型 | hash | 冻结时间 |", "|---|---|---|---|---|"]
     for a in snap["artifacts"]:
-        L.append(f"| `{a['key']}` | {a['kind']} | {a['hash'] or '**未冻结**'} | {a['frozen_at'] or '—'} |")
+        L.append(
+            f"| `{a['key']}` | {a.get('gate', '—')} | {a['kind']} | "
+            f"{a['hash'] or '**未冻结**'} | {a['frozen_at'] or '—'} |"
+        )
     L += [
         "",
         "> hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。",

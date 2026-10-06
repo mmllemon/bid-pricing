@@ -14,10 +14,15 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import tempfile
+import types
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest import mock
 
 from bidpricing.artifact import load_registry
 from bidpricing.paths import GATE0_REGISTRY, config_dir, repo_root
@@ -27,6 +32,7 @@ from bidpricing.status import (
     derive_next_steps,
     effective_status,
     render,
+    run_tests,
 )
 
 
@@ -246,9 +252,136 @@ class RenderTest(unittest.TestCase):
         out = render(self._snap())
         self.assertIn("无阻塞项", out)
 
+    def test_freeze_table_lists_both_gates(self):
+        """冻结表必须两个闸门都列。
+
+        只列 Gate 0a 时，Gate 0b 的制品（成本口径 / 税口径 / 桥接表 / q^1 声明）
+        在交接文档里看不到 hash——而「业务口径会不会被悄悄改掉」正靠这张表。
+        """
+        snap = self._snap()
+        snap["artifacts"] = [
+            {"key": "field_schema_version", "gate": "gate_0a", "kind": "versioned",
+             "hash": "sha256:aaa", "frozen_at": "2026-01-01"},
+            {"key": "cost_input_tax_spec", "gate": "gate_0b", "kind": "versioned",
+             "hash": "sha256:bbb", "frozen_at": "2026-01-02"},
+        ]
+        out = render(snap)
+        self.assertIn("`cost_input_tax_spec`", out)
+        self.assertIn("gate_0b", out)
+        self.assertIn("sha256:bbb", out)
+
+    def test_lists_gate_0b_blockers_when_present(self):
+        """Gate 0b 的阻塞项也必须落进快照。
+
+        旧实现只把 gate_0a 的明细带进快照，于是第二节只能写「Gate 0b = BLOCKED」
+        而不写被什么挡住——本次实测的阻塞项是一条制品 hash 失配，快照完全没体现，
+        接手者仍得自己复跑 gate-check 才问得出来。
+        """
+        snap = self._snap()
+        snap["gate_0b_items"] = [
+            {"scope": "gate_0b", "item": "cost_input_tax_spec", "status": "BLOCKED",
+             "actual": "sha256:aaaa", "expected": "sha256:bbbb", "delta": None,
+             "reason": "hash 失配：制品已被改动未重新冻结（契约失效）"},
+        ]
+        out = render(snap)
+        self.assertIn("Gate 0b 阻塞项", out)
+        self.assertIn("cost_input_tax_spec", out)
+        self.assertIn("hash 失配", out)
+
+    def test_says_detail_missing_when_blocked_without_items(self):
+        """闸门 BLOCKED 却拿不到明细时明说「未采集」，不静默留白。"""
+        out = render(self._snap())      # gate_0b=BLOCKED，但未给明细
+        self.assertIn("Gate 0b 为 BLOCKED，但明细未采集", out)
+
     def test_contains_freshness_section(self):
         out = render(self._snap())
         self.assertIn("快照新鲜度", out)
+
+
+class RunTestsEncodingTest(unittest.TestCase):
+    """H-005 加固：现场跑测试时必须**显式钉住子进程编码**。
+
+    实测崩溃链（中文 Windows，控制台 CP=936）：``text=True`` 缺省按本机 locale
+    解码 → unittest 报告里的 UTF-8 中文用例名触发 UnicodeDecodeError → 读取线程
+    挂掉使 ``out.stdout`` 变 ``None`` → 紧接着的字符串拼接 TypeError →
+    **整条 ``status --write`` 崩掉，状态快照根本生成不出来**。
+    """
+
+    @staticmethod
+    def _fake(**over):
+        base = {"stdout": "Ran 3 tests in 0.010s\n\nOK\n", "stderr": "", "returncode": 0}
+        base.update(over)
+        return types.SimpleNamespace(**base)
+
+    def test_pins_utf8_on_both_sides(self):
+        """父进程按 UTF-8 解码 + 子进程按 UTF-8 输出，两端都得钉住。"""
+        with mock.patch("bidpricing.status.subprocess.run",
+                        return_value=self._fake()) as run:
+            res = run_tests(repo_root())
+        kw = run.call_args.kwargs
+        self.assertEqual(kw["encoding"], "utf-8")
+        self.assertEqual(kw["errors"], "replace")
+        self.assertEqual(kw["capture_output"], True)
+        self.assertEqual(kw["env"]["PYTHONIOENCODING"], "utf-8")
+        self.assertEqual(kw["env"]["PYTHONPATH"], "src")
+        self.assertEqual(res["ran"], 3)
+        self.assertTrue(res["ok"])
+
+    def test_survives_none_streams(self):
+        """读取线程异常时两个流可能是 None——不得在拼接处以 TypeError 二次崩溃。
+
+        没有这条兜底，「子进程没读成」会被伪装成「状态模块自身坏了」，
+        排查方向直接跑偏。
+        """
+        with mock.patch(
+            "bidpricing.status.subprocess.run",
+            return_value=self._fake(stdout=None, stderr=None, returncode=1),
+        ):
+            res = run_tests(repo_root())
+        self.assertIsNone(res["ran"])
+        self.assertFalse(res["ok"])
+        self.assertIsInstance(res["detail"], str)
+        self.assertTrue(res["detail"])
+
+    def test_reports_last_line_as_detail_on_failure(self):
+        with mock.patch(
+            "bidpricing.status.subprocess.run",
+            return_value=self._fake(
+                stdout="Ran 1616 tests in 48s\n\nFAILED (failures=3)\n",
+                returncode=1,
+            ),
+        ):
+            res = run_tests(repo_root())
+        self.assertEqual(res["ran"], 1616)
+        self.assertFalse(res["ok"])
+        self.assertIn("failures=3", res["detail"])
+
+
+class CliEncodingTest(unittest.TestCase):
+    """CLI 在中文 Windows（GBK 控制台）下不得因子进程/自身打印非 ASCII 而崩。
+
+    实测症状：``contract-check`` 打印第一条判据的 ``✓``、``ruleset-selftest``
+    打印 ``⁺`` 时抛 UnicodeEncodeError，退出码 1——**而判据全是 PASS**，
+    看起来像逻辑失败。这里强制 ``PYTHONIOENCODING=gbk:strict`` 复现该环境，
+    要求命令不崩且退出码为 0。
+    """
+
+    def test_ruleset_selftest_survives_gbk_stdout(self):
+        env = {
+            **os.environ,
+            "PYTHONPATH": "src",
+            "PYTHONIOENCODING": "gbk:strict",
+            "PYTHONUTF8": "0",
+        }
+        out = subprocess.run(
+            [sys.executable, "-m", "bidpricing.cli", "ruleset-selftest"],
+            cwd=str(repo_root()),
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env, timeout=180,
+        )
+        blob = (out.stdout or "") + (out.stderr or "")
+        self.assertNotIn("UnicodeEncodeError", blob, blob[-2000:])
+        self.assertEqual(out.returncode, 0, blob[-2000:])
 
 
 class FreshnessTest(unittest.TestCase):
@@ -308,6 +441,31 @@ class RealRepoStateTest(unittest.TestCase):
         self.assertEqual(snap["task_counts"]["total"], 68)
         self.assertEqual(len(snap["tasks"]), 68)
         self.assertIn(snap["gates"]["gate_0a"], {"PASS", "BLOCKED"})
+
+    def test_collect_carries_gate_blocker_items(self):
+        """快照必须带各闸门的**逐条**判据。
+
+        只有 gate_0a 的明细不够：Gate 0b 一旦 BLOCKED，快照就只剩一个状态词，
+        说不出「被哪个制品、以什么理由挡住」——而那是交接者唯一想知道的事。
+        """
+        snap = collect(run_test_suite=False)
+        for key in ("gate_0a_items", "gate_0b_items", "phase_0_input_gate_items"):
+            self.assertIn(key, snap)
+            self.assertTrue(snap[key], f"{key} 不应为空")
+
+    def test_artifacts_cover_both_gates_and_skip_non_versioned(self):
+        """冻结表取两个闸门的 versioned/enum 记录；approvals 这类不入表。
+
+        approvals 没有待校验的内容 hash，列进「冻结表」只会让「未冻结」
+        这四个字失去含义。
+        """
+        snap = collect(run_test_suite=False)
+        gates = {a["gate"] for a in snap["artifacts"]}
+        self.assertEqual(gates, {"gate_0a", "gate_0b"})
+        keys = {a["key"] for a in snap["artifacts"]}
+        self.assertIn("cost_input_tax_spec", keys)
+        self.assertNotIn("approvals", keys)
+        self.assertTrue(all(a["kind"] in ("versioned", "enum") for a in snap["artifacts"]))
 
     def test_contract_consistency_is_collected_and_green(self):
         """跨制品一致性必须进快照，且真实仓库上应为 PASS。

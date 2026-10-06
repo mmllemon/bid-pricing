@@ -5,7 +5,7 @@
 
 # 项目状态快照
 
-> 生成于 **2026-10-06 17:03:49** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-10-07 07:32:54** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
@@ -19,10 +19,10 @@
 
 ## 一、版本锚点
 
-- 提交：`ba554d4` ｜ 累计 132 次提交 ｜ 未推送 4 次提交
-- 最新提交信息：fix(ui): 修复侧栏导航缺项/落地错跳、报价页刷新掉页、资产舱图标配色
+- 提交：`cdd4150` ｜ 累计 152 次提交 ｜ 未推送 5 次提交
+- 最新提交信息：docs(changelog): 记录编码加固/样本守卫/CI/前端小修，并登记待业务裁定的仓外样本版本问题
 - 最近里程碑标签：`pre-wb-merge-20261006`
-- 工作区：有 33 处未提交改动
+- 工作区：有 1 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -37,10 +37,10 @@
 | 闸门 | 状态 |
 |---|---|
 | Gate 0a — 技术接口与规则集冻结 | **PASS** |
-| Gate 0b — 商务口径与合规冻结 | **BLOCKED** |
+| Gate 0b — 商务口径与合规冻结 | **PASS** |
 | Phase 0 输入门 — 项目级数据/取值 | **PASS** |
 | Phase 0 准入（综合） | **RELEASED** |
-| WP4 求解层构建 | **BLOCKED** |
+| WP4 求解层构建 | **ALLOWED** |
 
 **Gate 0a 无阻塞项**，已放行 WP1 数据层 / WP2 配置层 / WP3 判定层。
 
@@ -48,18 +48,24 @@
 
 ## 三、契约制品冻结表
 
-| 制品 key | 类型 | hash | 冻结时间 |
-|---|---|---|---|
-| `rule_set_selector_spec` | versioned | sha256:0dd335b5a8ae | 2026-09-18T08:29:55+00:00 |
-| `field_schema_version` | versioned | sha256:0745655aa4b6 | 2026-09-18T08:29:55+00:00 |
-| `constraint_schema_version` | versioned | sha256:bccb081ed800 | 2026-09-18T08:29:55+00:00 |
-| `precision_profile_version` | versioned | sha256:146e8e6ffbc4 | 2026-09-18T08:29:55+00:00 |
-| `architecture_decision_version` | versioned | sha256:3601adeed46c | 2026-09-18T08:29:55+00:00 |
-| `competitiveness_classification` | versioned | sha256:2913378715d5 | 2026-09-18T08:29:55+00:00 |
-| `input_protocol_schema` | versioned | sha256:1696175b90ff | 2026-09-18T08:29:55+00:00 |
-| `canonical_schema_version` | versioned | sha256:ff90d54cbb5e | 2026-09-18T08:29:55+00:00 |
-| `pricing_rule_card_version` | versioned | sha256:d88298683924 | 2026-09-18T08:29:55+00:00 |
-| `adjustment_scope` | enum | **未冻结** | — |
+| 制品 key | 闸门 | 类型 | hash | 冻结时间 |
+|---|---|---|---|---|
+| `rule_set_selector_spec` | gate_0a | versioned | sha256:0dd335b5a8ae | 2026-09-18T08:29:55+00:00 |
+| `field_schema_version` | gate_0a | versioned | sha256:0745655aa4b6 | 2026-09-18T08:29:55+00:00 |
+| `constraint_schema_version` | gate_0a | versioned | sha256:bccb081ed800 | 2026-09-18T08:29:55+00:00 |
+| `precision_profile_version` | gate_0a | versioned | sha256:146e8e6ffbc4 | 2026-09-18T08:29:55+00:00 |
+| `architecture_decision_version` | gate_0a | versioned | sha256:3601adeed46c | 2026-09-18T08:29:55+00:00 |
+| `competitiveness_classification` | gate_0a | versioned | sha256:2913378715d5 | 2026-09-18T08:29:55+00:00 |
+| `input_protocol_schema` | gate_0a | versioned | sha256:1696175b90ff | 2026-09-18T08:29:55+00:00 |
+| `canonical_schema_version` | gate_0a | versioned | sha256:ff90d54cbb5e | 2026-09-18T08:29:55+00:00 |
+| `pricing_rule_card_version` | gate_0a | versioned | sha256:d88298683924 | 2026-09-18T08:29:55+00:00 |
+| `adjustment_scope` | gate_0a | enum | **未冻结** | — |
+| `contract_ruleset_version` | gate_0b | versioned | sha256:d88298683924 | 2026-09-18T08:29:55+00:00 |
+| `cost_basis_spec` | gate_0b | versioned | sha256:7b46f09f6022 | 2026-09-18T08:29:55+00:00 |
+| `cost_assumption_spec` | gate_0b | versioned | sha256:e72892bf68d9 | 2026-09-18T08:29:55+00:00 |
+| `q1_assumption_spec` | gate_0b | versioned | sha256:3181c6935394 | 2026-09-18T08:29:55+00:00 |
+| `profit_bridge_spec` | gate_0b | versioned | sha256:295530cf91f7 | 2026-09-18T08:29:55+00:00 |
+| `cost_input_tax_spec` | gate_0b | versioned | sha256:a5b2f53dfd8a | 2026-10-06T15:36:22+00:00 |
 
 > hash = 制品内容 SHA-256 前 12 位。制品一改即失配，闸门自动失效——无需人工记忆。
 
@@ -67,7 +73,7 @@
 
 ## 四、质量门
 
-- 单元测试：**1616** 项，结果 **未通过**（FAILED (failures=3, errors=1)）
+- 单元测试：**1620** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests

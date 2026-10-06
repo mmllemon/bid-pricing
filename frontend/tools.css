@@ -11,6 +11,16 @@ a.nav-item { text-decoration: none; color: inherit; }
 
 .tool-card { margin-bottom: 16px; scroll-margin-top: 16px; }
 
+/* 工具页卡片标题。
+   坑：quote-dashboard.css 里的 .card-title 带 #quoteView 前缀，工具页没有该容器，
+   命中不了；而同卡片里的 .card-subtitle 却是全局规则（quote-dashboard.css）——
+   于是「标题裸奔、副标题有样式」。这里补一条无前缀规则，视觉与报价页对齐。
+   注意它是全局选择器：报价页不受影响（#quoteView .card-title 特异性更高）。 */
+.card-title{
+  font-size: 16px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 7px;
+}
+
 /* ===== 工具箱落地页：卡片墙 ===== */
 .tool-cards {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

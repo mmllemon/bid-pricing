@@ -35,7 +35,7 @@
   function parseSpec(text) {
     // 「3×240」「3×240+2×120」「5×16」→ Σ(芯数×截面)；无法解析返回 0
     let sum = 0;
-    const re = /(\d+)\s*[×x*]\s*(\d+(?:\.\d+)?)/g;
+    const re = /(\d+)\s*[×xX*]\s*(\d+(?:\.\d+)?)/g;
     let m;
     while ((m = re.exec(String(text || ''))) !== null) {
       sum += (+m[1]) * (+m[2]);
@@ -47,7 +47,9 @@
     d = d || {};
     const esc = window.toolEsc;
     const metal = d.metal === 'al' ? 'al' : 'cu';
-    const matDef = d.matRatio ?? (VOLT_MAT[$('#cVolt').value] ?? 0.30).toFixed(2);
+    const matDef = (d.matRatio === '' || d.matRatio == null)
+      ? (VOLT_MAT[$('#cVolt').value] ?? 0.30).toFixed(2)   // P1: 空串回退电压建议值（?? 会放过 '' 导致按 0 计系统性低估）；填 0 仍为有效手工值
+      : d.matRatio;
     return `<tr>
       <td><input type="text" data-k="model" placeholder="如 YJV22-8.7/15kV" value="${esc(d.model)}"></td>
       <td><select data-k="metal"><option value="cu"${metal === 'cu' ? ' selected' : ''}>铜</option><option value="al"${metal === 'al' ? ' selected' : ''}>铝</option></select></td>
@@ -79,7 +81,9 @@
       const metalPrice = metal === 'cu' ? cuPrice : alPrice;
 
       const cuCost = areaSum * density * metalPrice / 1e6 * k;   // 导体成本 元/m
-      const pNex = cuCost * (1 + g('matRatio')) * (1 + mgr);     // 不含税
+      const matRaw = tr.querySelector('[data-k="matRatio"]').value;
+      const matRatio = matRaw === '' ? (VOLT_MAT[$('#cVolt').value] ?? 0.30) : g('matRatio');  // P1: 清空回退电压建议值，填 0 保留
+      const pNex = cuCost * (1 + matRatio) * (1 + mgr);     // 不含税
       const pTax = pNex * (1 + vat);                             // 含税
 
       const calcLen = (g('len') + g('pullPts') * g('pullLen')) * g('qty');

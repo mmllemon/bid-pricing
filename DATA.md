@@ -7,7 +7,7 @@
 
 | 数据 | 文件 | 归属进程 | 表 / 内容 | 备份 |
 |---|---|---|---|---|
-| 报价方案 | `outputs/projects/<user>/.sqlite/quote.db` | :8000 FastAPI | `plan`（方案）、`plan_group`（分组）、`plan_slot`（槽位）、`audit_log`（审计）、`wb_todos`（⚠️闲置：lshu 待办移植的表，暂无前端调用） | 拷整个 `outputs/projects/<user>/` |
+| 报价方案 | `outputs/projects/<user>/.sqlite/quote.db` | :8000 FastAPI | `plan`（方案）、`plan_group`（分组）、`plan_slot`（槽位）、`audit_log`（审计） | 拷整个 `outputs/projects/<user>/` |
 | 项目经营 | `outputs/projects/<user>/projects.json` | :8000 FastAPI | 项目列表（Biz 页；与方案经 `overview_id` 关联） | 同上（同一目录） |
 | 井库 | `outputs/projects/<user>/well-library.json` | :8000 FastAPI | 手动保存的井（含参数/单价/钢筋表快照）；旧浏览器数据首次访问自动迁移 | 同上（同一目录） |
 | 工作台数据 | `outputs/workbench-data/workbench.db` | :3456 Express | `settings`、`todos`（`project_id` 可空→关联 Biz 项目）、`scan_reports`、`xhs_*`（小红书账号）、`hotspot_*`（热点雷达）、`productivity_*`（日程/AI分析） | 拷整个目录（WAL 模式：停服务后拷，或连 `-wal`/`-shm` 一起拷） |
@@ -25,7 +25,7 @@
 
 ## 三个必须知道的结论
 
-1. **待办只有一套在用**：`todos`（workbench.db，React 待办页用，已加 `project_id` 可空字段挂项目）；`wb_todos`（quote.db）是 lshu 移植的闲置表，暂无前端调用（删/留待定）。项目↔待办关联已打通：待办详情抽屉可挂项目，Biz 项目卡片显示待办数、编辑弹窗聚合显示关联待办。
+1. **待办只有一套在用**：`todos`（workbench.db，React 待办页用，已加 `project_id` 可空字段挂项目）。`wb_todos`（quote.db 的闲置表）已于 2026-10-06 删除模块与路由（`api/wb_todos.py`，全仓库无前端调用；旧库中残留的空表不再建也不再访问）。项目↔待办关联已打通：待办详情抽屉可挂项目，Biz 项目卡片显示待办数、编辑弹窗聚合显示关联待办。
 2. **浏览器里现在只剩**：四工具参数快照、交接槽（24h 过期）、UI 偏好、两个 token（`agent_api_token`/`bidpricingApiToken`，localhost 单用户场景下 localStorage 存 token 的实际风险可接受，保留免重复输入）——井库已落盘 `well-library.json`。
 3. **备份口诀**：`outputs/` 整个拷走＋`agent-service/agent.sqlite` 拷走＝全部。
 

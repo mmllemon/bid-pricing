@@ -51,7 +51,6 @@ from bidpricing.validation.low_price_policy import DISPOSITION_NOTE
 
 from api.wb_local import router as wb_local_router
 from api.wb_proxy import router as wb_router
-from api.wb_todos import router as wb_todos_router
 
 # H-012 多用户隔离（不鉴权，仅目录级）：以运行账号作为命名空间，各用户方案互不相见。
 # 方案与方案组统一落到 SQLite，库文件沿用按用户重定向的 PROJECTS_DIR 模型。
@@ -366,7 +365,8 @@ def health() -> dict[str, str]:
 # ===== 工作台域本地实现（D-2 收编侧）=====
 # 必须先于 wb_proxy 注册：FastAPI 按注册顺序匹配，已收编的 /api/wb/<path> 由这里
 # 命中，未被收编的路径才落到下面的兜底反代。前端契约不变。
-app.include_router(wb_todos_router)
+# 注：wb_todos（/api/wb/todos）已于 2026-10-06 删除——全仓库无前端调用，
+# React 待办页实际走 /api/todos → :3456；如需恢复见 git 历史。
 app.include_router(wb_local_router)
 
 # ===== lshu-workbench 过渡期反代（D-2 strangler fig）=====

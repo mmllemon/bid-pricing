@@ -143,7 +143,7 @@ export default function SettingsPage() {
         if (h.cimi.hasCredentials) {
           setHotspotMsg(`次幂数据已配置（App ID ${h.cimi.appIdMasked}），接口可用。`);
         } else {
-          setHotspotMsg('尚未配置次幂凭证，请在 backend/.env.local 填写后重启后端。');
+          setHotspotMsg('尚未配置次幂凭证，请在 workbench-server/.env.local 填写后重启后端。');
         }
       }, { label: '正在测试热点连接', successMessage: '连接检测完成' });
     } catch (e) {
@@ -412,7 +412,7 @@ export default function SettingsPage() {
         <h2 className="ui-module-title"><span className="ui-code">HOT</span>热点雷达</h2>
         <p className="nb-muted" style={{ fontSize: 13, marginTop: 4, marginBottom: 12 }}>
           每天自动抓取「虎嗅APP」「36氪」微信公众号推文（标题、摘要、封面、正文、原文链接），用于热点雷达页。
-          凭证请填写在 <code>backend/.env.local</code>（<code>CIMIDATA_APP_ID</code> / <code>CIMIDATA_APP_SECRET</code>），绝不出现在前端或日志。
+          凭证请填写在 <code>workbench-server/.env.local</code>（<code>CIMIDATA_APP_ID</code> / <code>CIMIDATA_APP_SECRET</code>），绝不出现在前端或日志。
         </p>
 
         <div className="flex gap-2" style={{ flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>

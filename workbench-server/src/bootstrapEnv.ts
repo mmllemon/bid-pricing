@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Must be imported before db.ts or any module that creates files.
- * Sets a restrictive umask and loads backend/.env.local.
+ * Sets a restrictive umask and loads workbench-server/.env.local.
  */
 umask(0o077);
 

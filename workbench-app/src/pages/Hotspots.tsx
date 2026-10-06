@@ -597,7 +597,7 @@ export default function HotspotsPage() {
             <div className="ui-alert ui-alert--error">
               <h3 style={{ fontSize: 16, marginBottom: 8 }}>次幂数据凭证未配置</h3>
               <p style={{ fontSize: 14, lineHeight: 1.7 }}>
-                当前无法连接次幂数据 API。请在 <code>backend/.env.local</code> 中填写
+                当前无法连接次幂数据 API。请在 <code>workbench-server/.env.local</code> 中填写
                 <code> CIMIDATA_APP_ID</code> 与 <code>CIMIDATA_APP_SECRET</code>（可从 cimidata.com 注册获取），填写后重启后端即可抓取。
               </p>
             </div>

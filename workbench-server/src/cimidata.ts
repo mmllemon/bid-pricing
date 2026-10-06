@@ -75,7 +75,7 @@ async function getAccessToken(forceRefresh = false): Promise<string> {
 
   tokenFetching = (async () => {
     if (!appId() || !appSecret()) {
-      throw new CimiError(450, '次幂数据凭证未配置：请在 backend/.env.local 设置 CIMIDATA_APP_ID / CIMIDATA_APP_SECRET');
+      throw new CimiError(450, '次幂数据凭证未配置：请在 workbench-server/.env.local 设置 CIMIDATA_APP_ID / CIMIDATA_APP_SECRET');
     }
     const res = await rawPost<{ access_token: string }>('/api/token', { app_id: appId(), app_secret: appSecret() }, false);
     const token = res?.access_token;

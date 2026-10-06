@@ -28,6 +28,13 @@
     cross:    { name: '四通井', L: 3.0, W: 2.5, D: 2.0, nB: 2, Lb: 1.8, Wb: 2.0 },
   };
 
+  /* 参数 ID 清单（自动保存 + 井库快照共用；提前声明：初始化恢复早于井库段落执行） */
+  const PARAM_IDS = ['wName', 'wL', 'wW', 'wD', 'wT', 'wMat', 'wBrN', 'wLb', 'wWb',
+    'wBaseT', 'wPadT', 'wTopT', 'wShaftD', 'wShaftH', 'wShaftT', 'wCount',
+    'wLipW', 'wLipH', 'wPadOut',
+    'cCount', 'cLen', 'cW', 'cT', 'cMainN', 'cMainL', 'cDistN', 'cDistL', 'cEdgeL',
+    'wRebarBase', 'wRebarWall', 'wRebarTop'];
+
   /* 行定义：rebar 行的量 = 对应构件量 × 含钢量。dec 为工程量小数位。 */
   const WELL_UNIT = [
     { key: 'pad',       label: '混凝土垫层 C15',   unit: 'm³', price: 420, dec: 3 },
@@ -183,6 +190,7 @@
     renderWellPlan();
     renderWellSect();
     recalcRebar();
+    saveWellSoon();   // P1: 自动保存（500ms 防抖），与其他三工具对齐
   }
 
   /* ==================== 井体示意（SVG 平面 + 剖面） ====================
@@ -335,6 +343,8 @@
       $('#wName').value = p.name;
       $('#wL').value = p.L; $('#wW').value = p.W; $('#wD').value = p.D;
       $('#wBrN').value = String(p.nB);
+      const brSel = $('#wBrN');   // P1: 毛玻璃下拉显示同步（此前只改原生 select，按钮文字不变）
+      if (brSel && brSel.__cs) brSel.__cs.refresh();
       $('#wLb').value = p.Lb; $('#wWb').value = p.Wb;
       syncBranchInputs();
       document.querySelectorAll('.chip[data-well]')
@@ -387,10 +397,45 @@
     }
     recalcWell();
   });
+  /* ---------- 自动保存 / 恢复（P1：与其他三工具对齐，刷新不丢数） ---------- */
+  const AUTO_KEY = 'tool-well';
+  const canAutosave = Boolean(window.toolStore && window.toolDebounce);
+  function saveWellNow() {
+    if (!canAutosave) return;
+    const o = {};
+    PARAM_IDS.forEach(id => {
+      const el = $('#' + id);
+      if (el) o[id] = el.value;
+    });
+    o.wShaftOn = $('#wShaftOn').checked;
+    window.toolStore.save(AUTO_KEY, o);
+  }
+  const saveWellSoon = canAutosave ? window.toolDebounce(saveWellNow, 500) : function () {};
+  function applyWellState(s) {
+    if (!s || !canAutosave) return false;
+    try {
+      PARAM_IDS.forEach(id => {
+        const el = $('#' + id);
+        if (el && s[id] !== undefined) el.value = s[id];
+      });
+      if (s.wShaftOn !== undefined) $('#wShaftOn').checked = !!s.wShaftOn;
+      // 自定义下拉（毛玻璃）显示同步
+      ['wMat', 'wBrN'].forEach(id => {
+        const sel = $('#' + id);
+        if (sel && sel.__cs) sel.__cs.refresh();
+      });
+      syncBranchInputs();
+      syncShaftInputs();
+      return true;
+    } catch (e) { return false; }
+  }
+
   buildWellTable();
   syncBranchInputs();
   syncShaftInputs();
+  applyWellState(canAutosave ? window.toolStore.load(AUTO_KEY) : null);
   recalcWell();
+  window.addEventListener('pagehide', saveWellNow);
   // 独立字段接项目自定义下拉（毛玻璃组件）；表内 select 保持原生+统一箭头
   if (typeof initCustomSelect === 'function') {
     initCustomSelect('#wMat');
@@ -402,6 +447,16 @@
    * 载回则把参数与单价还原进计算器，便于改出「参数类似但不同」的井。
    */
   const LS_KEY = 'gc_well_library_v1';
+  // P1: 井库快照 schema 版本。v1 = 无 schema 字段（2026-10-06 前）；v2 起写入 schema。
+  // 迁移规则集中在 migrateSnapshotPrices，下次增删构件行只改这里，不再散落魔数。
+  const SCHEMA_WELL_LIB = 2;
+  function migrateSnapshotPrices(prices, schema) {
+    let p = Array.isArray(prices) ? prices.slice() : [];
+    if ((schema || 1) < 2 && p.length > WELL_UNIT.length) {
+      p = p.slice(0, 11).concat(p.slice(12));   // v1→v2：剔除已移除的「盖板钢筋 φ14」行（旧 index 11）
+    }
+    return p;
+  }
   const esc = s => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -433,16 +488,18 @@
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
     catch (e) { return []; }
   }
+  // P1: QuotaExceededError 等异常不再静默（快照含完整钢筋逐根表，易触 5MB 配额）；返回是否成功
   function saveLib(list) {
-    localStorage.setItem(LS_KEY, JSON.stringify(list));
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(list));
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // 保存时刻的输入快照（载回用）+ 构件表快照（查看用）
-  const PARAM_IDS = ['wName', 'wL', 'wW', 'wD', 'wT', 'wMat', 'wBrN', 'wLb', 'wWb',
-    'wBaseT', 'wPadT', 'wTopT', 'wShaftD', 'wShaftH', 'wShaftT', 'wCount',
-    'wLipW', 'wLipH', 'wPadOut',
-    'cCount', 'cLen', 'cW', 'cT', 'cMainN', 'cMainL', 'cDistN', 'cDistL', 'cEdgeL',
-    'wRebarBase', 'wRebarWall', 'wRebarTop'];
+  // 注：PARAM_IDS 已上移至文件头部（自动保存共用）
 
   function collectSnapshot() {
     recalcWell();
@@ -471,7 +528,7 @@
     const digest = `${matName} ${num($('#wL'))}×${num($('#wW'))}×${num($('#wD'))}`
       + (nB > 0 ? ` ＋支${nB}×${num($('#wLb'))}×${num($('#wWb'))}` : '')
       + ` · ${num($('#wCount')) || 1} 座`;
-    return { params, prices, rebar, summary: { digest, total, rows } };
+    return { schema: SCHEMA_WELL_LIB, params, prices, rebar, summary: { digest, total, rows } };
   }
 
   let expandedId = null;   // 当前展开查看的井（内存态）
@@ -542,12 +599,16 @@
       if (rec.params[id] === undefined) return;   // 旧存档缺新键 → 保留现值
       el.value = rec.params[id];
     });
+    // P1: 毛玻璃下拉（wMat/wBrN）显示同步（此前只改原生 select，按钮文字不变）
+    ['wMat', 'wBrN'].forEach(id => {
+      const sel = $('#' + id);
+      if (sel && sel.__cs) sel.__cs.refresh();
+    });
     // 井筒开关：旧存档没有该键 → 按"计入"还原，与当时算出的口径一致
     $('#wShaftOn').checked = rec.params.wShaftOn !== false;
     // 单价还原（表内行）；井壁价写回当前材料那份。
-    // 兼容旧井库快照：其 prices 含已移除的「盖板钢筋 φ14」行（旧 index 11），载入前剔除对齐
-    let prices = rec.prices;
-    if (prices.length > WELL_UNIT.length) prices = prices.slice(0, 11).concat(prices.slice(12));
+    // P1: 快照 schema 集中迁移（migrateSnapshotPrices），替代此前的魔数 slice
+    let prices = migrateSnapshotPrices(rec.prices, rec.schema);
     prices.forEach((p, i) => {
       const inp = $(`#wellRows input[data-p="${i}"]`);
       if (inp) inp.value = p;
@@ -605,11 +666,19 @@
       savedAt: ts,
       params: snap.params,
       prices: snap.prices,
+      rebar: snap.rebar,   // 修复：此前 collectSnapshot 采了 rebar 但保存时丢弃，载入的还原分支是死代码
       summary: snap.summary,
     };
     const list = loadLib();
     list.unshift(rec);
-    saveLib(list);
+    if (!saveLib(list)) {
+      // P1: 配额超限等失败给可见提示（此前静默，用户以为存上了）
+      const saveBtn = $('#wellSave');
+      const old = saveBtn.textContent;
+      saveBtn.textContent = '保存失败（存储空间不足）';
+      setTimeout(() => { saveBtn.textContent = old; }, 2000);
+      return;
+    }
     $('#wellSaveName').value = '';
     expandedId = rec.id;          // 保存后直接展开，确认存的就是看到的
     renderLib();

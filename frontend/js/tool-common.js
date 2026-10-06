@@ -69,6 +69,7 @@
    * 应用/忽略后 clear()。kind 冲突时后发覆盖先发。 */
   window.toolHandoff = {
     KEY: 'bidpricing.handoff.v1',
+    TTL: 24 * 3600 * 1000,   // 交接槽 24h 过期：跨天残留的旧交接不再被误取
     send(kind, payload) {
       try { localStorage.setItem(this.KEY, JSON.stringify({ kind, at: Date.now(), payload })); }
       catch (e) { /* 隐私模式等写失败时静默跳过 */ }
@@ -78,7 +79,9 @@
         const raw = localStorage.getItem(this.KEY);
         if (!raw) return null;
         const o = JSON.parse(raw);
-        return (o && o.kind === kind) ? o : null;
+        if (!o || o.kind !== kind) return null;
+        if (typeof o.at === 'number' && Date.now() - o.at > this.TTL) { this.clear(); return null; }
+        return o;
       } catch (e) { return null; }
     },
     clear() {

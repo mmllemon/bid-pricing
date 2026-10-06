@@ -443,10 +443,76 @@
   }
 
   /* ==================== 已存井库：保存 / 查看 / 重命名 / 载回 ====================
-   * localStorage 永久保存；快照存「当时算出的构件表 + 合计」，点开即看无需重算；
+   * 落盘后端 well-library.json（outputs/projects/<user>/），不再走浏览器 localStorage；
+   * 快照存「当时算出的构件表 + 合计」，点开即看无需重算；
    * 载回则把参数与单价还原进计算器，便于改出「参数类似但不同」的井。
    */
-  const LS_KEY = 'gc_well_library_v1';
+  const LS_KEY = 'gc_well_library_v1';   // 旧键：仅一次性迁移用，迁完即删
+  // 后端基地址：与 tool-cable 同口径（window.__API_BASE__ 覆盖；按主机名推导支持局域网；file:// 回退 localhost）
+  const API_BASE = window.__API_BASE__
+    || (location.hostname ? location.protocol + '//' + location.hostname + ':8000' : 'http://localhost:8000');
+  // 可选鉴权：服务端启用 BIDPRICING_API_TOKEN 时，token 存 sessionStorage（关标签页即焚，不进 localStorage）
+  function wellAuthHeaders() {
+    let t = '';
+    try { t = (sessionStorage.getItem('bidpricingApiToken') || '').trim(); } catch (e) {}
+    return t ? { Authorization: 'Bearer ' + t } : {};
+  }
+
+  let libCache = null;   // 内存缓存：井库数组（首屏一次 GET，后续走缓存）
+  let libDown = false;   // 后端不可用标记（未起 run.ps1 / 网络不通）
+
+  function readLegacyLib() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+    catch (e) { return []; }
+  }
+
+  async function postLib(list) {
+    const r = await fetch(API_BASE + '/api/well-library/save', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, wellAuthHeaders()),
+      body: JSON.stringify({ items: list }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j || j.status !== 'PASS') throw new Error((j && j.reason) || '保存被拒绝');
+  }
+
+  async function loadLib() {
+    if (libCache) return libCache;
+    libDown = false;
+    try {
+      const r = await fetch(API_BASE + '/api/well-library/list', { headers: wellAuthHeaders() });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      let items = (j && Array.isArray(j.items)) ? j.items : [];
+      // 一次性迁移：后端为空且浏览器有旧数据 → 整表导入，成功后删旧键
+      const legacy = readLegacyLib();
+      if (!items.length && legacy.length) {
+        try {
+          await postLib(legacy);
+          try { localStorage.removeItem(LS_KEY); } catch (e) {}
+          items = legacy;
+        } catch (e) { /* 迁移失败则保留旧键，下次再试 */ }
+      }
+      libCache = items;
+      return items;
+    } catch (e) {
+      libDown = true;
+      return [];
+    }
+  }
+  // 井库保存：整表回写后端；失败（后端未起/超限/被拒绝）返回 false，调用方给可见提示
+  async function saveLib(list) {
+    try {
+      await postLib(list);
+      libCache = list;
+      libDown = false;
+      return true;
+    } catch (e) {
+      libDown = true;
+      return false;
+    }
+  }
   // P1: 井库快照 schema 版本。v1 = 无 schema 字段（2026-10-06 前）；v2 起写入 schema。
   // 迁移规则集中在 migrateSnapshotPrices，下次增删构件行只改这里，不再散落魔数。
   const SCHEMA_WELL_LIB = 2;
@@ -484,19 +550,7 @@
     });
   }
 
-  function loadLib() {
-    try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
-    catch (e) { return []; }
-  }
-  // P1: QuotaExceededError 等异常不再静默（快照含完整钢筋逐根表，易触 5MB 配额）；返回是否成功
-  function saveLib(list) {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(list));
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+  // （井库读写已迁后端：见上方 loadLib/saveLib 异步实现）
 
   // 保存时刻的输入快照（载回用）+ 构件表快照（查看用）
   // 注：PARAM_IDS 已上移至文件头部（自动保存共用）
@@ -533,9 +587,13 @@
 
   let expandedId = null;   // 当前展开查看的井（内存态）
 
-  function renderLib() {
-    const list = loadLib();
+  async function renderLib() {
+    const list = await loadLib();
     const box = $('#wellLibList');
+    if (libDown) {
+      box.innerHTML = '<div class="well-lib-empty">井库服务不可用：后端未启动（请运行 run.ps1）。已存的井在后端恢复后自动出现，参数自动保存不受影响。</div>';
+      return;
+    }
     if (!list.length) {
       box.innerHTML = '<div class="well-lib-empty">还没有保存过井。调好参数后点「保存当前井」。</div>';
       return;
@@ -573,27 +631,27 @@
     const btn = e.target.closest('[data-act]');
     if (!btn) return;
     const item = btn.closest('.well-item');
-    const rec = loadLib().find(r => r.id === item.dataset.id);
+    const rec = (await loadLib()).find(r => r.id === item.dataset.id);
     if (!rec) return;
     const act = btn.dataset.act;
 
     if (act === 'view') {
       expandedId = expandedId === rec.id ? null : rec.id;
-      renderLib();
+      await renderLib();
     } else if (act === 'load') {
-      loadIntoCalc(rec);
+      await loadIntoCalc(rec);
     } else if (act === 'rename') {
       startRename(item, rec);
     } else if (act === 'del') {
       if (await uiConfirm(`删除「${rec.name}」？该井的保存记录将不可恢复。`)) {
-        saveLib(loadLib().filter(r => r.id !== rec.id));
+        await saveLib((await loadLib()).filter(r => r.id !== rec.id));
         if (expandedId === rec.id) expandedId = null;
-        renderLib();
+        await renderLib();
       }
     }
   });
 
-  function loadIntoCalc(rec) {
+  async function loadIntoCalc(rec) {
     PARAM_IDS.forEach(id => {
       const el = $('#' + id);
       if (rec.params[id] === undefined) return;   // 旧存档缺新键 → 保留现值
@@ -625,7 +683,7 @@
     syncShaftInputs();
     recalcWell();
     expandedId = null;
-    renderLib();
+    await renderLib();
     document.querySelector('.tool-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -638,14 +696,14 @@
     input.value = rec.name;
     nameBtn.replaceWith(input);
     input.focus(); input.select();
-    const commit = () => {
+    const commit = async () => {
       const v = input.value.trim();
       if (v && v !== rec.name) {
-        const list = loadLib();
+        const list = await loadLib();
         const hit = list.find(r => r.id === rec.id);
-        if (hit) { hit.name = v; saveLib(list); }
+        if (hit) { hit.name = v; await saveLib(list); }
       }
-      renderLib();
+      await renderLib();
     };
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') input.blur();
@@ -654,7 +712,7 @@
     input.addEventListener('blur', commit, { once: true });
   }
 
-  $('#wellSave').addEventListener('click', () => {
+  $('#wellSave').addEventListener('click', async () => {
     const snap = collectSnapshot();
     const custom = $('#wellSaveName').value.trim();
     const now = new Date();
@@ -669,19 +727,19 @@
       rebar: snap.rebar,   // 修复：此前 collectSnapshot 采了 rebar 但保存时丢弃，载入的还原分支是死代码
       summary: snap.summary,
     };
-    const list = loadLib();
+    const list = await loadLib();
     list.unshift(rec);
-    if (!saveLib(list)) {
-      // P1: 配额超限等失败给可见提示（此前静默，用户以为存上了）
-      const saveBtn = $('#wellSave');
-      const old = saveBtn.textContent;
-      saveBtn.textContent = '保存失败（存储空间不足）';
+    const saveBtn = $('#wellSave');
+    const old = saveBtn.textContent;
+    if (!(await saveLib(list))) {
+      // 井库落盘后端：失败（后端未起/超限/被拒绝）给可见提示
+      saveBtn.textContent = '保存失败（后端不可用或存储空间不足）';
       setTimeout(() => { saveBtn.textContent = old; }, 2000);
       return;
     }
     $('#wellSaveName').value = '';
     expandedId = rec.id;          // 保存后直接展开，确认存的就是看到的
-    renderLib();
+    await renderLib();
   });
   renderLib();
 

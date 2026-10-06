@@ -174,14 +174,15 @@ let lastResult = null;
 const API_BASE = window.__API_BASE__ || 'http://localhost:8000';
 
 // H-013：可选 API token——服务端启用 BIDPRICING_API_TOKEN 后，把 token 存入
-// localStorage('bidpricingApiToken')，此包装器为所有 /api 请求自动附加 Authorization。
+// sessionStorage('bidpricingApiToken')（关标签页即焚，不进 localStorage），
+// 此包装器为所有 /api 请求自动附加 Authorization。
 (() => {
   // 幂等标记：index.html 同页加载 workbench 脚本时会叠第二层包装，
-  // 读两次 localStorage、headers 合并两次——功能上无害但属隐性耦合。
+  // 读两次 sessionStorage、headers 合并两次——功能上无害但属隐性耦合。
   if (window.fetch && window.fetch.__tokenPatched) return;
   const _fetch = window.fetch.bind(window);
   const patched = (input, init) => {
-    const token = (localStorage.getItem('bidpricingApiToken') || '').trim();
+    const token = (sessionStorage.getItem('bidpricingApiToken') || '').trim();
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     if (token && url.startsWith(API_BASE)) {
       init = Object.assign({}, init || {}, {

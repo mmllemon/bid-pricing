@@ -18,7 +18,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -29,6 +29,7 @@ if str(SRC) not in sys.path:
 
 from bidpricing import project_overview, project_store
 from bidpricing import sqlite_store
+from bidpricing import well_library
 from bidpricing.atomic_io import atomic_write_text
 from bidpricing.deployment import log_event, safe_user, user_scope
 from bidpricing.import_preview import build_listing_preview
@@ -944,3 +945,25 @@ def overview_finalize(id: str = Form(...), bid_amount: str = Form(""), bid_cost:
     append_audit(CURRENT_USER, "project.overview.finalize", "PASS", project_id=id.strip(),
              detail={"bid_amount": rec.get("bid_amount")})
     return JSONResponse(status_code=200, content={"status": "PASS", "project": rec})
+
+
+@app.get("/api/well-library/list")
+def well_library_list() -> JSONResponse:
+    """井库列表：用户手动保存的井记录（落盘 well-library.json，不再走浏览器 localStorage）。"""
+    return JSONResponse(status_code=200, content={"status": "PASS", "items": well_library.list_records()})
+
+
+@app.post("/api/well-library/save")
+async def well_library_save(request: Request):
+    """井库整表覆盖保存。JSON 体 {"items": [...]}，每条须有 id。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体不是合法 JSON"})
+    items = body.get("items") if isinstance(body, dict) else None
+    try:
+        count = well_library.save_records(items)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    append_audit(CURRENT_USER, "well.library.save", "PASS", detail={"count": count})
+    return JSONResponse(status_code=200, content={"status": "PASS", "count": count})

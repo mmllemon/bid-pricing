@@ -5,8 +5,10 @@
    ============================================================================ */
 
 /* ---------- 双栏布局 ---------- */
+/* 参数栏随视口收缩：1281px 视口下右栏仅约 680px，固定 390px 会把明细表第 6 列挤出可视区。
+   clamp 让参数栏在 300~390px 之间随容器比例变化，宽度优先让给结果区。 */
 .workbench-layout{
-  display:grid;grid-template-columns:390px minmax(0,1fr);
+  display:grid;grid-template-columns:clamp(300px,24%,390px) minmax(0,1fr);
   gap:20px;align-items:stretch;
 }
 .param-column{min-width:0;display:flex;flex-direction:column;gap:16px}
@@ -146,7 +148,10 @@
 }
 .kpi-card[tabindex]:focus-visible{border-color:var(--ui-orange);outline:3px solid var(--ui-orange);outline-offset:2px}
 
-.kpi-label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+/* 标题行预留两行高度：四张卡的标题长度不一（「测算总报价 (含税)」带 hover 提示时折两行，
+   「测算进项抵扣总额」只有一行），不预留的话值/图形/底注三行的基线会各差 18px。
+   KPI 卡在网格里本来就等高，预留不增加页面高度，只把多出的留白放进最矮的卡。 */
+.kpi-label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;min-height:38px}
 .kpi-title{font-size:12px;font-weight:500;color:var(--text-secondary)}
 .kpi-drill-hint{font-size:12px;color:var(--text-tertiary);opacity:0;transition:opacity var(--dur-fast);white-space:nowrap}
 .kpi-card:hover .kpi-drill-hint{opacity:1}
@@ -163,10 +168,20 @@
 .delta-badge.warn{background:var(--ui-yellow);color:var(--text)}
 .delta-badge.neutral{background:var(--ui-white);color:var(--text-secondary)}
 .sparkline-svg{width:100%;height:28px;margin:4px 0;display:block}
+/* KPI 视觉槽：四张卡的图形统一放进等高容器，底注基线因此对齐；
+   6px 方角色带承担原卡 3 的行内三段条（原实现用了 3px 圆角，与全站直角规则冲突）。 */
+.kpi-vis{height:28px;display:flex;align-items:center;margin:6px 0 4px}
+.kpi-vis .sparkline-svg{width:100%;height:28px;margin:0}
+.kpi-scale{display:flex;width:100%;height:6px;border:1px solid var(--ui-black);background:var(--ui-white)}
+.kpi-scale > i{display:block;height:100%}
+.kpi-scale > .seg-safe{background:var(--success)}
+.kpi-scale > .seg-early{background:var(--warn)}
+.kpi-scale > .seg-risk{background:var(--danger)}
 .kpi-foot{
   font-size:12px;color:var(--text-tertiary);display:flex;justify-content:space-between;
-  gap:6px;flex-wrap:wrap;border-top:var(--line-thin);padding-top:5px;margin-top:2px;
+  gap:6px;flex-wrap:wrap;border-top:var(--line-thin);padding-top:5px;margin-top:0;
 }
+.kpi-foot .kpi-foot-status{font-weight:600;color:var(--text)}
 
 /* ---------- 明细审查表 ---------- */
 /* 明细表撑满右栏剩余高度，底部与左栏（报价资料卡）对齐，行多时表内纵向滚动 */
@@ -188,20 +203,29 @@
 .filter-chip:hover{background:var(--ui-yellow);border-color:var(--ui-black);color:var(--text)}
 .filter-chip.active{background:var(--ui-orange);color:var(--ui-black);border-color:var(--ui-black);font-weight:600}
 
-.table-scroll{overflow:auto;border:var(--line-thin);border-radius:0;background:var(--ui-white);flex:1 1 auto;min-height:0;padding:0 0 72px}
+.table-scroll{overflow:auto;border:var(--line-thin);border-radius:0;background:var(--ui-white);flex:1 1 auto;min-height:0}
+/* 横向滚动条常显：改前用 overlay 滚动条，最后一列被切在卡片边界上而无任何可滚动提示。
+   注意 10 列合计约 1316px，而 1440 视口下容器只有 737px，横向滚动是这张表的固有形态。
+   这里只用 ::-webkit-scrollbar 而不再写 scrollbar-width/scrollbar-color：
+   Chromium 只要看到 scrollbar-width 就改用自带的 Fluent 细滚动条，反而忽略下面这套规则，
+   实测滑块几乎看不见。去掉之后滑块由本文件完全接管：12px 轨道 + 实心黑滑块。 */
+.table-scroll::-webkit-scrollbar{width:12px;height:12px}
+.table-scroll::-webkit-scrollbar-track{background:var(--ui-white);border-top:var(--line-thin)}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--ui-black)}
+.table-scroll::-webkit-scrollbar-corner{background:var(--ui-white)}
 .table-scroll table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .table-scroll th{
   background:var(--ui-white);color:var(--text);font-weight:700;text-align:left;
-  padding:9px 12px;border-bottom:var(--line-strong);position:sticky;top:0;z-index:var(--z-sticky);
+  padding:9px 10px;border-bottom:var(--line-strong);position:sticky;top:0;z-index:var(--z-sticky);
 }
-.table-scroll th.num,.table-scroll td.num{text-align:right;padding-right:16px}
+.table-scroll th.num,.table-scroll td.num{text-align:right;padding-right:14px}
 /* 数字列语义类：从 JS 内联色收拢到 CSS 单点可调（P0-1） */
 .table-scroll td.cell-code{color:var(--text-secondary)}
 .table-scroll td.cap{color:var(--text-secondary)}
 .table-scroll td.cost{color:var(--text-tertiary)}
 .table-scroll td.quote{color:var(--text);font-weight:700}
 .table-scroll td.cell-total{font-weight:600}
-.table-scroll td{padding:9px 12px;border-bottom:var(--line-thin);color:var(--text)}
+.table-scroll td{padding:9px 10px;border-bottom:var(--line-thin);color:var(--text)}
 .table-scroll tbody tr:hover > td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
 .table-scroll tbody tr.selected > td:first-child{box-shadow:inset 4px 0 0 var(--ui-orange)}
 .table-scroll tbody tr:last-child td{border-bottom:none}

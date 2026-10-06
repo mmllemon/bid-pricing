@@ -46,7 +46,8 @@
       title: '核心功能',
       items: [
         { module: 'quote', num: 'Q-01', label: '投标报价', icon: 'quote' },
-        { module: 'cost', num: 'C-02', label: '实施成本', icon: 'cost' },
+        // soon: 模块只有占位页（无真实数据与操作），导航里灰显并标「建设中」，避免承诺不存在的能力。
+        { module: 'cost', num: 'C-02', label: '实施成本', icon: 'cost', soon: true },
         // 不再是 #agentView 视图切换项：点击唤起全局悬浮面板，故走 data-agent-open。
         { action: 'agent', num: 'A-03', label: 'AI 测算助手', icon: 'agent' },
       ],
@@ -54,8 +55,8 @@
     {
       title: '项目管理',
       items: [
-        { module: 'ledger', num: 'L-04', label: '项目台账', icon: 'ledger' },
-        { module: 'settlement', num: 'S-05', label: '结算管理', icon: 'settlement' },
+        { module: 'ledger', num: 'L-04', label: '项目台账', icon: 'ledger', soon: true },
+        { module: 'settlement', num: 'S-05', label: '结算管理', icon: 'settlement', soon: true },
       ],
     },
     {
@@ -119,11 +120,13 @@
 
   function itemHTML(item) {
     if (item.module === 'workbench') return wbGroupHTML(item);   // 折叠为「父行 + 9 个二级项」
-    var cls = 'nav-item' + (isActive(item) ? ' active' : '');
+    var cls = 'nav-item' + (isActive(item) ? ' active' : '') + (item.soon ? ' nav-soon' : '');
     var inner =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
       ICONS[item.icon] + '</svg>' +
-      '<span>' + item.label + '</span><span class="nav-num">' + item.num + '</span>';
+      '<span>' + item.label + '</span>' +
+      // 未上线项把索引位让给「建设中」标记：同一槽位，不改变行高与对齐
+      (item.soon ? '<span class="nav-num nav-soon-tag">建设中</span>' : '<span class="nav-num">' + item.num + '</span>');
     if (item.action) return '<button class="' + cls + '" type="button" data-agent-open>' + inner + '</button>';
     if (item.href) return '<a class="' + cls + '" href="' + item.href + '">' + inner + '</a>';
     if (isIndex) return '<button class="' + cls + '" type="button" data-module="' + item.module + '">' + inner + '</button>';

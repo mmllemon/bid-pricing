@@ -78,7 +78,9 @@ function showModule(module, sub) {
   const page = modulePages[module];
   if (!page) { quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); return; }
   quoteView.classList.add('hidden'); moduleView.classList.remove('hidden');
-  moduleView.innerHTML = `<div class="breadcrumb">${page.title} / 模块首页</div><header class="page-header"><div><span class="status-pill">${page.phase}</span><h1>${page.title}</h1><p>${page.subtitle}</p></div></header><section class="module-empty"><div class="module-icon">${page.icon}</div><h2>模块正在建设中</h2><p>该模块的页面入口已经建立，后续将接入真实业务数据和操作流程。</p><div class="module-cards">${page.cards.map(([title, text]) => `<article><strong>${title}</strong><span>${text}</span><em>即将上线</em></article>`).join('')}</div><button class="btn-primary module-back" data-module="quote">返回投标报价</button></section>`;
+  // 三个占位模块共用同一套模板：通用套话（「页面入口已经建立…」「即将上线」）逐页重复且零信息量，
+  // 只保留各模块自己独有的规划项标题与说明，让三页至少各自说明自己要做什么。
+  moduleView.innerHTML = `<div class="breadcrumb">${page.title} / 模块首页</div><header class="page-header"><div><span class="status-pill">${page.phase}</span><h1>${page.title}</h1><p>${page.subtitle}</p></div></header><section class="module-empty"><div class="module-icon">${page.icon}</div><h2>模块正在建设中</h2><div class="module-cards">${page.cards.map(([title, text]) => `<article><strong>${title}</strong><span>${text}</span></article>`).join('')}</div><button class="btn-primary module-back" data-module="quote">返回投标报价</button></section>`;
   location.hash = module;
   moduleView.querySelector('.module-back').addEventListener('click', () => selectModule('quote'));
 }
@@ -1291,6 +1293,10 @@ function renderDashTable() {
 }
 
 // KPI 看板
+// 金额统一「¥ + 千分位 + 固定 2 位小数」。只用 minimumFractionDigits 时，Intl 的
+// maximumFractionDigits 会默认取 max(min,3)，所以 279845.856 会渲染成 3 位小数，
+// 与相邻卡片的 2 位小数不一致——必须显式给出 maximumFractionDigits。
+const fmtMoney = (v) => `¥${Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 function renderKpi(result) {
   if (!result) return;
   const total = Number(result.target_total ?? 0);
@@ -1299,10 +1305,10 @@ function renderKpi(result) {
   const vatObj = computeInputVat(result);
   const marginRate = total > 0 ? (objective / total) * 100 : 0;
   // 主 KPI 数值走 count-up 动画（从 DOM 读旧值，平滑滚动到新值）
-  setKpiNum('kpiTotalVal', total, (v) => `¥${v.toLocaleString('zh-CN',{minimumFractionDigits:2})}`, true);
+  setKpiNum('kpiTotalVal', total, fmtMoney, true);
   setText('kpiTotalCap', result.competitive_budget ? `竞争预算 ${Number(result.competitive_budget).toLocaleString('zh-CN',{maximumFractionDigits:0})}` : '—');
   setText('kpiTotalDelta', result.status === 'PASS' ? '锁定约束' : '未平衡');
-  setKpiNum('kpiMarginVal', objective, (v) => `¥${v.toLocaleString('zh-CN',{minimumFractionDigits:2})}`, true);
+  setKpiNum('kpiMarginVal', objective, fmtMoney, true);
   setText('kpiMarginRate', `毛利率 ${marginRate.toFixed(1)}%`);
   setText('kpiCashflowTag', result.status === 'PASS' ? '结算调整后利润 · 不含税' : '待计算');
   // 评分格需让 grade 成为真元素（setText 用 textContent 会把 <span> 当字面文本显示），grade 为固定枚举非用户输入，安全用 innerHTML
@@ -1315,8 +1321,7 @@ function renderKpi(result) {
   document.querySelector('#scaleSafe').style.width = comp.safe + '%';
   document.querySelector('#scaleEarly').style.width = comp.early + '%';
   document.querySelector('#scaleRisk').style.width = comp.risk + '%';
-  setKpiNum('kpiVatVal', vatObj.vat, (v) => `¥${v.toLocaleString('zh-CN',{minimumFractionDigits:2})}`);
-  setText('kpiVatK', `k: ${vatObj.k}`);
+  setKpiNum('kpiVatVal', vatObj.vat, fmtMoney);
   setText('kpiVatShare', `材料抵扣贡献 ${vatObj.share}`);
   setText('kpiVatStatus', vatObj.status);
   renderDashTable();

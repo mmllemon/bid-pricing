@@ -182,9 +182,9 @@
     if (!opened) {          // 首次展开：补上欢迎态并建立与边车的连接（懒连接）
       opened = true;
       if (!hasConversation) appendWelcome();
-      refreshHealth();
       connectSSE();
     }
+    refreshHealth();          // P1: 每次展开都重探活（8010 后启动时状态 pill 不再永久"离线"）
     chat.scrollTop = chat.scrollHeight;
     input.focus();
   }

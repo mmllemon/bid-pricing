@@ -692,29 +692,19 @@ export interface HotspotFetchRun {
   error_message: string | null;
 }
 
-// ===== 知识大脑（V1.4：本地知识库服务）=====
+// ===== 知识大脑（2026-10-06 起：本地全文检索，轻量版不带 AI 问答）=====
 
-/** 知识库在线状态（后端 /api/knowledge/status 返回） */
+/** 知识库在线状态（后端 /api/knowledge/status 返回，恒在线） */
 export interface KnowledgeStatus {
   documents: number;
   chunks: number;
-  configured: boolean;
-  llm_model: string;
-  embedding_model: string;
-  reranker_model: string;
-  retrieval_context_chars: number;
-  /** 后端附加：服务地址 */
-  baseUrl?: string;
+  characters: number;
+  /** 固定 'local'：本地全文检索模式 */
+  mode: 'local';
   /** 后端附加：最近检测时间 */
   checkedAt?: string;
-  /** V1.5：服务地址是否已配置（工作台侧） */
-  serviceConfigured?: boolean;
-  /** V1.5：上游模型密钥是否配置 */
-  modelsConfigured?: boolean;
-  /** V1.5：本次健康检查是否在线 */
+  /** 本次健康检查是否在线（本地恒为 true） */
   online?: boolean;
-  /** V1.5：是否来自缓存 */
-  cached?: boolean;
 }
 
 /** 知识库文档（后端已裁剪内部路径 source_path） */
@@ -726,19 +716,19 @@ export interface KnowledgeDocument {
   chunks: number;
 }
 
-/** 知识库问答来源片段 */
-export interface KnowledgeChatSource {
+/** 本地全文检索命中片段 */
+export interface KnowledgeSearchHit {
+  document_id: string;
   document_name: string;
   heading: string;
-  score: number;
   excerpt: string;
+  score: number;
 }
 
-/** 知识库问答结果 */
-export interface KnowledgeChatResult {
-  answer: string;
-  sources: KnowledgeChatSource[];
-  retrieved_characters: number;
+/** 本地全文检索结果 */
+export interface KnowledgeSearchResult {
+  hits: KnowledgeSearchHit[];
+  total: number;
 }
 
 /** 知识库热点文章（public_hotspot，已剔除 content 只留 content_length） */

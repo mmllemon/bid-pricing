@@ -50,7 +50,7 @@ export default function SettingsPage() {
   const [scheduleTimes, setScheduleTimes] = useState('13:30,20:30');
   const [autoEnabled, setAutoEnabled] = useState(true);
   const [hotspotSaved, setHotspotSaved] = useState(false);
-  // 知识大脑连接（V1.4）
+  // 知识大脑（本地全文检索，不带 AI 问答）
   const [knowledge, setKnowledge] = useState<KnowledgeStatus | null>(null);
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
   const [knowledgeMsg, setKnowledgeMsg] = useState('');
@@ -173,10 +173,9 @@ export default function SettingsPage() {
         const k = await api.getKnowledgeStatus();
         setKnowledge(k);
         if (k.online) {
-          const modelHint = k.modelsConfigured ? '模型密钥已配置' : '模型密钥未配置（仅可浏览，无法问答）';
-          setKnowledgeMsg(`知识库服务在线（文档 ${k.documents} · 片段 ${k.chunks}）· ${modelHint}。`);
+          setKnowledgeMsg(`本地知识库在线（文档 ${k.documents} · 片段 ${k.chunks}）。`);
         } else {
-          setKnowledgeMsg('知识库服务离线，请检查 KNOWLEDGE_BASE_URL 或服务是否已启动。');
+          setKnowledgeMsg('本地知识库不可用，请检查工作台数据目录写入权限。');
         }
       }, { label: '正在测试知识库连接', successMessage: '连接检测完成' });
     } catch (e) {
@@ -474,26 +473,18 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* 知识大脑连接（V1.4） */}
-      <div className={`ui-module mt-4 setting-section${knowledge && !knowledge.online ? ' ui-alert--error' : ''}`}>
-        <h2 className="ui-module-title"><span className="ui-code">KB</span>知识库</h2>
+      {/* 知识大脑（本地全文检索） */}
+      <div className="ui-module mt-4 setting-section">
+        <h2 className="ui-module-title"><span className="ui-code">KB</span>知识大脑</h2>
         <p className="nb-muted" style={{ fontSize: 13, marginTop: 4, marginBottom: 12 }}>
-          知识大脑依赖外部独立的「L叔线下课知识库项目」（本地 Python 服务，默认 <code>127.0.0.1:8765</code>）。
-          工作台通过白名单代理访问，不迁移、不重建、不修改外部项目；外部项目的 API Key 保存在其自身 <code>.env</code>，不会进入本工作台或前端。
+          本地全文检索（轻量版，不带 AI 问答）。文档存在工作台数据目录 <code>knowledge/</code> 下，随现有备份体系走；
+          在「知识大脑」页上传 .md 即可检索。
         </p>
 
         <div className="flex gap-2" style={{ flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
           <span className={`nb-badge ${knowledgeLoading ? 'nb-badge--denim' : knowledge?.online ? 'nb-badge--olive' : 'nb-badge--red'}`}>
-            {knowledgeLoading ? '检查中…' : knowledge?.online ? '在线' : '离线/未配置'}
+            {knowledgeLoading ? '检查中…' : knowledge?.online ? '本地在线' : '不可用'}
           </span>
-          {knowledge?.online && (
-            <span className={`nb-badge ${knowledge.modelsConfigured ? 'nb-badge--olive' : 'nb-badge--red'}`}>
-              {knowledge.modelsConfigured ? '模型已配置' : '模型未配置'}
-            </span>
-          )}
-          {knowledge?.baseUrl && (
-            <span className="nb-muted" style={{ fontSize: 13 }}>服务地址：<code>{knowledge.baseUrl}</code></span>
-          )}
           <button className="nb-btn nb-btn--ghost" onClick={testKnowledgeConnection} disabled={knowledgeLoading || knowledgeTestProgress.running}>
             {knowledgeTestProgress.running ? '检测中…' : '测试连接'}
           </button>
@@ -505,7 +496,7 @@ export default function SettingsPage() {
         <ActionProgress progress={knowledgeTestProgress.progress} onRetry={testKnowledgeConnection} />
         <ActionProgress progress={knowledgeRefreshProgress.progress} onRetry={refreshKnowledge} />
 
-        {knowledge?.online ? (
+        {knowledge?.online && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, fontSize: 14 }}>
             <div className="cluster-row">
               <span className="nb-badge nb-badge--denim">文档数</span>
@@ -515,50 +506,19 @@ export default function SettingsPage() {
             <div className="cluster-row">
               <span className="nb-badge nb-badge--denim">知识片段</span>
               <div style={{ fontSize: 14 }}><strong>{knowledge.chunks}</strong></div>
-              <span className="nb-muted" style={{ fontSize: 12, marginLeft: 8 }}>个检索向量片段</span>
+              <span className="nb-muted" style={{ fontSize: 12, marginLeft: 8 }}>个检索片段（按标题切分）</span>
             </div>
             <div className="cluster-row">
-              <span className="nb-badge nb-badge--denim">检索上下文</span>
-              <div style={{ fontSize: 14 }}><strong>{knowledge.retrieval_context_chars?.toLocaleString() ?? '—'}</strong></div>
+              <span className="nb-badge nb-badge--denim">总字符</span>
+              <div style={{ fontSize: 14 }}><strong>{(knowledge.characters ?? 0).toLocaleString()}</strong></div>
               <span className="nb-muted" style={{ fontSize: 12, marginLeft: 8 }}>字符</span>
             </div>
-            <div className="cluster-row">
-              <span className="nb-badge nb-badge--denim">LLM</span>
-              <div style={{ fontSize: 14 }}><code>{knowledge.llm_model}</code></div>
-            </div>
-            <div className="cluster-row">
-              <span className="nb-badge nb-badge--denim">Embedding</span>
-              <div style={{ fontSize: 14 }}><code>{knowledge.embedding_model}</code></div>
-            </div>
-            <div className="cluster-row">
-              <span className="nb-badge nb-badge--denim">Reranker</span>
-              <div style={{ fontSize: 14 }}><code>{knowledge.reranker_model}</code></div>
-            </div>
-          </div>
-        ) : (
-          <div className="nb-muted" style={{ fontSize: 13, lineHeight: 1.8, marginBottom: 14 }}>
-            知识库服务未在线。启用步骤：
-            <div style={{ marginTop: 6 }}>1. 重新运行 <code>./start.sh</code>（会自动启动知识库服务），或手动启动：</div>
-            <div style={{ marginTop: 4, marginLeft: 12 }}>
-              <code>cd "$KNOWLEDGE_BASE_ROOT"</code>
-            </div>
-            <div style={{ marginTop: 4, marginLeft: 12 }}>
-              <code>python3 app.py</code>
-            </div>
-            <div style={{ marginTop: 6 }}>2. 启动日志：<code>logs/knowledge-base.log</code>；3. 本卡片信息来自 <code>/api/knowledge/status</code>。</div>
           </div>
         )}
 
         <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-          {knowledge?.online ? (
-            <a className="nb-btn nb-btn--ghost" href="http://127.0.0.1:8765" target="_blank" rel="noreferrer">
-              打开原知识库 ↗
-            </a>
-          ) : (
-            <span className="nb-btn nb-btn--ghost" style={{ opacity: 0.5, cursor: 'not-allowed' }}>打开原知识库 ↗</span>
-          )}
           <button className="nb-btn nb-btn--ghost" onClick={refreshKnowledge} disabled={knowledgeLoading || knowledgeRefreshProgress.running}>
-            {knowledgeRefreshProgress.running ? '刷新中…' : '刷新连接'}
+            {knowledgeRefreshProgress.running ? '刷新中…' : '刷新状态'}
           </button>
         </div>
       </div>

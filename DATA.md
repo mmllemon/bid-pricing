@@ -11,6 +11,7 @@
 | 项目经营 | `outputs/projects/<user>/projects.json` | :8000 FastAPI | 项目列表（Biz 页；与方案经 `overview_id` 关联） | 同上（同一目录） |
 | 井库 | `outputs/projects/<user>/well-library.json` | :8000 FastAPI | 手动保存的井（含参数/单价/钢筋表快照）；旧浏览器数据首次访问自动迁移 | 同上（同一目录） |
 | 工作台数据 | `outputs/workbench-data/workbench.db` | :3456 Express | `settings`、`todos`（`project_id` 可空→关联 Biz 项目）、`scan_reports`、`xhs_*`（小红书账号）、`hotspot_*`（热点雷达：微信源走次幂＋`rss:` 源走 RSS 链路）、`productivity_*`（日程/AI分析） | 拷整个目录（WAL 模式：停服务后拷，或连 `-wal`/`-shm` 一起拷） |
+| 知识库文档 | `outputs/workbench-data/knowledge/<id>.md`＋`index.json` | :3456 Express | 知识大脑上传的 .md（按标题切分片段，本地全文检索，不带 AI 问答；2026-10-06 起替代已下线的 :8765 RAG 服务） | 同上（同一目录） |
 | Agent 会话 | `agent-service/agent.sqlite` | :8010 agent-service | 会话/任务、提醒、审批决定（表由 Pi Durable 库管理） | 拷文件 |
 | 模型配置 | `agent-service/agent-model-config.json` | :8010 | 自定义模型 baseUrl＋**API Key**（已 gitignore，别外传） | 同上 |
 
@@ -36,6 +37,7 @@
 | 报价方案/项目列表没了 | `outputs/projects/<user>/` 在不在，`quote.db`/`projects.json` 时间戳 |
 | 井库没了 | `outputs/projects/<user>/well-library.json` 在不在；首次迁移失败时旧数据仍在浏览器 `gc_well_library_v1` |
 | 工作台待办/热点没了 | `outputs/workbench-data/workbench.db`（及 -wal/-shm） |
+| 知识库文档没了 | `outputs/workbench-data/knowledge/` 在不在（`index.json`＋`<id>.md`）；删文档不可恢复 |
 | Agent 失忆/提醒没了 | `agent-service/agent.sqlite` |
 | 工具页参数没恢复 | 浏览器 localStorage（F12→Application），键见上表 |
 | 端口/启动问题 | `run.ps1` 头部注释＋各进程日志目录 |

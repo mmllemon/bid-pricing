@@ -88,4 +88,5 @@
       try { localStorage.removeItem(this.KEY); } catch (e) {}
     }
   };
+  window.__toolCommonLoaded = true;
 })();

@@ -8,6 +8,18 @@
 (function () {
   'use strict';
 
+  /* P1: tool-common.js 加载失败时整页静默死亡 → 断言加载标记 + 可见提示后提前返回 */
+  if (!window.__toolCommonLoaded) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const host = document.querySelector('.tool-page') || document.body;
+      const bar = document.createElement('div');
+      bar.style.cssText = 'margin:12px;padding:12px 16px;border:2px solid #c00;border-radius:8px;background:#fff5f5;color:#a00;font-size:14px;line-height:1.7;';
+      bar.textContent = '页面初始化失败：公共脚本 tool-common.js 未加载（可能 404 或被拦截），后续计算全部不可用。请确认文件存在后刷新重试。';
+      host.prepend(bar);
+    });
+    return;
+  }
+
   const $ = (sel, root) => (root || document).querySelector(sel);
   const num = (el) => (window.toolNonNeg || window.toolNum)(el), fmt = window.toolFmt;   // P0-6: 负数钳制（标红+按0算），与 earth/duct 对齐
 
@@ -170,8 +182,22 @@
   ['cCu', 'cAl', 'cK', 'cMgr', 'cVat'].forEach(id =>
     $('#' + id).addEventListener('input', () => { recalcCable(); saveSoon(); }));
   /* 电压等级切换：其他材料系数按建议值分档，整表同步（仍可逐行改） */
-  $('#cVolt').addEventListener('change', () => {
-    const v = (VOLT_MAT[$('#cVolt').value] ?? 0.30).toFixed(2);
+  /* P1: 切换前 confirm —— 逐行核价后的手工系数不再被一次误触清空 */
+  const voltSel = $('#cVolt');
+  voltSel.dataset.prevVolt = voltSel.value;
+  voltSel.addEventListener('change', () => {
+    const v = (VOLT_MAT[voltSel.value] ?? 0.30).toFixed(2);
+    const oldV = (VOLT_MAT[voltSel.dataset.prevVolt] ?? 0.30).toFixed(2);
+    const dirty = [...cableBody.querySelectorAll('tr')].filter(tr => {
+      const inp = tr.querySelector('[data-k="matRatio"]');
+      return inp && inp.value !== '' && inp.value !== oldV && inp.value !== v;
+    });
+    if (dirty.length > 0 && !confirm(`切换电压等级会把 ${dirty.length} 行手工填写的材料系数覆盖为建议值 ${v}，确定继续吗？`)) {
+      voltSel.value = voltSel.dataset.prevVolt;
+      if (voltSel.__cs) voltSel.__cs.refresh();   // 同步毛玻璃下拉显示
+      return;
+    }
+    voltSel.dataset.prevVolt = voltSel.value;
     cableBody.querySelectorAll('tr').forEach(tr => {
       const inp = tr.querySelector('[data-k="matRatio"]');
       if (inp) inp.value = v;

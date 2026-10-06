@@ -77,18 +77,11 @@ import { workbenchRuntimeStamp } from './services/runtimeStamp';
 import multer from 'multer';
 import type { Request } from 'express';
 import {
-  getKnowledgeStatus,
-  getKnowledgeDocuments,
-  chatKnowledge,
-  uploadKnowledge,
-  deleteKnowledgeDocument,
   getKnowledgeHotspotStatus,
   getKnowledgeHotspotArticles,
   refreshKnowledgeHotspots,
   generateKnowledgeHotspotWithSource,
-  isKnowledgeConfigured,
   KnowledgeServiceError,
-  invalidateKnowledgeCache,
 } from './knowledgeClient';
 import {
   KnowledgeHotspotDraftError,
@@ -96,6 +89,13 @@ import {
   normalizeKnowledgeHotspotGenerationMode,
   normalizeKnowledgeHotspotRequestId,
 } from './knowledgeHotspotDrafts';
+import {
+  getLocalKnowledgeStatus,
+  listLocalKnowledgeDocuments,
+  addLocalKnowledgeDocument,
+  deleteLocalKnowledgeDocument,
+  searchLocalKnowledge,
+} from './knowledgeLocal';
 import { corsOriginDelegate, BIND_HOST } from './http/localCors';
 import { assertSettingsPatch, SettingsPolicyError } from './config/settingsPolicy';
 
@@ -961,122 +961,72 @@ app.patch('/api/hotspots/sources/:id', (req, res) => {
   res.json(getHotspotSource(id));
 });
 
-// ===== 知识大脑（V1.4：本地知识库服务代理）=====
-// 通过白名单客户端转发到外部 8765 服务，不暴露内部路径/API Key；
-// 上游离线时统一返回 503 code=KNOWLEDGE_SERVICE_OFFLINE。
+// ===== 知识大脑（2026-10-06 起：本地全文检索，轻量版不带 AI 问答）=====
+// 替代已下线的外部 :8765 RAG 服务。文档落盘 DATA_DIR/knowledge/，
+// 关键词检索按文件名/标题/正文加权计分；hotspots 相关路由仍走 knowledgeClient。
 
-// GET /api/knowledge/status → 在线状态 + 文档/片段数 + 模型配置（拆分语义）
-app.get('/api/knowledge/status', async (_req, res) => {
-  const baseUrl = process.env.KNOWLEDGE_BASE_URL || 'http://127.0.0.1:8765';
-  try {
-    const status = await getKnowledgeStatus();
-    res.json({
-      ...status,
-      online: true,
-      serviceConfigured: isKnowledgeConfigured(),
-      modelsConfigured: status.configured,
-      baseUrl,
-      checkedAt: new Date().toISOString(),
-    });
-  } catch (e) {
-    res.status(e instanceof KnowledgeServiceError ? e.status : 503).json({
-      code: e instanceof KnowledgeServiceError ? e.code : 'KNOWLEDGE_SERVICE_OFFLINE',
-      message: e instanceof Error ? e.message : '知识库服务不可用',
-      online: false,
-      serviceConfigured: isKnowledgeConfigured(),
-      modelsConfigured: null,
-      baseUrl,
-      checkedAt: new Date().toISOString(),
-    });
-  }
+// GET /api/knowledge/status → 本地状态（恒在线）
+app.get('/api/knowledge/status', (_req, res) => {
+  res.json(getLocalKnowledgeStatus());
 });
 
-// GET /api/knowledge/documents → 文档列表（已裁剪内部路径；支持 limit/offset 并返回 total）
-app.get('/api/knowledge/documents', async (req, res) => {
-  try {
-    const all = await getKnowledgeDocuments();
-    const limitRaw = Number(req.query.limit);
-    const offsetRaw = Number(req.query.offset);
-    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(500, Math.floor(limitRaw)) : undefined;
-    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
-    const documents = limit ? all.slice(offset, offset + limit) : all.slice(offset);
-    res.json({ documents, total: all.length, limit: limit ?? null, offset });
-  } catch (e) {
-    res.status(e instanceof KnowledgeServiceError ? e.status : 503).json({
-      code: e instanceof KnowledgeServiceError ? e.code : 'KNOWLEDGE_SERVICE_OFFLINE',
-      message: e instanceof Error ? e.message : '知识库服务不可用',
-    });
-  }
+// GET /api/knowledge/documents → 本地文档列表（支持 limit/offset 并返回 total）
+app.get('/api/knowledge/documents', (req, res) => {
+  const all = listLocalKnowledgeDocuments();
+  const limitRaw = Number(req.query.limit);
+  const offsetRaw = Number(req.query.offset);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(500, Math.floor(limitRaw)) : undefined;
+  const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
+  const documents = limit ? all.slice(offset, offset + limit) : all.slice(offset);
+  res.json({ documents, total: all.length, limit: limit ?? null, offset });
 });
 
-// POST /api/knowledge/chat → 问知识库
-app.post('/api/knowledge/chat', async (req, res) => {
-  try {
-    const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
-    const history = Array.isArray(req.body?.history) ? req.body.history : [];
-    if (!question) {
-      return res.status(400).json({ code: 'REQUIRED_FIELD', message: '请输入一个问题' });
-    }
-    if (question.length > 8000) {
-      return res.status(400).json({ code: 'QUESTION_TOO_LONG', message: '问题最多 8000 字，请精简后再提问' });
-    }
-    if (history.length > 12) {
-      return res.status(400).json({ code: 'HISTORY_TOO_LONG', message: '历史上下文最多 6 轮（12 条消息）' });
-    }
-    const result = await chatKnowledge(question, history);
-    res.json(result);
-  } catch (e) {
-    res.status(e instanceof KnowledgeServiceError ? e.status : 503).json({
-      code: e instanceof KnowledgeServiceError ? e.code : 'KNOWLEDGE_SERVICE_OFFLINE',
-      message: e instanceof Error ? e.message : '知识库服务不可用',
-    });
+// POST /api/knowledge/search → 关键词全文检索（替代已下线的 /knowledge/chat AI 问答）
+app.post('/api/knowledge/search', (req, res) => {
+  const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
+  if (!query) {
+    return res.status(400).json({ code: 'REQUIRED_FIELD', message: '请输入关键词' });
   }
+  if (query.length > 200) {
+    return res.status(400).json({ code: 'QUERY_TOO_LONG', message: '关键词最多 200 字' });
+  }
+  res.json(searchLocalKnowledge(query));
 });
 
-// POST /api/knowledge/upload → 上传 .md（≤10MB，multer 已限制）
+// POST /api/knowledge/upload → 上传 .md（≤10MB，multer 已限制），落盘 knowledge/
 app.post('/api/knowledge/upload', (req, res) => {
-  kbUpload.single('file')(req, res, async (uploadErr) => {
+  kbUpload.single('file')(req, res, (uploadErr) => {
     if (uploadErr) {
       const msg = uploadErr instanceof Error ? uploadErr.message : '上传失败';
       const tooLarge = typeof msg === 'string' && /10 ?MB|文件大小|File too large|limit/i.test(msg);
       return res.status(tooLarge ? 413 : 400).json({ code: 'UPLOAD_ERROR', message: msg });
     }
     const multerReq = req as Request & { file?: Express.Multer.File };
+    if (!multerReq.file || !multerReq.file.buffer) {
+      return res.status(400).json({ code: 'REQUIRED_FIELD', message: '请选择一个 Markdown 文件' });
+    }
     try {
-      if (!multerReq.file || !multerReq.file.buffer) {
-        return res.status(400).json({ code: 'REQUIRED_FIELD', message: '请选择一个 Markdown 文件' });
-      }
       const filename = multerReq.file.originalname || 'unnamed.md';
-      const result = await uploadKnowledge(multerReq.file.buffer, filename);
+      const result = addLocalKnowledgeDocument(multerReq.file.buffer, filename);
       res.status(201).json(result);
     } catch (e) {
-      res.status(e instanceof KnowledgeServiceError ? e.status : 503).json({
-        code: e instanceof KnowledgeServiceError ? e.code : 'KNOWLEDGE_SERVICE_OFFLINE',
-        message: e instanceof Error ? e.message : '知识库服务不可用',
-      });
+      res.status(500).json({ code: 'LOCAL_KB_ERROR', message: e instanceof Error ? e.message : '保存失败' });
     }
   });
 });
 
-// DELETE /api/knowledge/documents/:id → 删除文档
-app.delete('/api/knowledge/documents/:id', async (req, res) => {
+// DELETE /api/knowledge/documents/:id → 删除本地文档
+app.delete('/api/knowledge/documents/:id', (req, res) => {
   try {
     const id = String(req.params.id);
     if (!id) return res.status(400).json({ code: 'REQUIRED_FIELD', message: '缺少文档 ID' });
-    // 只接受固定格式的文档 ID，防止把代理当任意 URL/路径删除器
-    if (!/^[A-Za-z0-9._-]{1,200}$/.test(id)) {
-      return res.status(400).json({ code: 'INVALID_DOCUMENT_ID', message: '文档 ID 格式不合法' });
-    }
-    const result = await deleteKnowledgeDocument(id);
-    res.json(result);
+    res.json(deleteLocalKnowledgeDocument(id));
   } catch (e) {
-    res.status(e instanceof KnowledgeServiceError ? e.status : 503).json({
-      code: e instanceof KnowledgeServiceError ? e.code : 'KNOWLEDGE_SERVICE_OFFLINE',
-      message: e instanceof Error ? e.message : '知识库服务不可用',
-    });
+    const msg = e instanceof Error ? e.message : '删除失败';
+    const code = msg.includes('格式不合法') ? 400 : msg.includes('不存在') ? 404 : 500;
+    res.status(code).json({ code: 'LOCAL_KB_ERROR', message: msg });
   }
 });
-
 // ===== 知识大脑 · 热点雷达整合（代理到外部知识库 hotspots 服务）=====
 
 // GET /api/knowledge/hotspots/status

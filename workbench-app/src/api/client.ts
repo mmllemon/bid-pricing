@@ -20,7 +20,7 @@ import type {
   HotspotFetchRun,
   KnowledgeStatus,
   KnowledgeDocument,
-  KnowledgeChatResult,
+  KnowledgeSearchResult,
   KnowledgeHotspotList,
   KnowledgeHotspotStatus,
   KnowledgeGenerateResult,
@@ -177,8 +177,8 @@ export const api = {
   // 知识大脑（V1.4：本地知识库服务）
   getKnowledgeStatus: () => request<KnowledgeStatus>('/knowledge/status'),
   getKnowledgeDocuments: () => request<{ documents: KnowledgeDocument[] }>('/knowledge/documents'),
-  chatKnowledge: (question: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) =>
-    request<KnowledgeChatResult>('/knowledge/chat', { method: 'POST', body: JSON.stringify({ question, history }) }),
+  searchKnowledge: (query: string) =>
+    request<KnowledgeSearchResult>('/knowledge/search', { method: 'POST', body: JSON.stringify({ query }) }),
   uploadKnowledge: async (file: File) => {
     const form = new FormData();
     form.append('file', file);

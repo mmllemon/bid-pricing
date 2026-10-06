@@ -8,6 +8,19 @@
 (function () {
   'use strict';
 
+  /* P1: tool-common.js 加载失败时整页静默死亡 → 断言加载标记 + 可见提示后提前返回 */
+  if (!window.__toolCommonLoaded) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const host = document.querySelector('.tool-page') || document.body;
+      const bar = document.createElement('div');
+      bar.style.cssText = 'margin:12px;padding:12px 16px;border:2px solid #c00;border-radius:8px;background:#fff5f5;color:#a00;font-size:14px;line-height:1.7;';
+      bar.textContent = '页面初始化失败：公共脚本 tool-common.js 未加载（可能 404 或被拦截），后续计算全部不可用。请确认文件存在后刷新重试。';
+      host.prepend(bar);
+    });
+    return;
+  }
+
+
   const $ = (sel, root) => (root || document).querySelector(sel);
   const num = window.toolNum, fmt = window.toolFmt;
 

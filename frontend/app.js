@@ -38,7 +38,10 @@ function selectModule(module) {
   // 操作坞只挂在「投标报价」页；其余页面隐藏（各模块后续接入各自专属操作坞）
   const dock = document.querySelector('.floating-dock');
   if (dock) dock.classList.toggle('hidden', module !== 'quote');
-  if (module === 'quote') { location.hash = ''; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); if (agentView) agentView.classList.add('hidden'); }
+  // 报价页写 'quote' 而不是清空 hash：清空后 URL 变 ...index.html#，此时 location.hash 是空字符串，
+  // 刷新会命中 initDashboard 的「无 hash → 默认个人工作台」分支，把报价页弹回工作台。
+  // 各模块统一写自己的名字，刷新即可原地恢复。
+  if (module === 'quote') { location.hash = 'quote'; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); if (agentView) agentView.classList.add('hidden'); }
   else showModule(module);
 }
 function closeOverlays() {
@@ -49,7 +52,10 @@ function closeOverlays() {
 document.querySelectorAll('.nav-item').forEach(button => {
   button.addEventListener('click', () => selectModule(button.dataset.module));
 });
-window.addEventListener('hashchange', () => selectModule(location.hash.slice(1) || 'quote'));
+// hash 被清空（手动删地址栏片段）或收到空值时回落到默认落地页。
+// 兜底值必须与 initDashboard 的「无 hash → selectModule('workbench')」保持一致，
+// 否则「首次加载无 hash」和「运行中把 hash 清空」会落到两个不同页面。
+window.addEventListener('hashchange', () => selectModule(location.hash.slice(1) || 'workbench'));
 // 初始模块选择延后到 initDashboard 内执行：此时 hubView/hubSelected 等模块级 let 已就绪，
 // 避免在文件顶部同步调用 selectModule → closeOverlays → closePlanHub 读到 TDZ 中的 hubView。
 

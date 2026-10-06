@@ -32,13 +32,20 @@
 
         <div class="nav-group">
           <div class="nav-group-title">核心功能</div>
-          <a class="nav-item" href="./index.html">
+          <!-- 必须带 #quote：index.html 初始落地对「无 hash」判的是个人工作台（app.js initDashboard），
+               裸链会先落到工作台再让人二次点击。 -->
+          <a class="nav-item" href="./index.html#quote">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h5M8 17h8"/></svg>
             <span>投标报价</span><span class="nav-num">Q-01</span>
           </a>
           <a class="nav-item" href="./index.html#cost">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M5 9l7-7 7 7M5 15l7 7 7-7"/></svg>
             <span>实施成本</span><span class="nav-num">C-02</span>
+          </a>
+          <!-- 与 index.html 静态侧栏逐项对齐；此前漏了本项，导致进工具页后「AI 测算助手」消失 -->
+          <a class="nav-item" href="./index.html#agent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2.5"/><path d="M12 7V4M8 4h8"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><path d="M9 16h6"/></svg>
+            <span>AI 测算助手</span><span class="nav-num">A-03</span>
           </a>
         </div>
 

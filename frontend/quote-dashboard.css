@@ -424,11 +424,14 @@
 .intake-slot:focus-visible{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
 .intake-slot.dragging{border-color:var(--ui-orange);background:var(--ui-yellow)}
 .intake-head{display:flex;align-items:center;gap:9px;padding:12px 12px 9px}
-.intake-slot.cap{--ic:var(--ui-black);--ic-soft:var(--ui-yellow)}
-.intake-slot.cost{--ic:var(--ui-black);--ic-soft:var(--ui-white)}
+/* 图标块两个槽位同款：白底 + 黑色描边图标。
+   重构前这里是 --ic/--ic-soft 两个变量（cap 淡蓝 #e5edf6 / cost 淡绿 #e6f1ec），用来轻量区分两槽；
+   V2 禁第三强调色时这两个值被分别映射，cap 落成 --ui-yellow（中饱和强调色）、cost 落成白，
+   于是两个同构槽位变成一黄一白；且悬停时 .intake-slot:hover 会把槽底也变黄，
+   cap 的图标块随之与槽底同色、边界消失。现统一为白，去掉这层无用间接。 */
 .intake-ic{
   width:34px;height:34px;border-radius:0;flex-shrink:0;display:grid;place-items:center;
-  background:var(--ic-soft);color:var(--ic);border:var(--line-thin);
+  background:var(--ui-white);color:var(--ui-black);border:var(--line-thin);
 }
 .intake-ic svg{width:18px;height:18px}
 .intake-title strong{display:block;font-size:12px;font-weight:700;color:var(--text)}
@@ -437,7 +440,7 @@
 .intake-body{padding:0 12px 12px;border-top:var(--line-thin);padding-top:9px;flex:1 1 auto;display:flex;flex-direction:column}
 .intake-state{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
 .intake-cta{color:var(--text);font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--ic);opacity:.38;flex-shrink:0}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--ui-black);opacity:.38;flex-shrink:0}
 .intake-slot:not(.loaded) .pulse-dot{background:var(--ui-black);opacity:.38}
 .intake-slot.loaded .pulse-dot{background:var(--ui-black);opacity:1}
 .intake-reup{

@@ -25,6 +25,22 @@
     ? location.protocol + '//' + location.hostname + ':8010'
     : 'http://127.0.0.1:8010';
 
+  // P0-1: 边车鉴权 token（与服务端 AGENT_API_TOKEN 对应）。未设置服务端 token 时留空即可；
+  // 设置后 /approve、/apply-model 走请求头，/watch（SSE 不支持自定义头）走 ?token= 查询参数。
+  const agentToken = () => {
+    try { return localStorage.getItem('agent_api_token') || ''; } catch { return ''; }
+  };
+  const agentHeaders = (extra) => {
+    const h = Object.assign({}, extra);
+    const t = agentToken();
+    if (t) h['X-API-Token'] = t;
+    return h;
+  };
+  const watchUrl = () => {
+    const t = agentToken();
+    return AGENT_BASE + '/watch' + (t ? '?token=' + encodeURIComponent(t) : '');
+  };
+
   const ICON_BOT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="2.5"/><path d="M12 7V4M8 4h8"/><circle cx="9" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.1" fill="currentColor" stroke="none"/><path d="M9 16h6"/></svg>';
   const ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56h.01a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.03Z"/></svg>';
   const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -69,6 +85,9 @@
           '<label>Base URL</label><input id="agentCustomBase" type="text" placeholder="https://api.xxx.com/v1" style="margin-bottom:10px" />' +
           '<label>API Key</label><input id="agentCustomKey" type="password" placeholder="sk-..." style="margin-bottom:10px" />' +
           '<label>模型 ID</label><input id="agentCustomModel" type="text" placeholder="my-model" /></div>' +
+        '<div><div class="sec-title">边车鉴权（可选）</div>' +
+          '<label>AGENT_API_TOKEN</label><input id="agentApiToken" type="password" placeholder="与服务端 AGENT_API_TOKEN 一致；未设置服务端时留空" />' +
+          '<div class="as-hint" style="font-size:12px;opacity:.65;line-height:1.6;margin-top:4px">服务端设置 AGENT_API_TOKEN 后，审批与模型设置需鉴权；此处填同一值，保存在本机 localStorage。</div></div>' +
         '<label class="chk"><input type="checkbox" id="agentTestConn" checked /> 应用后自动测试连接</label>' +
         '<div id="agentApplyMsg" class="as-test"></div>' +
       '</div>' +
@@ -228,7 +247,7 @@
   let es = null;
   function connectSSE() {
     if (es) return;
-    try { es = new EventSource(AGENT_BASE + '/watch'); } catch { return; }
+    try { es = new EventSource(watchUrl()); } catch { return; }
     es.onmessage = (ev) => {
       let data;
       try { data = JSON.parse(ev.data); } catch { return; }
@@ -253,7 +272,7 @@
       '<div class="ap-result"></div>';
     const post = (allow) => fetch(AGENT_BASE + '/approve', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: agentHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify({ key: data.key, allow }),
     });
     card.querySelector('.ap-allow').onclick = async () => {
@@ -304,6 +323,7 @@
   const customBase = document.getElementById('agentCustomBase');
   const customKey = document.getElementById('agentCustomKey');
   const customModel = document.getElementById('agentCustomModel');
+  const agentApiToken = document.getElementById('agentApiToken');
   const testConn = document.getElementById('agentTestConn');
   const applyMsg = document.getElementById('agentApplyMsg');
   const currentModel = document.getElementById('agentCurrentModel');
@@ -348,7 +368,16 @@
       applyMsg.textContent = '读取配置失败：' + e.message;
       applyMsg.className = 'as-test bad';
     }
+    // P0-1: 边车鉴权 token 回填（本机 localStorage）
+    agentApiToken.value = agentToken();
   }
+
+  agentApiToken.addEventListener('change', () => {
+    try { localStorage.setItem('agent_api_token', agentApiToken.value.trim()); } catch {}
+    // token 变更后重建 SSE 连接，使其携带新 token；面板已展开时立即重连
+    if (es) { try { es.close(); } catch {} es = null; }
+    if (opened && !panel.classList.contains('hidden')) connectSSE();
+  });
 
   providerSel.addEventListener('change', () => {
     if (providerSel.value === '__custom__') {
@@ -387,7 +416,7 @@
     try {
       const res = await fetch(AGENT_BASE + '/apply-model', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: agentHeaders({ 'content-type': 'application/json' }),
         body: JSON.stringify(Object.assign({ provider, model }, extra, { test: testConn.checked })),
       });
       const data = await res.json();

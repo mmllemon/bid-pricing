@@ -26,6 +26,15 @@ frontend/node_modules/
 # vendored 工作台（lshu）：凭证与运行期数据库不入库（结构见 .env.example）
 workbench-server/.env.local
 workbench-server/data/
+# P0-2: agent-service 运行期文件不入库 —— agent.sqlite 含会话/提醒持久化，
+# agent-model-config.json 含自定义模型 API Key
+agent-service/*.sqlite
+agent-service/*.sqlite-journal
+agent-service/agent-model-config.json
+# P0-7: tsc -b 构建产物不入库（每次构建改写，产生噪音 diff）
+*.tsbuildinfo
+workbench-app/vite.config.js
+workbench-app/vite.config.d.ts
 *.pdf
 .trae/
 .workbuddy/

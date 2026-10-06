@@ -41,9 +41,28 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 
 const ctx = BACKGROUND_CONTEXT;
 const PORT = Number(process.env.AGENT_PORT ?? 8010);
+// P0-1: 默认只监听回环地址（防局域网/公网直连）；如需对外暴露，用 AGENT_HOST 显式覆盖
+const AGENT_HOST = process.env.AGENT_HOST || "127.0.0.1";
 const BACKEND = (process.env.BACKEND_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 const SQLITE_FILE = path.resolve(process.env.AGENT_SQLITE ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "agent.sqlite"));
 const MODEL_CONFIG_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "agent-model-config.json");
+// P0-1: 边车自身鉴权。AGENT_API_TOKEN 优先，回退 BIDPRICING_API_TOKEN（与 FastAPI 同语义）。
+// 未设置时保持本地零配置可用（启动时打印告警）；设置后 /approve、/apply-model、/watch 必须携带。
+const AGENT_TOKEN = process.env.AGENT_API_TOKEN || process.env.BIDPRICING_API_TOKEN || "";
+// P0-1: CORS 只放行本机来源（localhost/127.0.0.1 任意端口）；无 Origin 的直连（curl/同机脚本）不设 ACAO。
+const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+function corsAllowOrigin(req) {
+  const o = req.headers.origin;
+  if (!o) return null;
+  return LOCAL_ORIGIN_RE.test(o) ? o : null;
+}
+function agentTokenOk(req) {
+  if (!AGENT_TOKEN) return true;
+  const h = req.headers["x-api-token"] || "";
+  const az = req.headers["authorization"] || "";
+  const q = new URL(req.url, "http://x").searchParams.get("token") || "";
+  return h === AGENT_TOKEN || az === `Bearer ${AGENT_TOKEN}` || q === AGENT_TOKEN;
+}
 
 // ---------------------------------------------------------------------------
 // 模型：models.json 的所有 provider + 前端自定义 provider
@@ -129,7 +148,12 @@ function modelAvailable() {
 // 后端 API 访问
 // ---------------------------------------------------------------------------
 async function backendFetch(pathname, options) {
-  const res = await fetch(BACKEND + pathname, options);
+  // P0-3: 边车调 FastAPI 时透传 token（与 api/app.py 的 BIDPRICING_API_TOKEN 语义一致）
+  const headers = { ...(options && options.headers) };
+  if (process.env.BIDPRICING_API_TOKEN && !headers["X-API-Token"] && !headers["x-api-token"]) {
+    headers["X-API-Token"] = process.env.BIDPRICING_API_TOKEN;
+  }
+  const res = await fetch(BACKEND + pathname, { ...options, headers });
   const text = await res.text();
   let body;
   try { body = JSON.parse(text); } catch { body = text; }
@@ -527,8 +551,13 @@ let latestView = null;
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "content-type");
+  // P0-1: CORS 收敛到本机白名单（替代原来的 *）；预检需放行 x-api-token / authorization
+  const allowOrigin = corsAllowOrigin(req);
+  if (allowOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowOrigin);
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Headers", "content-type, x-api-token, authorization");
   if (req.method === "OPTIONS") return res.writeHead(204).end();
 
   try {
@@ -558,6 +587,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && url.pathname === "/apply-model") {
+      // P0-1: 自定义模型可改 baseUrl（后续请求外泄风险），需鉴权
+      if (!agentTokenOk(req)) return send(res, 403, { error: "agent token 缺失或不正确（X-API-Token / Authorization: Bearer / ?token=）" });
       const body = await readBody(req);
       const provider = String(body.provider ?? "").trim();
       const modelId = String(body.model ?? "").trim();
@@ -599,6 +630,8 @@ const server = http.createServer(async (req, res) => {
 
     // ---- 审批 ----
     if (req.method === "POST" && url.pathname === "/approve") {
+      // P0-1: 审批直接放行副作用工具执行，需鉴权
+      if (!agentTokenOk(req)) return send(res, 403, { error: "agent token 缺失或不正确（X-API-Token / Authorization: Bearer）" });
       const body = await readBody(req);
       const ok = decideApproval(String(body.key ?? ""), Boolean(body.allow));
       return send(res, 200, { ok });
@@ -606,6 +639,8 @@ const server = http.createServer(async (req, res) => {
 
     // ---- GET /watch (SSE) ----
     if (req.method === "GET" && url.pathname === "/watch") {
+      // P0-1: /watch 会推送 approval_request（含审批 key），嗅探后可伪造审批，需鉴权（SSE 只能用 ?token=）
+      if (!agentTokenOk(req)) return send(res, 403, { error: "agent token 缺失或不正确（?token=）" });
       res.writeHead(200, {
         "content-type": "text/event-stream",
         "cache-control": "no-cache",
@@ -675,11 +710,15 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`[agent-service] listening on :${PORT}`);
+server.listen(PORT, AGENT_HOST, () => {
+  console.log(`[agent-service] listening on ${AGENT_HOST}:${PORT}`);
   console.log(`[agent-service] storage=${SQLITE_FILE}`);
   console.log(`[agent-service] backend=${BACKEND} model=${ACTIVE.provider}/${ACTIVE.model} available=${modelAvailable()}`);
   console.log(`[agent-service] 门控工具：${[...GATED_TOOLS].join(", ")}（执行前需 /approve）`);
+  if (!AGENT_TOKEN) {
+    console.log("[agent-service] 安全提示：AGENT_API_TOKEN 未设置，/approve、/apply-model、/watch 无鉴权；" +
+      "当前仅靠回环监听 + 本机 CORS 白名单保护。如需对外暴露或加固，设置 AGENT_API_TOKEN（前端面板设置里填同一值）。");
+  }
 });
 
 process.on("SIGINT", async () => {

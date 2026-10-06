@@ -16,8 +16,12 @@ import { IconBriefcase, IconChart, IconClose, IconEye, IconPlus, IconSearch } fr
  * - 卡片堆叠：列内绝对定位错位下移（TAB_H + i*CAS），悬停/聚焦展开完整指标
  * - 新建/编辑弹窗：11 个可编辑字段 + 3 个自动派生指标实时预览 + 删除
  */
+// P0-8: 后端基地址：优先 window.__API_BASE__ 覆盖；否则按当前主机名推导（支持局域网 IP 访问，
+// 与 tool-cable.js 的 API_BASE 约定一致），file:// 直接打开时回退 localhost。
+// :8000 未运行时 load() 的 catch 会显示错误横幅（降级提示），不再静默空白。
 const API_BASE =
-  (window as unknown as { __API_BASE__?: string }).__API_BASE__ || 'http://localhost:8000';
+  (window as unknown as { __API_BASE__?: string }).__API_BASE__
+  || (location.hostname ? location.protocol + '//' + location.hostname + ':8000' : 'http://localhost:8000');
 
 const STAGES = ['投标', '中标在建', '已竣工', '已结算', '售后'];
 const ARCHIVE = '未中标';

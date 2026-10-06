@@ -18,7 +18,7 @@
   'use strict';
 
   const $ = (sel, root) => (root || document).querySelector(sel);
-  const num = window.toolNum, fmt = window.toolFmt;
+  const num = (el) => (window.toolNonNeg || window.toolNum)(el), fmt = window.toolFmt;   // P0-6: 负数钳制（标红+按0算），与 earth/duct 对齐
 
   /* 参考净空（可改）：常见配电电缆井，非图集替代 */
   const WELL_PRESETS = {
@@ -124,7 +124,7 @@
     const lipFormFx = lipForm > 0 ? `＋${f2(lipOuterP)}×${f2(lipH)}（井座外侧）` : '';
     const slabFormFx = topT > 0 ? `＋${f2(slabA)}（现浇顶板底）` : '';
     const fx = [
-      `(${f2(L + 2 * t + 0.2)}×${f2(W + 2 * t + 0.2)})×${f2(padT)}${brPad}`,
+      `(${f2(L + 2 * t + 2 * po)}×${f2(W + 2 * t + 2 * po)})×${f2(padT)}${brPad}`,   // P0-5: 公式文本与垫层外挑宽 po 联动（原写死 +0.2）
       `(${f2(L + 2 * t)}×${f2(W + 2 * t)})×${f2(baseT)}${brSlab}`,
       `${f2(concQty.base)}×${f2(rebarRatio.base)}`,
       `(${f2(2 * (L + t))}＋${f2(2 * (W + t))}${brCL})×${f2(D)}×${f2(t)}${lipFx}`,
@@ -155,7 +155,7 @@
         case 'render': return (innerP + outerP) * D;
         case 'coverSlab':  return cN * cL * cW * cT2;
         case 'coverAngle': return cN * cEL / 1000;
-        case 'jkAngle':    return jkTop + jkLower;   // 井座内侧同位置两圈=外缘内缩 lipW 周界（含支室）
+        case 'jkAngle':    return (lipW > 0 && lipH > 0) ? jkTop + jkLower : 0;   // P0-4: 与井座模板同守卫，默认 lipW/lipH=0 时不计入
         case 'cover':
         case 'ladder': return 1;
         default:       return 0;

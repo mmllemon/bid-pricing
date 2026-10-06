@@ -383,6 +383,12 @@ else {
     if (Test-Path (Join-Path $AgentDir "node_modules")) {
         $env:AGENT_PORT = "$AgentPort"
         $env:BACKEND_URL = "http://127.0.0.1:$BackendPort"
+        # P0-3: token 透传 —— Start-Process 默认继承父进程环境，这里显式写出以防将来改用 -Environment 启动：
+        # BIDPRICING_API_TOKEN 供边车以 X-API-Token 调用 :8000（与 api/app.py 同语义）；
+        # AGENT_API_TOKEN 供边车自身 /approve、/apply-model、/watch 鉴权（前端面板设置里填同一值）。
+        # 两者都未设置时保持本地零配置可用（边车启动时打印安全提示）。
+        if ($env:BIDPRICING_API_TOKEN) { $env:BIDPRICING_API_TOKEN = $env:BIDPRICING_API_TOKEN }
+        if ($env:AGENT_API_TOKEN) { $env:AGENT_API_TOKEN = $env:AGENT_API_TOKEN }
         Write-Host "==> agent    http://127.0.0.1:$AgentPort/health  ..."
         $agent = Start-Process -FilePath $nodeCmd.Source `
             -ArgumentList @("server.mjs") `

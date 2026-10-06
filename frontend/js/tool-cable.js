@@ -9,7 +9,7 @@
   'use strict';
 
   const $ = (sel, root) => (root || document).querySelector(sel);
-  const num = window.toolNum, fmt = window.toolFmt;
+  const num = (el) => (window.toolNonNeg || window.toolNum)(el), fmt = window.toolFmt;   // P0-6: 负数钳制（标红+按0算），与 earth/duct 对齐
 
   const cableBody = $('#cableRows');
   const METAL_DENSITY = { cu: 8.89, al: 2.70 };

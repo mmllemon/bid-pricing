@@ -79,10 +79,18 @@
 
   // 展开态：宽屏默认展开；≤768px（侧栏本身是抽屉）默认收起，避免二级把首屏撑满。
   // 但停在某个非根二级页时必须展开，否则用户看不到自己在哪。
-  var WB_OPEN_KEY = 'gc_wb_nav_open';
+  var WB_OPEN_KEY = 'bidpricing.wb_nav_open';   // P2: 键命名统一（旧 gc_wb_nav_open 一次性迁移）
   var wbOpen = window.innerWidth > 768;
   if (window.localStorage) {
     var wbStored = localStorage.getItem(WB_OPEN_KEY);
+    if (wbStored === null) {   // 一次性迁移旧键
+      var wbLegacy = localStorage.getItem('gc_wb_nav_open');
+      if (wbLegacy !== null) {
+        wbStored = wbLegacy;
+        localStorage.setItem(WB_OPEN_KEY, wbLegacy);
+        localStorage.removeItem('gc_wb_nav_open');
+      }
+    }
     if (wbStored === '1') wbOpen = true;
     else if (wbStored === '0') wbOpen = false;
   }
@@ -188,7 +196,7 @@
   window.addEventListener('keydown', e => { if (e.key === 'Escape') set(false); });
 })();
 
-/* 工作台二级折叠：展开态持久化到 localStorage（键 gc_wb_nav_open，'1' 展开 / '0' 收起） */
+/* 工作台二级折叠：展开态持久化到 localStorage（键 bidpricing.wb_nav_open，'1' 展开 / '0' 收起） */
 (function () {
   const parent = document.getElementById('wbNavParent');
   const list = document.getElementById('wbNavSub');
@@ -197,17 +205,25 @@
     parent.setAttribute('aria-expanded', open ? 'true' : 'false');
     parent.classList.toggle('is-collapsed', !open);
     list.classList.toggle('is-collapsed', !open);
-    if (persist && window.localStorage) localStorage.setItem('gc_wb_nav_open', open ? '1' : '0');
+    if (persist && window.localStorage) localStorage.setItem(WB_OPEN_KEY, open ? '1' : '0');
   };
   parent.addEventListener('click', () => setOpen(parent.getAttribute('aria-expanded') !== 'true', true));
 })();
 
 /* 侧栏用户名可自定义：点击后内联编辑，回车/失焦保存（localStorage 持久化，工作台问候同步读取） */
 (function () {
-  const NAME_KEY = 'gc_user_name';
+  const NAME_KEY = 'bidpricing.user_name';   // P2: 键命名统一（旧 gc_user_name 一次性迁移）
   const el = document.getElementById('userName');
   if (!el || !window.localStorage) return;
-  const saved = localStorage.getItem(NAME_KEY);
+  let saved = localStorage.getItem(NAME_KEY);
+  if (saved === null) {   // 一次性迁移旧键
+    const legacyName = localStorage.getItem('gc_user_name');
+    if (legacyName !== null) {
+      saved = legacyName;
+      localStorage.setItem(NAME_KEY, legacyName);
+      localStorage.removeItem('gc_user_name');
+    }
+  }
   if (saved) el.textContent = saved;
   el.title = '点击修改用户名';
   el.style.cursor = 'text';

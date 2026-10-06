@@ -101,6 +101,14 @@ import { assertSettingsPatch, SettingsPolicyError } from './config/settingsPolic
 
 const app = express();
 app.use(cors({ origin: corsOriginDelegate }));
+// P2: 第三方页面可 iframe 嵌套驱动导航 → frame-ancestors 白名单（仅本机父页 :8080 与自身）
+// 可用 WORKBENCH_FRAME_ANCESTORS 环境变量覆盖。
+const FRAME_ANCESTORS =
+  process.env.WORKBENCH_FRAME_ANCESTORS || "'self' http://127.0.0.1:8080 http://localhost:8080";
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy', `frame-ancestors ${FRAME_ANCESTORS}`);
+  next();
+});
 app.use(express.json({ limit: '2mb' }));
 
 const PORT = Number(process.env.PORT || 3456);
@@ -1169,6 +1177,12 @@ if (existsSync(resolve(frontendDist, 'index.html'))) {
     if (req.path.startsWith('/api/')) return next();
     return res.sendFile(resolve(frontendDist, 'index.html'));
   });
+} else {
+  // P2: dist 缺失不再静默 —— 父页 iframe 会挂空白页，启动时即告警
+  console.warn(
+    '⚠️  workbench-app/dist/index.html 不存在：前端未构建，内嵌工作台将显示空白页。' +
+    '请先执行 cd workbench-app && npm run build 后重启本服务。'
+  );
 }
 
 app.listen(PORT, BIND_HOST, () => {

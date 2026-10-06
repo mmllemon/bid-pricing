@@ -30,7 +30,7 @@
   }
 
 
-  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $ = window.tool$;   // P2: 抽取自 tool-common
   const num = (el) => (window.toolNonNeg || window.toolNum)(el), fmt = window.toolFmt;   // P0-6: 负数钳制（标红+按0算），与 earth/duct 对齐
 
   /* 参考净空（可改）：常见配电电缆井，非图集替代 */
@@ -423,7 +423,7 @@
     o.wShaftOn = $('#wShaftOn').checked;
     window.toolStore.save(AUTO_KEY, o);
   }
-  const saveWellSoon = canAutosave ? window.toolDebounce(saveWellNow, 500) : function () {};
+  const saveWellSoon = window.toolAutosave(AUTO_KEY, saveWellNow);   // P2: 抽取自 tool-common（内部已含缺失退化）
   function applyWellState(s) {
     if (!s || !canAutosave) return false;
     try {
@@ -539,29 +539,7 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  // 复用项目 ui-confirm 的类与样式（styles.css），本页轻量实现
-  function uiConfirm(message) {
-    return new Promise(resolve => {
-      let ov = document.getElementById('ui-confirm');
-      if (ov) ov.remove();
-      ov = document.createElement('div');
-      ov.id = 'ui-confirm';
-      ov.className = 'ui-confirm-overlay open danger';
-      ov.innerHTML = `<div class="ui-confirm-box" role="alertdialog" aria-modal="true" aria-label="确认删除">
-        <div class="ui-confirm-msg">${esc(message)}</div>
-        <div class="ui-confirm-actions">
-          <button type="button" class="btn-ghost" data-act="cancel">取消</button>
-          <button type="button" class="btn-danger" data-act="ok">确认删除</button>
-        </div></div>`;
-      document.body.appendChild(ov);
-      const done = v => { ov.remove(); resolve(v); };
-      ov.querySelector('[data-act="cancel"]').addEventListener('click', () => done(false));
-      ov.querySelector('[data-act="ok"]').addEventListener('click', () => done(true));
-      ov.addEventListener('mousedown', e => { if (e.target === ov) done(false); });
-      ov.addEventListener('keydown', e => { if (e.key === 'Escape') done(false); });
-      setTimeout(() => ov.querySelector('[data-act="cancel"]').focus(), 0);
-    });
-  }
+  // uiConfirm 已上移 tool-common → window.toolConfirm（P2 抽取）
 
   // （井库读写已迁后端：见上方 loadLib/saveLib 异步实现）
 
@@ -656,7 +634,7 @@
     } else if (act === 'rename') {
       startRename(item, rec);
     } else if (act === 'del') {
-      if (await uiConfirm(`删除「${rec.name}」？该井的保存记录将不可恢复。`)) {
+      if (await window.toolConfirm(`删除「${rec.name}」？该井的保存记录将不可恢复。`)) {
         await saveLib((await loadLib()).filter(r => r.id !== rec.id));
         if (expandedId === rec.id) expandedId = null;
         await renderLib();

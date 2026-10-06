@@ -16,6 +16,12 @@
 .agent-fab svg{width:22px;height:22px}
 .agent-fab:hover{background:var(--ui-yellow)}
 .agent-fab[aria-expanded="true"]{background:var(--ui-black);color:var(--ui-white)}
+/* P2: 面板关闭时来审批请求，FAB 右上角挂待批准数 */
+.agent-fab-badge{
+  position:absolute;top:-7px;right:-7px;min-width:20px;height:20px;padding:0 5px;
+  background:#c00;color:#fff;font-size:12px;font-weight:700;line-height:16px;text-align:center;
+  border-radius:10px;border:2px solid #fff;box-sizing:border-box;pointer-events:none;
+}
 
 /* ---------- 悬浮面板（FAB 正上方，fixed 定位，不参与任何页面的视图切换） ---------- */
 .agent-panel{

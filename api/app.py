@@ -386,8 +386,17 @@ _CCMN_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
 
+# P2: ccmn 短缓存 —— 长江现货一日一价，10 分钟内重复请求直接命中，避免每次点击
+# 都走「15s 建连 + 20s×3 重试」的同步抓取拖慢 /api/metal-prices。
+_CCMN_CACHE_TTL = 600
+_ccmn_cache: dict = {"at": 0.0, "data": None}
+
+
 def _ccmn_spot_prices() -> dict:
     """抓取长江现货 1#铜 / A00铝均价。返回 {"cu": 元/吨, "al": 元/吨, "date": "YYYY-MM-DD"}。"""
+    now = time.monotonic()
+    if _ccmn_cache["data"] is not None and now - _ccmn_cache["at"] < _CCMN_CACHE_TTL:
+        return _ccmn_cache["data"]
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
     try:  # 先访问报价页拿 session cookie；拿不到也不致命，继续调 AJAX
@@ -431,6 +440,8 @@ def _ccmn_spot_prices() -> dict:
             out.setdefault("date", str(it.get("publishDate", ""))[:10])
     if "cu" not in out or "al" not in out:
         raise RuntimeError("ccmn 返回中未找到 1#铜 / A00铝")
+    _ccmn_cache["at"] = time.monotonic()
+    _ccmn_cache["data"] = out
     return out
 
 

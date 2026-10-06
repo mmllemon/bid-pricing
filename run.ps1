@@ -356,6 +356,8 @@ $env:PYTHONPATH = "src"
 $env:PYTHONUNBUFFERED = "1"
 
 Write-Host "==> backend  http://127.0.0.1:$BackendPort  ..."
+# P2: 严禁加 --workers！api/app.py 的 _SLOT_LOCK 是 threading.Lock，不跨进程；
+# 多 worker 下每个进程各持一把锁，槽位并发写会互相覆盖。真要加 workers，先把锁换成 SQLite 事务/文件锁。
 $backend = Start-Process -FilePath $Py.Exe `
     -ArgumentList @("-m", "uvicorn", "api.app:app", "--host", "127.0.0.1", "--port", "$BackendPort") `
     -WorkingDirectory $Root -PassThru -NoNewWindow `

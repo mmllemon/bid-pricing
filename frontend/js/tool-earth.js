@@ -21,7 +21,7 @@
   }
 
 
-  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $ = window.tool$;   // P2: 抽取自 tool-common
   const num = window.toolNum, fmt = window.toolFmt;
 
   /* 放坡口径预设：建筑定额为全国统一建筑工程基础定额口径（可信）；
@@ -83,11 +83,12 @@
     const pDig = num($('#eDig')), pBack = num($('#eBack')), pHaul = num($('#eHaul'));
     const loose = num($('#eLoose')) || 1;   // 天然密实方→虚方换算系数
     let tDig = 0, tBack = 0, tSur = 0, total = 0;
+    const rules = readRules();   // P2: 口径表整次重算只读一次（原每行调两次，各 6 次 DOM 查询）
     earthBody.querySelectorAll('tr').forEach(tr => {
       const g = k => num(tr.querySelector(`[data-k="${k}"]`));
       const gn = k => window.toolNonNeg(tr.querySelector(`[data-k="${k}"]`));  // 几何量：负数标红按0算
       const len = gn('len'), a = gn('a'), h = gn('h'), deduct = gn('deduct');
-      const rule = readRules()[+tr.querySelector('[data-k="soil"]').value] || readRules()[0];
+      const rule = rules[+tr.querySelector('[data-k="soil"]').value] || rules[0];
       const mode = tr.querySelector('[data-k="mode"]').value;
       const custom = tr.querySelector('[data-k="mCustom"]');
 
@@ -176,8 +177,7 @@
       return true;
     } catch (e) { return false; }
   }
-  const saveNow = () => window.toolStore.save(STORE_KEY, collectState());
-  const saveSoon = window.toolDebounce(saveNow, 500);
+  const saveSoon = window.toolAutosave(STORE_KEY, collectState);   // P2: 抽取自 tool-common
 
   /* ---------- 复制结果（TSV，可直接粘贴到 Excel） ---------- */
   function buildEarthTsv() {
@@ -206,12 +206,6 @@
     lines.push(['估算合价(元)', $('#mTotal').textContent.trim()].join('\t'));
     return lines.join('\n');
   }
-  async function copyEarthResult(btn) {
-    const ok = await window.toolCopyText(buildEarthTsv());
-    const old = btn.textContent;
-    btn.textContent = ok ? '已复制 ✓' : '复制失败';
-    setTimeout(() => { btn.textContent = old; }, 1500);
-  }
 
   /* ---------- 事件 ---------- */
   $('#ruleTable').addEventListener('input', () => { recalcEarth(); saveSoon(); });
@@ -219,7 +213,7 @@
     earthBody.insertAdjacentHTML('beforeend', earthRowHtml());
     saveSoon();
   });
-  $('#earthCopy').addEventListener('click', (e) => copyEarthResult(e.currentTarget));
+  window.toolBindCopyButton('#earthCopy', buildEarthTsv);   // P2: 抽取自 tool-common
   earthBody.addEventListener('input', (e) => {
     if (e.target.matches('[data-k="mode"]')) {
       const row = e.target.closest('tr');

@@ -184,6 +184,7 @@
       if (!hasConversation) appendWelcome();
       connectSSE();
     }
+    pendingApprovals = 0; decidedApprovals.clear(); updateFabBadge();   // P2: 打开面板即视为已读
     refreshHealth();          // P1: 每次展开都重探活（8010 后启动时状态 pill 不再永久"离线"）
     chat.scrollTop = chat.scrollHeight;
     input.focus();
@@ -244,6 +245,29 @@
 
   // ---------------------------------------------------------------- SSE：审批与工作指示
   const approvalCards = new Map();
+  // P2: 面板关闭时来审批请求 → FAB 上挂 badge，避免用户看不到待批准
+  let pendingApprovals = 0;
+  const decidedApprovals = new Set();
+  function updateFabBadge() {
+    let badge = fab.querySelector('.agent-fab-badge');
+    if (pendingApprovals > 0 && panel.classList.contains('hidden')) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'agent-fab-badge';
+        badge.setAttribute('aria-label', '有待批准的请求');
+        fab.appendChild(badge);
+      }
+      badge.textContent = pendingApprovals > 9 ? '9+' : String(pendingApprovals);
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+  function noteApprovalDecided(key) {
+    if (decidedApprovals.has(key)) return;
+    decidedApprovals.add(key);
+    pendingApprovals = Math.max(0, pendingApprovals - 1);
+    updateFabBadge();
+  }
   let es = null;
   function connectSSE() {
     if (es) return;
@@ -280,16 +304,19 @@
       card.querySelector('.ap-result').textContent = '已批准，执行中…';
       card.querySelector('.ap-result').className = 'ap-result ok';
       await post(true);
+      noteApprovalDecided(data.key);
     };
     card.querySelector('.ap-deny').onclick = async () => {
       card.classList.add('decided');
       card.querySelector('.ap-result').textContent = '已拒绝，该操作不会执行';
       card.querySelector('.ap-result').className = 'ap-result bad';
       await post(false);
+      noteApprovalDecided(data.key);
     };
     approvalCards.set(data.key, card);
     chat.appendChild(card);
     chat.scrollTop = chat.scrollHeight;
+    pendingApprovals++; updateFabBadge();   // P2
   }
   function settleApproval(data) {
     const card = approvalCards.get(data.key);
@@ -297,6 +324,7 @@
     const r = card.querySelector('.ap-result');
     if (!r.textContent || r.textContent.startsWith('已')) return; // 已本地更新过
     r.textContent = data.allow ? '（已通过）' : '（已拒绝）';
+    noteApprovalDecided(data.key);
     setTimeout(() => card.remove(), 4000);
   }
 

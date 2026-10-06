@@ -20,7 +20,7 @@
     return;
   }
 
-  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $ = window.tool$;   // P2: 抽取自 tool-common
   const num = (el) => (window.toolNonNeg || window.toolNum)(el), fmt = window.toolFmt;   // P0-6: 负数钳制（标红+按0算），与 earth/duct 对齐
 
   const cableBody = $('#cableRows');
@@ -129,8 +129,7 @@
       return true;
     } catch (e) { return false; }
   }
-  const saveNow = () => window.toolStore.save(STORE_KEY, collectState());
-  const saveSoon = window.toolDebounce(saveNow, 500);
+  const saveSoon = window.toolAutosave(STORE_KEY, collectState);   // P2: 抽取自 tool-common
 
   /* ---------- 复制结果（TSV，可直接粘贴到 Excel） ---------- */
   function buildCableTsv() {
@@ -157,19 +156,13 @@
       $('#cableTotal').textContent.replace(/¥/g, '').trim()].join('\t'));
     return lines.join('\n');
   }
-  async function copyCableResult(btn) {
-    const ok = await window.toolCopyText(buildCableTsv());
-    const old = btn.textContent;
-    btn.textContent = ok ? '已复制 ✓' : '复制失败';
-    setTimeout(() => { btn.textContent = old; }, 1500);
-  }
 
   /* ---------- 事件 ---------- */
   $('#cableAdd').addEventListener('click', () => {
     cableBody.insertAdjacentHTML('beforeend', cableRowHtml());
     saveSoon();
   });
-  $('#cableCopy').addEventListener('click', (e) => copyCableResult(e.currentTarget));
+  window.toolBindCopyButton('#cableCopy', buildCableTsv);   // P2: 抽取自 tool-common
   cableBody.addEventListener('input', () => { recalcCable(); saveSoon(); });
   cableBody.addEventListener('click', (e) => {
     const del = e.target.closest('.row-del');

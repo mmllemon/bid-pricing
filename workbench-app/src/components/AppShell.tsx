@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { IconHome, IconTodo, IconChart, IconScan, IconSettings, IconHotspot, IconBrain, IconBriefcase } from './icons';
@@ -69,19 +69,31 @@ export default function AppShell() {
   const pathRef = useRef(location.pathname);
   pathRef.current = location.pathname;
 
+  // P2: 握手静默失败提示 —— 内嵌后 8s 没收到父页任何 __wb 消息，挂非阻塞横幅
+  const [handshakeFailed, setHandshakeFailed] = useState(false);
+  const gotParentMsg = useRef(false);
   // 握手 + 接收父侧导航：监听必须在发 ready 之前挂好，否则父侧随后发来的 nav 会丢
   useEffect(() => {
     if (!EMBEDDED || !PARENT_ORIGIN) return;
     const onMessage = (event: MessageEvent) => {
       if (event.source !== window.parent) return;            // 只认父窗口
       const msg = event.data as WbMessage | null;
-      if (!msg || msg.__wb !== 'nav' || typeof msg.to !== 'string') return;
+      if (!msg || typeof msg.__wb !== 'string') return;
+      gotParentMsg.current = true;                           // 收到父页消息即握手成功
+      setHandshakeFailed(false);
+      if (msg.__wb !== 'nav' || typeof msg.to !== 'string') return;
       if (!NAV_TOS.has(msg.to)) return;                      // to 必须在真实路由白名单内
       if (msg.to !== pathRef.current) navigate(msg.to);
     };
     window.addEventListener('message', onMessage);
     window.parent.postMessage({ __wb: 'ready' }, PARENT_ORIGIN);
-    return () => window.removeEventListener('message', onMessage);
+    const timer = setTimeout(() => {
+      if (!gotParentMsg.current) setHandshakeFailed(true);
+    }, 8000);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      clearTimeout(timer);
+    };
   }, [navigate]);
 
   // 路由上报（反向通道）：外层据此跟随高亮。
@@ -101,6 +113,20 @@ export default function AppShell() {
   if (EMBEDDED) {
     return (
       <div className="shell">
+        {handshakeFailed && (
+          <div className="ui-alert ui-alert--error" style={{ margin: '12px 12px 0' }}>
+            <p style={{ fontSize: 13, lineHeight: 1.7 }}>
+              未收到父页面握手响应，导航联动可能不可用。请检查父页是否正常加载，或刷新父页面重试。
+            </p>
+            <button
+              className="nb-btn nb-btn--ghost"
+              style={{ fontSize: 12, padding: '4px 10px', marginTop: 8 }}
+              onClick={() => setHandshakeFailed(false)}
+            >
+              知道了
+            </button>
+          </div>
+        )}
         <main className="main">
           <Outlet />
         </main>

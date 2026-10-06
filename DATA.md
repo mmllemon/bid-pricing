@@ -21,7 +21,7 @@
 |---|---|---|
 | `bidpricing.tool-{cable,earth,duct,well}.v1` | 四工具参数自动保存 | 刷新恢复用；清缓存即丢 |
 | `bidpricing.handoff.v1` | 工具间交接槽（duct→earth） | 24h 自动过期 |
-| `gc_wb_nav_open`、`gc_user_name` | 导航展开态、用户名 | 丢了无所谓 |
+| `bidpricing.wb_nav_open`、`bidpricing.user_name` | 导航展开态、用户名 | 丢了无所谓（旧 `gc_` 键一次性迁移） |
 | `agent_api_token`、`bidpricingApiToken` | 边车/:8000 的鉴权 token | 本机保存，重装需重填 |
 
 ## 三个必须知道的结论

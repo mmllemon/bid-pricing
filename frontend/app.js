@@ -5,12 +5,14 @@ const workbenchView = document.querySelector('#workbenchView');
 // 母项目侧只保留一个同页 iframe 宿主。P-W8 起工作台 9 页并入外层侧栏作二级折叠项，
 // 父 :8080 与子 :3456 跨源，二级路由靠 postMessage 双向同步。
 const WB_ORIGIN = window.__WORKBENCH_ORIGIN__ || 'http://127.0.0.1:3456';
-function mountWorkbenchFrame() {
+function mountWorkbenchFrame(initialTo) {
   const frame = workbenchView && workbenchView.querySelector('iframe');
   if (frame && !frame.getAttribute('src')) {
     wbReady = false;      // 重新挂载/刷新后必须重新握手，否则会把导航消息发给还没监听的文档
     wbSyncedSub = null;
-    frame.setAttribute('src', WB_ORIGIN + '/');
+    // P2: src 带初始 hash（子页 HashRouter），深链 #workbench/todos 不再先闪首页再跳转
+    const to = initialTo || '/';
+    frame.setAttribute('src', WB_ORIGIN + '/#' + (to === '/' ? '' : to));
   }
 }
 
@@ -36,8 +38,13 @@ function wbNavigate(to) {
   if (to === wbSyncedSub) return;                 // 已一致，不必重发
   const frame = wbFrame();
   if (!frame || !wbReady) { pendingWbNav = to; return; }
-  wbSyncedSub = to;
-  frame.contentWindow.postMessage({ __wb: 'nav', to: to }, WB_ORIGIN);
+  try {
+    frame.contentWindow.postMessage({ __wb: 'nav', to: to }, WB_ORIGIN);
+  } catch (e) {
+    pendingWbNav = to;   // P2: 发送失败不记账，下次重试而非状态永久过期
+    return;
+  }
+  wbSyncedSub = to;      // P2: 成功后再记账（原先记账后发送，异常则 to 永久被吞）
 }
 window.addEventListener('message', event => {
   if (event.origin !== WB_ORIGIN) return;
@@ -68,8 +75,8 @@ function showModule(module, sub) {
   if (module === 'workbench') {
     quoteView.classList.add('hidden'); moduleView.classList.add('hidden');
     workbenchView.classList.remove('hidden');
-    mountWorkbenchFrame(); // 首次显示才挂载 iframe（打开报价页时不必拉起工作台静态资源）
     const to = sub || '/';
+    mountWorkbenchFrame(to); // 首次显示才挂载 iframe（打开报价页时不必拉起工作台静态资源）
     location.hash = 'workbench' + (to === '/' ? '' : to);   // '#workbench' 或 '#workbench/todos'
     wbNavigate(to);                                        // 二级路由转给 iframe（未 ready 时入队）
     return;

@@ -22,7 +22,7 @@
   }
 
 
-  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $ = window.tool$;   // P2: 抽取自 tool-common
   const num = window.toolNum, fmt = window.toolFmt, nonNeg = window.toolNonNeg;
 
   /* 标准排列（行, 列），容量递增 */
@@ -146,7 +146,7 @@
     IDS.forEach(id => { o[id] = $('#' + id).value; });
     window.toolStore.save(STORE_KEY, o);
   }
-  const saveSoon = window.toolDebounce(saveNow, 500);
+  const saveSoon = window.toolAutosave(STORE_KEY, saveNow);   // P2: 抽取自 tool-common
   function applyState(s) {
     if (!s) return false;
     try {
@@ -179,12 +179,6 @@
       r.conc.toFixed(3), r.a.toFixed(2)].join('\t'));
     return lines.join('\n');
   }
-  async function copyResult(btn) {
-    const ok = await window.toolCopyText(buildTsv());
-    const old = btn.textContent;
-    btn.textContent = ok ? '已复制 ✓' : '复制失败';
-    setTimeout(() => { btn.textContent = old; }, 1500);
-  }
 
   /* ---------- 送入土方工具 ---------- */
   async function sendToEarth(btn) {
@@ -210,7 +204,7 @@
   $('#dLayout').addEventListener('change', () => { syncLayoutMode(); recalc(); });
   ['dPerCircuit', 'dRows', 'dCols', 'dD', 'dGap', 'dCover', 'dWork'].forEach(id =>
     $('#' + id).addEventListener('input', recalc));
-  $('#ductCopy').addEventListener('click', (e) => copyResult(e.currentTarget));
+  window.toolBindCopyButton('#ductCopy', buildTsv);   // P2: 抽取自 tool-common
   $('#ductSend').addEventListener('click', (e) => sendToEarth(e.currentTarget));
 
   /* ---------- 启动 ---------- */

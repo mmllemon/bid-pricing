@@ -1,5 +1,5 @@
 ﻿# bid-pricing one-click launcher (Windows PowerShell 5.1+)
-# 启动后端 8000 + 前端 8080；首次运行在仓库 .venv 内建隔离环境并装依赖；Ctrl+C 停止全部。
+# 启动后端 8000 + 前端 8080 + agent 8010（Pi Durable 边车，可选，BIDPRICING_AGENT_PORT 可覆盖）；首次运行在仓库 .venv 内建隔离环境并装依赖；Ctrl+C 停止全部。
 #
 # ⚠ 本文件必须保存为「UTF-8 with BOM」。
 #   Windows PowerShell 5.1 对**无 BOM** 的 .ps1 按系统 ANSI（中文 Windows = GBK）解码。
@@ -201,11 +201,11 @@ if (-not $Py) {
 }
 Write-Host ("    Python: " + $Py.Version + "  [" + $Py.Exe + "]") -ForegroundColor DarkGray
 
-# --- node (used for Excel export; warn but continue if missing) ---
+# --- node (used for Excel export and agent-service; warn but continue if missing) ---
 if (Get-Command node -ErrorAction SilentlyContinue) {
     Write-Host ("    Node:   " + (& node --version)) -ForegroundColor DarkGray
 }
-else { Write-Host "[WARN] node not found. Excel export will fail (JSON result still downloadable)." -ForegroundColor Yellow }
+else { Write-Host "[WARN] node not found. Excel export and agent-service will be unavailable (JSON result still downloadable)." -ForegroundColor Yellow }
 
 # --- 依赖：全部装在 .venv 内 ---
 $ReqFile = Join-Path $Root "requirements-web.txt"
@@ -298,6 +298,54 @@ $frontend = Start-Process -FilePath $Py.Exe `
     -RedirectStandardOutput (Join-Path $LogDir "frontend.out.log") `
     -RedirectStandardError (Join-Path $LogDir "frontend.err.log")
 
+# ============================================================================
+# agent-service（Pi Durable 边车，默认 8010；BIDPRICING_AGENT_PORT 可覆盖）
+# 它是增值组件：任何故障只告警跳过，不阻断主应用（后端/前端）启动。
+# 有意不用 Assert-PortFree 预检：8010 若被「已在跑的 agent-service」占用，
+# 探活会直接通过 → 按「复用外来实例」处理；被别的服务占用则探活失败 → 告警跳过。
+# 与 8000/8080 的「占用即 exit」不同：那两个是主应用，本服务不是。
+# ============================================================================
+$AgentPort = Get-PortOrDefault "BIDPRICING_AGENT_PORT" 8010
+$agent = $null
+$AgentDir = Join-Path $Root "agent-service"
+$AgentEntry = Join-Path $AgentDir "server.mjs"
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+
+if (-not (Test-Path -LiteralPath $AgentEntry)) {
+    Write-Host "[WARN] 未找到 agent-service\server.mjs，跳过 agent 服务（不影响主应用）。" -ForegroundColor Yellow
+}
+elseif (-not $nodeCmd) {
+    Write-Host "[WARN] node 不可用，跳过 agent 服务（不影响主应用）。" -ForegroundColor Yellow
+}
+else {
+    # 首次运行：装依赖（npm 走原生命令入口，stderr 警告不升级成终止错误）
+    if (-not (Test-Path (Join-Path $AgentDir "node_modules"))) {
+        Write-Host "==> agent-service: 首次安装依赖（npm install，可能要一会儿）..." -ForegroundColor Cyan
+        $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+        $r = [pscustomobject]@{ Code = 1; Text = "npm 不可用" }
+        if ($npmCmd) {
+            Push-Location $AgentDir
+            try { $r = Invoke-Native -Exe $npmCmd.Source -ArgList @("install", "--no-audit", "--no-fund") -Capture }
+            finally { Pop-Location }
+        }
+        if ($r.Code -ne 0) {
+            $tail = @($r.Text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3)
+            Write-Host "[WARN] agent-service 依赖安装失败，跳过（不影响主应用）。npm 输出：" -ForegroundColor Yellow
+            $tail | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow }
+        }
+    }
+    if (Test-Path (Join-Path $AgentDir "node_modules")) {
+        $env:AGENT_PORT = "$AgentPort"
+        $env:BACKEND_URL = "http://127.0.0.1:$BackendPort"
+        Write-Host "==> agent    http://127.0.0.1:$AgentPort/health  ..."
+        $agent = Start-Process -FilePath $nodeCmd.Source `
+            -ArgumentList @("server.mjs") `
+            -WorkingDirectory $AgentDir -PassThru -NoNewWindow `
+            -RedirectStandardOutput (Join-Path $LogDir "agent.out.log") `
+            -RedirectStandardError (Join-Path $LogDir "agent.err.log")
+    }
+}
+
 # --- 启动后真实探测：没探到就不许打印成功 ---
 function Wait-HttpOk {
     param([string]$Url, [int]$TimeoutSec)
@@ -313,47 +361,68 @@ function Wait-HttpOk {
     return $false
 }
 
-function Stop-Both {
-    Stop-Process -Id @($backend.Id, $frontend.Id) -Force -ErrorAction SilentlyContinue
+function Stop-All {
+    # -Id 只能出现一次；多进程传数组。$agent 未启动时为 $null，过滤掉。
+    $ids = @($backend.Id, $frontend.Id)
+    if ($agent) { $ids = @($ids + $agent.Id) }
+    Stop-Process -Id @($ids) -Force -ErrorAction SilentlyContinue
 }
 
 if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/api/health" 60)) {
     Write-Host "[ERR] 后端 60s 内未就绪（http://127.0.0.1:$BackendPort/api/health）。" -ForegroundColor Red
     if ($backend.HasExited) { Write-Host ("      后端进程已退出，exit code = " + $backend.ExitCode) -ForegroundColor Red }
     Write-Host "      日志：outputs\logs\backend.err.log" -ForegroundColor Yellow
-    Stop-Both
+    Stop-All
     exit 1
 }
 if ($backend.HasExited) {
     # 探活 200 可能由占用同端口的外来服务答出——自己拉起的进程死了就不许报成功。
     Write-Host "[ERR] /api/health 有 200 应答，但本脚本拉起的后端进程已退出——应答来自占用 $BackendPort 的其他服务（假成功拦截）。" -ForegroundColor Red
-    Stop-Both
+    Stop-All
     exit 1
 }
 if (-not (Wait-HttpOk "http://127.0.0.1:$FrontendPort/" 20)) {
     Write-Host "[ERR] 前端 20s 内未就绪（http://127.0.0.1:$FrontendPort/）。" -ForegroundColor Red
     Write-Host "      日志：outputs\logs\frontend.err.log" -ForegroundColor Yellow
-    Stop-Both
+    Stop-All
     exit 1
 }
 if ($frontend.HasExited) {
     # 同上：200 应答可能来自占用方而非本脚本拉起的前端。
     Write-Host "[ERR] 首页有 200 应答，但本脚本拉起的前端进程已退出——应答来自占用 $FrontendPort 的其他服务（假成功拦截）。" -ForegroundColor Red
     Write-Host "      日志：outputs\logs\frontend.err.log" -ForegroundColor Yellow
-    Stop-Both
+    Stop-All
     exit 1
+}
+
+# agent（边车）：探活通过但本进程已死 = 端口被既有 agent-service/外来服务占用，
+# 按「复用外来实例」处理（Ctrl+C 时不连它）；探活失败 = 启动失败，停掉本进程并告警跳过。
+if ($agent) {
+    if (Wait-HttpOk "http://127.0.0.1:$AgentPort/health" 30) {
+        if ($agent.HasExited) {
+            Write-Host "[WARN] :$AgentPort/health 已有人应答，但本拉起的 agent 进程已退出——复用在跑的 agent-service（Ctrl+C 时不会停它）。" -ForegroundColor Yellow
+            $agent = $null
+        }
+    } else {
+        Write-Host "[WARN] agent 服务 30s 内未就绪，已跳过（不影响主应用）。日志：outputs\logs\agent.err.log" -ForegroundColor Yellow
+        Stop-Process -Id @($agent.Id) -Force -ErrorAction SilentlyContinue
+        $agent = $null
+    }
 }
 
 Write-Host ""
 Write-Host "  frontend: http://127.0.0.1:$FrontendPort" -ForegroundColor Green
 Write-Host "  backend:  http://127.0.0.1:$BackendPort/api/health" -ForegroundColor Green
+if ($agent) { Write-Host "  agent:    http://127.0.0.1:$AgentPort/health  (Pi Durable 边车)" -ForegroundColor Green }
 Write-Host "  logs:     outputs\logs\*.log" -ForegroundColor DarkGray
-Write-Host "Press Ctrl+C to stop both services ..." -ForegroundColor DarkGray
+Write-Host "Press Ctrl+C to stop all services ..." -ForegroundColor DarkGray
 
 try {
     # -Id 只能出现一次；多进程必须传数组。
     # 写成 -Id $a -Id $b 会以「多次指定了参数 Id」参数绑定失败，停止路径直接报错。
-    Wait-Process -Id @($backend.Id, $frontend.Id) -ErrorAction SilentlyContinue
+    $ids = @($backend.Id, $frontend.Id)
+    if ($agent) { $ids = @($ids + $agent.Id) }
+    Wait-Process -Id @($ids) -ErrorAction SilentlyContinue
 }
 catch [System.Management.Automation.PipelineStoppedException] {
     # Ctrl+C：预期路径
@@ -363,5 +432,5 @@ catch {
 }
 finally {
     Write-Host "==> stopping services"
-    Stop-Process -Id @($backend.Id, $frontend.Id) -Force -ErrorAction SilentlyContinue
+    Stop-All
 }

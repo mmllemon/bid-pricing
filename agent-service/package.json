@@ -1,0 +1,20 @@
+{
+  "name": "bid-pricing-agent-service",
+  "version": "1.0.0",
+  "description": "Pi Durable 边车服务：把投标报价 agent 嵌入 bid-pricing 项目",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@earendil-works/chord": "^1.0.3",
+    "@earendil-works/pi-ai": "^1.0.3",
+    "@earendil-works/pi-durable": "^1.0.3"
+  }
+}

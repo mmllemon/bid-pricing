@@ -10,6 +10,37 @@
 
 ## [未发布]
 
+### 治理与工程基线：快照/CLI 编码加固、仓外样本版本守卫、CI 落地
+
+**修正**
+
+- **中文 Windows（GBK 控制台）上 `status --write` 整条命令崩溃**：`status.run_tests` 用 `text=True` 却不指定编码，父进程按 CP936 解码 unittest 的 UTF-8 中文输出 → 读取线程 UnicodeDecodeError → `out.stdout` 变 `None` → 字符串拼接 TypeError。现显式钉住两端编码（`encoding="utf-8"` + `errors="replace"` + 给子进程传 `PYTHONIOENCODING`），并对 `None` 流兜底。此前在这类机器上**状态快照根本生成不出来**——交接协议第一步就是坏的。
+- 同一环境下 `contract-check` / `ruleset-selftest` 因打印 `✓` / `⁺` 抛 UnicodeEncodeError，退出码 1 而判据全 PASS（看起来像逻辑失败）。CLI 入口新增 `harden_streams()`：**保留控制台原编码，只把不可表示字符降级为 `?`**（改成 UTF-8 输出反而会让 GBK 控制台显示乱码）。
+- **Gate 0b 契约失效修复**：`cost_input_tax_spec` 注册表 hash（`49ae53bc4fa6`）与制品内容（`a5b2f53dfd8a`）不一致，自 2026-09-20 起潜伏，Gate 0b 长时间 BLOCKED 而无人知其所以然。重新冻结后以 `a5b2f53dfd8a` 为新基线，Gate 0b 转 PASS（连带 WP4 求解层由 BLOCKED 转 ALLOWED）。
+- 仓外真实样本被替换后，`test_io_boq` / `test_io_clean` 以三条 `83 != 84` 的断言差异暴露：失败信息指向断言，根因却是样本换了版本。新增 `tests/_real_sample.py` 版本守卫——用 T01-05 登记表复算指纹，**被替换时跳过并说明原因**，未登记（无比对基准）时不拦，文件缺失时跳过。
+
+**新增**
+
+- `.github/workflows/ci.yml`：`minimal` / `solver` 两档依赖下跑 gate-check / contract-check / ruleset-selftest / unittest。因 `gate-check` 退出码按设计只反映 Gate 0a，另加一条**制品完整性**判据（复用 `compute_artifact_hash`），专拦「注册表 hash ≠ 制品内容」这类静默失效。
+- 快照第三节冻结表纳入 **Gate 0b 制品**（此前只列 Gate 0a，Gate 0b 的 hash 在交接文档里完全不可见）；第二节新增各闸门**阻塞明细**（此前只写 `BLOCKED` 不写原因，接手者仍要自己复跑 gate-check）。
+- `tests/test_status.py` 新增 9 项：编码钉住 / `None` 流兜底 / 失败明细 / GBK 环境端到端 / 闸门阻塞明细渲染 / 明细未采集明示 / 冻结表双闸门 / 采集覆盖两闸门 / 非版本化记录不入表。
+
+**变更**
+
+- 工具页卡片标题补全局 `.card-title` 规则（原规则带 `#quoteView` 前缀，工具页命中不了，出现「标题裸奔、副标题有样式」）；`tool-common.js` 破缓存串在四工具页统一（原为两个不同串，改共享脚本时只有部分页面生效）；`MiSansVF.min.css` 补 `?v=`；`tools.css` 串按约定 `tools4 → tools5` 同步 5 个引用页。
+
+**验证**
+
+- 全量测试 **1620 项 OK**（skipped=2：仓外样本已被替换，守卫按设计跳过，非失败）。
+- **不设任何编码环境变量**的原生 GBK 环境下：`gate-check` / `contract-check` / `ruleset-selftest` / `status --write` 全部 exit 0。
+- 制品完整性判据：0 项失配、0 项未冻结。
+
+**待办（未做，须业务裁定）**
+
+- 仓外样本的**权威版本裁定**：84 行版 vs 83 行版。守卫只负责把「样本换了」说清楚，不替人决定哪份是对的项目数据；裁定后需同步 `test_io_boq` / `test_io_clean` 的期望值与 `pair.json`。
+- **成本清单亦已被替换**（登记 `7a8110d65b24` → 当前 `441a40be1033`），故 T05/T07 的「西永真实样本」结论系对旧文件复算，需重新登记后复核。
+- 报价侧样本（`bid`）无版本守卫：`import-register` 的 side 词表仅 `cap`/`cost`，报价件不在求解输入侧，登记需先扩词表——属契约变更，未擅动。
+
 ### 报价页前端：审计日志展示 / 弹层跨页关闭 / 初始化与输入细节
 
 **新增**

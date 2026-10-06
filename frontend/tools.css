@@ -378,11 +378,19 @@ details.spec .hint { margin: 6px 0; }
 .tool-table .num,
 .tool-table tfoot td,
 .tool-table tfoot .num,
+/* 井库明细数字：回归正文字体（MiSans）＋等宽数字。
+ * 2026-10-06：像素字体只保留给 .well-item-time（时间日期，DESIGN.md §5.1 覆盖范围），
+ * 金额/工程量数字在非整数倍缩放下发虚，故不再接管。 */
 .well-detail th,
 .well-detail td.num,
 .well-detail th.num,
 .well-item-total,
-.well-detail .well-detail-total,
+.well-detail .well-detail-total{
+  font-family:var(--font);
+  font-weight:400;
+  font-synthesis:none;
+  font-variant-numeric:tabular-nums;
+}
 .well-item-time{           /* 时间日期 */
   font-family:var(--font-pixel);
   font-weight:400;

@@ -37,6 +37,32 @@
 #      Node 缺失、产物构建失败、端口被外来服务占用，一律只告警不阻断主应用。
 #      注意 3456 上回答 /api/health 的是**同一个 Express 进程**（SPA 与 API 同进程），
 #      前端 dist 由它在请求期读盘，故重建产物后无需重启。
+#
+# 启动拓扑（一览表，出问题先看这张）：
+#
+#   浏览器 ──► :8080  前端静态（python http.server，只 serving frontend/）
+#              :8000  后端 API（FastAPI，api/app.py）
+#                ├─ /api/*              报价 / 项目 / 井库 / 方案
+#                └─ /api/wb/* ──► :3456 反代（strangler；已收编的走本地 wb_local）
+#              :3456  个人工作台（Express，SPA 与 API 同进程；可选边车）
+#              :8010  Agent 边车（Pi Durable；可选边车）
+#
+#   端口覆盖（重跑生效，无需改脚本）：
+#     $env:BIDPRICING_BACKEND_PORT（8000）/ $env:BIDPRICING_FRONTEND_PORT（8080）/
+#     $env:BIDPRICING_AGENT_PORT（8010）/ $env:BIDPRICING_WORKBENCH_PORT（3456）
+#
+#   数据目录（备份就拷这几个）：
+#     outputs/projects/<user>/   quote.db（方案）＋ projects.json（项目）＋ well-library.json（井库）
+#     outputs/workbench-data/     workbench.db（工作台待办/热点/小红书）
+#     agent-service/agent.sqlite  Agent 会话 / 提醒 / 审批记录
+#   日志：outputs\logs\*.log（backend / frontend / agent / workbench 各一对 out/err）
+#
+#   故障速查：
+#     启动报端口被占用   → 按提示用 $env:<名> 换端口重跑（8080 常被 CAD 阅读器占用）
+#     页面空白 / 转圈    → 先看 outputs\logs\backend.err.log（:8000 挂则全挂）
+#     工作台 iframe 空白 → outputs\logs\workbench.err.log（边车，可选，不影响主应用）
+#     审批 / 模型设置 401 → 服务端 AGENT_API_TOKEN 与面板 token 是否一致
+#     井库 / 项目列表为空 → :8000 是否在跑；看 backend.err.log
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path

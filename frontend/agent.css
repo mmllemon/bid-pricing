@@ -4,8 +4,10 @@
  */
 
 /* ---------- 悬浮入口 FAB（48×48，橙底黑框，全站右下角） ---------- */
+/* z 层级：FAB(90) > 侧栏抽屉(60)，面板(100) > FAB；模型设置抽屉(110) > 面板。
+ * 背景：移动端侧栏抽屉 z=60 曾盖住面板(z=51)——2026-10-06 起提到 drawer 档。 */
 .agent-fab{
-  position:fixed;bottom:24px;right:32px;z-index:var(--z-floating);
+  position:fixed;bottom:24px;right:32px;z-index:var(--z-fab);
   width:48px;height:48px;display:grid;place-items:center;cursor:pointer;
   background:var(--ui-orange);color:var(--ui-black);
   border:var(--line-strong);border-radius:0;padding:0;
@@ -17,7 +19,7 @@
 
 /* ---------- 悬浮面板（FAB 正上方，fixed 定位，不参与任何页面的视图切换） ---------- */
 .agent-panel{
-  position:fixed;right:32px;bottom:84px;z-index:calc(var(--z-floating) + 1);
+  position:fixed;right:32px;bottom:84px;z-index:var(--z-drawer);
   width:400px;max-width:calc(100vw - 64px);
   height:min(620px, calc(100vh - 132px));
   display:flex;flex-direction:column;overflow:hidden;
@@ -184,12 +186,13 @@
 .agent-send:disabled{opacity:.5;cursor:not-allowed}
 
 /* ---------- 模型设置抽屉（与侧栏同一墨色语言） ---------- */
+/* 严格高于悬浮面板(100)：遮罩 105、抽屉 110，不依赖 DOM 顺序决胜 */
 .agent-drawer-mask{
-  position:fixed;inset:0;z-index:var(--z-drawer-backdrop);
+  position:fixed;inset:0;z-index:calc(var(--z-drawer) + 5);
   background:var(--ui-overlay);animation:agentFade var(--dur-base) ease;
 }
 .agent-settings{
-  position:fixed;top:0;right:0;bottom:0;width:384px;max-width:94vw;z-index:var(--z-drawer);
+  position:fixed;top:0;right:0;bottom:0;width:384px;max-width:94vw;z-index:calc(var(--z-drawer) + 10);
   background:var(--ui-white);
   color:var(--drawer-text);border-left:var(--line-strong);
   display:flex;flex-direction:column;animation:agentDrawerIn var(--dur-slow) var(--ease-out);

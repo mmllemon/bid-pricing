@@ -955,12 +955,15 @@ table.audit-table tr:hover td:first-child{box-shadow:inset 4px 0 0 var(--ui-yell
 .k-inline i,
 .k-inline b,
 .k-inline em,
-/* 表格列头与数字单元格 */
+/* 表格列头与数字单元格：回归正文字体（MiSans）。
+ * 2026-10-06：像素字体仅用于装饰性标签（H1/药丸/按钮/Badge/时间日期，见 DESIGN.md §5.1），
+ * 数字表格用像素字体在非整数倍缩放下发虚、可读性下降，故此处不再接管。 */
 .audit-table th,
 .table-scroll th.num,
 .table-scroll td.num,
 #quoteView table td.num{
-  font-family:var(--font-pixel);
+  font-family:var(--font);
   font-weight:400;
   font-synthesis:none;
+  font-variant-numeric:tabular-nums;   /* 数字等宽，列对齐不跳动 */
 }

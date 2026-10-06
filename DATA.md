@@ -26,7 +26,7 @@
 ## 三个必须知道的结论
 
 1. **待办有两套**：`wb_todos`（quote.db，报价页用）和 `todos`（workbench.db，工作台用）——互不相通。这是数据层"概念打通"（P1）要解决的第一个。
-2. **token 不再进 localStorage**：`agent_api_token`、`bidpricingApiToken` 改存 sessionStorage（关标签页即焚）；井库已落盘 `well-library.json`。浏览器里现在只剩：四工具参数快照、交接槽（24h 过期）、UI 偏好——都是"丢了可重建"的工作现场。
+2. **浏览器里现在只剩**：四工具参数快照、交接槽（24h 过期）、UI 偏好、两个 token（`agent_api_token`/`bidpricingApiToken`，localhost 单用户场景下 localStorage 存 token 的实际风险可接受，保留免重复输入）——井库已落盘 `well-library.json`。
 3. **备份口诀**：`outputs/` 整个拷走＋`agent-service/agent.sqlite` 拷走＝全部。
 
 ## 出问题先看哪

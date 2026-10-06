@@ -28,7 +28,7 @@
   // P0-1: 边车鉴权 token（与服务端 AGENT_API_TOKEN 对应）。未设置服务端 token 时留空即可；
   // 设置后 /approve、/apply-model 走请求头，/watch（SSE 不支持自定义头）走 ?token= 查询参数。
   const agentToken = () => {
-    try { return sessionStorage.getItem('agent_api_token') || ''; } catch { return ''; }
+    try { return localStorage.getItem('agent_api_token') || ''; } catch { return ''; }
   };
   const agentHeaders = (extra) => {
     const h = Object.assign({}, extra);
@@ -87,7 +87,7 @@
           '<label>模型 ID</label><input id="agentCustomModel" type="text" placeholder="my-model" /></div>' +
         '<div><div class="sec-title">边车鉴权（可选）</div>' +
           '<label>AGENT_API_TOKEN</label><input id="agentApiToken" type="password" placeholder="与服务端 AGENT_API_TOKEN 一致；未设置服务端时留空" />' +
-          '<div class="as-hint" style="font-size:12px;opacity:.65;line-height:1.6;margin-top:4px">服务端设置 AGENT_API_TOKEN 后，审批与模型设置需鉴权；此处填同一值，保存在本次会话（sessionStorage，关标签页即清除，不进 localStorage）。</div></div>' +
+          '<div class="as-hint" style="font-size:12px;opacity:.65;line-height:1.6;margin-top:4px">服务端设置 AGENT_API_TOKEN 后，审批与模型设置需鉴权；此处填同一值，保存在本机 localStorage。</div></div>' +
         '<label class="chk"><input type="checkbox" id="agentTestConn" checked /> 应用后自动测试连接</label>' +
         '<div id="agentApplyMsg" class="as-test"></div>' +
       '</div>' +
@@ -368,12 +368,12 @@
       applyMsg.textContent = '读取配置失败：' + e.message;
       applyMsg.className = 'as-test bad';
     }
-    // P0-1: 边车鉴权 token 回填（本次会话 sessionStorage）
+    // P0-1: 边车鉴权 token 回填（本机 localStorage）
     agentApiToken.value = agentToken();
   }
 
   agentApiToken.addEventListener('change', () => {
-    try { sessionStorage.setItem('agent_api_token', agentApiToken.value.trim()); } catch {}
+    try { localStorage.setItem('agent_api_token', agentApiToken.value.trim()); } catch {}
     // token 变更后重建 SSE 连接，使其携带新 token；面板已展开时立即重连
     if (es) { try { es.close(); } catch {} es = null; }
     if (opened && !panel.classList.contains('hidden')) connectSSE();

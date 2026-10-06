@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { XMLParser } from 'fast-xml-parser';
 import {
   getCimiAccount,
   getTodayArticles,
@@ -58,6 +59,159 @@ function callsCost(calls: Record<string, number>): number {
  * 抓取单个来源的当天发文并入库。
  * 返回该来源的运行统计。即使某来源失败也不阻断整体。
  */
+// ===== RSS 源同步（非微信链路）=====
+// source_key 形如 'rss:https://aihot.news/feed.xml'。抓 feed → 逐条去重入库；
+// 正文直接用 feed 的 description/summary（清洗后），不做额外的正文抓取。
+const RSS_TIMEOUT_MS = 15000;
+const RSS_MAX_ITEMS = 100;
+
+function stripHtmlToText(html: string): string {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+interface RssItem {
+  title: string;
+  url: string;
+  publishTime: string | null;
+  author: string | null;
+  text: string;
+}
+
+function rssItemLink(link: unknown): string {
+  if (typeof link === 'string') return link.trim();
+  if (Array.isArray(link)) {
+    const alt = link.find(
+      (l) => l && typeof l === 'object' && ((l as Record<string, unknown>).rel === 'alternate' || !(l as Record<string, unknown>).rel),
+    ) as Record<string, unknown> | undefined;
+    const href = alt?.href ?? (link[0] as Record<string, unknown> | undefined)?.href;
+    return typeof href === 'string' ? href.trim() : '';
+  }
+  if (link && typeof link === 'object') {
+    const href = (link as Record<string, unknown>).href;
+    return typeof href === 'string' ? href.trim() : '';
+  }
+  return '';
+}
+
+function parseRssItems(doc: unknown): RssItem[] {
+  const d = doc as Record<string, any>;
+  let raw: any[] = [];
+  // RSS 2.0
+  const channel = d?.rss?.channel;
+  if (channel?.item) raw = Array.isArray(channel.item) ? channel.item : [channel.item];
+  // Atom
+  else if (d?.feed?.entry) raw = Array.isArray(d.feed.entry) ? d.feed.entry : [d.feed.entry];
+  const items: RssItem[] = [];
+  for (const it of raw.slice(0, RSS_MAX_ITEMS)) {
+    const title = String(it?.title ?? '').trim();
+    const url = rssItemLink(it?.link);
+    if (!title || !url) continue;
+    let publishTime: string | null = null;
+    const rawTime = it?.pubDate ?? it?.published ?? it?.updated ?? null;
+    if (rawTime) {
+      const t = new Date(String(rawTime));
+      if (!Number.isNaN(t.getTime())) publishTime = t.toISOString();
+    }
+    const descRaw = it?.description ?? it?.summary ?? it?.['content:encoded'] ?? '';
+    const descStr = typeof descRaw === 'string' ? descRaw : String((descRaw as Record<string, unknown>)?.['#text'] ?? '');
+    const text = stripHtmlToText(descStr).slice(0, 20000);
+    const authorRaw = it?.author;
+    const author = typeof authorRaw === 'string'
+      ? authorRaw.trim() || null
+      : String((authorRaw as Record<string, unknown> | undefined)?.name ?? '').trim() || null;
+    items.push({ title, url, publishTime, author, text });
+  }
+  return items;
+}
+
+async function syncRssSource(
+  source: HotspotSourceRow,
+  triggeredBy: string,
+): Promise<{
+  status: 'ok' | 'error';
+  article_found: number;
+  inserted: number;
+  updated: number;
+  duplicate: number;
+  body_fetched: number;
+  error_message?: string;
+}> {
+  const runId = createFetchRun(source.id, triggeredBy);
+  const stats = {
+    article_found: 0,
+    inserted: 0,
+    updated: 0,
+    duplicate: 0,
+    body_fetched: 0,
+    status: 'ok' as 'ok' | 'error',
+  };
+  try {
+    const feedUrl = source.source_key.slice('rss:'.length).trim();
+    if (!/^https?:\/\//i.test(feedUrl)) throw new Error('RSS 地址不合法');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), RSS_TIMEOUT_MS);
+    let xml: string;
+    try {
+      const res = await fetch(feedUrl, {
+        headers: {
+          'User-Agent': 'bid-pricing-hotspot/1.0 (+local rss reader)',
+          Accept: 'application/rss+xml, application/xml, text/xml',
+        },
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`RSS HTTP ${res.status}`);
+      xml = await res.text();
+    } finally {
+      clearTimeout(timer);
+    }
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '', trimValues: true });
+    const items = parseRssItems(parser.parse(xml));
+    stats.article_found = items.length;
+    for (const it of items) {
+      const externalKey = 'rss:' + hashBody(it.url);
+      const result = upsertHotspotArticle({
+        source_id: source.id,
+        external_key: externalKey,
+        title: it.title,
+        url: it.url,
+        digest: it.text ? it.text.slice(0, 200) : null,
+        author: it.author,
+        publish_time: it.publishTime,
+      });
+      if (result.status === 'inserted') stats.inserted += 1;
+      else stats.duplicate += 1;
+      // RSS 正文即 feed 摘要：新入库直接落盘，不另行抓取
+      if (result.status === 'inserted' && it.text) {
+        updateHotspotArticleBody(result.id, {
+          body_text: it.text,
+          body_hash: hashBody(it.text),
+          too_short: countCjkChars(it.text) < 200,
+        });
+        stats.body_fetched += 1;
+      }
+    }
+    markHotspotFetch(source.id, stats.article_found);
+    finishFetchRun(runId, { ...stats, cost: 0, calls: {} });
+    return { ...stats, status: 'ok' as const };
+  } catch (e) {
+    const msg = (e as Error).message;
+    stats.status = 'error';
+    finishFetchRun(runId, { ...stats, status: 'error', error_message: msg, cost: 0, calls: {} });
+    return { ...stats, status: 'error' as const, error_message: msg };
+  }
+}
+
 export async function syncOneSource(source: HotspotSourceRow, triggeredBy: string): Promise<{
   status: 'ok' | 'error';
   article_found: number;
@@ -67,6 +221,10 @@ export async function syncOneSource(source: HotspotSourceRow, triggeredBy: strin
   body_fetched: number;
   error_message?: string;
 }> {
+  // RSS 源（source_key = 'rss:<feed_url>'）：不走次幂/微信链路，直接抓 feed
+  if (source.source_key.startsWith('rss:')) {
+    return syncRssSource(source, triggeredBy);
+  }
   const runId = createFetchRun(source.id, triggeredBy);
   const beforeCalls = getCallStats();
   const stats = {

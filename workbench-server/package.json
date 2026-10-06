@@ -20,6 +20,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.1",
+    "fast-xml-parser": "^5.2.5",
     "multer": "^2.2.0"
   },
   "devDependencies": {

@@ -492,15 +492,20 @@ else {
         # 工作台自有数据库必须落在本项目 outputs\ 下，不得写进仓库外路径（收编要求）。
         # workbench-server/src/db.ts 以 WORKBENCH_DATA_DIR 为根，缺省是包内 data/。
         $env:WORKBENCH_DATA_DIR = $WbDataDir
+        # 桌面扫描根目录：缺省扫 E:\工作liam（用户工作目录）。
+        # scanner.ts 口径：settings.scanRoot > $env:WORKBENCH_SCAN_ROOT > ~/Desktop。
+        # 若曾在设置页改过扫描目录，以设置页为准（DB 里 settings.scanRoot 优先）。
+        $env:WORKBENCH_SCAN_ROOT = "E:\工作liam"
         Write-Host "==> workbench http://127.0.0.1:$WbPort/api/health  ..."
         $workbench = Start-Process -FilePath $nodeCmd.Source `
             -ArgumentList @("--import", "tsx", "src/index.ts") `
             -WorkingDirectory $WbBackendDir -PassThru -NoNewWindow `
             -RedirectStandardOutput (Join-Path $LogDir "workbench.out.log") `
             -RedirectStandardError (Join-Path $LogDir "workbench.err.log")
-        # 子进程已拿到环境快照，立即复原，避免这两个泛用名污染后续同级进程
+        # 子进程已拿到环境快照，立即复原，避免这些泛用名污染后续同级进程
         Remove-Item Env:\PORT -ErrorAction SilentlyContinue
         Remove-Item Env:\WORKBENCH_DATA_DIR -ErrorAction SilentlyContinue
+        Remove-Item Env:\WORKBENCH_SCAN_ROOT -ErrorAction SilentlyContinue
     }
 }
 

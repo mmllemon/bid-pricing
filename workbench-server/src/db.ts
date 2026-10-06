@@ -655,6 +655,8 @@ export function noteIdBelongsToAccount(accountKey: string, noteId: string): bool
 export const DEFAULT_HOTSPOT_SOURCES = [
   { source_key: 'wechat:huxiu', display_name: '虎嗅APP', nickname: '虎嗅APP' },
   { source_key: 'wechat:36kr', display_name: '36氪', nickname: '36氪' },
+  // RSS 源：source_key 以 'rss:' 开头，走 hotspotSync.ts 的 RSS 链路（不依赖次幂）
+  { source_key: 'rss:https://aihot.news/feed.xml', display_name: 'AI Hot 新闻' },
 ] as const;
 
 export interface HotspotSourceRow {

@@ -354,3 +354,63 @@ details.spec .hint { margin: 6px 0; }
   .hint { font-size: 12px; }
   input, select, button { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ============================================================
+   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   ------------------------------------------------------------
+   覆盖：模块短标题、Chip / Badge、按钮、数据指标、表格列头与数字单元格。
+   不覆盖：.tool-table .fx（计算式长文本）、表格首列中文物料名、
+   .field-label / .hint / .well-lib-empty / .tool-card-link p 等说明文字、
+   全部 input / select / textarea 输入内容（§5.1 第 203 行）。
+   规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
+   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
+   ============================================================ */
+.tool-card-link h2,        /* 模块短标题 */
+.tool-subhead,             /* 参数分组小标题 */
+.well-viz-title,
+.tool-card-link h2 small,  /* Badge */
+.chip,                     /* Chip */
+.tool-card-go,             /* 入口按钮 */
+.well-act,
+.metric strong,            /* 数据指标 */
+.handoff-banner strong,
+.tool-table th,
+.tool-table .num,
+.tool-table tfoot td,
+.tool-table tfoot .num,
+.well-detail th,
+.well-detail td.num,
+.well-detail th.num,
+.well-item-total,
+.well-detail .well-detail-total,
+.well-item-time{           /* 时间日期 */
+  font-family:var(--font-pixel);
+  font-weight:400;
+  font-synthesis:none;
+}
+
+/* §5.1 第 205 行：像素字体元素字号须为整数像素。
+   以下 4 处原为 12.5px / 15.5px 尾数，就近取整，否则像素网格非整数倍会发糊。
+   限定在 screen 媒体内，避免覆盖本文件上方 @media print 的 .tool-table 12px 降档。 */
+@media screen {
+  .tool-card-link h2{font-size:16px}
+  .tool-card-go,
+  .chip{font-size:13px}
+  .tool-table{font-size:13px}
+}
+
+/* §5.1 第 203 行：表单输入内容不属像素字体范围。
+   上面 .tool-table th/.num/tfoot td 会经继承把像素字体带进表格内的输入控件
+   （.tool-table input/select 声明了 font:inherit），故显式还原为 --font。
+   选择器带上 input.num/select.num 与 .num input，是为了在特异性上压过
+   上面的 .tool-table .num，否则数字列的输入框仍会是像素字体。 */
+.tool-table input,
+.tool-table select,
+.tool-table input.num,
+.tool-table select.num,
+.tool-table .num input,
+.tool-table .num select,
+.tool-subhead .sw,
+.tool-subhead .hint{          /* 控件标签与说明文字，同上 */
+  font-family:var(--font);
+}

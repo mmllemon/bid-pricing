@@ -555,6 +555,9 @@
 .k-inline i{font-style:normal;font-weight:700;color:var(--text);font-size:12px}
 .k-inline b{font-weight:700;color:var(--text)}
 .k-inline em{font-style:normal;color:var(--text-tertiary);font-size:12px}
+/* k 公式下标 j：字体缺 U+2C7C，改用 <sub>j</sub>；显式取 12px（像素字体原生设计尺寸），
+   避免浏览器默认的 smaller（≈10px）落在非 12 网格上发糊。 */
+#quoteView .k-inline em sub{font-size:12px;line-height:0}
 
 /* 方案 Tab 文字：过长单行省略，悬浮显示完整名（由 label.title 提供） */
 #quoteView .scheme-tab .tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:126px}
@@ -897,3 +900,62 @@ table.audit-table tr:hover td:first-child{box-shadow:inset 4px 0 0 var(--ui-yell
 .skeleton-row{display:flex;gap:12px;align-items:center;padding:8px 12px;border-top:var(--line-thin)}
 .skeleton-cell{height:14px;border-radius:0;flex:1;min-width:0;background:var(--ui-white);border:var(--line-thin)}
 .skeleton-card{padding:12px 16px;border:var(--line-thin);border-radius:0;margin-bottom:8px}
+
+/* ============================================================
+   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   ------------------------------------------------------------
+   覆盖：模块短标题、Tab / Chip / Badge / 状态药丸、按钮、数据指标、
+   表格列头与数字单元格。
+   不覆盖：.card-subtitle / .kpi-foot / .phg-meta / .ph-empty / .prep-item
+   等说明文字，.input-affix 内输入内容，以及物料名/备注等中文数据串
+   （§5.1 第 203 行），一律保持 --font（MiSans）。
+   规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
+   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
+   ============================================================ */
+/* 模块短标题 */
+#quoteView .card-title,
+.cmp-head h3,
+.compare-stage .result-head h3,
+.preview-stage .result-head h3,
+.ph-header h3,
+/* Tab / Chip / Badge / 短状态码 */
+.scheme-tab,
+.filter-chip,
+.status-tag,
+.delta-badge,
+.risk-corner,
+.prep-state,
+.toast-pill,
+.status-capsule,
+/* 按钮 */
+.dock-btn,
+.intake-reup,
+.phg-op,
+.phg-slot .slot-act,
+.phg-expand,
+.ph-run,
+.drill-clear,
+.prep-actions .btn-primary,
+.prep-actions .btn-secondary,
+.result-actions .btn-primary,
+.result-actions .btn-secondary,
+.result-actions .download-button,
+/* 数据指标 */
+.range-val,
+.kpi-val,
+.intake-stat b,
+.phg-meta b,
+.phg-slot-stat b,
+.ph-count,
+.k-inline i,
+.k-inline b,
+.k-inline em,
+/* 表格列头与数字单元格 */
+.audit-table th,
+.table-scroll th.num,
+.table-scroll td.num,
+#quoteView table td.num{
+  font-family:var(--font-pixel);
+  font-weight:400;
+  font-synthesis:none;
+}

@@ -129,9 +129,9 @@
       `${f2(concQty.base)}×${f2(rebarRatio.base)}`,
       `(${f2(2 * (L + t))}＋${f2(2 * (W + t))}${brCL})×${f2(D)}×${f2(t)}${lipFx}`,
       isConc ? `${f2(concQty.wall)}×${f2(rebarRatio.wall)}` : '—（砖砌不计）',
-      (cT2 > 0 && cN > 0 ? '⚠ 与预制盖板重复？' : '') +
+      (cT2 > 0 && cN > 0 ? '※ 与预制盖板重复？' : '') +
       `(${f2(L + 2 * t)}×${f2(W + 2 * t)})×${f2(topT)}${brSlab}`,
-      (cT2 > 0 && cN > 0 ? '⚠ ' : '') + `${f2(concQty.top)}×${f2(rebarRatio.top)}`,
+      (cT2 > 0 && cN > 0 ? '※ ' : '') + `${f2(concQty.top)}×${f2(rebarRatio.top)}`,
       shaftOn ? `π×(${f2(sD)}＋${f2(sT)})×${f2(sH)}×${f2(sT)}` : '—（未计入井筒）',
       isConc ? `2×${f2(clNet)}×${f2(D)}${lipFormFx}＋${f2(outerP)}×${f2(baseT)}${slabFormFx}`
              : `${f2(outerP)}×${f2(baseT)}${lipFormFx}${slabFormFx}`,
@@ -706,7 +706,7 @@
     if (lastSteelEstKg > 0) {
       const diff = total - lastSteelEstKg;
       const pct = (diff / lastSteelEstKg * 100).toFixed(0);
-      const warn = Math.abs(diff / lastSteelEstKg) >= 0.15 ? ' ⚠ 差异较大，请以钢筋逐根表为准' : '';
+      const warn = Math.abs(diff / lastSteelEstKg) >= 0.15 ? ' ※ 差异较大，请以钢筋逐根表为准' : '';
       cmpEl.textContent = `含钢量法 ${fmt(lastSteelEstKg, 0)} kg vs 主体按图 ${fmt(total, 0)} kg（${diff >= 0 ? '+' : ''}${fmt(diff, 0)} / ${pct}%）· 未含盖板钢筋 ${fmt(coverTotal, 0)} kg${warn}`;
     } else cmpEl.textContent = '';
   }
@@ -761,9 +761,9 @@
         { no: '墙内长', d: 14, len: D + baseT - c, span: L + t, sp: 150,
           n: (Math.floor((L + t) / 150) + 1) * 2, note: '长墙内侧竖向（2道墙）' },
         { no: '外U短', d: 14, len: 2 * leg + (W + 2 * t - 2 * c), span: L + 2 * t, sp: 150,
-          n: nAlongL, note: '⚠ 底板下层+短墙外侧U形，单根长按图核对' },
+          n: nAlongL, note: '※ 底板下层+短墙外侧U形，单根长按图核对' },
         { no: '外U长', d: 14, len: 2 * leg + (L + 2 * t - 2 * c), span: W + 2 * t, sp: 150,
-          n: nAlongW, note: '⚠ 底板下层+长墙外侧U形，单根长按图核对' },
+          n: nAlongW, note: '※ 底板下层+长墙外侧U形，单根长按图核对' },
         { no: '水平内', d: 8, len: innerP, span: D, sp: 150,
           n: Math.floor(D / 150) + 1, note: '水平分布筋·内圈' },
         { no: '水平外', d: 8, len: outerP, span: D, sp: 150,

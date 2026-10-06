@@ -17,7 +17,12 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-206F;
+  /* 官方构建产物把箭头(→)、带圈序号(①)、几何块(▸)与希腊大写(Σ)也打进了 latin 子集，
+     但官方 unicode-range 未声明这些码位，于是这些字符在像素字体元素里找不到字面、
+     回退到系统字体（→ 在 Windows 会一路落到 monospace → NSimSun 宋体箭头）。
+     实测这些字形在 latin 与 zh_hans 两个子集文件中都存在，补齐区间即可命中。
+     新增区间与 zh_hans 面区间无重叠，不破坏「两个子集互不覆盖」的约定。 */
+  unicode-range: U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+370-3FF,U+2000-206F,U+2190-21FF,U+2460-24FF,U+25A0-25FF;
 }
 @font-face {
   font-family: "LShu Pixel";
@@ -54,7 +59,10 @@
   --shadow-action: 2px 2px 0 var(--ui-black);
 
   /* ===== 字体 ===== */
-  --font-pixel: "LShu Pixel", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
+  /* Fusion Pixel 子集里确实没有的字形（✓ ✕ − 等），在第 2 位交给 MiSans 兜底；
+     否则会继续坠落到 Cambria Math / Segoe UI Symbol / Microsoft YaHei 这类随机系统字体。
+     对 Fusion Pixel 已有的字形无影响——字体族内首个覆盖该码位的 face 优先命中。 */
+  --font-pixel: "LShu Pixel", "MiSans VF", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
   --font-display: var(--font-pixel);
   --font-mono: var(--font-pixel);
 

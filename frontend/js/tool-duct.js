@@ -37,7 +37,7 @@
     if ($('#dLayout').value === 'manual') {
       rows = Math.max(1, Math.round(num($('#dRows'))));
       cols = Math.max(1, Math.round(num($('#dCols'))));
-      if (rows * cols < used) note = `⚠ 孔位不足：已用 ${used} 孔，当前 ${rows}×${cols} 仅 ${rows * cols} 孔`;
+      if (rows * cols < used) note = `※ 孔位不足：已用 ${used} 孔，当前 ${rows}×${cols} 仅 ${rows * cols} 孔`;
     } else {
       const L = autoLayout(Math.max(used + spare, 2));
       rows = L.rows; cols = L.cols;

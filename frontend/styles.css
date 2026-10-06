@@ -91,7 +91,9 @@ button{font-family:var(--font)}
 .breadcrumb{font-size:12px;color:var(--text-secondary);margin-bottom:8px}
 .breadcrumb span{margin:0 6px;color:var(--text-tertiary)}
 .page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:24px}
-.page-header h1{font-size:28px;font-weight:700;margin:0;letter-spacing:-.03em}
+/* H1 用像素字体：字号须落在 12px 网格的整数倍（原 28px = 2.33× 会发糊），故取 36px（3×）；
+   同时去掉负字距——像素字体靠字形栅格对齐，负字距会把字形推到半像素上。 */
+.page-header h1{font-size:36px;font-weight:400;margin:0;letter-spacing:0}
 .page-sub{color:var(--text-secondary);margin:6px 0 0;font-size:12px}
 .status-pill{
   display:inline-flex;align-items:center;gap:6px;
@@ -478,3 +480,27 @@ button{font-family:var(--font)}
 .ui-confirm-actions{display:flex;justify-content:flex-end;gap:10px}
 .btn-danger{border:var(--line-strong);border-radius:0;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;background:var(--ui-orange);color:var(--ui-black);transition:background-color var(--dur-fast),color var(--dur-fast)}
 .btn-danger:hover{background:var(--ui-black);color:var(--ui-white)}
+
+/* ============================================================
+   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   ------------------------------------------------------------
+   覆盖：导航标签与编号、页面 H1、模块短标题、按钮 / Tab / Chip /
+   Badge、时间日期、数据指标、短状态码。
+   不覆盖：长段说明、记录/笔记正文、表单输入内容（§5.1 第 203 行），
+   以及用户/项目数据串（方案名、物料名），一律保持 --font（MiSans）。
+   规范依据 §5.1 第 205 行：像素字体元素统一 font-weight:400 +
+   font-synthesis:none，不以浏览器合成粗体建立层级。
+   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
+   （.brand-text strong / .nav-group-title / .nav-num / .avatar /
+     .version-line 已在上方原规则中直接声明，此处不重复。）
+   ============================================================ */
+.nav-item,                              /* 导航标签文字 */
+.page-header h1,                        /* 页面 H1 */
+.btn-primary,.btn-secondary,.btn-ghost,.download-button, /* 按钮 */
+.btn-danger,
+.status-pill,                           /* Badge / 状态药丸 */
+.ui-confirm-title{                      /* 模块短标题（确认框标题） */
+  font-family:var(--font-pixel);
+  font-weight:400;
+  font-synthesis:none;
+}

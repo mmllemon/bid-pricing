@@ -8,7 +8,7 @@
 /* ---------- 页面头（与其他模块页一致：面包屑 + 大标题 + 右侧操作） ---------- */
 .agent-page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px}
 .agent-page-header .head-left{display:flex;flex-direction:column;gap:6px}
-.agent-page-header h1{font-size:28px;font-weight:700;margin:0;letter-spacing:-.03em}
+.agent-page-header h1{font-size:36px;font-weight:400;margin:0;letter-spacing:0}
 .agent-page-sub{color:var(--text-secondary);font-size:12px;margin:0}
 .agent-page-actions{display:flex;align-items:center;gap:10px}
 
@@ -236,3 +236,40 @@
   .agent-msg{max-width:92%}
   .agent-approval{max-width:100%}
 }
+
+/* ============================================================
+   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   ------------------------------------------------------------
+   覆盖：页面 H1、状态药丸、模块短标题、按钮、Badge、时间日期。
+   不覆盖：.agent-chat / .agent-msg 正文与 .agent-msg.err 错误提示、
+   .agent-welcome p、.ap-args（工具参数 JSON）、.agent-settings label /
+   .chk / .as-test，以及 textarea / select / input 输入内容
+   （§5.1 第 203 行，#agentView 是 AI 对话页，聊天正文必须保持可读）。
+   规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
+   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
+   ============================================================ */
+.agent-page-header h1,   /* 页面 H1 */
+.agent-status-pill,      /* 状态药丸 */
+.agent-settings-btn,     /* 按钮 */
+.agent-send,
+.agent-settings-foot button,
+.agent-welcome h2,       /* 模块短标题 */
+.agent-settings-head h2,
+.agent-settings .sec-title,
+.agent-settings .as-active,          /* 当前模型短状态码 */
+.agent-approval .ap-title,
+.agent-approval .ap-title .ap-badge, /* Badge */
+.agent-approval .ap-btn,
+.agent-approval .ap-result,
+.agent-suggest,          /* 建议项（按钮语言） */
+.agent-msg .msg-time,    /* 时间日期 */
+.agent-work{
+  font-family:var(--font-pixel);
+  font-weight:400;
+  font-synthesis:none;
+}
+
+/* §5.1 第 205 行：像素字体元素字号须为整数像素。以下 3 处原为 12.5px 尾数，就近取整。 */
+.agent-suggest,
+.agent-settings .as-active,
+.agent-settings-foot button{font-size:13px}

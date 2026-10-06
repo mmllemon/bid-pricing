@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>工程智算 · 电缆价格速算</title>
   <!-- 设计令牌（单一事实源，必须最先加载） -->
-  <link rel="stylesheet" href="./tokens.css?v=2026-10-06-v2f" />
-  <link rel="stylesheet" href="./styles.css?v=2026-10-06-v2f" />
-  <link rel="stylesheet" href="./quote-dashboard.css?v=2026-10-06-v2f" />
-  <link rel="stylesheet" href="./tools.css?v=2026-10-06-tools2" />
+  <link rel="stylesheet" href="./tokens.css?v=2026-10-06-v2h" />
+  <link rel="stylesheet" href="./styles.css?v=2026-10-06-v2h" />
+  <link rel="stylesheet" href="./quote-dashboard.css?v=2026-10-06-v2i" />
+  <link rel="stylesheet" href="./tools.css?v=2026-10-06-tools4" />
   <!-- 字体：MiSans VF（正文） + LShu Pixel（像素标签，见 tokens.css） -->
   <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css" />
 </head>
@@ -35,7 +35,7 @@
           <label class="field" data-tip="企业管理费＋利润，按厂家口径"><span class="field-label">管理及利润率</span><input id="cMgr" class="tabular" type="number" min="0" step="0.5" value="10" /><span class="unit-suffix">%</span></label>
           <label class="field"><span class="field-label">增值税率</span><input id="cVat" class="tabular" type="number" min="0" step="0.5" value="13" /><span class="unit-suffix">%</span></label>
           <label class="field" data-tip="其他材料系数建议值：0.6/1kV 取 0.30，8.7/15kV 取 0.40，26/35kV 取 0.50，可按厂家询价调整；切换后整表该系数同步更新，仍可逐行改"><span class="field-label">电压等级</span><select id="cVolt"><option value="lv">0.6/1kV</option><option value="mv" selected>8.7/15kV</option><option value="hv">26/35kV</option></select></label>
-          <label class="field act" data-tip="经后端代理调用长江有色金属网公开报价接口（ccmn.cn），写入当日长江现货 1#铜 / A00铝均价；需后端服务运行中"><span class="field-label">现货价</span><span><button type="button" class="btn-secondary" id="cFetchPrice">⟳ 拉取长江现货</button></span></label>
+          <label class="field act" data-tip="经后端代理调用长江有色金属网公开报价接口（ccmn.cn），写入当日长江现货 1#铜 / A00铝均价；需后端服务运行中"><span class="field-label">现货价</span><span><button type="button" class="btn-secondary" id="cFetchPrice">↻ 拉取长江现货</button></span></label>
         </div>
         <div class="hint" style="margin:-6px 0 12px;"><span id="cPriceStatus">参考价（2026-09-30）：长江现货 1#铜 111,540 元/吨、A00 铝 24,030 元/吨</span>——铜价波动大，可点击「拉取长江现货」按当日现货更新，或手动修改上方输入。</div>
 

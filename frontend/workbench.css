@@ -51,7 +51,10 @@
 
 /* ---------- 页头 ---------- */
 #workbenchView .header{display:flex;align-items:flex-end;gap:var(--space-4);margin-bottom:var(--space-1)}
-#workbenchView .header h2{font-size:var(--text-h1);font-weight:800;letter-spacing:-.03em}
+/* 页面 H1：字号须落在 12px 网格整数倍（--text-h1=30px 即 2.5× 实测劣化最重），故取 36px（3×）；
+   并去掉负字距，避免字形被推到半像素上。font-family 必须在此显式声明——
+   本区块位于文件末尾像素字体块之前，仅靠块内选择器漏写了 .header h2。 */
+#workbenchView .header h2{font-family:var(--font-pixel);font-size:36px;font-weight:400;letter-spacing:0}
 #workbenchView .header p{color:var(--text-secondary);font-size:var(--text-micro);margin-top:5px}
 #workbenchView .header .spacer{flex:1}
 #workbenchView .date-chip{
@@ -68,7 +71,6 @@
   background:var(--ui-white); border:var(--line-strong);
   box-shadow:inset 4px 0 0 var(--ui-orange);
 }
-#workbenchView .hero-banner .hi{font-size:var(--text-h1);font-weight:800;letter-spacing:-.03em}
 #workbenchView .hero-banner .sub{color:var(--text-secondary);font-size:14px;margin-top:var(--space-1);max-width:460px}
 #workbenchView .hero-banner .hstats{display:flex;gap:var(--space-5);margin-top:var(--space-5)}
 #workbenchView .hero-banner .hstat{display:flex;flex-direction:column;gap:2px}
@@ -706,4 +708,82 @@
   #workbenchView .biz-col .biz-card{transition:none}
   #workbenchView .overlay,#workbenchView .modal{animation:none}
   #workbenchView *{transition-duration:0ms !important}
+}
+
+/* ============================================================
+   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   ------------------------------------------------------------
+   覆盖：导航标签、页面 H1（见上方 .header h2）、模块短标题、
+   按钮 / Tab / Badge、数据指标、时间日期、短状态码。
+   不覆盖：用户/项目数据串（.biz-name / .tk-name / .pin-t / .rname /
+   .focus-* / .pin-empty 等——这些是可变长中文，§3.2 禁止用像素字体
+   显示长段中文），以及 #workbenchView input / textarea /
+   .biz-col-sort(select) / .biz-mform .fld 系列输入内容。
+   规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
+   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
+   选择器均已对照 workbench.js 的实际模板与运行期 DOM 复核，
+   不含未产出的类名。
+   ============================================================ */
+/* 导航标签 */
+#workbenchView .navi,
+#workbenchView .nav-sep,
+/* 模块短标题 */
+#workbenchView .sec-title,
+#workbenchView .side-card .sh,
+#workbenchView .sec-grp .zh,
+#workbenchView .sec-grp .en,
+#workbenchView .tile-h .zh,
+#workbenchView .tile-h .en,
+#workbenchView .biz-head .bt,
+#workbenchView .biz-col-head,
+#workbenchView .biz-mhead h3,
+#workbenchView .modal h3,
+#workbenchView .clock-card .hi,
+/* Tab / Badge / 短状态码 */
+#workbenchView .biz-col .biz-tab b,
+#workbenchView .biz-col .biz-tab i,
+#workbenchView .seg .opt,
+#workbenchView .badge,
+#workbenchView .biz-badge,
+#workbenchView .biz-col-count,
+#workbenchView .rec .streak,
+#workbenchView .rec .meta-tag,
+#workbenchView .habit-tb th,
+/* 按钮 */
+#workbenchView .btn,
+#workbenchView .qbtn .l,
+#workbenchView .pin-step button,
+#workbenchView .link-danger,
+#workbenchView .biz-x,
+#workbenchView .pomo .pctl button,
+#workbenchView .biz-mactions .btn-primary,
+#workbenchView .biz-mactions .btn-secondary,
+#workbenchView .biz-mactions .btn-danger,
+/* 数据指标 */
+#workbenchView .ring .pct,
+#workbenchView .ring .lbl,
+#workbenchView .hero-v,
+#workbenchView .stat-row .val,
+#workbenchView .side-ring .big,
+#workbenchView .ov2-stat .s-v,
+#workbenchView .clock-card .clk,
+#workbenchView .rec .amt,
+#workbenchView .tk-head .pct,
+#workbenchView .tk-head .cnt,
+#workbenchView .pomo .ptime .t,
+#workbenchView .pomo .pstats .pv,
+#workbenchView .book-row .bpct,
+#workbenchView .spend-total,
+#workbenchView .biz-metric .v,
+#workbenchView .biz-derived b,
+#workbenchView .catbar .cbrow .cbv,
+#workbenchView .tile-h .r,
+#workbenchView .habit-tb td.hrate,
+/* 时间日期 */
+#workbenchView .date-chip,
+#workbenchView .rec .rdate,
+#workbenchView .clock-card .cmeta{
+  font-family:var(--font-pixel);
+  font-weight:400;
+  font-synthesis:none;
 }

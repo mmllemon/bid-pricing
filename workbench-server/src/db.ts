@@ -54,7 +54,8 @@ db.exec(`
     reason TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    project_id TEXT NOT NULL DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS xhs_snapshots (
@@ -147,6 +148,14 @@ db.exec(`
     FOREIGN KEY (source_id) REFERENCES hotspot_sources (id)
   );
 `);
+
+// ===== 兼容迁移：为旧库 todos 补 project_id 列（待办挂项目，可空不强制）=====
+{
+  const cols = db.prepare(`PRAGMA table_info(todos)`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'project_id')) {
+    db.exec(`ALTER TABLE todos ADD COLUMN project_id TEXT NOT NULL DEFAULT ''`);
+  }
+}
 
 // ===== 兼容迁移：为旧库 xhs_snapshots 补 periods_json 列 =====
 {
@@ -381,11 +390,11 @@ export function getScanReports(limit = 10): ScanReportRow[] {
 // ===== 待办 =====
 export function insertTodos(items: Omit<TodoRow, 'id'>[]): void {
   const stmt = db.prepare(
-    `INSERT INTO todos (title, source_path, cluster, priority, reason, status, created_at, updated_at)
-     VALUES (@title, @source_path, @cluster, @priority, @reason, @status, @created_at, @updated_at)`
+    `INSERT INTO todos (title, source_path, cluster, priority, reason, status, created_at, updated_at, project_id)
+     VALUES (@title, @source_path, @cluster, @priority, @reason, @status, @created_at, @updated_at, @project_id)`
   );
   const tx = db.transaction((list: Omit<TodoRow, 'id'>[]) => {
-    for (const t of list) stmt.run(t);
+    for (const t of list) stmt.run({ ...t, project_id: t.project_id ?? '' });
   });
   tx(items);
 }
@@ -411,7 +420,7 @@ export function updateTodo(id: number, patch: Partial<TodoRow>): TodoRow | undef
   const merged = { ...existing, ...patch, updated_at: new Date().toISOString() };
   db.prepare(
     `UPDATE todos SET title=@title, source_path=@source_path, cluster=@cluster, priority=@priority,
-     reason=@reason, status=@status, updated_at=@updated_at,
+     reason=@reason, status=@status, updated_at=@updated_at, project_id=@project_id,
      source_type=@source_type, source_external_id=@source_external_id, source_fingerprint=@source_fingerprint,
      lifecycle_status=@lifecycle_status, due_at=@due_at, estimated_minutes=@estimated_minutes,
      planned_start_at=@planned_start_at, planned_end_at=@planned_end_at,
@@ -1116,6 +1125,7 @@ export interface TodoRow {
   status: string;
   created_at: string;
   updated_at: string;
+  project_id: string;
   source_type?: string;
   source_external_id?: string | null;
   source_fingerprint?: string | null;

@@ -27,6 +27,7 @@ export function publicTodoDto(row: Record<string, unknown>) {
     sourceFreshness: String(r.source_freshness || r.sourceFreshness || 'unknown'),
     sourceReadonly: r.source_readonly === 1 || r.sourceReadonly === true,
     visibility: String(r.visibility || 'visible'),
+    projectId: String(r.project_id || r.projectId || ''),
     sourceScope: (r.source_scope ?? r.sourceScope ?? null) as string | null,
     inferenceReasonCode: (r.inference_reason_code ?? r.inferenceReasonCode ?? null) as string | null,
   };

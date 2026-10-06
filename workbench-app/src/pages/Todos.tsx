@@ -82,6 +82,17 @@ function weekdayLabel(dateKey: string): string {
   return d.toLocaleDateString('zh-CN', { weekday: 'long' });
 }
 
+// :8000 基地址（项目经营数据）：与 Biz.tsx 同口径，window.__API_BASE__ 覆盖；按主机名推导支持局域网
+const API_BASE_8000 =
+  (window as unknown as { __API_BASE__?: string }).__API_BASE__
+  || (location.hostname ? `${location.protocol}//${location.hostname}:8000` : 'http://localhost:8000');
+
+interface ProjectLite {
+  id: string;
+  name?: string | null;
+  short_name?: string | null;
+}
+
 export default function TodosPage() {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
   const date = localDateKey(new Date(), timezone);
@@ -123,10 +134,11 @@ export default function TodosPage() {
   const [aiStatus, setAiStatus] = useState<AiStatusResponse | null>(null);
   const [editMinutes, setEditMinutes] = useState('');
   const [editDue, setEditDue] = useState('');
+  const [projects, setProjects] = useState<ProjectLite[]>([]);
 
   const load = useCallback(async (mode: 'page' | 'refresh' = 'page') => {
     try {
-      const [list, status, dash, ai, sugg, today, plan] = await Promise.all([
+      const [list, status, dash, ai, sugg, today, plan, projJson] = await Promise.all([
         api.getTodos(),
         api.getConnectorStatus(),
         api.getAgenda(),
@@ -134,8 +146,11 @@ export default function TodosPage() {
         api.getAiSuggestions().catch(() => ({ suggestions: [] as Array<{ id: number; title: string; confidence: number; reasonCode?: string; reason_code?: string }>, count: 0 })),
         api.getTodayOverview(date, timezone),
         api.getTodayDayPlan(date, timezone).catch(() => ({ plan: null })),
+        // 项目列表（:8000）：待办挂项目用下拉；失败不阻塞待办页
+        fetch(`${API_BASE_8000}/api/project/overview/list`).then((r) => (r.ok ? r.json() : { projects: [] })).catch(() => ({ projects: [] })),
       ]);
       setTodos(list);
+      setProjects(((projJson as { projects?: ProjectLite[] }).projects ?? []));
       setConnectors(status.connectors);
       setSettings(status.settings);
       const calendar = dash.calendar;
@@ -751,6 +766,13 @@ export default function TodosPage() {
             <div className="flex gap-2 mt-2" style={{ flexWrap: 'wrap' }}>
               <span className="nb-badge">{SOURCE_LABEL[selected.sourceType || 'desktop']}</span>
               <span className="nb-badge">{lifecycleOf(selected)}</span>
+              {selected.projectId && (
+                <span className="nb-badge" title="关联项目">
+                  {projects.find((p) => p.id === selected.projectId)?.short_name
+                    || projects.find((p) => p.id === selected.projectId)?.name
+                    || '已关联项目'}
+                </span>
+              )}
             </div>
             <label className="setting-label">预计时长（分钟）</label>
             {selected.sourceReadonly ? (
@@ -774,6 +796,22 @@ export default function TodosPage() {
                 >
                   保存时长与截止时间
                 </button>
+                <label className="setting-label">关联项目（可选）</label>
+                <select
+                  className="nb-input"
+                  value={selected.projectId || ''}
+                  onChange={async (e) => {
+                    const v = e.target.value;
+                    const updated = await api.editTodo(selected.id, { projectId: v });
+                    setSelected(updated);
+                    await refreshAfterWrite();
+                  }}
+                >
+                  <option value="">不关联</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.short_name || p.name || p.id}</option>
+                  ))}
+                </select>
               </>
             )}
             <h3 style={{ marginTop: 18 }}>来源证据</h3>

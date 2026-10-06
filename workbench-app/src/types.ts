@@ -113,6 +113,7 @@ export interface TodoItem {
   completionSource?: string | null;
   lastSeenAt?: string | null;
   evidenceCount?: number;
+  projectId?: string;
   originMode?: 'structured' | 'ai' | 'manual' | 'legacy' | string;
   sourceReadonly?: boolean;
   inferenceConfidence?: number | null;

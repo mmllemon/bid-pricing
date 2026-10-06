@@ -254,7 +254,12 @@ app.patch('/api/todos/:id', (req, res) => {
   try {
     const existing = getTodo(Number(req.params.id));
     if (!existing) return res.status(404).json({ code: 'NOT_FOUND', message: '待办不存在' });
-    const { title, estimatedMinutes, dueAt, visibility } = req.body;
+    const { title, estimatedMinutes, dueAt, visibility, projectId } = req.body;
+    if (projectId !== undefined) {
+      // 项目关联：非生命周期流转，直接写字段；空字符串=解除关联（不强制）
+      const t = updateTodo(existing.id, { project_id: String(projectId || '') });
+      return res.json(mapTodoRow(t || existing));
+    }
     if (visibility === 'hidden_local' || visibility === 'visible') {
       const next = dispatchTodoAction(rowToTransitionState(existing as unknown as Record<string, unknown>), visibility === 'hidden_local' ? 'hide' : 'unhide');
       const t = updateTodo(existing.id, next);

@@ -115,10 +115,11 @@ function sortList(list: ProjectOverview[], key: string): ProjectOverview[] {
 interface CardProps {
   p: ProjectOverview;
   index?: number;
+  todoCount?: number;
   onEdit: (p: ProjectOverview) => void;
 }
 
-function BizCard({ p, index, onEdit }: CardProps) {
+function BizCard({ p, index, todoCount, onEdit }: CardProps) {
   const gp = toNum(p.gross_profit);
   const gm = toNum(p.gross_margin);
   const clsV = gm != null ? (gm < 0 ? ' neg' : ' pos') : '';
@@ -149,6 +150,7 @@ function BizCard({ p, index, onEdit }: CardProps) {
         <div className="biz-top">
           <span className="biz-name" title={p.name || ''}>{p.name}</span>
           <span className="nb-badge">{stage}</span>
+          {(todoCount || 0) > 0 && <span className="nb-badge">待办 {todoCount}</span>}
         </div>
         <div className="biz-metrics">
           <div className="biz-metric"><span className="l">总限价</span><span className="v">{yf(p.limit_total)}</span></div>
@@ -189,11 +191,12 @@ const FORM_FIELDS: Array<{ key: string; label: string; placeholder: string }> = 
 
 interface ModalProps {
   project: ProjectOverview | null;
+  todos: TodoLite[];
   onClose: () => void;
   onSaved: () => void;
 }
 
-function BizEditModal({ project, onClose, onSaved }: ModalProps) {
+function BizEditModal({ project, todos, onClose, onSaved }: ModalProps) {
   const isNew = !project;
   const [form, setForm] = useState<Record<string, string>>(() => {
     const base = { ...EMPTY_FORM };
@@ -313,6 +316,21 @@ function BizEditModal({ project, onClose, onSaved }: ModalProps) {
             <div><span>总毛利率（自动）</span><b>{pct(derived.gross_margin)}</b></div>
             <div><span>实际收益率（自动）</span><b>{pct(derived.actual_yield)}</b></div>
           </div>
+          {!isNew && (
+            <div className="wide">
+              <div className="biz-todos-head">关联待办（{todos.filter((t) => t.projectId === project!.id).length}）</div>
+              {todos.filter((t) => t.projectId === project!.id).length === 0 ? (
+                <p className="nb-muted" style={{ fontSize: 13 }}>暂无关联待办，可在「待办」页点开待办详情挂到本项目。</p>
+              ) : (
+                todos.filter((t) => t.projectId === project!.id).map((t) => (
+                  <div key={t.id} className="biz-todo-row">
+                    <span className="biz-todo-title">{t.title}</span>
+                    <span className="nb-badge">{t.status || ''}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
         <div className="biz-mactions">
           {!isNew ? (
@@ -347,6 +365,13 @@ function NumberField({
   );
 }
 
+interface TodoLite {
+  id: number;
+  title: string;
+  status?: string;
+  projectId?: string;
+}
+
 export default function BizPage() {
   const [projects, setProjects] = useState<ProjectOverview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -355,6 +380,8 @@ export default function BizPage() {
   const [sortMap, setSortMap] = useState<Record<string, string>>({});
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ProjectOverview | null>(null);
+  // 待办（:3456 同源 /api，相对路径即可）：按 projectId 聚合到项目卡片/编辑弹窗
+  const [todos, setTodos] = useState<TodoLite[]>([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -375,6 +402,23 @@ export default function BizPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    // 待办列表：失败不阻塞项目页（:3456 未起或接口异常时仅无聚合显示）
+    fetch('/api/todos')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((j: unknown) => setTodos(Array.isArray(j) ? (j as TodoLite[]) : []))
+      .catch(() => setTodos([]));
+  }, []);
+
+  // projectId → 关联待办数（未关联的不计）
+  const todoCountByProject = useMemo(() => {
+    const m = new Map<string, number>();
+    todos.forEach((t) => {
+      if (t.projectId) m.set(t.projectId, (m.get(t.projectId) || 0) + 1);
+    });
+    return m;
+  }, [todos]);
 
   const bidding = projects.filter((p) => p.stage === '投标').length;
   const building = projects.filter((p) => p.stage === '中标在建').length;
@@ -494,7 +538,7 @@ export default function BizPage() {
                     <div className="biz-col-body" style={bodyStyle}>
                       {arr.length === 0
                         ? <div className="biz-col-empty">—</div>
-                        : arr.map((p, i) => <BizCard key={p.id} p={p} index={i} onEdit={openEdit} />)}
+                        : arr.map((p, i) => <BizCard key={p.id} p={p} index={i} todoCount={todoCountByProject.get(p.id) || 0} onEdit={openEdit} />)}
                     </div>
                   </div>
                 );
@@ -505,7 +549,7 @@ export default function BizPage() {
               <summary>未中标归档（{archived.length}）</summary>
               {archived.length > 0 && (
                 <div className="biz-arch-grid">
-                  {archived.map((p) => <BizCard key={p.id} p={p} onEdit={openEdit} />)}
+                  {archived.map((p) => <BizCard key={p.id} p={p} todoCount={todoCountByProject.get(p.id) || 0} onEdit={openEdit} />)}
                 </div>
               )}
             </details>
@@ -520,6 +564,7 @@ export default function BizPage() {
       {showModal && (
         <BizEditModal
           project={editing}
+          todos={todos}
           onClose={() => setShowModal(false)}
           onSaved={load}
         />

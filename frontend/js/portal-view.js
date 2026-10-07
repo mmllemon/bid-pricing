@@ -65,6 +65,7 @@
     mod: null,          // 当前选中的模块 ID
     branch: null,       // 当前选中的二级分支节点 ID
     item: null,         // 当前选中的三级数据条目 ID
+    paused: false,      // 重播/暂停控制（paused 时时间冻结）
     time: 0,
     branchStart: 0,     // 二级分支节点开花起始时间
     leafStart: 0,       // 三级叶子卡片开花起始时间
@@ -107,18 +108,20 @@
     var W = L.size.w;
     var H = L.size.h;
     var st = L.stage;
-    var narrow = W < 860;
+    // 沉浸态展开时，中心核心与第一列模块共占左侧约 44(核心 x)+110(核心 s/2)+16 = 170px，
+    // 1310 起（右侧抽屉不再预留时）三列才有足够余量居中铺开而不溢出右边界。
+    var narrow = W < 1310;
     var res = { orb: {}, jelly: {}, branches: null, leaves: null };
     var mods = global.PORTAL_DATA ? global.PORTAL_DATA.modules : [];
 
     if (st === 'hub') {
       // 对齐 neural 首页构图：一颗足够大的核心锚定全场，模块均布在扁椭圆上贴向边缘。
       var s = narrow ? clamp(W * 0.34, 150, 210) : clamp(Math.min(W, H) * 0.43, 240, 380);
-      var cy = narrow ? H * 0.5 : H * 0.52;
+      var cy = narrow ? H * 0.48 : H * 0.47;
       res.orb = { x: W / 2, y: cy, s: s };
 
       var rx = narrow ? W * 0.36 : Math.min(W * 0.37, 560);
-      var ry = narrow ? H * 0.31 : Math.min(H * 0.31, 272);
+      var ry = narrow ? H * 0.29 : Math.min(H * 0.27, 236);
 
       mods.forEach(function (m, i) {
         // 卫星均布在一圈上（从正上方起逆时针），避免角度不均造成两两聚堆
@@ -134,33 +137,49 @@
         };
       });
     } else {
-      // 展开态：核心退左，三列「模块 → 分支 → 卡片」整体居中铺开，列距收敛而不留大片空白。
+      // 展开态：核心退左，四级链条「核 → 模块 → 分支 → 卡片」紧咬核心向右生长，整组居中。
       var drawerW = L.stage === 'item' ? 420 : 0;   // 抽屉打开时占用的右侧宽度
-      var availRight = W - drawerW - 24;            // 三列可用的右边界
-      var ox = narrow ? 44 : Math.max(52, W * 0.05);
+      var availRight = W - drawerW - 24;            // 可用右边界
       var cy2 = H * 0.5;
-      res.orb = { x: ox, y: cy2, s: narrow ? 110 : 150 };
+      var coreS = narrow ? 110 : 148;
+      var coreR = coreS / 2;
 
       // 模块列：N 个纵向排开，卡片必须小于行距，否则会互相压住
-      var step = Math.min(122, (H - 150) / Math.max(mods.length, 1));
-      var cardSel = Math.min(104, step - 6);
-      var cardOther = Math.min(84, step - 6);
+      var step = Math.min(92, (H - 170) / Math.max(mods.length, 1));
+      var cardSel = Math.min(96, step - 6);
+      var cardOther = Math.min(76, step - 6);
 
-      // 三列宽度与列距（居中铺开）
+      // 三列宽度（与 CSS 一致：模块卡片 120 / 分支节点 130 / 三级卡片 262）
       var cardW = 120, branchW = 130, leafW = 262;
-      var gapA = narrow ? 150 : 200;
-      var gapB = narrow ? 170 : 220;
-      var totalW = cardW + gapA + branchW + gapB + leafW;
-      var startX = Math.max(ox + 96, (availRight - totalW) / 2);
-      var col1_x = startX + cardW / 2;
-      var col2_x = startX + cardW + gapA;
-      var col3_x = startX + cardW + gapA + branchW + gapB;
+      // 核心右缘→模块左缘、模块右缘→分支左缘、分支右缘→卡片左缘（触须长度）
+      var coreGap = narrow ? 10 : 16;
+      var gapA = narrow ? 56 : 88;
+      var gapB = narrow ? 84 : 128;
+
+      var baseX = narrow ? 44 : 58;
+      // 用卡片的**实际渲染尺寸**（cardSel，随缩放变化）而非 CSS 基准宽 120 的一半，
+      // 否则差额会全部变成核心与模块之间的空隙。
+      var d1 = coreR + coreGap + cardSel / 2;   // 核中心 → 模块中心
+      var col1_x = baseX + d1;
+      var col2_x = col1_x + cardW / 2 + gapA;
+      var col3_x = col2_x + branchW + gapB;
+
+      // 整组在可用宽度内居中（左端从核心左缘算起）
+      var groupLeft = baseX - coreR;
+      var groupW = col3_x + leafW - groupLeft;
+      if (groupW < availRight) {
+        var shift = (availRight - groupW) / 2 - groupLeft;
+        if (shift > 0) { col1_x += shift; col2_x += shift; col3_x += shift; }
+      }
+      var coreCx = col1_x - d1;
+
+      res.orb = { x: coreCx, y: cy2, s: coreS };
 
       mods.forEach(function (m) {
         var sel = m.id === L.mod;
         var k = slotOf(L.mod, m.id);
         res.jelly[m.id] = {
-          x: col1_x + (sel ? 16 : 0),
+          x: col1_x + (sel ? 14 : 0),
           y: cy2 + (k - (mods.length - 1) / 2) * step,
           s: sel ? cardSel : cardOther,
           o: sel ? 1 : 0.5,
@@ -293,9 +312,10 @@
 
   // —— 主步进引擎 (Step Engine) ——
   function step(now) {
-    var dt = Math.max(0, Math.min(1 / 30, (now - lastTime) / 1000));
+    var rawDt = Math.max(0, Math.min(1 / 30, (now - lastTime) / 1000));
     lastTime = now;
-    live.time += dt;
+    if (!live.paused) live.time += rawDt;
+    var dt = live.paused ? 0 : rawDt;
 
     if (container) {
       var realW = container.clientWidth || window.innerWidth;
@@ -1039,12 +1059,47 @@
     container.innerHTML = '';
     container.className = 'portal-view stage-hub';
 
-    // 1. 顶栏控制条
+    var mods = global.PORTAL_DATA ? global.PORTAL_DATA.modules : [];
+
+    // 1. 顶栏：品牌 + 居中胶囊导航 + 操作（参照 neural 顶部导航，使门户不依赖侧栏）
     var topBar = document.createElement('div');
     topBar.className = 'portal-top-bar';
-    topBar.innerHTML = '<div class="portal-breadcrumb" id="portalBreadcrumb"></div><div class="portal-top-actions"><button type="button" class="pixel-pill-btn" id="portalNavToggle" aria-label="展开侧栏导航">☰ 导航</button><button type="button" class="pixel-pill-btn" id="portalResetBtn">重置大盘视角</button></div>';
+    var navItems = [
+      { id: 'portal', zh: '全景大盘', en: 'Overview' },
+      { id: 'workbench', zh: '工作台', en: 'Workspace' },
+      { id: 'quote', zh: '投标报价', en: 'Quoting' },
+      { id: 'cost', zh: '实施成本', en: 'Cost' },
+      { id: 'ledger', zh: '项目台账', en: 'Ledger' },
+      { href: './tools.html', zh: '工具箱', en: 'Tools' }
+    ];
+    topBar.innerHTML =
+      '<button class="portal-brand" type="button" id="portalHomeBtn">' +
+        '<span class="portal-brand-mark">◈</span>' +
+        '<span class="portal-brand-text"><strong>工程智算</strong><small>工程项目智能决策平台</small></span>' +
+      '</button>' +
+      '<nav class="portal-nav" aria-label="主导航">' +
+        navItems.map(function (it) {
+          var key = it.id || it.href;
+          return '<button type="button" class="portal-nav-btn' + (it.id === 'portal' ? ' active' : '') + '" data-nav="' + key + '">' + it.zh + '<em>' + it.en + '</em></button>';
+        }).join('') +
+      '</nav>' +
+      '<div class="portal-top-actions">' +
+        '<button type="button" class="pixel-pill-btn" id="portalNavToggle" aria-label="展开侧栏导航">☰ 侧栏</button>' +
+        '<button type="button" class="pixel-pill-btn" id="portalResetBtn">重置视角</button>' +
+      '</div>';
     container.appendChild(topBar);
-    breadcrumbEl = topBar.querySelector('#portalBreadcrumb');
+
+    var homeBtn = topBar.querySelector('#portalHomeBtn');
+    if (homeBtn) homeBtn.onclick = returnToHub;
+    topBar.querySelectorAll('.portal-nav-btn').forEach(function (btn) {
+      btn.onclick = function () {
+        var key = btn.getAttribute('data-nav');
+        if (!key) return;
+        if (key.indexOf('.html') > -1) { window.location.href = key; return; }
+        if (key === 'portal') { returnToHub(); return; }
+        if (typeof global.selectModule === 'function') global.selectModule(key);
+      };
+    });
     var resetBtn = topBar.querySelector('#portalResetBtn');
     if (resetBtn) resetBtn.onclick = returnToHub;
     // 沉浸态下侧栏已收走，留一个可逆的出口：点一下把壳叫回来（再点收起）
@@ -1053,8 +1108,15 @@
       var shell = document.querySelector('.app-shell');
       if (!shell) return;
       var immersive = shell.classList.toggle('shell-immersive');
-      navToggle.textContent = immersive ? '☰ 导航' : '›› 收起导航';
+      navToggle.textContent = immersive ? '☰ 侧栏' : '›› 收起侧栏';
     };
+
+    // 面包屑：舞台上漂浮条（参照 neural 的 crumbs），仅展开态可见
+    var crumbs = document.createElement('div');
+    crumbs.className = 'portal-crumbs';
+    crumbs.id = 'portalBreadcrumb';
+    container.appendChild(crumbs);
+    breadcrumbEl = crumbs;
 
     // 2. 星尘粒子 Canvas
     dustCanvas = document.createElement('canvas');
@@ -1072,7 +1134,64 @@
     svgThreads.setAttribute('class', 'portal-threads');
     container.appendChild(svgThreads);
 
-    // 4. 中心呼吸聚能枢纽 (Core Hub)
+    // 4. 四周悬浮配件：左上文案 / 右上工具条 / 右侧图例 / 底部数据坞（参照 neural 首页的舞台配件）
+    var chromeLayer = document.createElement('div');
+    chromeLayer.className = 'portal-chrome';
+
+    var localizedOnly = document.createElement('div');
+    localizedOnly.className = 'portal-hero-copy';
+    localizedOnly.innerHTML = '<p class="hero-eyebrow">ENGINEERING NEURAL SKY <span>工程智算·全景</span></p>' +
+      '<h1>让每一个工程，<br/>长成一张网络。</h1>' +
+      '<p class="hero-hint">点击模块节点，展开它的业务链条 · <em>Tap a module to expand</em></p>';
+    chromeLayer.appendChild(localizedOnly);
+
+    var tools = document.createElement('div');
+    tools.className = 'portal-stage-tools';
+    tools.innerHTML = '<button type="button" class="pixel-pill-btn" id="portalReplayBtn" title="重播开场">↻ 重播</button>' +
+      '<button type="button" class="pixel-pill-btn" id="portalPauseBtn" aria-pressed="false" title="暂停/继续动画">❚❚ 暂停</button>';
+    chromeLayer.appendChild(tools);
+
+    // 暂停开关：整体冻结帧演进（仍保留交互），对应 neural 的 stage-tools
+    var pauseBtn = tools.querySelector('#portalPauseBtn');
+    if (pauseBtn) pauseBtn.onclick = function () {
+      live.paused = !live.paused;
+      pauseBtn.textContent = live.paused ? '▶ 继续' : '❚❚ 暂停';
+      pauseBtn.setAttribute('aria-pressed', live.paused ? 'true' : 'false');
+    };
+    var replayBtn = tools.querySelector('#portalReplayBtn');
+    if (replayBtn) replayBtn.onclick = function () {
+      live.time = 0;
+      live.paused = false;
+      if (pauseBtn) { pauseBtn.textContent = '❚❚ 暂停'; pauseBtn.setAttribute('aria-pressed', 'false'); }
+    };
+
+    // 右侧图例：模块主色 + 数量，对应 neural 的 legend（数据取自 PORTAL_DATA）
+    var legend = document.createElement('aside');
+    legend.className = 'portal-legend';
+    var legendRows = mods.map(function (m) {
+      var n = global.PORTAL_DATA.getItems(m.id).length;
+      return '<div class="legend-row"><i style="background:' + m.color + '"></i>' + m.name + '<b>' + n + '</b></div>';
+    }).join('');
+    legend.innerHTML = '<h3>图例 <em>Legend</em></h3>' + legendRows +
+      '<div class="legend-lines"><span><i class="ln one"></i>触须连线</span><span><i class="ln pulse"></i>能量脉冲</span></div>';
+    chromeLayer.appendChild(legend);
+
+    // 底部数据坞：四个 KPI + 提示（对应 neural 的 dock）
+    var dock = document.createElement('div');
+    dock.className = 'portal-dock';
+    var totalItems = mods.reduce(function (s, m) { return s + global.PORTAL_DATA.getItems(m.id).length; }, 0);
+    dock.innerHTML = '<div class="dock-kpis">' +
+      '<div><span>业务模块 <em>Modules</em></span><strong>' + mods.length + '</strong></div>' +
+      '<div><span>实体条目 <em>Records</em></span><strong>' + totalItems + '</strong></div>' +
+      '<div><span>运行进程 <em>Procs</em></span><strong>2</strong></div>' +
+      '<div><span>架位 <em>Slots</em></span><strong>—</strong></div>' +
+      '</div>' +
+      '<p class="dock-hint"><span class="pixel-pulse-dot"></span> 本地运行 · 数据仅存本机 <em>Local · nothing leaves this machine</em></p>';
+    chromeLayer.appendChild(dock);
+
+    container.appendChild(chromeLayer);
+
+    // 5. 中心呼吸聚能枢纽 (Core Hub)
     var core = document.createElement('div');
     core.id = 'portalCoreHub';
     core.className = 'portal-core-hub';
@@ -1083,7 +1202,6 @@
     // 5. 模块卫星节点层 (第 1 列)
     nodesLayer = document.createElement('div');
     nodesLayer.className = 'portal-nodes-layer';
-    var mods = global.PORTAL_DATA ? global.PORTAL_DATA.modules : [];
 
     mods.forEach(function (m) {
       var modBtn = document.createElement('button');

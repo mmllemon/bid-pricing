@@ -10,6 +10,30 @@
 
 ## [未发布]
 
+### 与远端 P2 的合并：两条并行方案合流 + 判据抓到远端两处回归
+
+远端在 `master` 上并行做了 P2 工程化（工具页共享样板抽取 `tool$` / `toolAutosave` / `toolBindCopyButton` / `toolConfirm`、深链与消息同步、Knowledge 本地检索等），与本轮前端清理**改了同一批文件**（`app.js` / `agent-panel.js` / `tool-common.js` / `tool-well.js`）。已在 `origin/master` 之上 rebase 并逐处合流。
+
+**合流决策：两处并行方案合为一个**
+
+- **确认框**：远端把 well 页的 `uiConfirm` 上移到 `tool-common.js` 成为 `window.toolConfirm`——但那仍是**与 app.js 各建一份 `#ui-confirm` 的实现**；本轮已收敛为唯一实现 `js/confirm.js`。合流结果：实现唯一在 `js/confirm.js`，`app.js` 与 `toolConfirm` 都只做委托（保留 P2 的名字与 `okText` 选项，令四工具页调用点零改动）——两边意图都保住，且不再有第二份创建代码（判据：`test/smoke.test.mjs` 的「R9 单一创建点」+ 委托位置断言）。
+- 四个工具页统一加载 `js/confirm.js`（`tool-common.js` 在加载时即要求它）。
+
+**判据抓到远端两处回归（本轮新增的机械判据直接生效）**
+
+- **`pagehide → saveNow` ReferenceError（cable / earth 两页加载即报错）**：远端 P2 把保存函数改名为 `collectState`（交给 `toolAutosave`），但两页文件末尾仍绑定 `window.addEventListener('pagehide', saveNow)`——该标识符已不存在，**加载即抛 ReferenceError 并中断 IIFE 余下语句**。由前端冒烟「各页脚本执行无未捕获错误」判据抓出（duct / well 未受影响）。已改为 `() => window.toolStore.save(STORE_KEY, collectState())`。
+- **文本模式子进程未指定编码（远端新测试在中文 Windows 上静默丢 3 项用例）**：`tests/test_workbench_nav.py` 用 node 子进程执行 `workbench-nav.js` 后 `json.loads(proc.stdout)`，但 `subprocess.run(..., text=True)` 未指定编码 → CP=936 下按 GBK 解码 UTF-8 输出 → 读取线程 UnicodeDecodeError → `stdout` 变 `None` → `json.loads(None)` TypeError → `setUpClass` 抛错 → **该类 3 项用例不运行**（全量从 1619 变 1616、只多一条 error，极难发现）。这与 `status.run_tests` 是同一类事故，且**在 Linux/UTF-8 CI 上永远看不到**。已为 3 处补 `encoding="utf-8", errors="replace"`（该测试 + `api/app.py` 的导出子进程），并新增**静态判据** `tests/test_subprocess_encoding.py`：凡 `text=True` 的子进程调用必须显式声明 `encoding=`（带自检：扫描产出须非平凡）。
+
+**验证**
+
+- Python 全量：**1620 项 OK**，且**在原生 GBK 控制台与 UTF-8 环境两种口径下都通过**（合并前 GBK 下是 1616 + 1 error）。
+- 前端冒烟：**28 项全绿**（跑在「远端 P2 + 本轮清理」的合并结果上）。
+- 新增判据做了变异验证：去掉任一处 `encoding=` → 判据变红；恢复即绿。
+
+**教训（又一次）**
+
+- **变异验证要用文件备份，不能用 `git checkout --`**：未提交的修复会被一并回滚（本轮又踩一次——`test_workbench_nav.py` 的编码修复被回滚后重新补上）。上一条记录已写过这条，这次是复发。
+
 ### 前端清单收尾（R6/R9/R12/R14）：死代码、重复实现、孤儿样式表、隐性样式耦合
 
 **修正**

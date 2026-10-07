@@ -10,6 +10,27 @@
 
 ## [未发布]
 
+### 前端技术债清理：转义收敛、CSS 分层、工具页初始化顺序
+
+**修正**
+
+- **HTML 转义实现收敛为唯一一份**（此前 6 处：`js/escape.js` 的正本 + `app.js` 两处 + `renderAudit` 内一处同名遮蔽 + `agent-panel.js` + `js/tool-common.js` + `js/tool-well.js`）。根因是四个工具页**不加载** `js/escape.js`——正因如此 `agent-panel.js` 只能自带副本、`tool-common.js` 只能重写公式。现五个页面（tools + 四工具页）都在最前面加载 `escape.js`，业务脚本一律别名引用（`window.gcEsc` / `window.toolEsc`），共享脚本在加载顺序被改坏时**立刻抛可读错误**而不是静默退化。实测带 `&amp;` 映射表的内联实现由 **6 处降到 1 处**。
+- **`tool-well.js` 初始化顺序隐患（TDZ）消除**：`rebarUnitKgPerM` 是 `const` 箭头函数（声明在文件后段），而启动路径 `recalcWell() → recalcRebar() → rebarUnitKgPerM` 早于它执行——今天不炸**只因为**启动瞬间 `#rebarRows` 为空、`forEach` 体一次都不执行（靠数据巧合撑着，不靠代码性质撑着）。改为函数声明（提升）后不再依赖调用顺序。连带把该公式在「盖板钢筋」处复用（原先内联了第二份 `0.00617`），并把 `coverRebarBody` 的 `var` 提前声明改为与 `rebarBody` 同期取（同一类隐患）。**jsdom 前后对照**：往 `#rebarRows` 预置一行后，旧版抛 `ReferenceError: Cannot access 'rebarUnitKgPerM' before initialization`，新版正常启动。
+  - **更正**：同文件 `fnum` 曾被判为同类问题，经 jsdom 实测**不成立**（它声明在 L200，首个 `recalcWell()` 调用在 L437 之后，根本不在 TDZ）；本次仍改为函数声明以消除同类脆弱性，但它不是 bug。教训：文本序 ≠ 执行序，TDZ 判定必须看调用点的执行时机。
+- **CSS 分层矛盾与加载顺序统一**：`styles.css` 的 `.compose-foot` 声明 `flex-direction:column + align-items:flex-start + gap:4px`，与 `quote-dashboard.css` qd6 的 `row + 8px` 直接矛盾，而它先加载、特异性相同 → **那三条永远不生效**（改基础样式却看不到变化，是纯陷阱）。现基础层只留结构（`display:flex` + `margin-top`），方向与间距归视图层；净计算样式与改前**逐属性一致**。另删除 `quote-dashboard.css` 中 `prefers-reduced-motion` 的重复副本——它比 `styles.css` 的正本更弱（只盖 `*`、时长 `.01ms` 而非 `.001ms`），且加载在后会把更严的那份盖松。`index.html` 样式顺序统一为 `tokens → styles → quote-dashboard → results → agent`（此前与工具页把 `agent.css`/`quote-dashboard.css` 写反；实测两者选择器集合无交集，故无视觉差异，但同一批文件两种顺序是纯隐患）。
+  - 全量比对（逐文件解析选择器 + 逐属性比对）后：**同上下文下的跨文件属性冲突归零**；其余同名选择器要么是视图层追加（`.table-wrap` 的高度上限），要么在 `@media print` 内（工具页打印隐藏导航，有意覆盖）。
+- **破缓存令牌（`?v=`）不再各自为政**：`tool-common.js` 曾在 cable/well 是 `p2`、在 duct/earth 是 `duct`（同一份共享脚本两个令牌 → 改了只有部分页面生效）；`MiSansVF.min.css` 六个页面全无令牌。现统一为「同一资产在所有引用页用同一令牌；只有**行为**变化才升令牌」，规则写进 `frontend/README.md`，并做了全量自检（多令牌资产 0 个）。
+
+**变更**
+
+- `frontend/README.md` 重写：去掉写死的绝对路径（`E:\liam proj\work\...`），补「脚本/样式加载顺序」与「破缓存令牌」两条约定。
+
+**验证**
+
+- 12 个前端 JS 全部通过 `node --check`。
+- **jsdom 真实 DOM 冒烟**：按页面真实顺序执行 `tool-well.html` 的全部 7 个脚本；在「支室数 = 1」（走 `fnum` 分支）与「预置钢筋行」（走 TDZ 分支）两种输入下均无未捕获错误；`window.toolEsc === window.gcEsc` 成立。
+- 静态自检：内联转义实现 1 处；TDZ 扫描剩余 5 项经逐条判读全为闭包内引用（不在启动路径）；跨文件 CSS 属性冲突仅剩 `@media print` 内的有意覆盖。
+
 ### 治理与工程基线：快照/CLI 编码加固、仓外样本版本守卫、CI 落地
 
 **修正**

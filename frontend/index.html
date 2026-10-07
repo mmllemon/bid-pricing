@@ -139,6 +139,31 @@
               </div>
             </section>
 
+            <!-- 不平衡报价参数（仅方案 C 生效） -->
+            <section class="card">
+              <div class="card-head">
+                <span class="card-title"><span class="title-dot"></span>不平衡报价参数</span>
+                <span class="card-subtitle">仅方案 C · 策略权重分配</span>
+              </div>
+              <div class="field-group">
+                <div style="display:flex;gap:10px;">
+                  <label class="field" style="flex:1;" data-tip="报价单价相对（不含税）成本的下浮下限；0 = 不亏本；抢标让利时可填负数（如 -0.05）">
+                    <span class="field-label">m_min（成本下浮）</span>
+                    <input id="ubMMin" class="tabular" type="number" step="0.01" value="0" />
+                  </label>
+                  <label class="field" style="flex:1;" data-tip="无最高限价时，报价单价相对成本的上浮上限；有最高限价的项以上限价为准">
+                    <span class="field-label">m_max（成本上浮）</span>
+                    <input id="ubMMax" class="tabular" type="number" step="0.05" value="0.3" />
+                  </label>
+                </div>
+                <label class="field" data-tip="按项目名称/编码关键字打策略标签，每行一条「关键字=策略」；策略：前期 / 预计增 / 正常 / 预计减；多条命中取第一条；权重：前期·预计增 1.5、正常 1.0、预计减 0.5，让利时自动反转">
+                  <span class="field-label">策略关键字规则</span>
+                  <textarea id="ubKwRules" rows="4" placeholder="土方=前期&#10;基础=前期&#10;电缆敷设=预计增&#10;调试=预计减"
+                    style="width:100%;font-family:inherit;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:6px;resize:vertical;"></textarea>
+                </label>
+              </div>
+            </section>
+
             <!-- 成本税口径（成本构成） -->
             <section class="card">
               <div class="card-head">

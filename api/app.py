@@ -28,13 +28,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from bidpricing import bid_package
 from bidpricing import project_overview, project_store
 from bidpricing import sqlite_store
-from bidpricing import unbalanced
 from bidpricing import well_library
-from bidpricing.io.boq import parse_listing as bid_parse_listing
-from bidpricing.io.clean import clean_listing_rows as bid_clean_rows
 from bidpricing.atomic_io import atomic_write_text
 from bidpricing.deployment import log_event, safe_user, user_scope
 from bidpricing.import_preview import build_listing_preview
@@ -532,7 +528,7 @@ def _rebuild_xlsx(job_id: str) -> Path | None:
 
 
 @app.post("/api/quote/optimize")
-async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFile = File(...), project_id: str = Form("当前项目"), project_name: str = Form(""), target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), overview_id: str = Form(""), input_vat_credit_mode: str = Form("PARTIAL"), cost_input_vat_rate: float = Form(0.13), credit_ratio: float = Form(0.70), cost_composition: str = Form(""), strategy: str = Form("optimal"), group_id: str = Form("")):
+async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFile = File(...), project_id: str = Form("当前项目"), project_name: str = Form(""), target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), overview_id: str = Form(""), input_vat_credit_mode: str = Form("PARTIAL"), cost_input_vat_rate: float = Form(0.13), credit_ratio: float = Form(0.70), cost_composition: str = Form(""), strategy: str = Form("optimal"), group_id: str = Form(""), unbalanced_m_min: float = Form(0.0), unbalanced_m_max: float = Form(0.3), unbalanced_strategies: str = Form(""), unbalanced_kw_rules: str = Form("")):
     strategy = strategy.strip() or "optimal"
     if strategy not in STRATEGIES:
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"未知报价策略：{strategy}（可选：{'、'.join(sorted(STRATEGIES))}）"})
@@ -549,7 +545,7 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
     proj_name = project_name.strip() or proj_uuid or "当前项目"
     low_policy, _, _ = _load_low_policy()
     tax_override = _build_tax_override(input_vat_credit_mode, cost_input_vat_rate, credit_ratio, cost_composition)
-    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": overview_id, "input_vat_credit_mode": input_vat_credit_mode, "cost_input_vat_rate": cost_input_vat_rate, "credit_ratio": credit_ratio, "cost_composition": tax_override.get("cost_composition")}
+    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": overview_id, "input_vat_credit_mode": input_vat_credit_mode, "cost_input_vat_rate": cost_input_vat_rate, "credit_ratio": credit_ratio, "cost_composition": tax_override.get("cost_composition"), "unbalanced_m_min": unbalanced_m_min, "unbalanced_m_max": unbalanced_m_max, "unbalanced_strategies": unbalanced_strategies, "unbalanced_kw_rules": unbalanced_kw_rules}
     guard = _low_price_guard(params, low_policy)
     if guard is not None:
         return guard
@@ -760,7 +756,7 @@ def project_copy(id: str, name: str = "") -> JSONResponse:
 
 
 @app.post("/api/project/recompute")
-def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), input_vat_credit_mode: str = Form(""), cost_input_vat_rate: float = Form(None), credit_ratio: float = Form(None), cost_composition: str = Form(""), strategy: str = Form("")) -> JSONResponse:
+def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: float = Form(0.0), vat_rate: float = Form(0.09), surtax_rate: float = Form(0.12), ratio_min: float = Form(0.5), ratio_max: float = Form(1.0), low_ratio_confirmed: bool = Form(False), low_price_confirmed_by: str = Form(""), clause_enabled: bool = Form(True), input_vat_credit_mode: str = Form(""), cost_input_vat_rate: float = Form(None), credit_ratio: float = Form(None), cost_composition: str = Form(""), strategy: str = Form(""), unbalanced_m_min: float = Form(0.0), unbalanced_m_max: float = Form(0.3), unbalanced_strategies: str = Form(""), unbalanced_kw_rules: str = Form("")) -> JSONResponse:
     rec = load_plan(id)
     if rec is None:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
@@ -789,7 +785,7 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "进项税额抵扣比例非法：须为 0～1 之间的小数（0.70 = 70%）"})
     comp = cost_composition or rec_params.get("cost_composition") or ""
     tax_override = _build_tax_override(mode, rate, cr, comp)
-    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": _keep_ov, "input_vat_credit_mode": mode, "cost_input_vat_rate": rate, "credit_ratio": cr, "cost_composition": tax_override.get("cost_composition")}
+    params = {"target_total": target_total, "fixed_pretax": fixed_pretax, "vat_rate": vat_rate, "surtax_rate": surtax_rate, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_ratio_confirmed": low_ratio_confirmed, "low_price_confirmed_by": low_price_confirmed_by, "overview_id": _keep_ov, "input_vat_credit_mode": mode, "cost_input_vat_rate": rate, "credit_ratio": cr, "cost_composition": tax_override.get("cost_composition"), "unbalanced_m_min": unbalanced_m_min, "unbalanced_m_max": unbalanced_m_max, "unbalanced_strategies": unbalanced_strategies, "unbalanced_kw_rules": unbalanced_kw_rules}
     guard = _low_price_guard(params, low_policy)
     if guard is not None:
         return guard
@@ -987,126 +983,6 @@ async def well_library_save(request: Request):
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
     append_audit(CURRENT_USER, "well.library.save", "PASS", detail={"count": count})
     return JSONResponse(status_code=200, content={"status": "PASS", "count": count})
-
-
-# ---- 不平衡报价（2026-10-07）：投标报价流第一个功能，见 docs/BID_DESIGN.md ----
-
-
-@app.post("/api/bid/parse")
-async def bid_parse(bid_file: UploadFile = File(...), project_id: str = Form("当前项目")):
-    """解析招标清单 xlsx → 规范清单项（编码/名称/单位/工程量/控制价）。
-
-    复用 T01 解析器（表-09 识别、列别名），只取分部分项/措施项明细行。
-    """
-    with tempfile.TemporaryDirectory(prefix="bidpricing-bid-") as temp_dir:
-        xlsx_path = Path(temp_dir) / "bid.xlsx"
-        data, err = await _read_upload_limited(bid_file)
-        if err:
-            return JSONResponse(status_code=413, content={"status": "BLOCKED", "reason": err})
-        xlsx_path.write_bytes(data)
-        try:
-            report = await asyncio.to_thread(bid_parse_listing, xlsx_path, project_id.strip() or "当前项目")
-            clean_rows, clean_rep = await asyncio.to_thread(bid_clean_rows, report.rows, "cap")
-        except Exception as exc:  # noqa: BLE001
-            return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"清单解析失败：{exc}"})
-    items = []
-    for r in clean_rows:
-        d = r.to_dict()
-        if d.get("q0") is None or d["q0"] <= 0:
-            continue
-        items.append({
-            "key": f"{d.get('unit_work') or ''}|{d.get('item_id') or ''}".strip("|") or d.get("item_name"),
-            "item_id": d.get("item_id") or "",
-            "name": d.get("item_name") or "",
-            "unit": d.get("unit") or "",
-            "qty": d.get("q0"),
-            "cap": d.get("cap"),  # 无控制价 → None
-            "cost": None,          # 成本单价由用户测算后填写
-            "strategy": "normal",
-        })
-    return JSONResponse(status_code=200, content={
-        "status": "PASS",
-        "items": items,
-        "parse": {
-            "n_rows": len(report.rows),
-            "n_items": len(items),
-            "n_failed": len(report.failures),
-            "no_cap": len(clean_rep.no_cap_items),
-        },
-    })
-
-
-@app.post("/api/bid/allocate")
-async def bid_allocate(request: Request):
-    """不平衡报价分配。JSON 体 {items, target_total, m_min?, m_max?, locked?}。"""
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体不是合法 JSON"})
-    if not isinstance(body, dict):
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体必须是对象"})
-    try:
-        target_total = float(body.get("target_total"))
-    except (TypeError, ValueError):
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "target_total 非法"})
-    result = await asyncio.to_thread(
-        unbalanced.allocate,
-        body.get("items") or [],
-        target_total,
-        float(body.get("m_min", 0.0)),
-        float(body.get("m_max", 0.3)),
-        body.get("weights"),
-        body.get("locked"),
-    )
-    status = "PASS" if result["ok"] else "BLOCKED"
-    code = 200 if result["ok"] else 400
-    return JSONResponse(status_code=code, content={"status": status, **result})
-
-
-@app.get("/api/bid/packages")
-def bid_packages_list() -> JSONResponse:
-    """报价包摘要列表。"""
-    return JSONResponse(status_code=200, content={"status": "PASS", "items": bid_package.list_packages()})
-
-
-@app.post("/api/bid/packages")
-async def bid_packages_save(request: Request):
-    """报价包整包保存。JSON 体即 BidPackage（含 bid_id/items/...）。"""
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体不是合法 JSON"})
-    try:
-        bid_id = bid_package.save_package(body if isinstance(body, dict) else {})
-    except ValueError as exc:
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
-    append_audit(CURRENT_USER, "bid.package.save", "PASS", detail={"bid_id": bid_id})
-    return JSONResponse(status_code=200, content={"status": "PASS", "bid_id": bid_id})
-
-
-@app.get("/api/bid/packages/{bid_id}")
-def bid_packages_get(bid_id: str) -> JSONResponse:
-    """读出单个报价包全文。"""
-    try:
-        pkg = bid_package.get_package(bid_id)
-    except ValueError as exc:
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
-    if pkg is None:
-        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "报价包不存在"})
-    return JSONResponse(status_code=200, content={"status": "PASS", "package": pkg})
-
-
-@app.delete("/api/bid/packages/{bid_id}")
-def bid_packages_delete(bid_id: str) -> JSONResponse:
-    """删除报价包（需前端二次确认）。"""
-    try:
-        ok = bid_package.delete_package(bid_id)
-    except ValueError as exc:
-        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
-    if not ok:
-        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "报价包不存在"})
-    append_audit(CURRENT_USER, "bid.package.delete", "PASS", detail={"bid_id": bid_id})
-    return JSONResponse(status_code=200, content={"status": "PASS"})
 
 
 # ---- P0 架构收敛（2026-10-07）：:8080 并入 :8000 ----

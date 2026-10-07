@@ -454,7 +454,7 @@ def mark_finalized(plan_id: str, db: Path | str | None = None,
 # 方案组（plan_group + plan_slot）
 # ---------------------------------------------------------------------------
 
-_GROUP_SLOT_LETTER = {"optimal": "A", "uniform": "B"}
+_GROUP_SLOT_LETTER = {"optimal": "A", "uniform": "B", "unbalanced": "C"}
 _SLOT_LETTERS = ("A", "B", "C")
 
 

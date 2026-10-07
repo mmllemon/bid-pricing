@@ -236,6 +236,11 @@ function fillParams(params) {
   if (rlo && params.ratio_min !== undefined) rlo.value = Math.round(Number(params.ratio_min) * 100);
   if (rhi && params.ratio_max !== undefined) rhi.value = Math.round(Number(params.ratio_max) * 100);
   refreshRatioUI();
+  // 不平衡报价参数回填（方案 C）
+  const umin = document.querySelector('#ubMMin'), umax = document.querySelector('#ubMMax'), ukw = document.querySelector('#ubKwRules');
+  if (umin && params.unbalanced_m_min !== undefined) umin.value = params.unbalanced_m_min;
+  if (umax && params.unbalanced_m_max !== undefined) umax.value = params.unbalanced_m_max;
+  if (ukw && params.unbalanced_kw_rules !== undefined) ukw.value = params.unbalanced_kw_rules || '';
 }
 
 // P0：预览渲染进右栏 #previewStage（唯一真相源）；就绪态 preparePanel 仍可见。
@@ -562,6 +567,11 @@ function buildOptimizeForm(strategy) {
   data.append('credit_ratio', taxCalc.creditRatio);
   data.append('cost_composition', taxCalc.compositionJson);
   data.append('strategy', strategy);
+  // 不平衡报价（方案 C）：m 界 + 关键字规则（其他策略下后端忽略；清空回退默认值）
+  data.append('unbalanced_m_min', numVal('ubMMin') || '0');
+  data.append('unbalanced_m_max', numVal('ubMMax') || '0.3');
+  data.append('unbalanced_strategies', '');
+  data.append('unbalanced_kw_rules', (document.querySelector('#ubKwRules') || {}).value || '');
   // H-008 方案组：带当前组 id，后端归入该组对应策略槽位（可空，空则并入既有组或新建组）
   data.append('group_id', activeGroupId || '');
   return data;
@@ -732,7 +742,7 @@ async function refreshPlans() {
 const HUB_SLOT_DEFS = [
   { key: 'A', label: '逐项最优', strategy: 'optimal' },
   { key: 'B', label: '等比下浮', strategy: 'uniform' },
-  { key: 'C', label: '策略待定', strategy: null },
+  { key: 'C', label: '不平衡报价', strategy: 'unbalanced' },
 ];
 function _fmtMoney(v) { return v != null && v !== '' ? '¥' + Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2}) : '—'; }
 
@@ -924,14 +934,15 @@ async function runSlotCalc(groupId, strategy) {
   if (!cap || !cost) { setMessage('请先在左栏导入限价清单与成本清单后再点算该槽位。', 'warn'); return; }
   const prev = activeGroupId;
   activeGroupId = groupId;   // buildOptimizeForm 据此带上 group_id
-  setMessage('正在测算方案 ' + (strategy === 'optimal' ? 'A' : 'B') + ' 槽位，请稍候。', '');
+  const _slotName = strategy === 'optimal' ? 'A' : strategy === 'uniform' ? 'B' : 'C（不平衡报价）';
+  setMessage('正在测算方案 ' + _slotName + ' 槽位，请稍候。', '');
   try {
     const result = await postOptimize(strategy);
     activeGroupId = result.group_id || groupId;
     if (result.plan_id) { currentPlanId = result.plan_id; planStrategyOverride[result.plan_id] = strategy; lastResult = result; }
     renderResult(result, { savedPlan: Boolean(currentPlanId) });
     await openSlot(result.plan_id, groups.find(g => g.group_id === activeGroupId) || activeGroup);
-    setMessage(`方案 ${strategy === 'optimal' ? 'A' : 'B'} 槽位测算完成。${costBasisNote(result)}`, 'success');
+    setMessage(`方案 ${_slotName} 槽位测算完成。${costBasisNote(result)}`, 'success');
     await refreshPlans();
     openGroupById(activeGroupId);
   } catch (error) {
@@ -1364,7 +1375,7 @@ function alignDetailTable() {
 }
 
 // ---- A/B/C 方案切换（P0 策略语义）：槽位 A=当前项目 strategy=optimal、槽位 B=strategy=uniform、
-// 槽位 C=恒灰显「方案 C · 策略待定」（disabled）。历史方案缺省视为 optimal。
+// 槽位 C=不平衡报价（strategy=unbalanced）。历史方案缺省视为 optimal。
 let schemePlanIds = [];
 const planStrategyOverride = {}; // 会话内回填：后端尚未持久化 strategy 时，用本会话生成的 plan_id→strategy 兜底
 function _planStrategy(p) {
@@ -1404,7 +1415,7 @@ function refreshSchemeTabs() {
   const slotDefs = [
     { slot: 'A', strategy: 'optimal', label: '逐项最优' },
     { slot: 'B', strategy: 'uniform', label: '等比下浮' },
-    { slot: 'C', strategy: null, label: '策略待定' },
+    { slot: 'C', strategy: 'unbalanced', label: '不平衡报价' },
   ];
   schemePlanIds = [null, null, null];
   const slots = (activeGroup && activeGroup.strategy_slots) || {};
@@ -1425,14 +1436,8 @@ function refreshSchemeTabs() {
     label.title = pid ? String(((s.summary || {}).plan_id) || pid) : '';
     t.appendChild(label);
     t.title = pid ? String(((s.summary || {}).plan_id) || pid) : '';
-    if (i === 2) { // 槽位 C：恒灰显「策略待定」，不可点
-      t.disabled = true;
-      t.setAttribute('aria-disabled', 'true');
-      t.classList.remove('active');
-    } else {
-      t.disabled = false;
-      t.removeAttribute('aria-disabled');
-    }
+    t.disabled = false;
+    t.removeAttribute('aria-disabled');
   });
   syncSchemeSwitcher();
 }

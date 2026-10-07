@@ -1,82 +1,86 @@
-# 投标报价流设计（2026-10-07）
+# 不平衡报价设计（2026-10-07，2026-10-07 修订：并入报价页方案 C）
 
-> 决策：先啃不平衡报价，再做项目主页。数据模型先行（只设计不建页面），
-> 不平衡报价是第一个长在该模型上的功能。
+> **2026-10-07 修订（合并决策）**：本功能不再作为独立工具页存在，已并入报价页
+> （`index.html`）作为**第三种报价策略 `unbalanced`（方案 C 槽位）**，与
+> `optimal`（A 槽位）/`uniform`（B 槽位）共用同一套解析→优化→存储→导出链路。
+> 独立页 `tool-bid.html`、`/api/bid/*` 路由、`bid_package.py` 存储已下线（见删除清单 §6）。
 
-## 1. 最小数据模型
+## 1. 数据模型（合并后）
 
-```
-Project（项目，一等公民）
-├── id / 名称 / 编号 / 招标人 / 地点
-├── 阶段：投标中 → 在建 → 完工 → 结算
-├── bids: BidPackage[]          # 一次投标一个包，可多个版本比选
-└── （Phase 2）contracts / costs / payments / visas / docs / settlement
-
-BidPackage（报价包）
-├── id / project_id / 版本号 / 状态：测算中 / 已报价 / 已投标 / 中标 / 未中标
-├── 招标控制价 / 目标总价 T
-└── items: BOQItem[]
-
-BOQItem（清单项）
-├── 编码 / 名称 / 单位 / 工程量 q
-├── 成本单价 c（测算或 solver 接入）
-├── 控制价单价 p_max（限价，可空）
-├── 策略标签：前期 / 预计增 / 预计减 / 正常
-└── 报价单价 p（算法输出，可手工微调）
-```
-
-存储：先放 `outputs/projects/<user>/bids/<bid_id>.json`（与 well-library.json 同口径），
-项目量上来后再考虑进 quote.db。版本用文件快照（v1/v2…），不搞复杂版本表。
-
-## 2. 不平衡报价算法
-
-**输入**：items[{q, c, p_max, 策略}]，目标总价 T
-**输出**：每项报价单价 p_i，满足 Σ(p_i·q_i) = T
+不再使用独立的 BidPackage JSON；不平衡报价的结果作为报价页**方案（plan）**
+存入 `quote.db`，`strategy='unbalanced'`，参数随方案持久化：
 
 ```
-C = Σ(c_i · q_i)                    # 成本总价
-S = T - C                           # 待分配利润（可为负，即让利）
-约束：c_i·(1+m_min) ≤ p_i ≤ min(p_max, c_i·(1+m_max))
-      m_min/m_max 可配，缺省 0 / 0.3；p_max 为空时只受 m_max 约束
+plan.params: {
+  ...通用参数（target_total / ratio_min / ratio_max / 税口...）,
+  unbalanced_m_min: float,        # 默认 0.0
+  unbalanced_m_max: float,        # 默认 0.3
+  unbalanced_strategies: {...},   # 明确指定的 {item_id: 策略}（V1 为空，由规则生成）
+  unbalanced_kw_rules: str,        # 关键字规则文本，每行 `关键字=策略`
+}
+```
 
+## 2. 算法（`src/bidpricing/unbalanced.py`，被复用）
+
+**输入**：清单项（工程量 / 有效成本单价 c_i（H-002 换算后不含税）/ 控制价 / 策略标签）
+＋ 可竞争预算 B（由 `compute_P_competitive` 从含税目标总价反推）
+**输出**：每项报价单价 p_i，满足 Σ(p_i·q_i) = B，且每项落在 [下界, 上界] 内。
+
+```
 策略权重 w_i：
-  前期项（早收款）      w = 1.5
-  预计工程量增加项       w = 1.5
-  预计工程量减少项       w = 0.5
-  正常项                w = 1.0
-  （权重可调；S 为负让利时权重反转——预计减项多让、预计增项少让）
+  前期（早收款）/ 预计工程量增加 → 1.5
+  正常 → 1.0
+  预计工程量减少 → 0.5
+  让利（B < 成本总价）时权重反转：预计减项多让、预计增项少让
 
-分配（迭代 clamp）：
-  repeat:
-    s_i = S_rem · w_i·q_i / Σ(w_j·q_j)     # 按"权重×工程量"比例分剩余利润
-    p_i = c_i + s_i
-    超上界 → p_i = 上界；超下界 → p_i = 下界
-    S_rem = T - Σ(p_i·q_i)
-  until |S_rem| < 0.01 或迭代 100 次
-  若仍有剩余（全部顶到界）→ 报错提示"目标总价在约束下不可达"，列出卡界的项
+约束：c_i·(1+m_min) ≤ p_i ≤ min(cap_i, c_i·(1+m_max))
+      （cap 缺失时上界退化为 c_i·(1+m_max)）
+
+分配（迭代 clamp）：按 w_i·q_i 比例分摊差额，顶界项逐轮剔除；
+单价保留 2 位小数，尾差按 1 分步进贪心吸收（从小工程量项开始）；
+不可达时返回原因（哪几项卡界），上游转 422。
 ```
 
-**手工微调**：算法给初值，单项可手工改，改后显示"总价偏差"并支持"将偏差按权重重新分摊"。
+策略标签来源（V1）：`unbalanced_kw_rules` 关键字规则，
+每行 `关键字=策略`，命中项目名称/编码即打标，多条命中取第一条；
+`unbalanced_strategies` 明确指定的单项覆盖规则结果。V1 不做锁定（lock）——
+算法已预留 `locked` 参数，待权重逻辑经 2~3 个真实项目验证后 V2 再加前端。
 
-## 3. 流程（UI）
+## 3. 管线集成（`src/bidpricing/quote_strategies.py::solve_unbalanced`）
 
-1. **导入**：Excel 清单（编码/名称/单位/工程量/控制价）→ BOQItem；成本单价手工填或接 solver
-2. **策略**：顶部填目标总价 T、m_min/m_max；逐项打策略标签（可按名称关键字批量打，如"土方""基础"→前期）
-3. **分配**：一键计算 → 表格显示每项 成本/限价/策略/报价单价/合价；顶部 KPI：控制价、成本合计、目标总价、利润额、利润率
-4. **导出**：投标清单 Excel（编码/名称/单位/工程量/报价单价/合价），格式对齐常见招标格式
+与 `solve_uniform` 同构：H-002 税口换算 → 过滤可优化项 → 权重分配 →
+`reconcile_total` 调和 → `QuotePipelineResult(solver_status=UNBALANCED_WEIGHTED)` →
+中文明细行（多一列"报价策略"）→ payload（含 `unbalanced` 回显段：
+实际策略映射 / m 界 / 利润 / 是否反转）。非法策略标签回退 normal。
 
-## 4. 验证方式
+## 4. 前端
 
-拿一个**已完工的真实历史项目**回测：用当时的清单+成本跑算法，对比他手工报出的单项价——
-看总价是否一致、单项偏离是否在合理范围、策略是否符合他当时的判断。
-需要他提供一份脱敏清单 Excel。
+- 方案中心槽位 C：`{ key:'C', label:'不平衡报价', strategy:'unbalanced' }`
+  （原"策略待定"占位已激活；scheme tabs 的 C 灰显逻辑已删除）
+- 参数区新增"不平衡报价参数"卡：m_min / m_max 输入＋策略关键字规则 textarea
+- `buildOptimizeForm` 附加三个字段；`fillParams` 打开已存方案时回填
+- `renderResult` 零改动（payload 同构）
 
-**已完成的合成验证（2026-10-07）**：算法单测 9 项、存储单测 5 项、前端冒烟 30 项全过；
-jsdom 全链路（解析→填成本→分配→KPI→TSV 导出）一次跑通；`/api/bid/parse` 用仓库
-fixture（A_pos_cap.xlsx）实测 24 行全中。等他发真实清单后做领域回测。
+## 5. 验证方式
 
-## 5. 假设（待他纠正）
+拿一个**已完工的真实历史项目**回测：用当时的清单+成本跑 C 槽位，
+对比手工报出的单项价——看总价是否一致、单项偏离是否合理、
+策略是否符合当时判断。需要一份脱敏清单 Excel（两份：限价+成本）。
 
-- 单项报价一般不超控制价（超了废标风险）；如重庆有"超 X% 扣分"而非废标的规则，约束改为软约束
-- 让利时（S<0）策略反转是否符合他的习惯
-- m_min 缺省 0（不亏本）是否太保守
+**已完成的合成验证（2026-10-07）**：
+- `tests/test_unbalanced.py` 9 项（算法）、`tests/test_solve_unbalanced.py` 6 项（管线集成，含与 uniform 的 payload 同构断言）
+- 前端冒烟 30 项全过（含 slot C 激活后的页面加载）
+
+## 6. 删除清单（2026-10-07 合并时执行，已确认）
+
+- `frontend/tool-bid.html`、`frontend/js/tool-bid.js`（独立页下线）
+- `src/bidpricing/bid_package.py`、`tests/test_bid_package.py`
+- `api/app.py` 的 `/api/bid/*` 6 个路由及相关 import
+- `frontend/tools.html` 第 5 卡、`frontend/test/_harness.mjs` 与 `smoke.test.mjs` 的 tool-bid 登记
+- 保留：`src/bidpricing/unbalanced.py`、`tests/test_unbalanced.py`、本文件
+
+## 7. 假设（待真实回测纠正）
+
+- m_min 缺省 0（不亏本）、m_max 缺省 0.3 是否符合电力工程习惯
+- 让利时权重反转是否符合他的手工习惯
+- 重庆招标对单项超控制价是废标还是扣分（当前按硬约束处理）

@@ -40,6 +40,11 @@ APP_TSX = ROOT / "workbench-app" / "src" / "App.tsx"
 # App.tsx 里带 path 的路由：<Route path="/todos" element={<TodosPage />} />
 _ROUTE_PATH_RE = re.compile(r'<Route\s+path="([^"]+)"')
 
+# 站点级路由：属于全站顶栏导航（SiteTopBar 的域），不属于工作台 9 个二级项。
+# 前端整合（docs/FRONTEND_UNIFY_PLAN.md）把母项目页面逐个迁入 React，迁入一个在这里登记一个，
+# 否则本用例会把它当成「外层点不到的漂移路由」而变红。显式清单而非前缀通配，保持可审计。
+_SITE_LEVEL_ROUTES = {'/portal'}
+
 _NODE_RUNNER = r"""
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf-8');
@@ -101,7 +106,12 @@ class WorkbenchNavDriftGuardTest(unittest.TestCase):
         豁免按「含 : 即参数路由」显式过滤，而非逐个列名，避免新增详情页时漏改。
         """
         nav_tos = {it["to"] for it in self.items}
-        route_tos = {r for r in _ROUTE_PATH_RE.findall(self.app_src) if ":" not in r}
+        # 带参详情路由（/biz/:id）与站点级路由（/portal）都不是工作台二级项：
+        # 前者由卡片 navigate 进入，后者是全站顶栏的域。两者一并豁免。
+        route_tos = {
+            r for r in _ROUTE_PATH_RE.findall(self.app_src)
+            if ":" not in r and r not in _SITE_LEVEL_ROUTES
+        }
         param_routes = sorted(r for r in _ROUTE_PATH_RE.findall(self.app_src) if ":" in r)
         only_in_nav = sorted(nav_tos - route_tos)
         only_in_routes = sorted(route_tos - nav_tos)
@@ -112,6 +122,7 @@ class WorkbenchNavDriftGuardTest(unittest.TestCase):
             f"  仅存在于 workbench-nav.js（点了会落空）：{only_in_nav}\n"
             f"  仅存在于 App.tsx（外层点不到）：{only_in_routes}\n"
             f"  参数路由豁免（详情页，不占二级项）：{param_routes}\n"
+            f"  站点级路由豁免（全站顶栏域，不占二级项）：{sorted(_SITE_LEVEL_ROUTES)}\n"
             "修法：同步两边，或删除多余项。",
         )
 

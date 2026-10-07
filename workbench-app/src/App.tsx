@@ -10,11 +10,13 @@ import KnowledgePage from './pages/Knowledge';
 import FinancePage from './pages/Finance';
 import BizPage from './pages/Biz';
 import BizDetailPage from './pages/BizDetail';
+import PortalPage from './features/portal/Portal';
 
 export default function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
+        <Route path="/portal" element={<PortalPage />} />
         <Route path="/" element={<HomePage />} />
         <Route path="/todos" element={<TodosPage />} />
         <Route path="/performance" element={<PerformancePage />} />

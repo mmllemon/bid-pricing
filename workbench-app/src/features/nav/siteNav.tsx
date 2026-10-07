@@ -36,7 +36,7 @@ export const SITE_DOMAINS: SiteDomain[] = [
     id: 'portal',
     label: '全景大盘',
     code: 'P-00',
-    href: `${LEGACY_ORIGIN}/#portal`, // P1 迁入后改为 to: '/portal'
+    to: '/portal', // P1 已迁入 React
   },
   {
     id: 'workbench',

@@ -5,7 +5,8 @@
  * 渲染模式按「是否 index 页」分叉：
  *   - index 页：module 项渲染为 <button data-module>，由 app.js 做同页视图切换；
  *   - 工具页：module 项渲染为 <a href="./index.html#mod">，跨页跳转。
- * action 项（AI 测算助手）两种页面都是 button，点击唤起全局悬浮面板（agent-panel.js）。
+ * action 项（data-agent-open，点击唤起全局悬浮面板 agent-panel.js）：预留的通用
+ * 渲染分支，目前 NAV_GROUPS 里暂无 action 项（AI 助手入口已收敛为悬浮 FAB）。
  *
  * P-W8 起「个人工作台」不再是一级单项：它折叠为「父行 + 9 个二级项」，使全站只有一条竖栏。
  * 那 9 项的 label/code/icon/to 只在 js/workbench-nav.js 里维护（唯一事实源，与
@@ -48,8 +49,7 @@
         { module: 'quote', num: 'Q-01', label: '投标报价', icon: 'quote' },
         // soon: 模块只有占位页（无真实数据与操作），导航里灰显并标「建设中」，避免承诺不存在的能力。
         { module: 'cost', num: 'C-02', label: '实施成本', icon: 'cost', soon: true },
-        // 不再是 #agentView 视图切换项：点击唤起全局悬浮面板，故走 data-agent-open。
-        { action: 'agent', num: 'A-03', label: 'AI 测算助手', icon: 'agent' },
+        // 2026-10-07 去掉：AI 助手已有全局悬浮 FAB（agent-panel.js），侧栏再摆一个入口纯冗余。
       ],
     },
     {

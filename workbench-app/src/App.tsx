@@ -16,12 +16,14 @@ import ToolDuct from './features/tools/ToolDuct';
 import ToolEarth from './features/tools/ToolEarth';
 import ToolCable from './features/tools/ToolCable';
 import ToolWell from './features/tools/ToolWell';
+import QuotePage from './features/quote/Quote';
 
 export default function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/portal" element={<PortalPage />} />
+        <Route path="/quote" element={<QuotePage />} />
         <Route path="/tools" element={<ToolsHome />} />
         <Route path="/tools/duct" element={<ToolDuct />} />
         <Route path="/tools/earth" element={<ToolEarth />} />

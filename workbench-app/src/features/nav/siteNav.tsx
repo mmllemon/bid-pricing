@@ -49,7 +49,7 @@ export const SITE_DOMAINS: SiteDomain[] = [
     id: 'quote',
     label: '投标报价',
     code: 'Q-01',
-    href: `${LEGACY_ORIGIN}/#quote`, // P3 迁入后改为 to: '/quote'
+    to: '/quote', // P3 已迁入 React（只读骨架，交互分块补齐）
   },
   {
     id: 'tools',

@@ -10,6 +10,24 @@
 
 ## [未发布]
 
+### 与远端的第二次合流：本地文档整理 rebase 到远端 4 提交之上 + 判据抓到两侧各一处回归
+
+远端在 `master` 上并行做了 4 个提交（`5de133b` 进程收敛 4→2 + 删只读参照、`05aa19b` 不平衡报价工具、`0e52bde` 并入报价页策略三、`b3c8741` 项目主页/执行四表/资金驾驶舱），本地是 1 个文档整理提交（`5d3d89f` pnpm lockfile 入库 + 三份入口文档合并为 `docs/PROJECT.md` + 审查报告标状态）。已在 `origin/master` 之上 rebase，唯一冲突 `docs/V3_INTEGRATION_PLAN.md` 文件头注记（两边各加一段）已合并保留。
+
+**判据抓到两侧各一处回归（都是合并不跑全量就发现不了的）**
+
+- **本地文档合并删了 `PROJECT_HANDOFF.md`，测试还指着它**：`tests/test_run_script.py` 的口径一致性判据读 `docs/PROJECT_HANDOFF.md`（已删）→ `FileNotFoundError` → 整类 error。修法：判据跟随指向合并后的 `docs/PROJECT.md`，并在 `PROJECT.md` 补 §10「启动与运行」小节（把被删文档里的能力探测/`.venv`/`.python-path` 口径接回来，避免"文档说 A、实现做 B"）。
+- **远端新增 `/biz/:id` 详情路由，导航清单没同步**：`workbench-nav.js` 的 `to` 集合 9 项，`App.tsx` 路由 10 项（多 `/biz/:id`），由「二级导航↔路由集合相等」判据抓出。修法：判据按「含 `:` 即参数路由」显式豁免（详情页由项目卡片 `navigate` 进入，不占二级项），而非逐个列名——新增详情页时不再漏改。变异验证：去掉豁免即变红。
+
+**验证**
+
+- Python 全量：**1620 项 OK**（合流前是 1618 + 1 failure + 1 error）。
+- 前端冒烟：**28 项全绿**。
+
+**教训**
+
+- 变异验证的替换锚必须精确：首版锚 `if ":" not in r` 在文件里是单引号写法，替换没命中、判据仍绿——"绿了"不等于"验证了"，必须先确认变异已写入。
+
 ### 与远端 P2 的合并：两条并行方案合流 + 判据抓到远端两处回归
 
 远端在 `master` 上并行做了 P2 工程化（工具页共享样板抽取 `tool$` / `toolAutosave` / `toolBindCopyButton` / `toolConfirm`、深链与消息同步、Knowledge 本地检索等），与本轮前端清理**改了同一批文件**（`app.js` / `agent-panel.js` / `tool-common.js` / `tool-well.js`）。已在 `origin/master` 之上 rebase 并逐处合流。

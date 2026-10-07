@@ -132,3 +132,12 @@ QuotePolicy
 4. `.\run.ps1` 启动，做一次默认 50% 计算和一次「低于 50% 未确认」测试。
 5. 修改模型代码后：先补最小单元测试再改主流程；求解器结果必须独立复算；
    条款解释写入配置/ADR，不留在聊天记录。
+
+## 10. 启动与运行（Windows 一键）
+
+`.\run.ps1`：先对解释器做**能力探测**（真跑 `import ssl,venv`，逐个候选试，
+跳过 `WindowsApps` 下的 0 字节应用执行别名占位符与 `_ssl` 加载失败的残缺安装），
+首次运行在仓库内 `.venv` 建隔离环境并从 `requirements-web.txt` 装依赖（不污染系统 Python）；
+探到 `/api/health` 与首页均 200 才报成功。解释器钉死：仓库根 `.python-path`
+（单行绝对路径，已 gitignore）或环境变量 `BIDPRICING_PYTHON`。详见 `README.md`
+「网页应用：安装与启动」与 `tests/test_run_script.py` 守住的启动器判据。

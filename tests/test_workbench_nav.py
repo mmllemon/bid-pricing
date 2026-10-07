@@ -94,9 +94,15 @@ class WorkbenchNavDriftGuardTest(unittest.TestCase):
         cls.app_src = APP_TSX.read_text(encoding="utf-8")
 
     def test_tos_match_react_routes(self) -> None:
-        """路径集合与 App.tsx 路由集合相等（双向：多一条/少一条都失败）。"""
+        """路径集合与 App.tsx 路由集合相等（双向：多一条/少一条都失败）。
+
+        带参数的详情路由（如 /biz/:id）豁免：它不是二级导航项——侧栏只列 9 个
+        静态入口，详情页由项目卡片 navigate 进入，不在 WB_NAV 中占位。
+        豁免按「含 : 即参数路由」显式过滤，而非逐个列名，避免新增详情页时漏改。
+        """
         nav_tos = {it["to"] for it in self.items}
-        route_tos = set(_ROUTE_PATH_RE.findall(self.app_src))
+        route_tos = {r for r in _ROUTE_PATH_RE.findall(self.app_src) if ":" not in r}
+        param_routes = sorted(r for r in _ROUTE_PATH_RE.findall(self.app_src) if ":" in r)
         only_in_nav = sorted(nav_tos - route_tos)
         only_in_routes = sorted(route_tos - nav_tos)
         self.assertEqual(
@@ -105,6 +111,7 @@ class WorkbenchNavDriftGuardTest(unittest.TestCase):
             "外层二级导航与 React 路由漂移。\n"
             f"  仅存在于 workbench-nav.js（点了会落空）：{only_in_nav}\n"
             f"  仅存在于 App.tsx（外层点不到）：{only_in_routes}\n"
+            f"  参数路由豁免（详情页，不占二级项）：{param_routes}\n"
             "修法：同步两边，或删除多余项。",
         )
 

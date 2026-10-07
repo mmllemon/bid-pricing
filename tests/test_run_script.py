@@ -257,9 +257,11 @@ class RunScriptDocConsistencyTest(unittest.TestCase):
     """口径一致性：脚本行为变了，文档必须跟着变（否则又出现「文档说 A、实现做 B」）。"""
 
     def test_readme_and_handoff_mention_venv_and_bom_contract(self) -> None:
+        # 入口文档合并（2026-10-07）：PROJECT_HANDOFF.md 等三份已并入 docs/PROJECT.md，
+        # 旧文件删除，内容以 git 历史为准。判据跟随指向合并后的文件。
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        handoff = (ROOT / "docs" / "PROJECT_HANDOFF.md").read_text(encoding="utf-8")
-        for name, text in (("README.md", readme), ("PROJECT_HANDOFF.md", handoff)):
+        handoff = (ROOT / "docs" / "PROJECT.md").read_text(encoding="utf-8")
+        for name, text in (("README.md", readme), ("docs/PROJECT.md", handoff)):
             with self.subTest(doc=name):
                 self.assertIn(".venv", text, f"{name} 未说明 .venv 隔离")
                 self.assertIn("能力探测", text, f"{name} 未说明解释器能力探测")

@@ -1695,10 +1695,12 @@ function syncDockCta() {
   // 状态机主按钮唯一化：空态置灰（主动作聚焦 preparePanel 内「识别文件并计算」），结果态启用（重算）
   btn.disabled = !dashActive;
   btn.classList.remove('ready-pulse'); // 呼吸光晕已转移至 preparePanel 主动作
-  // 导出按钮同理：仅在存在可下载的 excel_download_url 时才启用，避免空态点出「暂无可导出」toast
+  // 导出按钮同理：只在**结果态**且存在可下载的 excel_download_url 时才启用。
+  // 只判 lastResult 不够——预览会把右栏切回无结果态（setDashboardVisible(false)）却不清
+  // lastResult，于是「重算」置灰而「导出」仍可点，点了导出的是**上一轮**结果。
   const expBtn = document.querySelector('#dockExportBtn');
   if (expBtn) {
-    expBtn.disabled = !(lastResult && lastResult.excel_download_url);
+    expBtn.disabled = !dashActive || !(lastResult && lastResult.excel_download_url);
     expBtn.setAttribute('aria-disabled', expBtn.disabled ? 'true' : 'false');
   }
   // 方案中心 / 审计日志：无前提的常驻入口，不参与结果态门控；busy 结束后必须恢复可点，
@@ -1717,7 +1719,8 @@ function bindDock() {
   });
   const exportBtn = document.querySelector('#dockExportBtn');
   if (exportBtn) exportBtn.addEventListener('click', () => {
-    if (!lastResult) { triggerToast('暂无可导出的结果'); return; }
+    // 双保险：置灰已挡住点击，但 busy 结束后的状态恢复期间仍可能点到旧状态
+    if (!dashActive || !lastResult) { triggerToast('暂无可导出的结果'); return; }
     if (lastResult.excel_download_url) { window.location.href = API_BASE + lastResult.excel_download_url; triggerToast('已开始下载 Excel 报表'); }
     else triggerToast('暂无可导出的结果');
   });
@@ -1768,12 +1771,17 @@ function openPlanHub() {
 }
 function closePlanHub() {
   const hub = document.querySelector('#planHub');
+  const wasOpen = Boolean(hub && hub.classList.contains('open'));
   if (hub) { hub.classList.remove('open'); hub.setAttribute('aria-hidden', 'true'); }
   hubView = 'list';
   hubSelected.clear();
   const dock = document.querySelector('#diffDrawerBtn');
   if (dock) dock.setAttribute('aria-expanded', 'false');
-  releaseTrap();
+  // 只在**真的关了**的时候弹栈。closeOverlays() 每次切页都串行关闭三个弹层，
+  // 无条件下弹会把「并未打开」的那个也记成一次关闭，从而弹掉别人压在栈里的项。
+  // 实测后果：切项目时 onGlobalProjectChange 只调 closeCompareModal()，方案中心仍开着，
+  // 但焦点陷阱已被弹空、body 提前解锁 —— 开着的模态失去 Tab 陷阱。
+  if (wasOpen) releaseTrap();
 }
 // —— 对比结果弹层（#cmpModal）：方案中心「开始对比」结果的居中式呈现 ——
 function openCompareModal() {
@@ -1788,6 +1796,7 @@ function openCompareModal() {
 function closeCompareModal() {
   const modal = document.querySelector('#cmpModal');
   if (!modal) return;
+  if (!modal.classList.contains('open')) return;   // 没开就不是「关闭」，不得弹栈（同 closePlanHub 注）
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
   releaseTrap();
@@ -1806,6 +1815,7 @@ function openAuditModal() {
 function closeAuditModal() {
   const modal = document.querySelector('#auditModal');
   if (!modal) return;
+  if (!modal.classList.contains('open')) return;   // 没开就不是「关闭」，不得弹栈（同 closePlanHub 注）
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
   releaseTrap();

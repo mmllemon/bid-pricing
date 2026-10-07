@@ -69,8 +69,24 @@ function _safeToastHtml(text) {
 // 即时校验：比率区间非法在提交前拦截，并给对应输入框加错误态/焦点，避免空跑服务端再 422。
 function clearInvalid() { document.querySelectorAll('.invalid').forEach(el => { el.classList.remove('invalid'); el.removeAttribute('aria-invalid'); }); }
 function markInvalid(el, msg) { el.classList.add('invalid'); el.setAttribute('aria-invalid', 'true'); el.focus(); setMessage(msg, 'error'); }
-function validateParams() {
+function validateParams({ markTargetTotal = true } = {}) {
   clearInvalid();
+  // ① 目标总报价：**必填**项——后端 `target_total: float = Form(...)` 且校验 > 0。
+  //    留空时 numVal 会回落占位默认值 "0.00"（见文件末 numVal 注）；若在此放行，
+  //    「用户没填」就被静默补成 0 元发出去，再以一次服务端「必填/非正数」错误收场。
+  //    markTargetTotal=false 供比率框的**实时**校验复用：否则在比率框打字会把焦点抢到
+  //    总报价框上（markInvalid 会 focus），且「还没填总报价」时就标红很吵。
+  if (markTargetTotal) {
+    const ttEl = document.querySelector('#targetTotal');
+    if (ttEl) {
+      const raw = ttEl.value.trim();
+      const tt = raw === '' ? NaN : Number(raw);
+      if (!Number.isFinite(tt) || tt <= 0) {
+        markInvalid(ttEl, '请填写目标总报价（元）：须为大于 0 的数值。');
+        return false;
+      }
+    }
+  }
   const loEl = document.querySelector('#ratioMin'); const hiEl = document.querySelector('#ratioMax');
   const lo = Number(loEl.value); const hi = Number(hiEl.value);
   if (Number.isNaN(lo) || lo < 0 || lo > 1) { markInvalid(loEl, '单项报价比率下限非法：须为 0～1 之间的数值。'); return false; }
@@ -82,7 +98,10 @@ function validateParams() {
   if (Number.isNaN(st) || st <= 0 || st > 100) { markInvalid(stEl, '附加税率须为 0～100 之间的百分比整数（如 12 表示 12%）。'); return false; }
   return true;
 }
-// 比率输入实时校验：输完即标红，不必等提交
-document.querySelectorAll('#ratioMin,#ratioMax').forEach(el => el.addEventListener('input', validateParams));
-// 读取数字输入：留空时回落到浅灰占位默认值（目标总报价/固定税前项）
+// 比率输入实时校验：输完即标红，不必等提交（只跑比率/税率部分，见 validateParams 注）
+document.querySelectorAll('#ratioMin,#ratioMax').forEach(el =>
+  el.addEventListener('input', () => validateParams({ markTargetTotal: false })));
+// 读取数字输入：留空时回落到浅灰占位默认值。
+// ⚠ 只适用于**可选**字段（如固定税前项，缺省 0.00）。必填字段（目标总报价）必须由
+//   validateParams 在提交前拦住空值——否则「没填」会被这个兜底静默变成 0 元。
 function numVal(id) { const el = document.querySelector(`#${id}`); return el.value.trim() !== '' ? el.value : el.placeholder; }

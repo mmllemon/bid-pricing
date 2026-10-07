@@ -43,24 +43,27 @@ uvicorn api.app:app --reload --port 8000
 
 ## 前端回归冒烟（jsdom）
 
-静态看代码看不出、一运行才炸的三类问题，已做成机械判据：
+静态看代码看不出、一运行才炸的问题，已做成机械判据：
 
 ```powershell
 cd frontend
 npm ci        # 首次或依赖变更后（jsdom 30 要求 Node ≥ 22.22.2 / 24.15）
-npm test      # node --test；6 个页面 x 分组，共 18 项
+npm test      # node --test，21 项（9 个顶层用例，含 per-page 子测试）
 ```
 
-`test/smoke.test.mjs` 把页面里的外链脚本**按原顺序**内联后交给 jsdom 真实执行，覆盖：
-
-| 判据 | 拦什么 |
+| 文件 | 覆盖 |
 |---|---|
-| 各页脚本执行无未捕获错误 | 初始化顺序/TDZ、引用不存在等「运行就炸」 |
-| `js/escape.js` 是每页第一个脚本 | 转义实现又被复制成第二份 |
-| `toolEsc === gcEsc` 且五字符全转义 | 转义实现分叉 |
-| 同一资产令牌一致 | 改了共享文件只有部分页面生效 |
-| 引用资产存在 | 改名/删除后留死链 |
-| tool-well 在「钢筋表非空 + 支室数>0」下不抛错 | R4 那类靠数据巧合撑着的 TDZ |
+| `test/smoke.test.mjs` | 6 个页面按真实顺序执行脚本无未捕获错误；`js/escape.js` 必须是每页第一个脚本；`toolEsc === gcEsc` 且五字符全转义；同一资产令牌一致；引用的本地资产都存在；`tool-well` 在「钢筋表非空 + 支室数>0」下不抛错 |
+| `test/quote-flow.test.mjs` | 报价页交互路径：R5 焦点陷阱栈不平衡、R7 预览后导出仍指上一轮结果、R8 空目标报价被占位默认值兜成 `0.00` |
+| `test/_harness.mjs` | 共享加载器（内联脚本 → jsdom；fetch 桩；`waitForInit`） |
+
+**新增测试文件要加进 `package.json` 的 `test` 脚本里**（显式文件列表，不用目录扫描：
+`test/` 下的辅助模块会被 Node 的默认发现当成测试文件，多出一个 0 用例的空条目）。
+
+三处**jsdom 时序陷阱**已在 `test/_harness.mjs` 里注释并封装，写新交互用例前请先读：
+初始化尾部（被 `setTimeout` 延后的初始模块选择）会 `closeOverlays()` 并清空结果态；
+加载后再改 `location.hash` 会排入额外 hashchange（应改为加载时带 `#quote`）；
+「等请求已发出」不等于「等渲染完成」（要等可观察状态，如按钮 disabled 翻转）。
 
 **边界**：jsdom 不是浏览器——没有布局与绘制，SVG 与部分 DOM API 覆盖有限。它能拦
-「运行就炸」，**拦不住视觉回归**；视觉仍需人看。
+「运行就炸」与「状态没跟着走」，**拦不住视觉回归**；视觉仍需人看。

@@ -1,123 +1,24 @@
-/* frontend/ 的回归冒烟（node:test + jsdom）。
+/* frontend/ 的静态与启动冒烟（node:test + jsdom）。
  *
  * 为什么需要它：本仓对 Python 侧的口径是「闸门是代码，不是约定」，而前端此前没有任何
  * 自动判据。实测踩到的三类问题**静态看代码都不像有问题**：
- *   1. 初始化顺序（TDZ）：tool-well.js 的 recalcUnitKgPerM 声明在启动调用之后，
+ *   1. 初始化顺序（TDZ）：tool-well.js 的 rebarUnitKgPerM 声明在启动调用之后，
  *      只因为「启动瞬间钢筋表恰好为空」才没炸（换成非空输入即 ReferenceError）。
  *   2. 脚本加载顺序：四个工具页不加载 js/escape.js，于是各脚本各自长出一份转义副本
  *      （最多 6 份），一份漏改就开洞。
  *   3. 破缓存令牌：同一份共享脚本在不同页面用不同 ?v=，改了只有部分页面生效。
  *
- * 本文件把这三类做成机械判据：把页面的 <script src> 按**原顺序**内联后交给 jsdom 真实
- * 执行，未捕获错误即失败；另加纯文本判据（加载顺序、令牌一致性、引用文件存在性）。
- *
- * 边界（如实标注）：jsdom 不是浏览器——没有布局与绘制，SVG/DOM API 覆盖有限。
- * 它能拦「运行就炸」，拦不住任何视觉回归；视觉仍需人看。
+ * 本文件把这三类做成机械判据。运行：`npm test`（工作目录 frontend/）。
+ * 边界：jsdom 不是浏览器——能拦「运行就炸」，**拦不住视觉回归**。
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import jsdomPkg from 'jsdom';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const { JSDOM, VirtualConsole } = jsdomPkg;
-
-const FE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-/** 需要冒烟的全部页面（脚本顺序即站点真实加载顺序） */
-const PAGES = [
-  'index.html',
-  'tools.html',
-  'tool-cable.html',
-  'tool-duct.html',
-  'tool-earth.html',
-  'tool-well.html',
-];
-
-/** 一行的钢筋明细表行（用于把「启动瞬间钢筋表非空」这个 TDZ 触发条件造出来） */
-const REBAR_ROW = '<tr><td><input type="text" data-rf="no" value="①"></td>'
-  + '<td><select data-rf="d"><option value="14" selected>14</option></select></td>'
-  + '<td><input data-rf="len" type="number" value="1000"></td><td class="row-tw">—</td>'
-  + '<td><input data-rf="span" type="number" value="0"></td>'
-  + '<td><input data-rf="sp" type="number" value="150"></td>'
-  + '<td><input data-rf="n" type="number" value="1"></td><td class="row-kg">0.0</td>'
-  + '<td><input type="text" data-rf="note" value=""></td><td><button class="row-del">×</button></td></tr>';
-
-const SCRIPT_RE = /<script src="([^"]+)"\s*><\/script>/g;
-
-function readPage(page) {
-  return fs.readFileSync(path.join(FE_DIR, page), 'utf8');
-}
-
-function scriptSrcs(html) {
-  return [...html.matchAll(SCRIPT_RE)].map((m) => m[1]);
-}
-
-/** 把外链脚本就地替换成内联内容，保留原有先后顺序。 */
-function inlineScripts(html, { omit = null } = {}) {
-  let count = 0;
-  const out = html.replace(SCRIPT_RE, (_m, src) => {
-    const rel = src.split('?')[0].replace(/^\.\//, '');
-    if (rel === omit) return '';
-    count += 1;
-    return `<script>${fs.readFileSync(path.join(FE_DIR, rel), 'utf8')}</script>`;
-  });
-  return { html: out, count };
-}
-
-/**
- * 在 jsdom 里加载一个页面。
- *
- * @param {string} page                    页面文件名
- * @param {object} opts
- * @param {object} opts.seed             预置 localStorage（键 → 值字符串）
- * @param {boolean} opts.injectRebar     是否往 #rebarRows 预置一行
- * @param {string|null} opts.omit        故意不加载某个脚本（负向验证用）
- */
-function loadPage(page, opts = {}) {
-  const { seed = {}, injectRebar = false, omit = null } = opts;
-  let html = readPage(page);
-  if (injectRebar) {
-    html = html.replace('<tbody id="rebarRows"></tbody>', `<tbody id="rebarRows">${REBAR_ROW}</tbody>`);
-  }
-  const inlined = inlineScripts(html, { omit });
-
-  const errors = [];
-  const vc = new VirtualConsole();
-  vc.on('jsdomError', (e) => errors.push(e.message + (e.detail ? ` | ${e.detail}` : '')));
-
-  const dom = new JSDOM(inlined.html, {
-    runScripts: 'dangerously',
-    url: `http://localhost:8080/${page}`,
-    pretendToBeVisual: true,
-    virtualConsole: vc,
-    beforeParse(window) {
-      // 页面初始化会调后端 API，而 jsdom 没有 fetch。给一个「永远不可达」的桩，
-      // 让判据聚焦在脚本自身的初始化错误上，而不是网络可达性。
-      window.fetch = () => Promise.resolve({
-        ok: false, status: 0, json: async () => ({ status: 'BLOCKED', reason: 'jsdom: 无后端' }),
-      });
-      if (!window.matchMedia) {
-        window.matchMedia = () => ({
-          matches: false, addListener() {}, removeListener() {},
-          addEventListener() {}, removeEventListener() {},
-        });
-      }
-      for (const [k, v] of Object.entries(seed)) {
-        try { window.localStorage.setItem(k, v); } catch { /* 忽略存储不可用 */ }
-      }
-    },
-  });
-
-  return { dom, window: dom.window, errors, inlined: inlined.count };
-}
-
-/** 让已排入的微/宏任务跑完（fetch 桩、防抖等），再判定错误。 */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-// ---------------------------------------------------------------- 运行判据
-
+import {
+  FE_DIR, PAGES, loadPage, readPage, scriptSrcs, settle,
+} from './_harness.mjs';
 
 test('每个页面按真实顺序执行脚本，且无未捕获错误', async (t) => {
   for (const page of PAGES) {
@@ -181,8 +82,7 @@ test('破缓存令牌：同一资产在所有引用页用同一个 ?v=（R10）'
 test('页面引用的本地资产都存在（防改名/删除后留死链）', () => {
   const missing = [];
   for (const page of PAGES) {
-    const html = readPage(page);
-    for (const m of html.matchAll(/(?:src|href)="\.\/([^"?]+)(?:\?[^"]*)?"/g)) {
+    for (const m of readPage(page).matchAll(/(?:src|href)="\.\/([^"?]+)(?:\?[^"]*)?"/g)) {
       const rel = m[1];
       if (!fs.existsSync(path.join(FE_DIR, rel))) missing.push(`${page} → ${rel}`);
     }

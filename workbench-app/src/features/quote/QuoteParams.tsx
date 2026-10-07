@@ -15,7 +15,17 @@ const VOLT_DEFAULT_COMP: TaxComp[] = [
   { key: 'sub', label: '分包', proportion: 0.17, input_vat_rate: 0.09 },
 ];
 
-export function QuoteParams({ params, set }: { params: QuoteParamsState; set: (p: Partial<QuoteParamsState>) => void }) {
+export function QuoteParams({ params, set, capFile, costFile, onFile, onPreview, previewing, capStat, costStat }: {
+  params: QuoteParamsState;
+  set: (p: Partial<QuoteParamsState>) => void;
+  capFile: string | null;
+  costFile: string | null;
+  onFile: (kind: 'cap' | 'cost', f: File | null) => void;
+  onPreview: () => void;
+  previewing: boolean;
+  capStat: string;
+  costStat: string;
+}) {
   const [comp, setComp] = useState<TaxComp[]>(VOLT_DEFAULT_COMP);
   const [riskOpen, setRiskOpen] = useState(false);
 
@@ -243,7 +253,7 @@ export function QuoteParams({ params, set }: { params: QuoteParamsState; set: (p
         </div>
         <div className="intake-grid">
           <label className="intake-slot cap" id="capSlot" tabIndex={0} role="button" aria-label="导入最高限价清单">
-            <input id="capFile" type="file" accept=".xlsx" />
+            <input id="capFile" type="file" accept=".xlsx" onChange={(e) => onFile('cap', e.target.files?.[0] ?? null)} />
             <div className="intake-head">
               <span className="intake-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
@@ -251,13 +261,13 @@ export function QuoteParams({ params, set }: { params: QuoteParamsState; set: (p
               <div className="intake-title"><strong>限价清单</strong><span>综合单价列作为不含税最高限价</span></div>
             </div>
             <div className="intake-body">
-              <div className="intake-state" id="capState"><span className="pulse-dot" /><span className="intake-cta" data-for="capFile">选择 Excel 文件</span></div>
-              <div className="intake-stat" id="capStat" />
+              <div className="intake-state" id="capState"><span className="pulse-dot" /><span className="intake-cta" data-for="capFile">{capFile || '选择 Excel 文件'}</span></div>
+              <div className="intake-stat" id="capStat">{capStat}</div>
               <button type="button" className="intake-reup" data-reup="capFile">重新上传</button>
             </div>
           </label>
           <label className="intake-slot cost" id="costSlot" tabIndex={0} role="button" aria-label="导入成本清单">
-            <input id="costFile" type="file" accept=".xlsx" />
+            <input id="costFile" type="file" accept=".xlsx" onChange={(e) => onFile('cost', e.target.files?.[0] ?? null)} />
             <div className="intake-head">
               <span className="intake-ic">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" /></svg>
@@ -265,11 +275,16 @@ export function QuoteParams({ params, set }: { params: QuoteParamsState; set: (p
               <div className="intake-title"><strong>成本清单</strong><span>综合单价作为含税成本</span></div>
             </div>
             <div className="intake-body">
-              <div className="intake-state" id="costState"><span className="pulse-dot" /><span className="intake-cta" data-for="costFile">选择 Excel 文件</span></div>
-              <div className="intake-stat" id="costStat" />
+              <div className="intake-state" id="costState"><span className="pulse-dot" /><span className="intake-cta" data-for="costFile">{costFile || '选择 Excel 文件'}</span></div>
+              <div className="intake-stat" id="costStat">{costStat}</div>
               <button type="button" className="intake-reup" data-reup="costFile">重新上传</button>
             </div>
           </label>
+        </div>
+        <div className="action-row" style={{ marginTop: 12 }}>
+          <button type="button" className="btn-secondary" onClick={onPreview} disabled={previewing || !capFile || !costFile}>
+            {previewing ? '预览中…' : '预览导入资料'}
+          </button>
         </div>
       </section>
     </aside>

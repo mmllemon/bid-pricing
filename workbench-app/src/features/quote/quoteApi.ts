@@ -1,0 +1,50 @@
+/**
+ * 报价域 API 客户端（P3 前端整合）
+ * 同源基址：浏览器只访问 :3456，报价域 /api/* 由 workbench-server 反代到 :8000（见 quoteProxy.ts）。
+ * 与原生 app.js 的 API_BASE 语义一致，但统一走同源相对路径，不再硬编码端口。
+ */
+const BASE = '/api';
+
+export interface QuotePreviewResult {
+  status: string;
+  reason?: string;
+  cap: { rows: number; unit_works: Record<string, number>; hash_sha256?: string };
+  cost: { rows: number; unit_works: Record<string, number>; hash_sha256?: string };
+  match: { master_keys: number; matched: number; only_cap: number; only_cost: number; blocked?: boolean; only_cap_ids?: string[] };
+  fields: Record<string, boolean>;
+  optimizable_count: number;
+  manual_count: number;
+  missing_cap_ids: string[];
+  missing_cost_ids: string[];
+  duplicate_item_id_across_unit_work: string[];
+  anomaly_count: number;
+  anomalies: { kind: string; item_id: string }[];
+  project_id?: string;
+}
+
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const r = await fetch(BASE + path, { method: 'POST', body: form });
+  const text = await r.text().catch(() => '');
+  let json: unknown = {};
+  try { json = text ? JSON.parse(text) : {}; } catch { json = { status: 'ERROR', reason: text }; }
+  if (!r.ok) {
+    const reason = (json as { reason?: string; detail?: string })?.reason || (json as { detail?: string })?.detail || `HTTP ${r.status}`;
+    throw new Error(reason);
+  }
+  return json as T;
+}
+
+/** 预览导入资料（限价 + 成本两个 xlsx）。 */
+export function previewQuote(limitFile: File, costFile: File, projectId: string, projectName: string) {
+  const data = new FormData();
+  data.append('limit_file', limitFile);
+  data.append('cost_file', costFile);
+  data.append('project_id', projectId);
+  data.append('project_name', projectName);
+  return postForm<QuotePreviewResult>('/quote/preview', data);
+}
+
+/** 额度优化（方案 A/B/C）。form 由调用方组装（字段多且含税口径覆盖）。 */
+export function optimizeQuote(form: FormData) {
+  return postForm<{ status: string; result?: unknown; reason?: string; hint?: string }>('/quote/optimize', form);
+}

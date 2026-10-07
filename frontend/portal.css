@@ -13,6 +13,69 @@ body:has(.portal-view:not(.hidden)) {
 /* ===== 沉浸态：进场收壳、出场还壳 =====
  * 大盘是顶层门户，应该像 neural 首页那样铺满整屏。
  * 只在大盘激活时生效，其余页面一根头发不动；退场时侧栏滑回、主区恢复内边距。 */
+/* ===== 舞台下方的「工程快照」段（参照 neural Snapshot）===== */
+.portal-snapshot {
+  position: relative;
+  z-index: 1;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 40px 60px 64px;
+  background: #f8f9fa;
+}
+
+.snap-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 16px; }
+.snap-source { margin: 0; font-size: 12px; color: #888; }
+.snap-source em { color: #bbb; font-style: normal; margin-left: 4px; }
+
+.snap-kpi-band {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--ui-white);
+  border: 2px solid #111111;
+  box-shadow: 6px 6px 0 #111111;
+  margin-bottom: 22px;
+}
+.snap-kpi-band > div { display: grid; gap: 4px; padding: 18px 22px; border-left: 1px solid rgba(17, 17, 17, 0.14); }
+.snap-kpi-band > div:first-child { border-left: 0; }
+.snap-kpi-band span { font-size: 11px; color: #666; }
+.snap-kpi-band span em { color: #aaa; font-style: normal; }
+.snap-kpi-band strong { font-family: var(--font-pixel); font-size: 28px; font-weight: 800; }
+
+.snap-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 22px; }
+
+.snap-card {
+  background: var(--ui-white);
+  border: 2px solid #111111;
+  box-shadow: 6px 6px 0 #111111;
+  padding: 18px 20px 16px;
+}
+.snap-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.snap-card h2 { margin: 0; font-size: 17px; font-weight: 900; }
+.snap-card h2 em { color: #aaa; font-style: normal; font-size: 12px; margin-left: 6px; font-weight: 400; }
+
+.snap-perf table { width: 100%; border-collapse: collapse; }
+.snap-perf th { text-align: left; padding: 8px 10px; font-size: 11px; color: #666; border-bottom: 2px solid #111111; white-space: nowrap; }
+.snap-perf th em { color: #aaa; font-style: normal; }
+.snap-perf td { padding: 10px; border-bottom: 1px solid rgba(17, 17, 17, 0.12); font-size: 13px; vertical-align: middle; }
+.snap-perf .t-title { display: block; font-weight: 700; margin-bottom: 6px; }
+.snap-perf .t-bar { display: block; height: 5px; background: rgba(17, 17, 17, 0.1); }
+.snap-perf .t-bar i { display: block; height: 100%; background: #ff6b00; }
+.snap-perf .t-num { font-family: var(--font-pixel); text-align: right; white-space: nowrap; }
+.snap-foot { margin: 12px 0 0; font-size: 11.5px; color: #888; }
+.snap-foot em { color: #bbb; font-style: normal; }
+
+.snap-todo-list { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.snap-todo { display: flex; align-items: center; gap: 8px; padding: 9px 10px; background: rgba(17, 17, 17, 0.03); border: 1px solid rgba(17, 17, 17, 0.14); font-size: 12.5px; }
+.snap-dot { width: 7px; height: 7px; background: #ff6b00; flex: none; }
+.snap-todo em { margin-left: auto; color: #999; font-style: normal; font-size: 11px; white-space: nowrap; }
+
+@media (max-width: 1100px) {
+  .portal-snapshot { padding: 32px 24px 48px; }
+  .snap-grid { grid-template-columns: 1fr; }
+  .snap-kpi-band { grid-template-columns: repeat(2, 1fr); }
+  .snap-kpi-band > div:nth-child(3) { border-left: 0; }
+}
+
 .app-shell .sidebar { transition: margin-left var(--dur-slow) var(--ease-out); }
 .app-shell .main-content { transition: padding var(--dur-slow) var(--ease-out); }
 
@@ -30,8 +93,8 @@ body:has(.portal-view:not(.hidden)) {
 }
 
 .app-shell.shell-immersive .portal-view {
-  height: 100vh;
-  min-height: 0;
+  height: auto;
+  min-height: 100vh;
   border: 0;
 }
 
@@ -53,25 +116,25 @@ body:has(.portal-view:not(.hidden)) {
 }
 
 /* 左上品牌文案 */
-.portal-hero-copy { position: absolute; left: 28px; top: 84px; max-width: 340px; }
+.portal-hero-copy { position: absolute; left: 28px; top: 78px; max-width: 300px; }
 .hero-eyebrow {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-family: var(--font-pixel);
-  font-size: 11px;
-  letter-spacing: 0.18em;
+  font-size: 10px;
+  letter-spacing: 0.16em;
   font-weight: 700;
   color: #ff6b00;
 }
 .hero-eyebrow span { color: #666; letter-spacing: 0.06em; margin-left: 8px; }
 .portal-hero-copy h1 {
   margin: 0;
-  font-size: clamp(26px, 2.5vw, 40px);
-  line-height: 1.2;
+  font-size: clamp(22px, 2.05vw, 32px);
+  line-height: 1.22;
   font-weight: 900;
   letter-spacing: 0.01em;
   color: #111111;
 }
-.hero-hint { margin: 14px 0 0; font-size: 12px; color: #666; }
+.hero-hint { margin: 12px 0 0; font-size: 11.5px; line-height: 1.5; color: #666; max-width: 260px; }
 .hero-hint em { color: #999; font-style: normal; font-size: 11px; }
 
 /* 右上舞台工具条 */
@@ -165,24 +228,50 @@ body:has(.portal-view:not(.hidden)) {
 .portal-view {
   position: relative;
   width: 100%;
-  height: calc(100vh - 16px);
-  min-height: 640px;
+  height: auto;
+  min-height: 100vh;
   background: #f8f9fa;
   border: 2px solid #111111;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
-  overflow: hidden !important;
+  overflow-x: hidden;
   user-select: none;
 }
 
-/* 点阵工程网格底纹 */
-.portal-view::before {
+/* 舞台：一屏高的画布层容器；下面接「工程快照」段 */
+.portal-stage {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 620px;
+  overflow: hidden;
+}
+
+/* 点阵工程网格底纹（缓慢漂移，给白场一口气）+ 极淡工程分格线 */
+.portal-stage::before {
+  content: '';
+  position: absolute;
+  inset: -32px;
+  background-image: radial-gradient(rgba(17, 17, 17, 0.17) 1.3px, transparent 1.3px);
+  background-size: 30px 30px;
+  pointer-events: none;
+  z-index: 0;
+  animation: pv-grid-drift 26s linear infinite;
+}
+
+.portal-stage::after {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgba(0, 0, 0, 0.12) 1.2px, transparent 1.2px);
-  background-size: 32px 32px;
+  background-image:
+    linear-gradient(rgba(17, 17, 17, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 17, 17, 0.04) 1px, transparent 1px);
+  background-size: 150px 150px;
   pointer-events: none;
   z-index: 0;
+}
+
+@keyframes pv-grid-drift {
+  to { transform: translate3d(30px, 30px, 0); }
 }
 
 /* —— 顶栏：品牌 + 居中胶囊导航 + 操作 —— */

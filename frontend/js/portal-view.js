@@ -18,6 +18,7 @@
   var drawer = null;
   var breadcrumbEl = null;
 
+  var stageEl = null;
   var animFrameId = null;
   var lastTime = performance.now();
 
@@ -140,38 +141,29 @@
       // 展开态：核心退左，四级链条「核 → 模块 → 分支 → 卡片」紧咬核心向右生长，整组居中。
       var drawerW = L.stage === 'item' ? 420 : 0;   // 抽屉打开时占用的右侧宽度
       var availRight = W - drawerW - 24;            // 可用右边界
-      var cy2 = H * 0.5;
-      var coreS = narrow ? 110 : 148;
+      var cy2 = H * 0.52;
+      var coreS = narrow ? 112 : 158;
       var coreR = coreS / 2;
+      var coreCx = narrow ? 76 : 120;              // 参照 neural：核心贴左（x≈55~120），不对整组居中
 
       // 模块列：N 个纵向排开，卡片必须小于行距，否则会互相压住
-      var step = Math.min(92, (H - 170) / Math.max(mods.length, 1));
-      var cardSel = Math.min(96, step - 6);
-      var cardOther = Math.min(76, step - 6);
+      var step = Math.min(96, (H - 170) / Math.max(mods.length, 1));
+      var cardSel = Math.min(98, step - 6);
+      var cardOther = Math.min(78, step - 6);
 
       // 三列宽度（与 CSS 一致：模块卡片 120 / 分支节点 130 / 三级卡片 262）
       var cardW = 120, branchW = 130, leafW = 262;
       // 核心右缘→模块左缘、模块右缘→分支左缘、分支右缘→卡片左缘（触须长度）
-      var coreGap = narrow ? 10 : 16;
-      var gapA = narrow ? 56 : 88;
-      var gapB = narrow ? 84 : 128;
+      var coreGap = narrow ? 16 : 24;
+      var gapA = narrow ? 70 : 100;
+      var gapB = narrow ? 100 : 150;
 
-      var baseX = narrow ? 44 : 58;
       // 用卡片的**实际渲染尺寸**（cardSel，随缩放变化）而非 CSS 基准宽 120 的一半，
       // 否则差额会全部变成核心与模块之间的空隙。
       var d1 = coreR + coreGap + cardSel / 2;   // 核中心 → 模块中心
-      var col1_x = baseX + d1;
+      var col1_x = coreCx + d1;
       var col2_x = col1_x + cardW / 2 + gapA;
       var col3_x = col2_x + branchW + gapB;
-
-      // 整组在可用宽度内居中（左端从核心左缘算起）
-      var groupLeft = baseX - coreR;
-      var groupW = col3_x + leafW - groupLeft;
-      if (groupW < availRight) {
-        var shift = (availRight - groupW) / 2 - groupLeft;
-        if (shift > 0) { col1_x += shift; col2_x += shift; col3_x += shift; }
-      }
-      var coreCx = col1_x - d1;
 
       res.orb = { x: coreCx, y: cy2, s: coreS };
 
@@ -317,12 +309,16 @@
     if (!live.paused) live.time += rawDt;
     var dt = live.paused ? 0 : rawDt;
 
-    if (container) {
-      var realW = container.clientWidth || window.innerWidth;
-      var realH = container.clientHeight || window.innerHeight;
+    if (stageEl) {
+      var realW = stageEl.clientWidth || window.innerWidth;
+      var realH = stageEl.clientHeight || window.innerHeight;
       if (realW > 100 && realH > 100) {
         live.size = { w: realW, h: realH };
       }
+    } else if (container) {
+      var cw = container.clientWidth || window.innerWidth;
+      var ch = container.clientHeight || window.innerHeight;
+      if (cw > 100 && ch > 100) live.size = { w: cw, h: ch };
     }
 
     var t = live.time;
@@ -585,8 +581,9 @@
       return;
     }
 
-    var w = container.clientWidth || window.innerWidth;
-    var h = container.clientHeight || window.innerHeight;
+    var sz = stageEl || container;
+    var w = sz.clientWidth || window.innerWidth;
+    var h = sz.clientHeight || window.innerHeight;
     if (dustCanvas && (dustCanvas.width !== w || dustCanvas.height !== h)) {
       dustCanvas.width = w;
       dustCanvas.height = h;
@@ -1053,6 +1050,74 @@
     }
   }
 
+  // —— 舞台下方的「工程快照」段（数据全部取自 PORTAL_DATA，不造假不与真实业务冲突）——
+  function buildSnapshot() {
+    var biz = global.PORTAL_DATA.getModule('biz');
+    var projects = global.PORTAL_DATA.getItems('biz', 'projects') || [];
+    var todos = (global.PORTAL_DATA.getItems('todos', 'p0') || []).concat(global.PORTAL_DATA.getItems('todos', 'regular') || []);
+    var atBid = projects.filter(function (p) { return p.stage === '投标'; }).length;
+    var building = projects.filter(function (p) { return p.stage === '中标在建'; }).length;
+    var totalBid = projects.reduce(function (s, p) { return s + Number(String(p.bidAmount).replace(/,/g, '')) || 0; }, 0);
+    var won = projects.filter(function (p) { return p.stage === '中标在建' || p.stage === '已竣工'; }).length;
+    var winRate = projects.length ? Math.round(won / projects.length * 100) : 0;
+
+    var kpis = [
+      ['在库项目', 'Projects', projects.length],
+      ['在投标', 'Bidding', atBid],
+      ['在建中', 'In progress', building],
+      ['中标率', 'Win rate', winRate + '%']
+    ];
+
+    var maxBid = Math.max(1, projects.reduce(function (mx, p) { return Math.max(mx, Number(String(p.bidAmount).replace(/,/g, '')) || 0); }, 0));
+    var rows = projects.map(function (p) {
+      var amt = Number(String(p.bidAmount).replace(/,/g, '')) || 0;
+      var tagCls = p.stage === '投标' ? 'tag-bid' : (p.stage === '中标在建' ? 'tag-build' : 'tag-done');
+      return '<tr>' +
+        '<td><span class="t-title">' + p.title + '</span><span class="t-bar"><i style="width:' + Math.round(amt / maxBid * 100) + '%"></i></span></td>' +
+        '<td><span class="stage-tag ' + tagCls + '">' + p.stage + '</span></td>' +
+        '<td class="t-num">' + p.bidAmount + '</td>' +
+        '<td class="t-num">' + p.progress + '%</td>' +
+        '</tr>';
+    }).join('');
+
+    var todoRows = todos.slice(0, 5).map(function (t) {
+      return '<li class="snap-todo"><span class="snap-dot"></span>' + t.title + '<em>' + (t.taskDetail && t.taskDetail.deadline ? t.taskDetail.deadline : '') + '</em></li>';
+    }).join('');
+
+    var wrap = document.createElement('section');
+    wrap.className = 'portal-snapshot';
+    wrap.innerHTML =
+      '<header class="snap-head">' +
+        '<p class="hero-eyebrow">SNAPSHOT <span>工程快照</span></p>' +
+        '<p class="snap-source">数据源自本机工作台 · 演示用途 <em>Local data · demo</em></p>' +
+      '</header>' +
+      '<div class="snap-kpi-band">' +
+        kpis.map(function (k) { return '<div><span>' + k[0] + ' <em>' + k[1] + '</em></span><strong>' + k[2] + '</strong></div>'; }).join('') +
+      '</div>' +
+      '<div class="snap-grid">' +
+        '<section class="snap-card snap-perf">' +
+          '<header><h2>在库项目表现 <em>Projects</em></h2><button type="button" class="pixel-pill-btn" id="snapGoBiz">进入经营 →</button></header>' +
+          '<table><thead><tr><th>项目 <em>Project</em></th><th>阶段 <em>Stage</em></th><th>报价 <em>Bid</em></th><th>进度 <em>Progress</em></th></tr></thead><tbody>' + rows + '</tbody></table>' +
+          '<p class="snap-foot">共 ' + projects.length + ' 个在库项目 · 累计报价额 ' + totalBid.toLocaleString('zh-CN') + ' 元 <em>Total bid amount</em></p>' +
+        '</section>' +
+        '<section class="snap-card snap-plan">' +
+          '<header><h2>近期待办 <em>Up next</em></h2></header>' +
+          '<ul class="snap-todo-list">' + (todoRows || '<li class="snap-todo">暂无待推进事项</li>') + '</ul>' +
+          '<button type="button" class="pixel-btn-action" id="snapGoTodos">查看全部待办 →</button>' +
+        '</section>' +
+      '</div>';
+
+    wrap.querySelector('#snapGoBiz').onclick = function () {
+      selectModule('biz', 'projects');
+      container.scrollTop = 0;
+    };
+    wrap.querySelector('#snapGoTodos').onclick = function () {
+      selectModule('todos', 'p0');
+      container.scrollTop = 0;
+    };
+    return wrap;
+  }
+
   // —— DOM 结构装载 ——
   function mountPortal(viewContainer) {
     container = viewContainer;
@@ -1111,17 +1176,23 @@
       navToggle.textContent = immersive ? '☰ 侧栏' : '›› 收起侧栏';
     };
 
+    // 舞台层容器（一屏高）：所有悬浮层都挂在它内部，下面再接「工程快照」段
+    var stage = document.createElement('div');
+    stage.className = 'portal-stage';
+    container.appendChild(stage);
+    stageEl = stage;
+
     // 面包屑：舞台上漂浮条（参照 neural 的 crumbs），仅展开态可见
     var crumbs = document.createElement('div');
     crumbs.className = 'portal-crumbs';
     crumbs.id = 'portalBreadcrumb';
-    container.appendChild(crumbs);
+    stage.appendChild(crumbs);
     breadcrumbEl = crumbs;
 
     // 2. 星尘粒子 Canvas
     dustCanvas = document.createElement('canvas');
     dustCanvas.className = 'portal-dust-canvas';
-    container.appendChild(dustCanvas);
+    stage.appendChild(dustCanvas);
     // jsdom 未装 canvas 包：getContext 会返回 null 并向 virtualConsole 抛 jsdomError（try/catch 拦不住），
     // 故先探测全局 CanvasRenderingContext2D；不存在则整个星尘层降级关闭（非必需视觉）。
     // （该错误会让前端冒烟「各页无未捕获错误」判据变红，属真实回归，不可省。）
@@ -1132,7 +1203,7 @@
     // 3. SVG 贝塞尔光纤层
     svgThreads = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svgThreads.setAttribute('class', 'portal-threads');
-    container.appendChild(svgThreads);
+    stage.appendChild(svgThreads);
 
     // 4. 四周悬浮配件：左上文案 / 右上工具条 / 右侧图例 / 底部数据坞（参照 neural 首页的舞台配件）
     var chromeLayer = document.createElement('div');
@@ -1189,7 +1260,7 @@
       '<p class="dock-hint"><span class="pixel-pulse-dot"></span> 本地运行 · 数据仅存本机 <em>Local · nothing leaves this machine</em></p>';
     chromeLayer.appendChild(dock);
 
-    container.appendChild(chromeLayer);
+    stage.appendChild(chromeLayer);
 
     // 5. 中心呼吸聚能枢纽 (Core Hub)
     var core = document.createElement('div');
@@ -1197,7 +1268,7 @@
     core.className = 'portal-core-hub';
     core.innerHTML = '<div class="core-halo"></div><div class="core-ring r0"></div><div class="core-ring r1"></div><div class="core-ring r2"></div><div class="core-radar"></div><div class="core-pixel-box"><div class="core-badge">DIGITAL CORE</div><div class="core-title">工程智算</div><div class="core-sub"><span class="pixel-pulse-dot"></span> 枢纽在线</div></div>';
     core.onclick = returnToHub;
-    container.appendChild(core);
+    stage.appendChild(core);
 
     // 5. 模块卫星节点层 (第 1 列)
     nodesLayer = document.createElement('div');
@@ -1217,22 +1288,25 @@
       };
       nodesLayer.appendChild(modBtn);
     });
-    container.appendChild(nodesLayer);
+    stage.appendChild(nodesLayer);
 
     // 6. 二级分支节点层 (第 2 列)
     branchesLayer = document.createElement('div');
     branchesLayer.className = 'portal-branches-layer';
-    container.appendChild(branchesLayer);
+    stage.appendChild(branchesLayer);
 
     // 7. 三级实体卡片展开层 (第 3 列)
     fanLayer = document.createElement('div');
     fanLayer.className = 'portal-fan-layer';
-    container.appendChild(fanLayer);
+    stage.appendChild(fanLayer);
 
     // 8. 像素深度分析抽屉 (第 4 列)
     drawer = document.createElement('aside');
     drawer.className = 'portal-analysis-drawer';
-    container.appendChild(drawer);
+    stage.appendChild(drawer);
+
+    // 6. 舞台下方的「工程快照」段（参照 neural 首页 Snapshot：KPI 带 + 左表 + 右图）
+    container.appendChild(buildSnapshot());
 
     // 全局 Esc 逐层回退
     window.addEventListener('keydown', function (e) {

@@ -10,6 +10,23 @@
 
 ## [未发布]
 
+### 前端回归冒烟入仓（jsdom）：把「文本看着对、运行就炸」变成机械判据
+
+**新增**
+
+- `frontend/package.json` + `package-lock.json` + `frontend/test/smoke.test.mjs`（18 项）：用 jsdom 把页面外链脚本**按原顺序**内联后真实执行。判据：各页脚本执行无未捕获错误、`js/escape.js` 必须是每页第一个脚本、`toolEsc === gcEsc` 且五字符全转义、同一资产破缓存令牌一致、页面引用的本地资产都存在、`tool-well` 在「钢筋表非空 + 支室数>0」下不得抛错——正是最近一轮前端修复里三类问题（R1/R4/R10）的机械复现。
+- `.github/workflows/ci.yml` 新增**独立** job `frontend-smoke`（`npm ci` + `npm test`）。独立是为了不让前端工具链的问题把 Python 侧判据一起判红，反之亦然；其余 node 工程（workbench-app / workbench-server / agent-service）作为增值组件仍不构建。
+- 套件做过**变异验证**（不会失败的测试等于没有测试）：把 `rebarUnitKgPerM` 打回 `const` → 4 项红；删掉某页的 `escape.js` 引用 → 4 项红；把某页令牌改成异值 → 1 项红（并输出「js/tool-common.js 有 2 个令牌：… vs …」）；还原后 18/18 绿。
+
+**修正（对上一轮记录的补正）**
+
+- R4 的两半改动是**耦合**的，上一轮没说透：把「盖板钢筋」处内联的 `0.00617` 换成复用 `rebarUnitKgPerM(COVER_REBAR_D)` 时，若**不同时**把该函数提升为函数声明，就会把潜伏隐患变成**无条件启动崩溃**——`renderCoverRebarRows` 由 `recalcRebar` 在启动路径上调用（`tool-well.js:831`），而它先于原 `const` 声明执行。变异验证顺带实证了这一点（不预置任何钢筋行也照样红）。即：**先提升、后去重**，顺序不能反。
+
+**说明**
+
+- jsdom 30 的 `engines` 是 `^22.22.2 || ^24.15.0 || >=26.0.0`（偏严），CI 的 node 版本随它走；升级 jsdom 前先看 engines。
+- 边界：jsdom 无布局与绘制，SVG 与部分 DOM API 覆盖有限——能拦「运行就炸」，**拦不住视觉回归**，视觉仍需人看。
+
 ### 前端技术债清理：转义收敛、CSS 分层、工具页初始化顺序
 
 **修正**

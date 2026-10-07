@@ -1,16 +1,187 @@
-:root {
-  /* ===== V2 实体色 ===== */
-  --ui-white: #ffffff;
-  --ui-black: #111111;
-  --ui-orange: #ff5a1f;
-  --ui-yellow: #ffc928;
-  --ui-overlay: rgba(17, 17, 17, 0.52);
+/* ============================================================
+   工程智算 · 统一前端设计令牌（单一事实源）
+   ------------------------------------------------------------
+   来源：合并 frontend/tokens.css（原母项目令牌，唯一事实源）与
+        workbench-app/src/styles/tokens.css（React 侧存量别名）。
+   为什么并：两前端要合为一个 React 应用，颜色若各存一份必然漂移。
+   规则：
+   1. 本文件是唯一的 :root 令牌定义处，其他 CSS 不得再定义颜色/圆角/阴影/间距。
+   2. 新代码请直接使用 --ui-* / --space-* / --line-* 语义令牌。
+   3. 「兼容别名」区仅供存量样式平滑迁移，禁止在新代码中使用。
+   ============================================================ */
 
-  /* ===== 兼容别名：只映射到新四色 ===== */
+/* ---------- 字体：Fusion Pixel 12px Proportional（本地托管，禁止 CDN） ----------
+   来源：TakWolf/fusion-pixel-font，SIL Open Font License 1.1（见 assets/fonts/OFL.txt）
+   ⚠ 字体 @font-face 声明在 global.css（相对路径 ../assets/fonts/），本文件不重复声明。 */
+
+:root {
+  /* ===== V2 实体色（全站仅允许这四种实体颜色） ===== */
+  --ui-white: #ffffff;   /* 页面 / 模块 / 卡片 / 输入框唯一实体底色 */
+  --ui-black: #111111;   /* 主文字、图标、边框、数据线 */
+  --ui-orange: #ff5a1f;  /* 当前导航、选中态、主按钮、错误/高风险 */
+  --ui-yellow: #ffc928;  /* 优先级、提醒、待处理、今日标记 */
+  --ui-overlay: rgba(17, 17, 17, 0.52); /* 抽屉遮罩；不可作模块底色 */
+
+  /* ===== 间距：4px 网格 ===== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* ===== 边框 / 裁角 / 阴影 ===== */
+  --line-thin: 1px solid var(--ui-black);
+  --line-strong: 2px solid var(--ui-black);
+  --line-accent: 2px solid var(--ui-orange);
+  --notch-sm: 6px;
+  --notch-md: 10px;
+  --shadow-action: 2px 2px 0 var(--ui-black);
+
+  /* ===== 字体 ===== */
+  --font-pixel: "LShu Pixel", "MiSans VF", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
+  --font-display: var(--font-pixel);
+  --font-mono: var(--font-pixel);
+
+  /* ===== 字阶 ===== */
+  --text-display: 48px;
+  --text-h1: 30px;
+  --text-h2: 20px;
+  --text-h3: 16px;
+  --text-body: 15px;
+  --text-small: 13px;
+  --text-micro: 12px;
+
+  /* ===== 动效（默认 100–140ms，仅颜色/边框/1px 位移） ===== */
+  --dur-fast: 100ms;
+  --dur-base: 140ms;
+  --dur-slow: 240ms;
+  --ease-out: cubic-bezier(.2, .8, .3, 1);
+  --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+
+  /* ===== z-index 阶梯 ===== */
+  --z-sticky: 1;
+  --z-tooltip: 10;
+  --z-nav: 20;
+  --z-sidebar: 30;
+  --z-floating: 50;
+  --z-backdrop: 55;
+  --z-overlay: 60;
+  --z-toggle: 70;
+  --z-fab: 90;
+  --z-drawer-backdrop: 95;
+  --z-drawer: 100;
+  --z-modal: 120;
+  --z-audit: 130;
+  --z-toast: 200;
+  --z-portal: 1000;
+
+  /* ============================================================
+     兼容别名区（存量迁移用，禁止新增引用）
+     ============================================================ */
+
+  /* 表面：全部收敛为纯白 */
+  --page-bg: var(--ui-white);
+  --surface-card: var(--ui-white);
+  --surface-nested: var(--ui-white);
+
+  /* 边框：细线一律黑 */
+  --border: var(--ui-black);
+  --border-input: var(--ui-black);
+  --select-arrow: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M6 8l4 4 4-4' stroke='%23111111' stroke-width='1.7' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+
+  /* 文本层级：用透明度弱化，不建立灰色板 */
+  --text: var(--ui-black);
+  --text-secondary: rgba(17, 17, 17, .62);
+  --text-tertiary: rgba(17, 17, 17, .45);
+
+  /* 主色：橙色承担「当前/选中/主行动」 */
+  --accent: var(--ui-orange);
+  --accent-600: var(--ui-black);
+  --accent-muted: var(--ui-white);
+  --on-accent: var(--ui-black);
+
+  /* 模块色轮转：取消多色，统一黑（强调交给橙/黄） */
+  --module-1: var(--ui-black);
+  --module-2: var(--ui-black);
+  --module-3: var(--ui-black);
+  --module-4: var(--ui-black);
+  --module-5: var(--ui-black);
+  --module-6: var(--ui-black);
+
+  /* 状态色：成功=黑勾，错误=橙，提醒=黄 —— 一律不使用绿/红/蓝 */
+  --success: var(--ui-black);
+  --success-soft: var(--ui-white);
+  --danger: var(--ui-orange);
+  --danger-soft: var(--ui-white);
+  --warn: var(--ui-yellow);
+  --warn-soft: var(--ui-white);
+
+  /* 侧栏：深色面板 → 白底黑字 */
+  --drawer-bg: var(--ui-white);
+  --drawer-bg-top: var(--ui-white);
+  --drawer-text: var(--ui-black);
+  --drawer-text-mute: rgba(17, 17, 17, .62);
+  --drawer-hover: var(--ui-yellow);
+  --drawer-active: var(--ui-orange);
+
+  /* 圆角：全域直角 */
+  --radius-control: 0px;
+  --radius-tile: 0px;
+  --radius-card: 0px;
+  --radius-sheet: 0px;
+
+  /* 阴影：仅主按钮保留硬阴影，其余一律无 */
+  --shadow-card: none;
+  --shadow-overlay: none;
+  --shadow-modal: none;
+  --shadow-popover: none;
+  --shadow-tooltip: none;
+
+  /* 字体（存量名） */
+  --font: "MiSans VF", "MiSans", "HarmonyOS Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  /* 布局 */
+  --sidebar-w: 248px;
+  --card-pad: var(--space-4);
+  --fs-min: 12px;
+
+  /* 报价页局部令牌（原 quote-dashboard.css :root） */
+  --brand-gold: var(--ui-yellow);
+  --intake-cap: var(--ui-black);
+  --intake-cost: var(--ui-black);
+  --cobalt-soft: var(--ui-white);
+  --emerald-soft: var(--ui-white);
+
+  /* 补齐 Phase 1 迁移时漏收的历史变量名，避免 var() 落空 */
+  --border-hover: var(--ui-orange);
+  --surface-muted: var(--ui-white);
+  --surface-soft: var(--ui-yellow);
+  --text-primary: var(--ui-black);
+
+  /* ============================================================
+     React 侧（workbench-app）存量别名
+     —— 合并前由 workbench-app/src/styles/tokens.css 提供，被其
+        存量样式引用（--denim 32 次 / --olive 19 次 / --red 17 次 …）。
+        一律映射到 V2 四色，禁止新增引用。
+     ============================================================ */
+
+  /* 间距（旧短名） */
+  --sp-1: var(--space-2);
+  --sp-2: var(--space-3);
+  --sp-3: var(--space-4);
+  --sp-4: var(--space-5);
+  --sp-5: var(--space-6);
+  --sp-6: var(--space-7);
+
+  /* 底色 / 墨色（旧名） */
   --bg: var(--ui-white);
   --bg-soft: var(--ui-white);
   --ink: var(--ui-black);
   --ink-soft: var(--ui-black);
+
+  /* 旧配色名：整体重指向四色 */
   --brown: var(--ui-orange);
   --brown-light: var(--ui-orange);
   --olive: var(--ui-black);
@@ -21,56 +192,20 @@
   --blush-light: var(--ui-yellow);
   --red: var(--ui-orange);
   --red-light: var(--ui-yellow);
-  --success: var(--ui-black);
   --warning: var(--ui-yellow);
-  --danger: var(--ui-orange);
 
-  /* ===== 间距：4px 网格 ===== */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --sp-1: var(--space-2);
-  --sp-2: var(--space-3);
-  --sp-3: var(--space-4);
-  --sp-4: var(--space-5);
-  --sp-5: var(--space-6);
-  --sp-6: var(--space-7);
-
-  /* ===== 边框 / 裁角 / 阴影 ===== */
-  --line-thin: 1px solid var(--ui-black);
-  --line-strong: 2px solid var(--ui-black);
-  --line-accent: 2px solid var(--ui-orange);
-  --radius-control: 0px;
-  --notch-sm: 6px;
-  --notch-md: 10px;
-  --shadow-action: 2px 2px 0 var(--ui-black);
+  /* 圆角 / 边框宽 / 阴影（旧名） */
   --radius-lg: 0px;
   --radius-md: 0px;
   --radius-sm: 0px;
   --border-w: 2px;
-  --border: var(--line-strong);
   --shadow-sm: none;
   --shadow-md: none;
   --shadow-lg: none;
   --shadow-red: var(--shadow-action);
 
-  /* ===== 字体 ===== */
-  --font-pixel: "LShu Pixel", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
-  --font-display: var(--font-pixel);
+  /* 字体（旧名） */
   --font-body: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
-  --font-mono: var(--font-pixel);
-
-  --text-display: 48px;
-  --text-h1: 30px;
-  --text-h2: 20px;
-  --text-h3: 16px;
-  --text-body: 15px;
-  --text-small: 13px;
-  --text-micro: 11px;
 }
 
 /* 线 A：让径向指针的角度成为可过渡变量（节点选中时指向跟随移动，而非硬切）。 */

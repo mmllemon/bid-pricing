@@ -98,6 +98,7 @@ import {
 } from './knowledgeLocal';
 import { corsOriginDelegate, BIND_HOST } from './http/localCors';
 import { assertSettingsPatch, SettingsPolicyError } from './config/settingsPolicy';
+import { registerQuoteProxy } from './quoteProxy';
 
 const app = express();
 app.use(cors({ origin: corsOriginDelegate }));
@@ -118,6 +119,9 @@ app.use('/agent', (req, res) => {
   req.url = req.url.replace(/^\/agent/, '') || '/';
   agentRequestHandler(req as any, res as any);
 });
+// P0-2 前端整合：报价域（:8000）同源反代。必须在 express.json() 之前——
+// 否则 JSON 请求体已被消费，转发会丢 body。
+registerQuoteProxy(app);
 app.use(express.json({ limit: '2mb' }));
 
 const PORT = Number(process.env.PORT || 3456);

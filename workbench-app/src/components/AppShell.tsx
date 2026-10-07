@@ -1,20 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import type { ReactNode } from 'react';
-import AvatarMascot from './AvatarMascot';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { WORKBENCH_NAV as navItems } from '../features/nav/workbenchNav';
+import SiteTopBar from './SiteTopBar';
 
-/* 独立访问（未内嵌）时的自带侧栏清单来自 features/nav/workbenchNav.tsx（React 侧唯一数据源）。
- *
- * ⚠ 仅独立访问使用：内嵌进母项目时下面整块不渲染，导航由母项目外层侧栏
- *   （frontend/js/sidebar.js 消费 frontend/js/workbench-nav.js）提供，全站只有一条竖栏。
- *   因此这里的文案/图标允许与外层漂移；路径集合由 tests/test_workbench_nav.py 守卫。 */
+/* 导航形态（P0-3 前端整合）：全站主导航改到顶栏（SiteTopBar），不再渲染自带侧栏。
+ * 迁移期：内嵌/独立访问都渲染同一套顶栏；未迁入 React 的域以 <a href> 外链回母项目。
+ * 工作台 9 页清单唯一事实源为 features/nav/workbenchNav.tsx，路径集合由
+ * tests/test_workbench_nav.py 静态守卫。 */
 
 // 入站导航消息的白名单：只接受本应用真实存在的路由（挡掉被构造出来的任意跳转）。
 const NAV_TOS = new Set(navItems.map((it) => it.to));
 
 /* 内嵌判定与父窗口 origin。
- * iframe 跨源（父 :8080 / 子 :3456），子页读不到父文档，只能用 document.referrer 反推。
+ * iframe 跨源（父 :8000 / 子 :3456），子页读不到父文档，只能用 document.referrer 反推。
  * postMessage 的 targetOrigin 必须是具体 origin，禁用 '*'（见 docs/V3_INTEGRATION_PLAN.md §9.3-2）。 */
 const EMBEDDED = typeof window !== 'undefined' && window.self !== window.top;
 const PARENT_ORIGIN = (() => {
@@ -25,27 +23,6 @@ const PARENT_ORIGIN = (() => {
     return '';
   }
 })();
-
-interface NavItemProps {
-  to: string;
-  label: string;
-  code: string;
-  icon: ReactNode;
-}
-
-function NavItem({ to, label, code, icon }: NavItemProps) {
-  return (
-    <NavLink
-      to={to}
-      end={to === '/'}
-      className={({ isActive }) => `nav-item${isActive ? ' nav-item--active' : ''}`}
-    >
-      <span aria-hidden="true">{icon}</span>
-      <span>{label}</span>
-      <span className="nav-item-code">{code}</span>
-    </NavLink>
-  );
-}
 
 type WbMessage = { __wb?: string; to?: string };
 
@@ -96,10 +73,12 @@ export default function AppShell() {
     window.parent.postMessage({ __wb: 'route', to: location.pathname }, PARENT_ORIGIN);
   }, [location.pathname]);
 
-  // 内嵌时不渲染自带侧栏：母项目外层已有一条全高竖栏，否则又变成「两个导航栏」
+  // 内嵌时不再渲染自带侧栏（母项目外层已有一条全高竖栏），但仍渲染全站顶栏导航：
+  // 前端整合后顶栏是唯一的主导航，侧栏最终会退场。
   if (EMBEDDED) {
     return (
-      <div className="shell">
+      <div className="shell shell--topnav">
+        <SiteTopBar />
         {handshakeFailed && (
           <div className="ui-alert ui-alert--error" style={{ margin: '12px 12px 0' }}>
             <p style={{ fontSize: 13, lineHeight: 1.7 }}>
@@ -122,27 +101,8 @@ export default function AppShell() {
   }
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="sidebar-logo">
-            <AvatarMascot />
-          </div>
-          <div>
-            <div className="sidebar-title">L叔的工作台</div>
-            <div className="sidebar-sub">LOCAL COMMAND</div>
-          </div>
-        </div>
-        <nav className="sidebar-nav" aria-label="主导航">
-          {navItems.map((it) => (
-            <NavItem key={it.to} {...it} />
-          ))}
-        </nav>
-        <div className="sidebar-foot" aria-live="polite">
-          <div className="sidebar-foot-badge">SYSTEM OK</div>
-          <div className="sidebar-foot-text">本地运行 · 数据仅存本机</div>
-        </div>
-      </aside>
+    <div className="shell shell--topnav">
+      <SiteTopBar />
       <main className="main">
         <Outlet />
       </main>

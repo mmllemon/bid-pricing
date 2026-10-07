@@ -1,11 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { computeCompliance, computeInputVat, marginRatePercent, type QuoteResult } from './quoteCalc';
-import { QuoteParams } from './QuoteParams';
+import { QuoteParams, VOLT_DEFAULT_COMP } from './QuoteParams';
 import { QuoteKpi } from './QuoteKpi';
 import { QuoteTable } from './QuoteTable';
 import { QuotePreview } from './QuotePreview';
-import { previewQuote } from './quoteApi';
+import { QuoteReady, StatusCapsule, computeReady } from './QuoteReady';
+import { previewQuote, optimizeQuote } from './quoteApi';
 import type { QuotePreviewResult } from './quoteApi';
+import { buildTaxOverride, type TaxComp } from './quoteCalc';
 
 /**
  * 投标报价沙盘（P3 前端整合：由 frontend/index.html 的 #quoteView + app.js 迁入 React）
@@ -39,13 +41,12 @@ const DEFAULT_PARAMS: QuoteParamsState = {
   projectId: '', targetTotal: '', fixedPretax: '', vatRate: '9', surtaxRate: '12',
   ratioLow: 50, ratioHigh: 80, lowRatioConfirmed: false,
   lowPriceConfirmedBy: '', lowPriceBasisBy: '',
-  taxMode: 'PARTIAL', clauseEnabled: false, ubMMin: '', ubMMax: '', ubKwRules: '',
+  taxMode: 'PARTIAL', clauseEnabled: true, ubMMin: '', ubMMax: '', ubKwRules: '',
 };
 
 export default function QuotePage() {
   const [params, setParams] = useState<QuoteParamsState>(DEFAULT_PARAMS);
-  // 结果态：块 1 仅用于渲染 KPI 骨架（无结果时显示「待测算」），API 接入在块 3。
-  const [result] = useState<QuoteResult | null>(null);
+  const [result, setResult] = useState<QuoteResult | null>(null);
 
   // 上传舱：File 对象不进 state（不可序列化），用 ref 持有；仅存展示/摘要所需
   const capFileRef = useRef<File | null>(null);
@@ -54,8 +55,9 @@ export default function QuotePage() {
   const [costName, setCostName] = useState<string | null>(null);
   const [preview, setPreview] = useState<QuotePreviewResult | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [calculating, setCalculating] = useState(false);
   const [message, setMessage] = useState<{ text: string; kind: 'info' | 'error' | 'success' } | null>(null);
-
+  const [taxComp, setTaxComp] = useState<TaxComp[]>(VOLT_DEFAULT_COMP);
   const set = (patch: Partial<QuoteParamsState>) => setParams((s) => ({ ...s, ...patch }));
 
   const onFile = (kind: 'cap' | 'cost', f: File | null) => {
@@ -87,6 +89,67 @@ export default function QuotePage() {
   const vat = useMemo(() => computeInputVat(result), [result]);
   const margin = useMemo(() => marginRatePercent(result), [result]);
 
+  // 就绪度（三态之一）：项目 / 清单 / 税口径闭环
+  const taxClosed = params.taxMode === 'NONE'
+    || Math.abs(taxComp.reduce((s, c) => s + c.proportion, 0) - 1) < 1e-6;
+  const ready = computeReady(params, Boolean(capFileRef.current && costFileRef.current), taxClosed);
+
+  /** 组装 /api/quote/optimize 表单（字段对齐 app.js buildOptimizeForm）。 */
+  const buildForm = useCallback((strategy: string): FormData | null => {
+    const cap = capFileRef.current, cost = costFileRef.current;
+    if (!cap || !cost) return null;
+    const data = new FormData();
+    data.append('limit_file', cap);
+    data.append('cost_file', cost);
+    const fields: [string, string][] = [
+      ['project_id', params.projectId], ['target_total', params.targetTotal], ['fixed_pretax', params.fixedPretax],
+      ['vat_rate', String(Number(params.vatRate) / 100)], ['surtax_rate', String(Number(params.surtaxRate) / 100)],
+      ['ratio_min', String(params.ratioLow / 100)], ['ratio_max', String(params.ratioHigh / 100)],
+    ];
+    fields.forEach(([k, v]) => data.append(k, v));
+    data.append('project_name', '');
+    data.append('overview_id', '');
+    data.append('low_ratio_confirmed', params.lowRatioConfirmed ? 'true' : 'false');
+    data.append('low_price_confirmed_by', [params.lowPriceConfirmedBy, params.lowPriceBasisBy].filter(Boolean).join('；'));
+    data.append('clause_enabled', params.clauseEnabled ? 'true' : 'false');
+    const tax = buildTaxOverride(params.taxMode, taxComp);
+    data.append('input_vat_credit_mode', tax.mode);
+    data.append('cost_input_vat_rate', '0.13');
+    data.append('credit_ratio', String(tax.creditRatio));
+    data.append('cost_composition', tax.compositionJson);
+    data.append('strategy', strategy);
+    data.append('unbalanced_m_min', params.ubMMin || '0');
+    data.append('unbalanced_m_max', params.ubMMax || '0.3');
+    data.append('unbalanced_strategies', '');
+    data.append('unbalanced_kw_rules', params.ubKwRules || '');
+    data.append('group_id', '');
+    return data;
+  }, [params, taxComp]);
+
+  /** 计算（方案 A optimal）：提交 → 渲染结果。方案组/对比属块 4。 */
+  const runCalculate = useCallback(async () => {
+    const form = buildForm('optimal');
+    if (!form) { setMessage({ text: '请先上传限价清单和成本清单。', kind: 'error' }); return; }
+    setCalculating(true);
+    setMessage({ text: '正在识别清单并运行 Phase 2 MILP（方案 A：逐项最优），请稍候。', kind: 'info' });
+    try {
+      // 后端返回体即完整 result（字段在顶层，无 result 嵌套，与 app.js 一致）。
+      // 非 PASS（含 BLOCKED）由 postForm 按 !r.ok 抛错，此处只处理 PASS。
+      const result = await optimizeQuote(form);
+      setResult(result as QuoteResult);
+      setMessage({
+        text: `方案 A 计算完成：竞争性预算 ${Number(result.competitive_budget).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元，结算调整后利润（不含增值税）${Number(result.objective).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元。`,
+        kind: 'success',
+      });
+    } catch (e) {
+      setMessage({ text: `计算失败：${(e as Error).message}`, kind: 'error' });
+    } finally {
+      setCalculating(false);
+    }
+  }, [buildForm]);
+
+  const hasResult = Boolean(result);
+
   return (
     <div className="page page-quote" id="quoteView">
       <div className="breadcrumb">投标报价 <span>/</span> 优化沙盘</div>
@@ -101,6 +164,8 @@ export default function QuotePage() {
         <QuoteParams
           params={params}
           set={set}
+          comp={taxComp}
+          setComp={setTaxComp}
           capFile={capName}
           costFile={costName}
           onFile={onFile}
@@ -111,9 +176,11 @@ export default function QuotePage() {
         />
 
         <section className="canvas-column">
-          {preview && <QuotePreview res={preview} />}
-          <QuoteKpi result={result} compliance={compliance} vat={vat} marginRate={margin} />
-          <QuoteTable items={[]} totalCount={0} />
+          {!hasResult && <QuoteReady ready={ready} onCalculate={runCalculate} calculating={calculating} balanceText="" />}
+          {!hasResult && preview && <QuotePreview res={preview} />}
+          {hasResult && <StatusCapsule text="推演完成" />}
+          {hasResult && <QuoteKpi result={result} compliance={compliance} vat={vat} marginRate={margin} />}
+          {hasResult && <QuoteTable items={(result?.items ?? []) as never} totalCount={(result?.items ?? []).length} />}
         </section>
       </div>
     </div>

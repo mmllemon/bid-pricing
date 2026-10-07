@@ -44,7 +44,7 @@ export function previewQuote(limitFile: File, costFile: File, projectId: string,
   return postForm<QuotePreviewResult>('/quote/preview', data);
 }
 
-/** 额度优化（方案 A/B/C）。form 由调用方组装（字段多且含税口径覆盖）。 */
+/** 额度优化（方案 A/B/C）。返回体即完整 result（字段在顶层，无 result 嵌套）。 */
 export function optimizeQuote(form: FormData) {
-  return postForm<{ status: string; result?: unknown; reason?: string; hint?: string }>('/quote/optimize', form);
+  return postForm<import('./quoteCalc').QuoteResult & { status: string; reason?: string; cost_input_tax?: { user_hint?: string } }>('/quote/optimize', form);
 }

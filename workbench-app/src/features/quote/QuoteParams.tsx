@@ -7,17 +7,20 @@ import { buildTaxOverride, type TaxComp } from './quoteCalc';
  * 5 张卡：本次测算参数 / 单项报价安全防线（双滑块） / 不平衡报价 / 成本进项税抵扣模型 / 报价资料（上传舱）。
  */
 
-const VOLT_DEFAULT_COMP: TaxComp[] = [
-  { key: 'main', label: '主材', proportion: 0.42, input_vat_rate: 0.13 },
-  { key: 'aux', label: '辅材', proportion: 0.11, input_vat_rate: 0.13 },
-  { key: 'labor', label: '人工', proportion: 0.23, input_vat_rate: 0 },
-  { key: 'machine', label: '机械', proportion: 0.07, input_vat_rate: 0.13 },
-  { key: 'sub', label: '分包', proportion: 0.17, input_vat_rate: 0.09 },
+/**
+ * 默认成本构成：与 app.js 的 COMP_DEFAULTS 逐字对齐
+ * （匹配 config/project_quote_policy.json）；否则 k 与进项抵扣会与原生版不同。
+ */
+export const VOLT_DEFAULT_COMP: TaxComp[] = [
+  { key: 'goods', label: '材料设备', proportion: 0.65, input_vat_rate: 0.13 },
+  { key: 'service', label: '劳务及措施', proportion: 0.35, input_vat_rate: 0.09 },
 ];
 
-export function QuoteParams({ params, set, capFile, costFile, onFile, onPreview, previewing, capStat, costStat }: {
+export function QuoteParams({ params, set, comp, setComp, capFile, costFile, onFile, onPreview, previewing, capStat, costStat }: {
   params: QuoteParamsState;
   set: (p: Partial<QuoteParamsState>) => void;
+  comp: TaxComp[];
+  setComp: (fn: (cs: TaxComp[]) => TaxComp[]) => void;
   capFile: string | null;
   costFile: string | null;
   onFile: (kind: 'cap' | 'cost', f: File | null) => void;
@@ -26,11 +29,9 @@ export function QuoteParams({ params, set, capFile, costFile, onFile, onPreview,
   capStat: string;
   costStat: string;
 }) {
-  const [comp, setComp] = useState<TaxComp[]>(VOLT_DEFAULT_COMP);
   const [riskOpen, setRiskOpen] = useState(false);
 
   const totalProp = comp.reduce((s, c) => s + (Number.isFinite(c.proportion) ? c.proportion : 0), 0);
-  // k = 1 − Σ pⱼ·rⱼ/(1+rⱼ)（本页只做展示提示，后端为准）
   const k = 1 - comp.reduce((s, c) => s + (c.proportion * c.input_vat_rate) / (1 + c.input_vat_rate), 0);
   const override = buildTaxOverride(params.taxMode, comp);
   const creditPct = (override.creditRatio * 100).toFixed(1);
@@ -158,7 +159,14 @@ export function QuoteParams({ params, set, capFile, costFile, onFile, onPreview,
           <label className="field check">
             <input id="lowRatioConfirmed" type="checkbox" checked={params.lowRatioConfirmed}
               onChange={(e) => set({ lowRatioConfirmed: e.target.checked })} />
-            <span>已确认低价风险</span>
+            <span>已确认该设置，允许低于 50% 报价</span>
+          </label>
+        </div>
+        <div className="field-group">
+          <label className="field check">
+            <input id="clauseEnabled" type="checkbox" checked={params.clauseEnabled}
+              onChange={(e) => set({ clauseEnabled: e.target.checked })} />
+            <span>启用严重不平衡报价结算修正条款</span>
           </label>
         </div>
       </section>

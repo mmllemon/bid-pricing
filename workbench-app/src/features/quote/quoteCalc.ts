@@ -43,7 +43,7 @@ export function computeCompliance(result: QuoteResult | null | undefined): Compl
   // 三桶互斥：有意提前回笼（≥92%）的项若已属风险桶则不重复计入 early
   const earlyRows = items.filter((r) => Number(r['报价比率'] ?? 0) >= 0.92 && !isRiskRow(r));
   const n = items.length || 1;
-  const failCount = [].concat(result.violations || [], result.anomalies || [], result.low_ratio_items || []).length;
+  const failCount = (result.violations?.length ?? 0) + (result.anomalies?.length ?? 0) + (result.low_ratio_items?.length ?? 0);
   score -= Math.min(40, failCount * 8);
   score -= Math.min(25, riskRows.length * 5);
   if (result.low_ratio_review_required) score -= 12;

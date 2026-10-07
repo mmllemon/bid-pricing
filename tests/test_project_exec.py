@@ -120,3 +120,22 @@ def test_settlement_roundtrip_and_summary(db):
     assert s["settle_submit"] == 1100000.0
     assert s["settle_approved"] == 1050000.0
     assert s["settle_reduction"] == 50000.0
+
+
+def test_subcontract_material_summary(db):
+    sqlite_store.exec_save("subcontract", {
+        "project_id": "P1", "subcontractor": "劳务A", "scope": "电缆敷设",
+        "amount": 200000, "paid": 120000, "status": "施工中",
+    }, db=db)
+    sqlite_store.exec_save("material", {
+        "project_id": "P1", "name": "电缆", "spec": "YJV-3x120",
+        "unit": "米", "qty": 500, "price": 80, "amount": 40000,
+        "supplier": "远东", "status": "已到货",
+    }, db=db)
+    s = sqlite_store.exec_summary("P1", db=db)
+    assert s["subcontract_total"] == 200000.0
+    assert s["subcontract_paid"] == 120000.0
+    assert s["subcontract_payable"] == 80000.0
+    assert s["material_total"] == 40000.0
+    # 列表隔离：P2 看不到 P1 的
+    assert sqlite_store.exec_list("subcontract", "P2", db=db) == []

@@ -55,4 +55,8 @@ export interface ExecSummary {
   settle_submit: number;
   settle_approved: number;
   settle_reduction: number;
+  subcontract_total: number;
+  subcontract_paid: number;
+  subcontract_payable: number;
+  material_total: number;
 }

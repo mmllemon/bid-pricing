@@ -166,6 +166,40 @@ CREATE TABLE IF NOT EXISTS exec_settlement (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_exec_settlement_project ON exec_settlement(project_id);
+-- 劳务分包（2026-10-07）：分包合同与付款结算。
+CREATE TABLE IF NOT EXISTS exec_subcontract (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  subcontractor TEXT,
+  scope TEXT,
+  amount REAL,
+  signed_at TEXT,
+  paid REAL,
+  settled_amount REAL,
+  status TEXT NOT NULL DEFAULT '未开工',
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exec_subcontract_project ON exec_subcontract(project_id);
+-- 材料采购（2026-10-07）：材料台帐。
+CREATE TABLE IF NOT EXISTS exec_material (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  name TEXT,
+  spec TEXT,
+  unit TEXT,
+  qty REAL,
+  price REAL,
+  amount REAL,
+  supplier TEXT,
+  date TEXT,
+  status TEXT NOT NULL DEFAULT '待采购',
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exec_material_project ON exec_material(project_id);
 """
 
 
@@ -192,12 +226,15 @@ _SCHEMA_OBJECTS = (
     ("table", "exec_contract"), ("table", "exec_cost"),
     ("table", "exec_payment"), ("table", "exec_visa"),
     ("table", "exec_settlement"),
+    ("table", "exec_subcontract"), ("table", "exec_material"),
     ("index", "idx_plan_project"), ("index", "idx_plan_saved"),
     ("index", "idx_plan_amount"), ("index", "idx_group_project"),
     ("index", "idx_audit_ts"), ("index", "idx_audit_action"),
     ("index", "idx_exec_contract_project"), ("index", "idx_exec_cost_project"),
     ("index", "idx_exec_payment_project"), ("index", "idx_exec_visa_project"),
     ("index", "idx_exec_settlement_project"),
+    ("index", "idx_exec_subcontract_project"),
+    ("index", "idx_exec_material_project"),
 )
 
 
@@ -1023,6 +1060,8 @@ _EXEC_TABLES = {
     "payment": "exec_payment",
     "visa": "exec_visa",
     "settlement": "exec_settlement",
+    "subcontract": "exec_subcontract",
+    "material": "exec_material",
 }
 #: 各表可写字段（id/project_id/created_at/updated_at 由后端管理，不在白名单）。
 _EXEC_FIELDS = {
@@ -1033,7 +1072,17 @@ _EXEC_FIELDS = {
     "visa": ("no", "kind", "amount", "status", "date", "note"),
     "settlement": ("round", "submit_amount", "submit_date", "approved_amount",
                    "approved_date", "status", "note"),
+    "subcontract": ("subcontractor", "scope", "amount", "signed_at", "paid",
+                    "settled_amount", "status", "note"),
+    "material": ("name", "spec", "unit", "qty", "price", "amount",
+                 "supplier", "date", "status", "note"),
 }
+
+
+#: 数值型字段（存 REAL，空/非法转 NULL）。
+_MONEY_FIELDS = ("amount", "target", "actual", "claimed", "received",
+                 "submit_amount", "approved_amount", "paid", "settled_amount",
+                 "qty", "price")
 
 
 def _exec_table(name: str) -> str:
@@ -1083,10 +1132,9 @@ def exec_save(table: str, rec: dict[str, Any],
         if f not in provided:
             continue
         v = rec.get(f)
-        if v is None and f in ("status", "kind", "round"):
-            continue  # 有 NOT NULL DEFAULT 的列：不传=用库默认
-        if f in ("amount", "target", "actual", "claimed", "received",
-                 "submit_amount", "approved_amount"):
+        if not v and f in ("status", "kind", "round"):
+            continue  # 有 NOT NULL DEFAULT 的列：不传/空=用库默认
+        if f in _MONEY_FIELDS:
             data[f] = _num_or_none(v)
         else:
             data[f] = (str(v).strip() or None) if v is not None else None
@@ -1149,6 +1197,9 @@ def exec_summary(project_id: str | None = None,
     签证口径：visa_approved 已批签证金额；visa_pending 待批签证金额。
     结算口径：settle_submit 送审金额合计；settle_approved 审定金额合计；
       settle_reduction = submit - approved（审减额，正=审减）。
+    分包口径：subcontract_total 分包合同总额；subcontract_paid 已付；
+      subcontract_payable = total - paid（应付未付）。
+    材料口径：material_total 材料采购总额。
     """
     conn = _connect(db)
     try:
@@ -1166,6 +1217,9 @@ def exec_summary(project_id: str | None = None,
             ([project_id] if project_id else [])).fetchone()[0] or 0)
         settle_submit = _sum_col(conn, "exec_settlement", "submit_amount", project_id)
         settle_approved = _sum_col(conn, "exec_settlement", "approved_amount", project_id)
+        subcontract_total = _sum_col(conn, "exec_subcontract", "amount", project_id)
+        subcontract_paid = _sum_col(conn, "exec_subcontract", "paid", project_id)
+        material_total = _sum_col(conn, "exec_material", "amount", project_id)
     finally:
         conn.close()
     receivable = round(contract_total - received_total, 2)
@@ -1183,4 +1237,8 @@ def exec_summary(project_id: str | None = None,
         "settle_submit": round(settle_submit, 2),
         "settle_approved": round(settle_approved, 2),
         "settle_reduction": round(settle_submit - settle_approved, 2),
+        "subcontract_total": round(subcontract_total, 2),
+        "subcontract_paid": round(subcontract_paid, 2),
+        "subcontract_payable": round(subcontract_total - subcontract_paid, 2),
+        "material_total": round(material_total, 2),
     }

@@ -16,7 +16,7 @@
 
 | 数据 | 文件 | 归属进程 | 表 / 内容 | 备份 |
 |---|---|---|---|---|
-| 报价方案 | `outputs/projects/<user>/.sqlite/quote.db` | :8000 FastAPI | `plan`（方案）、`plan_group`（分组）、`plan_slot`（槽位）、`audit_log`（审计）、`exec_contract/cost/payment/visa/settlement`（执行五表：收入合同/成本台帐/进度款/签证变更/结算，`project_id`=经营概览 UUID） | 拷整个 `outputs/projects/<user>/` |
+| 报价方案 | `outputs/projects/<user>/.sqlite/quote.db` | :8000 FastAPI | `plan`（方案）、`plan_group`（分组）、`plan_slot`（槽位）、`audit_log`（审计）、`exec_contract/cost/payment/visa/settlement/subcontract/material`（执行七表：收入合同/成本台帐/进度款/签证变更/结算/劳务分包/材料采购，`project_id`=经营概览 UUID） | 拷整个 `outputs/projects/<user>/` |
 | 项目经营 | `outputs/projects/<user>/projects.json` | :8000 FastAPI | 项目列表（Biz 页；报价方案经 `plan.project_id`=项目 UUID 关联；详情页路由 `/biz/:id`：概况/报价/执行/文档/待办五 tab） | 同上（同一目录） |
 | 项目文档 | `outputs/projects/<user>/docs/<项目id>/`＋`.index.json` | :8000 FastAPI | 按项目归档的招标文件/图纸/合同等（分类/大小/上传时间记 `.index.json`；单文件 10MB 上限） | 同上（同一目录） |
 | 井库 | `outputs/projects/<user>/well-library.json` | :8000 FastAPI | 手动保存的井（含参数/单价/钢筋表快照）；旧浏览器数据首次访问自动迁移 | 同上（同一目录） |

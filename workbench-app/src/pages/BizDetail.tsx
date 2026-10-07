@@ -110,9 +110,37 @@ const EXEC_TABLES: ExecTableDef[] = [
       { key: 'note', label: '备注', type: 'text' },
     ],
   },
+  {
+    key: 'subcontract', title: '劳务分包',
+    columns: [
+      { key: 'subcontractor', label: '分包单位', type: 'text' },
+      { key: 'scope', label: '分包内容', type: 'text' },
+      { key: 'amount', label: '合同金额', type: 'number' },
+      { key: 'signed_at', label: '签订日期', type: 'date' },
+      { key: 'paid', label: '已付金额', type: 'number' },
+      { key: 'settled_amount', label: '结算金额', type: 'number' },
+      { key: 'status', label: '状态', type: 'select', options: ['未开工', '施工中', '已完工', '已结算'] },
+      { key: 'note', label: '备注', type: 'text' },
+    ],
+  },
+  {
+    key: 'material', title: '材料采购',
+    columns: [
+      { key: 'name', label: '材料名称', type: 'text' },
+      { key: 'spec', label: '规格型号', type: 'text' },
+      { key: 'unit', label: '单位', type: 'text' },
+      { key: 'qty', label: '数量', type: 'number' },
+      { key: 'price', label: '单价', type: 'number' },
+      { key: 'amount', label: '金额', type: 'number' },
+      { key: 'supplier', label: '供应商', type: 'text' },
+      { key: 'date', label: '采购日期', type: 'date' },
+      { key: 'status', label: '状态', type: 'select', options: ['待采购', '已下单', '已到货', '已入库'] },
+      { key: 'note', label: '备注', type: 'text' },
+    ],
+  },
 ];
 
-const MONEY_KEYS = new Set(['amount', 'target', 'actual', 'claimed', 'received', 'submit_amount', 'approved_amount']);
+const MONEY_KEYS = new Set(['amount', 'target', 'actual', 'claimed', 'received', 'submit_amount', 'approved_amount', 'paid', 'settled_amount', 'qty', 'price']);
 
 function cellText(col: ExecColumn, v: unknown): string {
   if (v == null || v === '') return '—';
@@ -305,6 +333,9 @@ function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: str
   const set = (k: string) => (e: { target: { value: string } }) =>
     setEditing((prev) => (prev ? { ...prev, [k]: e.target.value } : prev));
 
+  // note-table 的 grid 写死 6 列；执行表列数不一，用动态列数覆盖
+  const gridCols = { gridTemplateColumns: `repeat(${table.columns.length + 1}, minmax(96px, 1fr))` };
+
   return (
     <section style={{ marginBottom: 28 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -317,12 +348,12 @@ function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: str
         <div className="empty-state"><p>暂无记录，点右上「新增」开始记账。</p></div>
       ) : (
         <div className="note-table">
-          <div className="note-table-head">
+          <div className="note-table-head" style={gridCols}>
             {table.columns.map((c) => <span key={c.key} className="note-th">{c.label}</span>)}
             <span className="note-th">操作</span>
           </div>
           {rows.map((row) => (
-            <div key={String(row.id)} className="note-row">
+            <div key={String(row.id)} className="note-row" style={gridCols}>
               {table.columns.map((c) => (
                 <div key={c.key} className="note-td" title={String(row[c.key] ?? '')}>
                   {cellText(c, row[c.key])}
@@ -369,7 +400,27 @@ function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: str
   );
 }
 
-/* ---------------- 主页 ---------------- */
+/* ---------------- 执行：子 tab（7 节太多，纵向拉太长） ---------------- */
+function ExecTabs({ projectId }: { projectId: string }) {
+  const [sub, setSub] = useState(EXEC_TABLES[0].key);
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+        {EXEC_TABLES.map((t) => (
+          <button key={t.key} type="button"
+            className="nb-btn nb-btn--ghost"
+            style={{ fontWeight: sub === t.key ? 700 : 400, opacity: sub === t.key ? 1 : 0.65 }}
+            onClick={() => setSub(t.key)}>
+            {t.title}
+          </button>
+        ))}
+      </div>
+      {EXEC_TABLES.filter((t) => t.key === sub).map((t) => (
+        <ExecSection key={t.key} table={t} projectId={projectId} />
+      ))}
+    </div>
+  );
+}
 export default function BizDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -516,6 +567,10 @@ export default function BizDetailPage() {
                     <div className="biz-metric"><span className="l">送审金额</span><span className="v">{yf(summary.settle_submit)}</span></div>
                     <div className="biz-metric"><span className="l">审定金额</span><span className="v">{yf(summary.settle_approved)}</span></div>
                     <div className="biz-metric"><span className="l">审减额</span><span className="v">{yf(summary.settle_reduction)}</span></div>
+                    <div className="biz-metric"><span className="l">分包合同</span><span className="v">{yf(summary.subcontract_total)}</span></div>
+                    <div className="biz-metric"><span className="l">分包已付</span><span className="v">{yf(summary.subcontract_paid)}</span></div>
+                    <div className="biz-metric"><span className="l">分包应付</span><span className="v">{yf(summary.subcontract_payable)}</span></div>
+                    <div className="biz-metric"><span className="l">材料采购</span><span className="v">{yf(summary.material_total)}</span></div>
                   </div>
                 </div>
               )}
@@ -561,11 +616,7 @@ export default function BizDetailPage() {
             </div>
           )}
 
-          {tab === 'exec' && (
-            <div>
-              {EXEC_TABLES.map((t) => <ExecSection key={t.key} table={t} projectId={pid} />)}
-            </div>
-          )}
+          {tab === 'exec' && <ExecTabs projectId={pid} />}
 
           {tab === 'docs' && <DocsSection projectId={pid} />}
 

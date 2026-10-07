@@ -55,7 +55,7 @@ export const SITE_DOMAINS: SiteDomain[] = [
     id: 'tools',
     label: '工具箱',
     code: 'T-06',
-    href: `${LEGACY_ORIGIN}/tools.html`, // P2 迁入后改为 to: '/tools'
+    to: '/tools', // P2 已迁入 React
   },
 ];
 

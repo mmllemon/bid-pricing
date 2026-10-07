@@ -43,7 +43,7 @@ _ROUTE_PATH_RE = re.compile(r'<Route\s+path="([^"]+)"')
 # 站点级路由：属于全站顶栏导航（SiteTopBar 的域），不属于工作台 9 个二级项。
 # 前端整合（docs/FRONTEND_UNIFY_PLAN.md）把母项目页面逐个迁入 React，迁入一个在这里登记一个，
 # 否则本用例会把它当成「外层点不到的漂移路由」而变红。显式清单而非前缀通配，保持可审计。
-_SITE_LEVEL_ROUTES = {'/portal'}
+_SITE_LEVEL_ROUTES = {'/portal', '/tools', '/tools/duct', '/tools/cable', '/tools/earth', '/tools/well'}
 
 _NODE_RUNNER = r"""
 const fs = require('fs');

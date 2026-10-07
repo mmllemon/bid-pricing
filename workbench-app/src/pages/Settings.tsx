@@ -55,6 +55,9 @@ export default function SettingsPage() {
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
   const [knowledgeMsg, setKnowledgeMsg] = useState('');
   const [aiNotice, setAiNotice] = useState('');
+  // W-3：AI 开关的隐私确认走行内两步（不再 window.confirm）：首次点开只立待确认旗，
+  // 行内条点"确认开启"才生效；直接点开关=取消。隐私告知不削弱，只是换了载体。
+  const [aiPending, setAiPending] = useState(false);
   const verifyProgress = useActionProgress();
   const hotspotTestProgress = useActionProgress();
   const knowledgeTestProgress = useActionProgress();
@@ -538,20 +541,39 @@ export default function SettingsPage() {
         <label className="todo-switch"><input type="checkbox" checked={Boolean(settings.autoCompleteEnabled)} onChange={(e) => api.updateSettings({ autoCompleteEnabled: e.target.checked }).then(setSettings)} />自动确认完成</label>
         <label className="todo-switch"><input type="checkbox" checked={Boolean(settings.feishuP2pEnabled)} onChange={(e) => api.updateSettings({ feishuP2pEnabled: e.target.checked }).then(setSettings)} />飞书 P2P（需 user identity）</label>
         <label className="todo-switch"><input type="checkbox" checked={Boolean(settings.feishuAllowAll)} onChange={(e) => api.updateSettings({ feishuAllowAll: e.target.checked }).then(setSettings)} />飞书允许全部可见会话（含群与已开的 P2P）</label>
-        <label className="todo-switch"><input type="checkbox" checked={Boolean(settings.aiAnalysisEnabled)} onChange={async (e) => {
+        <label className="todo-switch"><input type="checkbox" checked={Boolean(settings.aiAnalysisEnabled) || aiPending} onChange={async (e) => {
           const enable = e.target.checked;
-          if (enable && !window.confirm('开启后，经过脱敏裁剪的飞书/桌面片段会发送给 DeepSeek。Things 与 Calendar 不会上传。确认开启？')) return;
+          if (enable && !settings.aiAnalysisEnabled && !aiPending) {
+            // 第一步：只立旗，行内条待确认（替代 window.confirm）
+            setAiPending(true);
+            setAiNotice('开启后，经过脱敏裁剪的飞书/桌面片段会发送给 DeepSeek。Things 与 Calendar 不会上传。请点下方「确认开启」。');
+            return;
+          }
+          if (!enable) setAiPending(false); // 直接关开关 = 取消待确认
           try {
             const next = await api.updateSettings({ aiAnalysisEnabled: enable, confirmAiUpload: enable });
             setSettings(next);
+            setAiPending(false);
             setAiNotice(enable
               ? 'AI 分析已开启；请到待办页点击立即同步，或等待下一次自动同步。'
               : '');
           } catch (err) {
-            window.alert((err as Error).message);
+            setAiNotice(`设置失败：${(err as Error).message}`);
           }
         }} />AI 分析飞书/桌面（默认关）</label>
         {aiNotice && <p className="nb-muted" style={{ fontSize: 13, margin: '6px 0 10px' }}>{aiNotice}</p>}
+        {aiPending && !settings.aiAnalysisEnabled && (
+          <button type="button" className="nb-btn nb-btn--primary" style={{ margin: '0 0 10px' }} onClick={async () => {
+            try {
+              const next = await api.updateSettings({ aiAnalysisEnabled: true, confirmAiUpload: true });
+              setSettings(next);
+              setAiPending(false);
+              setAiNotice('AI 分析已开启；请到待办页点击立即同步，或等待下一次自动同步。');
+            } catch (err) {
+              setAiNotice(`设置失败：${(err as Error).message}`);
+            }
+          }}>确认开启</button>
+        )}
         <label className="todo-switch"><input type="checkbox" checked={Boolean(settings.aiAutoSyncEnabled)} disabled={!settings.aiAnalysisEnabled} onChange={(e) => api.updateSettings({ aiAutoSyncEnabled: e.target.checked }).then(setSettings)} />定时自动 AI 同步（依赖上一开关）</label>
         <div className="flex gap-2" style={{ flexWrap: 'wrap', marginTop: 12 }}>
           <button className="nb-btn nb-btn--ghost" disabled={calendarProgress.running} onClick={() => {
@@ -576,9 +598,9 @@ export default function SettingsPage() {
           }}>{calendarProgress.running ? '连接中…' : '连接 Apple Calendar'}</button>
           <button className="nb-btn nb-btn--ghost" disabled={aiCacheProgress.running} onClick={() => {
             void aiCacheProgress.run(
-              () => api.clearAiCache().then(() => window.alert('已清空 AI 分析缓存与待复核派生数据，未删除待办/Things/日程')),
+              () => api.clearAiCache().then(() => setCalendarNote('已清空 AI 分析缓存与待复核派生数据，未删除待办/Things/日程')),
               { label: '正在清空 AI 缓存', successMessage: '缓存已清空' }
-            ).catch((err) => window.alert((err as Error).message));
+            ).catch((err) => setCalendarNote(`清空失败：${(err as Error).message}`));
           }}>{aiCacheProgress.running ? '清理中…' : '清空 AI 分析缓存'}</button>
         </div>
         {calendarNote && <p className="nb-muted" style={{ fontSize: 13, margin: '8px 0 0' }}>{calendarNote}</p>}

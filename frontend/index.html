@@ -430,7 +430,9 @@
            本页只保留同页 iframe 宿主，src 延迟到首次显示时由 app.js 挂载；
            服务来源可用 window.__WORKBENCH_ORIGIN__ 覆盖。 -->
       <section id="workbenchView" class="workbench-view hidden">
-        <iframe class="wb-frame" title="个人工作台" loading="lazy"></iframe>
+        <!-- F-P0-4：最小 sandbox——allow-same-origin（子页 API 相对路径 + 父页 origin 白名单校验继续有效）
+             + allow-scripts + allow-forms；不给 allow-top-navigation，子页跳不出本页 -->
+        <iframe class="wb-frame" title="个人工作台" loading="lazy" sandbox="allow-same-origin allow-scripts allow-forms"></iframe>
       </section>
 
     </main>
@@ -505,6 +507,7 @@
 
   <!-- js/escape.js 必须最先加载：全站唯一 HTML 转义实现，其余脚本一律引用它 -->
   <script src="./js/escape.js?v=2026-09-28"></script>
+  <script src="./js/config.js?v=2026-10-07-cfg1"></script>
   <script src="./js/confirm.js?v=2026-10-06-cf1"></script>
   <!-- 工作台 9 页清单（唯一事实源）：必须早于 sidebar.js，后者渲染二级折叠项时消费 window.WB_NAV -->
   <script src="./js/workbench-nav.js?v=2026-10-06-wb1"></script>

@@ -24,14 +24,41 @@
   const esc = window.gcEsc;
 
   // P0 架构收敛（2026-10-07）：agent-service 并入 workbench-server（:3456），挂 /agent 前缀
-  const AGENT_BASE = location.protocol.startsWith('http')
-    ? location.protocol + '//' + location.hostname + ':3456/agent'
-    : 'http://127.0.0.1:3456/agent';
+  // F-P0-4：基址走 js/config.js 单一事实源，不再各自拼串
+  const AGENT_BASE = (window.__BID && window.__BID.agentBase && window.__BID.agentBase())
+    || (location.protocol.startsWith('http')
+      ? location.protocol + '//' + location.hostname + ':3456/agent'
+      : 'http://127.0.0.1:3456/agent');
 
   // P0-1: 边车鉴权 token（与服务端 AGENT_API_TOKEN 对应）。未设置服务端 token 时留空即可；
   // 设置后 /approve、/apply-model 走请求头，/watch（SSE 不支持自定义头）走 ?token= 查询参数。
+  // F-P0-2（2026-10-07）：token 只放内存 + sessionStorage（关闭标签即失），不再写 localStorage——
+  // localStorage 是永久存储，任一 XSS 即永久窃取。旧存量做一次性迁移后清除。
+  let _memToken = null; // null = 未初始化；初始化后为字符串（可空）
   const agentToken = () => {
-    try { return localStorage.getItem('agent_api_token') || ''; } catch { return ''; }
+    if (_memToken !== null) return _memToken;
+    let t = '';
+    try { t = sessionStorage.getItem('agent_api_token') || ''; } catch { t = ''; }
+    if (!t) {
+      // 一次性迁移：localStorage 旧存量 → sessionStorage，随后清除旧键
+      try {
+        t = localStorage.getItem('agent_api_token') || '';
+        if (t) {
+          sessionStorage.setItem('agent_api_token', t);
+          localStorage.removeItem('agent_api_token');
+        }
+      } catch { t = ''; }
+    }
+    _memToken = t;
+    return _memToken;
+  };
+  const setAgentToken = (t) => {
+    _memToken = t || '';
+    try {
+      if (_memToken) sessionStorage.setItem('agent_api_token', _memToken);
+      else sessionStorage.removeItem('agent_api_token');
+      localStorage.removeItem('agent_api_token'); // 旧键永不回写
+    } catch {}
   };
   const agentHeaders = (extra) => {
     const h = Object.assign({}, extra);
@@ -404,7 +431,7 @@
   }
 
   agentApiToken.addEventListener('change', () => {
-    try { localStorage.setItem('agent_api_token', agentApiToken.value.trim()); } catch {}
+    setAgentToken(agentApiToken.value.trim());
     // token 变更后重建 SSE 连接，使其携带新 token；面板已展开时立即重连
     if (es) { try { es.close(); } catch {} es = null; }
     if (opened && !panel.classList.contains('hidden')) connectSSE();

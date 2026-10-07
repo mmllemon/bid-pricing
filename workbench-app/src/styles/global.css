@@ -224,10 +224,21 @@ img {
   color: var(--ui-black);
 }
 
-.nb-badge--olive,
-.nb-badge--denim,
+/* W-1（2026-10-07）：olive/denim/blush 三个别名此前视觉完全相同（白底黑字），
+   状态靠猜。V2 不许第五色，用边框样式区分：olive 实线（正常）/ denim 虚线（待定）/
+   blush 左侧橙条（需注意）。red 保持橙边框（错误=橙是 V2 约定）。 */
+.nb-badge--olive {
+  background: var(--ui-white);
+}
+
+.nb-badge--denim {
+  background: var(--ui-white);
+  border-style: dashed;
+}
+
 .nb-badge--blush {
   background: var(--ui-white);
+  border-left: 3px solid var(--ui-orange);
 }
 
 .nb-chip {

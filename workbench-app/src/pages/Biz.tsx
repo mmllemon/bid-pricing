@@ -168,6 +168,9 @@ export function BizEditModal({ project, todos, onClose, onSaved }: BizModalProps
     return base;
   });
   const [saving, setSaving] = useState(false);
+  // W-3：Modal 内错误走行内 ui-alert，不再 window.alert（系统灰框破 V2 视觉）
+  const [formError, setFormError] = useState('');
+  const [confirmArmed, setConfirmArmed] = useState(false);
   const derived = derive(form);
 
   useEffect(() => {
@@ -183,9 +186,10 @@ export function BizEditModal({ project, todos, onClose, onSaved }: BizModalProps
 
   async function save() {
     if (!form.name.trim()) {
-      window.alert('请填写项目名称');
+      setFormError('请填写项目名称');
       return;
     }
+    setFormError('');
     const data = new FormData();
     Object.entries(form).forEach(([k, v]) => data.append(k, v));
     if (project?.id) data.append('pid', project.id);
@@ -198,13 +202,18 @@ export function BizEditModal({ project, todos, onClose, onSaved }: BizModalProps
       onClose();
     } catch (err) {
       setSaving(false);
-      window.alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+      setFormError(`保存失败：${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   async function del() {
     if (!project) return;
-    if (!window.confirm(`确定删除项目「${project.name || ''}」？此操作不可恢复。`)) return;
+    // 二次确认走行内：首次点删除变"确认删除"，3 秒内再点执行（替代 window.confirm）
+    if (!confirmArmed) {
+      setConfirmArmed(true);
+      window.setTimeout(() => setConfirmArmed(false), 3000);
+      return;
+    }
     const data = new FormData();
     data.append('id', project.id);
     try {
@@ -214,7 +223,8 @@ export function BizEditModal({ project, todos, onClose, onSaved }: BizModalProps
       onSaved();
       onClose();
     } catch (err) {
-      window.alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+      setConfirmArmed(false);
+      setFormError(`删除失败：${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -290,9 +300,12 @@ export function BizEditModal({ project, todos, onClose, onSaved }: BizModalProps
             </div>
           )}
         </div>
+        {formError && <div className="ui-alert ui-alert--error" role="alert">{formError}</div>}
         <div className="biz-mactions">
           {!isNew ? (
-            <button type="button" className="nb-btn biz-danger" onClick={del}>删除</button>
+            <button type="button" className="nb-btn biz-danger" onClick={del}>
+              {confirmArmed ? '再点确认删除' : '删除'}
+            </button>
           ) : (
             <span />
           )}

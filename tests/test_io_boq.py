@@ -354,5 +354,32 @@ class AliasMirrorTest(unittest.TestCase):
         self.assertIn("项目编码", COLUMN_ALIASES["item_id"])
 
 
+class ZipBombGuardTest(unittest.TestCase):
+    """B-P0-2：解压炸弹封顶——展开体积超限的 xlsx 必须拒收为 XlsxError。"""
+
+    def test_expanded_size_over_limit_rejected(self):
+        import bidpricing.io.xlsx as xlsx_mod
+
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "bomb.xlsx"
+            build_xlsx(p, [("S1", [["a"]])])
+            # 伪造一个超限成员：file_size 只读元数据，不实际写大文件
+            orig = xlsx_mod._MAX_EXPANDED_BYTES
+            xlsx_mod._MAX_EXPANDED_BYTES = 10
+            try:
+                with self.assertRaises(XlsxError) as ctx:
+                    load_workbook(p)
+            finally:
+                xlsx_mod._MAX_EXPANDED_BYTES = orig
+            self.assertIn("解压炸弹", str(ctx.exception))
+
+    def test_normal_file_passes(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "ok.xlsx"
+            build_xlsx(p, [("S1", [["a", "b"], ["c", "d"]])])
+            wb = load_workbook(p)
+            self.assertEqual(wb.sheets[0].cell(0, 0), "a")
+
+
 if __name__ == "__main__":
     unittest.main()

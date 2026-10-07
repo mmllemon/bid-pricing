@@ -4,7 +4,7 @@ const workbenchView = document.querySelector('#workbenchView');
 // 个人工作台已由 React 版（workbench-server :3456，与 SPA 同进程）接管；
 // 母项目侧只保留一个同页 iframe 宿主。P-W8 起工作台 9 页并入外层侧栏作二级折叠项，
 // 父 :8000 与子 :3456 跨源，二级路由靠 postMessage 双向同步。
-const WB_ORIGIN = window.__WORKBENCH_ORIGIN__ || 'http://127.0.0.1:3456';
+const WB_ORIGIN = (window.__BID && window.__BID.wbOrigin) || window.__WORKBENCH_ORIGIN__ || 'http://127.0.0.1:3456';
 function mountWorkbenchFrame(initialTo) {
   const frame = workbenchView && workbenchView.querySelector('iframe');
   if (frame && !frame.getAttribute('src')) {
@@ -180,18 +180,36 @@ let plans = [];
 let lastResult = null;
 // 后端服务基址：单一配置点，换域名/环境只改这一处（下载与所有 API 调用共用）
 // 部署钩子：页面脚本前定义 window.__API_BASE__ 可覆盖；缺省同机开发端口。
-const API_BASE = window.__API_BASE__ || 'http://localhost:8000';
+const API_BASE = (window.__BID && window.__BID.apiBase) || window.__API_BASE__ || 'http://localhost:8000';
 
 // H-013：可选 API token——服务端启用 BIDPRICING_API_TOKEN 后，把 token 存入
-// localStorage('bidpricingApiToken')，
-// 此包装器为所有 /api 请求自动附加 Authorization。
+// sessionStorage('bidpricingApiToken')（关闭标签即失；F-P0-2 起不再用 localStorage 永久存储），
+// 此包装器为所有 /api 请求自动附加 Authorization。localStorage 旧存量一次性迁移后清除。
 (() => {
   // 幂等标记：index.html 同页加载 workbench 脚本时会叠第二层包装，
   // 读两次 localStorage、headers 合并两次——功能上无害但属隐性耦合。
   if (window.fetch && window.fetch.__tokenPatched) return;
   const _fetch = window.fetch.bind(window);
+  // F-P0-2：token 只读内存 + sessionStorage。localStorage 旧存量第一次读到即迁移并清除旧键。
+  let _memApiToken = null;
+  const readApiToken = () => {
+    if (_memApiToken !== null) return _memApiToken;
+    let t = '';
+    try { t = (sessionStorage.getItem('bidpricingApiToken') || '').trim(); } catch { t = ''; }
+    if (!t) {
+      try {
+        t = (localStorage.getItem('bidpricingApiToken') || '').trim();
+        if (t) {
+          sessionStorage.setItem('bidpricingApiToken', t);
+          localStorage.removeItem('bidpricingApiToken');
+        }
+      } catch { t = ''; }
+    }
+    _memApiToken = t;
+    return _memApiToken;
+  };
   const patched = (input, init) => {
-    const token = (localStorage.getItem('bidpricingApiToken') || '').trim();
+    const token = readApiToken();
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     if (token && url.startsWith(API_BASE)) {
       init = Object.assign({}, init || {}, {

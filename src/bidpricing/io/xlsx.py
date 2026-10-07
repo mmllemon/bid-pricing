@@ -30,6 +30,12 @@ class XlsxError(Exception):
     """xlsx 打不开 / 结构不符合预期。"""
 
 
+#: 解压炸弹封顶：zip 内各成员展开后累计字节上限。压缩包本身已有上传体积上限，
+# B-P0-2：但压缩比可达百倍——10MB 压缩包可展开至 GB 级内存。此前全量解压 +
+# 全矩阵驻留无任何封顶。64MB 展开上限对正常投标清单绰绰有余（实测清单多为 KB 级）。
+_MAX_EXPANDED_BYTES = 64 * 1024 * 1024
+
+
 @dataclass
 class Sheet:
     """一张工作表：名称 + 矩形行矩阵（行列均从 0 计）。"""
@@ -159,6 +165,12 @@ def load_workbook(path: str | Path) -> Workbook:
         raise XlsxError(f"文件不存在：{p}")
     try:
         with zipfile.ZipFile(p) as zf:
+            total = sum(i.file_size for i in zf.infolist())
+            if total > _MAX_EXPANDED_BYTES:
+                raise XlsxError(
+                    f"拒绝解析 xlsx（{p.name}）：展开体积约 {total // 1024 // 1024}MB，"
+                    f"超过 {_MAX_EXPANDED_BYTES // 1024 // 1024}MB 上限（疑似解压炸弹）"
+                )
             sst = _shared_strings(zf)
             wb = Workbook(path=p)
             for name, target in _sheet_entries(zf):

@@ -470,10 +470,11 @@
   // 后端基地址：与 tool-cable 同口径（window.__API_BASE__ 覆盖；按主机名推导支持局域网；file:// 回退 localhost）
   const API_BASE = window.__API_BASE__
     || (location.hostname ? location.protocol + '//' + location.hostname + ':8000' : 'http://localhost:8000');
-  // 可选鉴权：服务端启用 BIDPRICING_API_TOKEN 时，token 存本机 localStorage，随请求自动附带
+  // 可选鉴权：服务端启用 BIDPRICING_API_TOKEN 时，token 存 sessionStorage（关闭标签即失），随请求自动附带
+  // F-P0-2：不再读 localStorage 永久存储；旧存量走 app.js 的 fetch 包装迁移，此处只认 sessionStorage + 内存
   function wellAuthHeaders() {
     let t = '';
-    try { t = (localStorage.getItem('bidpricingApiToken') || '').trim(); } catch (e) {}
+    try { t = (sessionStorage.getItem('bidpricingApiToken') || '').trim(); } catch (e) {}
     return t ? { Authorization: 'Bearer ' + t } : {};
   }
 

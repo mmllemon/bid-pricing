@@ -345,6 +345,8 @@ async def _auth_guard(request, call_next):
 
 #: F-16（UI/UX 审查 P2）：CSP header，限制内联脚本/事件处理器。
 #: 静态文件由 uvicorn 直接服务，不经 API 路由，故仅对非 /api 响应注入。
+#: F-P0-3（2026-10-07）：补 frame-ancestors 'self'——此前只有 frame-src（管"我能嵌谁"），
+#: 没有 frame-ancestors（管"谁能嵌我"），file:// 直开或任意外站 iframe 嵌本页无约束。
 _CSP_HEADER = (
     "default-src 'self'; "
     "script-src 'self'; "
@@ -355,7 +357,8 @@ _CSP_HEADER = (
     "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000; "
     # 个人工作台 iframe（app.js 用 http://127.0.0.1:3456）：无 frame-src 会回退
     # default-src 'self' 被拦，localhost/127.0.0.1 两个写法都要放行。
-    "frame-src http://127.0.0.1:3456 http://localhost:3456"
+    "frame-src http://127.0.0.1:3456 http://localhost:3456; "
+    "frame-ancestors 'self'"
 )
 
 
@@ -626,7 +629,9 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         payload["plan_id"] = job_id
         payload["group_id"] = effective_group_id
         # 先导出再落盘：保存的方案 result 也要带 excel_download_url，否则打开方案时下载按钮 href="#" 无反应
-        excel_url = _export_xlsx(payload, job_id)
+        # B-P0-1：本函数是 async 路由，_export_xlsx 内的 subprocess.run(node, timeout=60) 是同步阻塞，
+        # 直接调会卡住事件循环（一次导出最长 60s 全站无响应）。包进 to_thread，与本文件他处同口径。
+        excel_url = await asyncio.to_thread(_export_xlsx, payload, job_id)
         if excel_url:
             payload["excel_download_url"] = excel_url
 

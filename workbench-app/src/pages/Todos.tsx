@@ -30,6 +30,9 @@ import {
 } from '../features/todos/todoPresentation';
 import { RECEIPT_PRINT_DURATION_MS } from '../features/todos/receiptMotion';
 
+// W-2 注（2026-10-07）：此处的非四色是刻意的来源品牌标识（飞书橙/苹果蓝），
+// 不是语义色——用户靠"蓝色=苹果日历"认来源，换成四色反而认不出。与 V2 四色约定豁免，
+// 豁免面仅限本映射（来源色点 + 左边框），其余语义色一律走令牌。
 const SOURCE_COLOR: Record<string, string> = {
   things: '#FFD12E',
   feishu: '#FF5A1F',

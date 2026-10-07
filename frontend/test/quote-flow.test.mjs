@@ -213,16 +213,14 @@ test('R9 确认框（报价页）：取消/确认/Escape 的返回值与焦点�
   window.close();
 });
 
-test('R9 确认框（工具页）：无标题、无焦点陷阱（与原件行为一致）', async () => {
-  // 注：tool-well.js 的 uiConfirm 在 IIFE 内、不挂 window；这里直接用共享实现 + 该页传入的
-  // options 验证行为（「tool-well.js 已委托给 window.gcConfirm」由 smoke.test.mjs 静态核对）。
+test('R9 确认框（工具页）：走 toolConfirm，无标题、无焦点陷阱', async () => {
+  // 与远端 P2 合并后的实际调用链：tool-well.js → window.toolConfirm → js/confirm.js → gcConfirm。
   const { window, errors } = loadPage('tool-well.html');
   await settle(0);
   assert.equal(typeof window.gcConfirm, 'function', '工具页也应加载 confirm.js');
+  assert.equal(typeof window.toolConfirm, 'function', 'tool-common.js 应暴露 toolConfirm');
 
-  const p = window.gcConfirm('删除「某井」？该井的保存记录将不可恢复。', {
-    danger: true, ariaLabel: '确认删除', okLabel: '确认删除', trap: false,
-  });
+  const p = window.toolConfirm('删除「某井」？该井的保存记录将不可恢复。');
   await settle(0);
   const ov = window.document.querySelector('#ui-confirm');
   assert.ok(ov, '应渲染 #ui-confirm');
@@ -230,14 +228,12 @@ test('R9 确认框（工具页）：无标题、无焦点陷阱（与原件行�
   assert.match(ov.textContent, /确认删除/);
   assert.ok(!/删除已定稿方案/.test(ov.textContent), '井库删除不该出现方案定稿的文案');
   assert.equal(window.document.body.getAttribute('tabindex'), null,
-    '工具页没有模态栈：trap:false 不得改动 body[tabindex]');
+    '工具页没有模态栈：不得改动 body[tabindex]');
   ov.querySelector('[data-act="ok"]').click();
   assert.equal(await p, true, '确认 → true');
   assert.deepEqual(errors, []);
   window.close();
 });
-
-
 
 test('R8 目标总报价留空不得被占位默认值兜成 0.00 提交', async () => {
   const { window, errors, calls } = await bootQuotePage();

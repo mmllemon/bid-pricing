@@ -150,11 +150,17 @@ test('R9 确认框只有一个创建点：不得再有第二份 #ui-confirm 实�
   assert.deepEqual(creators, ['js/confirm.js'],
     '创建 #ui-confirm 的文件应当只有 js/confirm.js（两处实现各自 createElement 同一个 id，'
     + '靠「永不同页加载」侥幸不冲突）；如新增了调用方，请传 options 而不是再写一份实现');
-  // 两个使用方都必须**委托**给共享实现，而不是各写一份
+  // 委托关系（与远端 P2 合并后的形态）：报价页 app.js → gcConfirm；
+  // 工具页 tool-well.js → toolConfirm；toolConfirm 自身也只是委托给 gcConfirm。
   assert.ok(readPage('app.js').includes('window.gcConfirm('),
     'app.js 的 uiConfirm 应委托给 window.gcConfirm');
-  assert.ok(readPage('js/tool-well.js').includes('window.gcConfirm('),
-    'tool-well.js 应委托给 window.gcConfirm');
+  assert.ok(readPage('js/tool-well.js').includes('window.toolConfirm('),
+    '工具页应走 window.toolConfirm（P2 抽取的共享入口）');
+  const tc = stripJsComments(readPage('js/tool-common.js'));
+  assert.ok(tc.includes('window.gcConfirm('),
+    'tool-common.js 的 toolConfirm 应委托给 window.gcConfirm（全站唯一实现）');
+  assert.ok(!/ov\.id\s*=\s*['"]ui-confirm['"]/.test(tc),
+    'tool-common.js 不得再自己创建 #ui-confirm（合并前它曾与 app.js 各建一份）');
   // 使用方必须先在脚本顺序里拿到它
   for (const [page, consumer] of [['index.html', 'app.js'], ['tool-well.html', 'js/tool-well.js']]) {
     const order = scriptSrcs(readPage(page)).map((s) => s.split('?')[0].replace(/^\.\//, ''));

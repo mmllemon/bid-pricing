@@ -10,6 +10,25 @@
 
 ## [未发布]
 
+### 报价页交互路径修正（R5/R7/R8）：判据先行，逐条变异验证
+
+**修正**
+
+- **R5 焦点陷阱栈不平衡**：`closePlanHub` / `closeCompareModal` / `closeAuditModal` 原先**无条件** `releaseTrap()`，而 `closeOverlays()` 每次切页都串行关闭三个弹层、`onGlobalProjectChange()` 切项目时也只调 `closeCompareModal()`。后果：关闭一个**并未打开**的弹层会弹掉别人压在栈里的那一项——切项目时方案中心仍开着，但焦点陷阱已被弹空、`body` 提前解锁，开着的模态失去 Tab 陷阱。现改为「只在真的关了时才弹栈」（`closePlanHub` 判 `wasOpen`；`closeCompareModal`/`closeAuditModal` 未开即 return）。
+- **R7 预览后「导出」仍指向上一轮结果**：`syncDockCta()` 只用 `lastResult.excel_download_url` 裁决导出按钮，而预览会把右栏切回无结果态（`setDashboardVisible(false)`）却不清 `lastResult`。于是「重算」置灰、「导出」仍可点。现导出按钮与点击处理都一并要求 `dashActive`（结果态）。
+- **R8 空目标总报价被占位默认值兜成 `0.00` 提交**：`numVal` 留空时回落 `placeholder`（`#targetTotal` 的占位值是 `"0.00"`），而目标总报价是**必填**项（后端 `target_total: float = Form(...)` 且校验 `> 0`）——「用户没填」被静默补成 0 元发出去，再以一次服务端「必填/非正数」错误收场。现在 `validateParams()` 在提交前拦住空值/非正数并就地标红提示；比率框的**实时**校验传 `markTargetTotal:false`，避免在比率框打字时把焦点抢到总报价框上。`numVal` 的占位兜底保留给**可选**字段（固定税前项），注释写明适用边界。
+
+**新增**
+
+- `frontend/test/quote-flow.test.mjs`（3 项）+ `frontend/test/_harness.mjs`（共享加载器，`smoke.test.mjs` 一并改用）。断言全部落在**可观察后果**上（DOM 状态、是否发出请求），不断言内部变量；三个用例都是从页面真实操作路径走（点按钮 → 桩 fetch → 读状态）。
+- 三条判据都做了**变异验证**（判据先行 → 逐条把修复打回）：每条对应修复被回退时，**只有**该条判据变红。
+
+**教训（写进 `test/_harness.mjs` 与 README，供后来者少走弯路）**
+
+- jsdom 里存在两处时序陷阱，都会让判据得出与事实相反的结论：① `initDashboard` 把初始模块选择放进 `setTimeout` 宏任务，其 `selectModule → closeOverlays()` 会关掉用例刚打开的弹层、并清空 `dashActive/lastResult`；症状是「点击后立即读到 open，一个 tick 后就没了」。② 加载后再改 `location.hash`，jsdom 会排入额外 hashchange 任务，在用例点击之后才跑。对策分别是 `waitForInit()` 与「加载时带 `#quote`」。
+- 「等请求已发出」≠「等渲染完成」：交互判据要等**可观察状态**（如按钮 disabled 翻转），否则断言跑在渲染之前。
+- 变异验证必须在**提交之后**做：用 `git checkout --` 回退变异时会连带丢弃尚未提交的修复（本轮踩过一次，已按原样重建）。
+
 ### 前端回归冒烟入仓（jsdom）：把「文本看着对、运行就炸」变成机械判据
 
 **新增**

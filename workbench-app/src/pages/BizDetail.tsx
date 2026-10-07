@@ -98,9 +98,21 @@ const EXEC_TABLES: ExecTableDef[] = [
       { key: 'note', label: '备注', type: 'text' },
     ],
   },
+  {
+    key: 'settlement', title: '结算',
+    columns: [
+      { key: 'round', label: '轮次', type: 'select', options: ['初审', '终审'] },
+      { key: 'submit_amount', label: '送审金额', type: 'number' },
+      { key: 'submit_date', label: '送审日期', type: 'date' },
+      { key: 'approved_amount', label: '审定金额', type: 'number' },
+      { key: 'approved_date', label: '审定日期', type: 'date' },
+      { key: 'status', label: '状态', type: 'select', options: ['未送审', '已送审', '审定中', '已审定'] },
+      { key: 'note', label: '备注', type: 'text' },
+    ],
+  },
 ];
 
-const MONEY_KEYS = new Set(['amount', 'target', 'actual', 'claimed', 'received']);
+const MONEY_KEYS = new Set(['amount', 'target', 'actual', 'claimed', 'received', 'submit_amount', 'approved_amount']);
 
 function cellText(col: ExecColumn, v: unknown): string {
   if (v == null || v === '') return '—';
@@ -501,6 +513,9 @@ export default function BizDetailPage() {
                     <div className="biz-metric"><span className="l">目标成本</span><span className="v">{yf(summary.cost_target)}</span></div>
                     <div className="biz-metric"><span className="l">实际成本</span><span className="v">{yf(summary.cost_actual)}</span></div>
                     <div className="biz-metric"><span className="l">资金压力</span><span className="v">{summary.fund_pressure != null ? pct(summary.fund_pressure) : '—'}</span></div>
+                    <div className="biz-metric"><span className="l">送审金额</span><span className="v">{yf(summary.settle_submit)}</span></div>
+                    <div className="biz-metric"><span className="l">审定金额</span><span className="v">{yf(summary.settle_approved)}</span></div>
+                    <div className="biz-metric"><span className="l">审减额</span><span className="v">{yf(summary.settle_reduction)}</span></div>
                   </div>
                 </div>
               )}

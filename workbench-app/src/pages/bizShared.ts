@@ -52,4 +52,7 @@ export interface ExecSummary {
   cost_variance: number;
   visa_approved: number;
   visa_pending: number;
+  settle_submit: number;
+  settle_approved: number;
+  settle_reduction: number;
 }

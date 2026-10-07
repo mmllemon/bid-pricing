@@ -102,3 +102,21 @@ def test_summary_empty_project(db):
     assert s["contract_total"] == 0
     assert s["receivable"] == 0
     assert s["fund_pressure"] is None
+
+
+def test_settlement_roundtrip_and_summary(db):
+    r1 = sqlite_store.exec_save("settlement", {
+        "project_id": "P1", "round": "初审", "submit_amount": 1100000,
+        "submit_date": "2026-06-01", "status": "已送审",
+    }, db=db)
+    assert r1["round"] == "初审"
+    # 更新为已审定
+    r2 = sqlite_store.exec_save("settlement", {
+        "id": r1["id"], "project_id": "P1", "approved_amount": 1050000,
+        "approved_date": "2026-08-01", "status": "已审定",
+    }, db=db)
+    assert r2["approved_amount"] == 1050000.0
+    s = sqlite_store.exec_summary("P1", db=db)
+    assert s["settle_submit"] == 1100000.0
+    assert s["settle_approved"] == 1050000.0
+    assert s["settle_reduction"] == 50000.0

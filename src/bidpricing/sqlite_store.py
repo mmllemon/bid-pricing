@@ -151,6 +151,21 @@ CREATE TABLE IF NOT EXISTS exec_visa (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_exec_visa_project ON exec_visa(project_id);
+-- 结算（2026-10-07）：送审/审定，支持多轮（初审/终审）。
+CREATE TABLE IF NOT EXISTS exec_settlement (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  round TEXT NOT NULL DEFAULT '终审',
+  submit_amount REAL,
+  submit_date TEXT,
+  approved_amount REAL,
+  approved_date TEXT,
+  status TEXT NOT NULL DEFAULT '未送审',
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exec_settlement_project ON exec_settlement(project_id);
 """
 
 
@@ -176,11 +191,13 @@ _SCHEMA_OBJECTS = (
     ("table", "plan_slot"), ("table", "audit_log"),
     ("table", "exec_contract"), ("table", "exec_cost"),
     ("table", "exec_payment"), ("table", "exec_visa"),
+    ("table", "exec_settlement"),
     ("index", "idx_plan_project"), ("index", "idx_plan_saved"),
     ("index", "idx_plan_amount"), ("index", "idx_group_project"),
     ("index", "idx_audit_ts"), ("index", "idx_audit_action"),
     ("index", "idx_exec_contract_project"), ("index", "idx_exec_cost_project"),
     ("index", "idx_exec_payment_project"), ("index", "idx_exec_visa_project"),
+    ("index", "idx_exec_settlement_project"),
 )
 
 
@@ -1005,6 +1022,7 @@ _EXEC_TABLES = {
     "cost": "exec_cost",
     "payment": "exec_payment",
     "visa": "exec_visa",
+    "settlement": "exec_settlement",
 }
 #: 各表可写字段（id/project_id/created_at/updated_at 由后端管理，不在白名单）。
 _EXEC_FIELDS = {
@@ -1013,6 +1031,8 @@ _EXEC_FIELDS = {
     "payment": ("period", "claimed", "claimed_at", "status", "received",
                 "received_at", "note"),
     "visa": ("no", "kind", "amount", "status", "date", "note"),
+    "settlement": ("round", "submit_amount", "submit_date", "approved_amount",
+                   "approved_date", "status", "note"),
 }
 
 
@@ -1057,12 +1077,16 @@ def exec_save(table: str, rec: dict[str, Any],
         raise ValueError("project_id 不能为空")
     rid = (rec.get("id") or "").strip() or uuid.uuid4().hex
     now = _now_iso()
+    provided = set(rec.keys())  # 更新时只碰显式传入的字段，未传的不置 NULL
     data: dict[str, Any] = {"id": rid, "project_id": pid}
     for f in fields:
+        if f not in provided:
+            continue
         v = rec.get(f)
-        if v is None and f in ("status", "kind"):
+        if v is None and f in ("status", "kind", "round"):
             continue  # 有 NOT NULL DEFAULT 的列：不传=用库默认
-        if f in ("amount", "target", "actual", "claimed", "received"):
+        if f in ("amount", "target", "actual", "claimed", "received",
+                 "submit_amount", "approved_amount"):
             data[f] = _num_or_none(v)
         else:
             data[f] = (str(v).strip() or None) if v is not None else None
@@ -1123,6 +1147,8 @@ def exec_summary(project_id: str | None = None,
     成本口径：cost_target 目标成本合计；cost_actual 实际成本合计；
       cost_variance = actual - target（正=超支）。
     签证口径：visa_approved 已批签证金额；visa_pending 待批签证金额。
+    结算口径：settle_submit 送审金额合计；settle_approved 审定金额合计；
+      settle_reduction = submit - approved（审减额，正=审减）。
     """
     conn = _connect(db)
     try:
@@ -1138,6 +1164,8 @@ def exec_summary(project_id: str | None = None,
             "SELECT COALESCE(SUM(amount),0) FROM exec_visa WHERE status != '已批'"
             + (" AND project_id = ?" if project_id else ""),
             ([project_id] if project_id else [])).fetchone()[0] or 0)
+        settle_submit = _sum_col(conn, "exec_settlement", "submit_amount", project_id)
+        settle_approved = _sum_col(conn, "exec_settlement", "approved_amount", project_id)
     finally:
         conn.close()
     receivable = round(contract_total - received_total, 2)
@@ -1152,4 +1180,7 @@ def exec_summary(project_id: str | None = None,
         "cost_variance": round(cost_actual - cost_target, 2),
         "visa_approved": round(visa_approved, 2),
         "visa_pending": round(visa_pending, 2),
+        "settle_submit": round(settle_submit, 2),
+        "settle_approved": round(settle_approved, 2),
+        "settle_reduction": round(settle_submit - settle_approved, 2),
     }

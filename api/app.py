@@ -352,7 +352,10 @@ _CSP_HEADER = (
     "img-src 'self' data:; "
     # 前端 API_BASE 默认写 http://localhost:8000——CSP 源匹配按主机名字面量，
     # localhost 与 127.0.0.1 是两个不同的源，缺哪一个就拦哪一个。
-    "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000"
+    "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000; "
+    # 个人工作台 iframe（app.js 用 http://127.0.0.1:3456）：无 frame-src 会回退
+    # default-src 'self' 被拦，localhost/127.0.0.1 两个写法都要放行。
+    "frame-src http://127.0.0.1:3456 http://localhost:3456"
 )
 
 

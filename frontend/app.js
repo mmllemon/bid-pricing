@@ -3,7 +3,7 @@ const moduleView = document.querySelector('#moduleView');
 const workbenchView = document.querySelector('#workbenchView');
 // 个人工作台已由 React 版（workbench-server :3456，与 SPA 同进程）接管；
 // 母项目侧只保留一个同页 iframe 宿主。P-W8 起工作台 9 页并入外层侧栏作二级折叠项，
-// 父 :8080 与子 :3456 跨源，二级路由靠 postMessage 双向同步。
+// 父 :8000 与子 :3456 跨源，二级路由靠 postMessage 双向同步。
 const WB_ORIGIN = window.__WORKBENCH_ORIGIN__ || 'http://127.0.0.1:3456';
 function mountWorkbenchFrame(initialTo) {
   const frame = workbenchView && workbenchView.querySelector('iframe');

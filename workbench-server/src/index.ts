@@ -101,10 +101,11 @@ import { assertSettingsPatch, SettingsPolicyError } from './config/settingsPolic
 
 const app = express();
 app.use(cors({ origin: corsOriginDelegate }));
-// P2: 第三方页面可 iframe 嵌套驱动导航 → frame-ancestors 白名单（仅本机父页 :8080 与自身）
+// P2: 第三方页面可 iframe 嵌套驱动导航 → frame-ancestors 白名单（仅本机父页 :8000 与自身）
 // 可用 WORKBENCH_FRAME_ANCESTORS 环境变量覆盖。
+// 2026-10-07 修正：:8080 已并入 :8000，原白名单写的是旧端口导致 :8000 首页 iframe 被拦。
 const FRAME_ANCESTORS =
-  process.env.WORKBENCH_FRAME_ANCESTORS || "'self' http://127.0.0.1:8080 http://localhost:8080";
+  process.env.WORKBENCH_FRAME_ANCESTORS || "'self' http://127.0.0.1:8000 http://localhost:8000";
 app.use((_req, res, next) => {
   res.setHeader('Content-Security-Policy', `frame-ancestors ${FRAME_ANCESTORS}`);
   next();

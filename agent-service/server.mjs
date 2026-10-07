@@ -18,7 +18,7 @@ import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels, createProvider } from "@earendil-works/pi-ai/models";
@@ -549,7 +549,9 @@ const watchClients = new Set();
 let watchHandle = null;
 let latestView = null;
 
-const server = http.createServer(async (req, res) => {
+// P0 架构收敛（2026-10-07）：请求处理抽为具名导出，供 workbench-server 以 /agent 前缀挂载；
+// 本文件直接 node 运行时仍独立监听 :8010（向下兼容）。
+export async function agentRequestHandler(req, res) {
   const url = new URL(req.url, "http://x");
   // P0-1: CORS 收敛到本机白名单（替代原来的 *）；预检需放行 x-api-token / authorization
   const allowOrigin = corsAllowOrigin(req);
@@ -708,9 +710,17 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent) return send(res, 500, { error: String(err?.message ?? err) });
     res.end();
   }
-});
+}
 
-server.listen(PORT, AGENT_HOST, () => {
+const _isStandalone = (() => {
+  try {
+    return !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+  } catch { return false; }
+})();
+let _server = null;
+if (_isStandalone) {
+  _server = http.createServer(agentRequestHandler);
+  _server.listen(PORT, AGENT_HOST, () => {
   console.log(`[agent-service] listening on ${AGENT_HOST}:${PORT}`);
   console.log(`[agent-service] storage=${SQLITE_FILE}`);
   console.log(`[agent-service] backend=${BACKEND} model=${ACTIVE.provider}/${ACTIVE.model} available=${modelAvailable()}`);
@@ -719,9 +729,12 @@ server.listen(PORT, AGENT_HOST, () => {
     console.log("[agent-service] 安全提示：AGENT_API_TOKEN 未设置，/approve、/apply-model、/watch 无鉴权；" +
       "当前仅靠回环监听 + 本机 CORS 白名单保护。如需对外暴露或加固，设置 AGENT_API_TOKEN（前端面板设置里填同一值）。");
   }
-});
+  });
+}
 
-process.on("SIGINT", async () => {
-  console.log("\n[agent-service] shutting down（后台任务与提醒会在下次启动时自动恢复）…");
-  try { await harness.close(ctx); } finally { server.close(); process.exit(0); }
-});
+if (_isStandalone) {
+  process.on("SIGINT", async () => {
+    console.log("\n[agent-service] shutting down（后台任务与提醒会在下次启动时自动恢复）…");
+    try { await harness.close(ctx); } finally { _server.close(); process.exit(0); }
+  });
+}

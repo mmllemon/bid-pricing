@@ -3,6 +3,15 @@
 > 给非程序员维护者：出问题 / 要备份 / 要迁移时，先看这张表。
 > 盘点基准：`6933c6e`（2026-10-06），依据代码建模（`src/bidpricing/*.py`、`api/*.py`、`workbench-server/src/db.ts`、`agent-service/server.mjs`、前端 localStorage 调用）。运行时文件均 gitignore，**只存在你 Windows 本机**。
 
+## 架构总览（2026-10-07 收敛后：2 进程 2 端口）
+
+| 进程 | 技术栈 | 管什么 | 不管什么 |
+|---|---|---|---|
+| :8000 Python FastAPI | Python＋vanilla JS | 计算与数据：报价/solver、项目、井库、铜铝价、导出；**兼 serving `frontend/` 静态**（`/` 挂载，`html=True`） | 工作台、AI 助手 |
+| :3456 Node Express | TypeScript＋React | 工作台生态（lshu fork：待办/热点/知识/扫描/财务/设置）＋**`/agent/*`（AI 助手，原独立 :8010 已并入）**＋ serving React SPA | 报价计算 |
+
+分工口诀：**Python 管算数，Node 管工作台**。Python 是你最熟的部分，放心改；Node 是 lshu 生态，"不动就是赢"，只调它的 HTTP API。前端两套：vanilla（工具箱，要快、单文件好改）＋ React（工作台 9 页重型）。跨栈只走 HTTP/SSE，不共享代码。
+
 ## 文件存储（3 个库，各有主人）
 
 | 数据 | 文件 | 归属进程 | 表 / 内容 | 备份 |
@@ -12,8 +21,8 @@
 | 井库 | `outputs/projects/<user>/well-library.json` | :8000 FastAPI | 手动保存的井（含参数/单价/钢筋表快照）；旧浏览器数据首次访问自动迁移 | 同上（同一目录） |
 | 工作台数据 | `outputs/workbench-data/workbench.db` | :3456 Express | `settings`、`todos`（`project_id` 可空→关联 Biz 项目）、`scan_reports`、`xhs_*`（小红书账号）、`hotspot_*`（热点雷达：微信源走次幂＋`rss:` 源走 RSS 链路）、`productivity_*`（日程/AI分析） | 拷整个目录（WAL 模式：停服务后拷，或连 `-wal`/`-shm` 一起拷） |
 | 知识库文档 | `outputs/workbench-data/knowledge/<id>.md`＋`index.json` | :3456 Express | 知识大脑上传的 .md（按标题切分片段，本地全文检索，不带 AI 问答；2026-10-06 起替代已下线的 :8765 RAG 服务） | 同上（同一目录） |
-| Agent 会话 | `agent-service/agent.sqlite` | :8010 agent-service | 会话/任务、提醒、审批决定（表由 Pi Durable 库管理） | 拷文件 |
-| 模型配置 | `agent-service/agent-model-config.json` | :8010 | 自定义模型 baseUrl＋**API Key**（已 gitignore，别外传） | 同上 |
+| Agent 会话 | `agent-service/agent.sqlite` | :3456 Express（/agent，原独立 :8010 已并入） | 会话/任务、提醒、审批决定（表由 Pi Durable 库管理） | 拷文件 |
+| 模型配置 | `agent-service/agent-model-config.json` | :3456（/agent） | 自定义模型 baseUrl＋**API Key**（已 gitignore，别外传） | 同上 |
 
 ## 浏览器存储（localStorage，备份盲区⚠️）
 

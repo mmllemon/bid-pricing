@@ -21,6 +21,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -982,3 +983,10 @@ async def well_library_save(request: Request):
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
     append_audit(CURRENT_USER, "well.library.save", "PASS", detail={"count": count})
     return JSONResponse(status_code=200, content={"status": "PASS", "count": count})
+# ---- P0 架构收敛（2026-10-07）：:8080 并入 :8000 ----
+# 前端静态（frontend/，vanilla 页）改由本 FastAPI 同进程 serving，run.ps1 不再起
+# python http.server :8080。挂载放在所有 /api 路由之后，API 优先匹配；html=True
+# 让 / 直接落到 frontend/index.html。目录缺失时不挂载（不影响 API）。
+_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+if _FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(_FRONTEND_DIR), html=True), name="frontend")

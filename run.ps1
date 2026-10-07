@@ -1,6 +1,6 @@
 ﻿# bid-pricing one-click launcher (Windows PowerShell 5.1+)
-# 启动后端 8000 + 前端 8080 + agent 8010（Pi Durable 边车，可选，BIDPRICING_AGENT_PORT 可覆盖）
-# + lshu 个人工作台 3456（边车，可选，BIDPRICING_WORKBENCH_PORT 可覆盖；
+# 启动后端 8000（Python FastAPI，含前端静态）+ 个人工作台 3456（Node，可选，BIDPRICING_WORKBENCH_PORT 可覆盖；
+# agent 已并入工作台进程（/agent 前缀），不再独立占 :8010；:8080 已并入 :8000；
 #   代码取仓库内 workbench-app/（React 前端）+ workbench-server/（Express 后端），不再指向 skill 安装目录）；
 # 首次运行在仓库 .venv 内建隔离环境并装依赖；Ctrl+C 停止全部。
 #
@@ -22,11 +22,9 @@
 #      stderr 升级成**终止性错误**，脚本会在装依赖中途直接暴毙。所有原生命令统一走 Invoke-Native。
 #   5) 启动后必须真的探到 HTTP 200 才允许打印成功，杜绝「假成功」。
 #   6) Wait-Process 的 -Id 只能出现一次，多进程必须传数组；写成 -Id $a -Id $b 会参数绑定失败。
-#   7) 端口三重防护：预检占用 / 探活后校验进程存活 / 端口可覆盖。8080 是常见的
-#      应用/代理端口（实测被 CAD 阅读器占用过）：http.server 绑定失败会静默退出，
-#      而探活 GET / 可能被占用方的 HTTP 服务答 200 —— 打印「成功」而前端实际没起来。
-#      故起服务前先查端口占用并明说占用者；探活通过后还须确认是自己拉起的进程
-#      还活着；端口可用 BIDPRICING_BACKEND_PORT / BIDPRICING_FRONTEND_PORT 覆盖。
+#   7) 端口三重防护：预检占用 / 探活后校验进程存活 / 端口可覆盖。
+#      起服务前先查端口占用并明说占用者；探活通过后还须确认是自己拉起的进程
+#      还活着；端口可用 BIDPRICING_BACKEND_PORT / BIDPRICING_WORKBENCH_PORT 覆盖。
 #   8) WORKBENCH_UPSTREAM 必须在**起后端进程之前**设好：api/wb_proxy.py 在 import 时
 #      读它（默认 127.0.0.1:3456），后端拉起后再改只能影响新进程，反代仍指向旧地址。
 #   9) lshu 工作台要跑 src/index.ts（node --import tsx），不能跑 dist/index.js：
@@ -40,25 +38,24 @@
 #
 # 启动拓扑（一览表，出问题先看这张）：
 #
-#   浏览器 ──► :8080  前端静态（python http.server，只 serving frontend/）
-#              :8000  后端 API（FastAPI，api/app.py）
+#   浏览器 ──► :8000  后端 API + 前端静态（FastAPI，api/app.py；/ 挂 frontend/）
 #                ├─ /api/*              报价 / 项目 / 井库 / 方案
+#                ├─ /*                  前端静态（html=True，/ → index.html）
 #                └─ /api/wb/* ──► :3456 反代（strangler；已收编的走本地 wb_local）
 #              :3456  个人工作台（Express，SPA 与 API 同进程；可选边车）
-#              :8010  Agent 边车（Pi Durable；可选边车）
+#                └─ /agent/*           Agent（Pi Durable，原独立 :8010，已并入本进程）
 #
 #   端口覆盖（重跑生效，无需改脚本）：
-#     $env:BIDPRICING_BACKEND_PORT（8000）/ $env:BIDPRICING_FRONTEND_PORT（8080）/
-#     $env:BIDPRICING_AGENT_PORT（8010）/ $env:BIDPRICING_WORKBENCH_PORT（3456）
+#     $env:BIDPRICING_BACKEND_PORT（8000）/ $env:BIDPRICING_WORKBENCH_PORT（3456）
 #
 #   数据目录（备份就拷这几个）：
 #     outputs/projects/<user>/   quote.db（方案）＋ projects.json（项目）＋ well-library.json（井库）
 #     outputs/workbench-data/     workbench.db（工作台待办/热点/小红书）
 #     agent-service/agent.sqlite  Agent 会话 / 提醒 / 审批记录
-#   日志：outputs\logs\*.log（backend / frontend / agent / workbench 各一对 out/err）
+#   日志：outputs\logs\*.log（backend / workbench 各一对 out/err）
 #
 #   故障速查：
-#     启动报端口被占用   → 按提示用 $env:<名> 换端口重跑（8080 常被 CAD 阅读器占用）
+#     启动报端口被占用   → 按提示用 $env:<名> 换端口重跑
 #     页面空白 / 转圈    → 先看 outputs\logs\backend.err.log（:8000 挂则全挂）
 #     工作台 iframe 空白 → outputs\logs\workbench.err.log（边车，可选，不影响主应用）
 #     审批 / 模型设置 401 → 服务端 AGENT_API_TOKEN 与面板 token 是否一致
@@ -280,7 +277,7 @@ $LogDir = Join-Path $Root "outputs\logs"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 # ============================================================================
-# 端口：默认 8000/8080，可用环境变量覆盖（端口被其他应用占用时无需改脚本）
+# 端口：默认 8000（后端+前端）/ 3456（工作台，含 agent），可用环境变量覆盖（端口被其他应用占用时无需改脚本）
 # ============================================================================
 function Get-PortOrDefault {
     param([string]$EnvName, [int]$Default)
@@ -314,9 +311,7 @@ function Assert-PortFree {
 }
 
 $BackendPort  = Get-PortOrDefault "BIDPRICING_BACKEND_PORT" 8000
-$FrontendPort = Get-PortOrDefault "BIDPRICING_FRONTEND_PORT" 8080
 Assert-PortFree $BackendPort  "后端" "BIDPRICING_BACKEND_PORT"
-Assert-PortFree $FrontendPort "前端" "BIDPRICING_FRONTEND_PORT"
 
 # ============================================================================
 # lshu-workbench 边车：解析目录与端口，并**提前**把反代上游告诉后端。
@@ -364,69 +359,33 @@ $backend = Start-Process -FilePath $Py.Exe `
     -RedirectStandardOutput (Join-Path $LogDir "backend.out.log") `
     -RedirectStandardError (Join-Path $LogDir "backend.err.log")
 
-# --- start frontend 8080 (static server only) ---
-Write-Host "==> frontend http://127.0.0.1:$FrontendPort  ..."
-$frontend = Start-Process -FilePath $Py.Exe `
-    -ArgumentList @("-m", "http.server", "$FrontendPort", "--directory", "frontend") `
-    -WorkingDirectory $Root -PassThru -NoNewWindow `
-    -RedirectStandardOutput (Join-Path $LogDir "frontend.out.log") `
-    -RedirectStandardError (Join-Path $LogDir "frontend.err.log")
+# P0 架构收敛（2026-10-07）：前端静态改由 :8000 FastAPI 同进程 serving（api/app.py 末尾 mount），
+# 不再起 python http.server :8080。
 
 # ============================================================================
-# agent-service（Pi Durable 边车，默认 8010；BIDPRICING_AGENT_PORT 可覆盖）
-# 它是增值组件：任何故障只告警跳过，不阻断主应用（后端/前端）启动。
-# 有意不用 Assert-PortFree 预检：8010 若被「已在跑的 agent-service」占用，
-# 探活会直接通过 → 按「复用外来实例」处理；被别的服务占用则探活失败 → 告警跳过。
-# 与 8000/8080 的「占用即 exit」不同：那两个是主应用，本服务不是。
+# agent 依赖（Pi Durable）：已并入工作台进程（workbench-server :3456 的 /agent 前缀），
+# 不再独立起 :8010 进程。此处只负责装 agent-service/ 的 npm 依赖（server.mjs 的
+# @earendil-works/* 裸导入从该目录的 node_modules 解析）；装失败则工作台段会一并告警。
+# AGENT_SQLITE / agent-model-config.json 默认仍在 agent-service/ 下，就地沿用。
 # ============================================================================
-$AgentPort = Get-PortOrDefault "BIDPRICING_AGENT_PORT" 8010
-$agent = $null
 $AgentDir = Join-Path $Root "agent-service"
-$AgentEntry = Join-Path $AgentDir "server.mjs"
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-
-if (-not (Test-Path -LiteralPath $AgentEntry)) {
-    Write-Host "[WARN] 未找到 agent-service\server.mjs，跳过 agent 服务（不影响主应用）。" -ForegroundColor Yellow
-}
-elseif (-not $nodeCmd) {
-    Write-Host "[WARN] node 不可用，跳过 agent 服务（不影响主应用）。" -ForegroundColor Yellow
-}
-else {
-    # 首次运行：装依赖（npm 走原生命令入口，stderr 警告不升级成终止错误）
-    if (-not (Test-Path (Join-Path $AgentDir "node_modules"))) {
-        Write-Host "==> agent-service: 首次安装依赖（npm install，可能要一会儿）..." -ForegroundColor Cyan
-        $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
-        $r = [pscustomobject]@{ Code = 1; Text = "npm 不可用" }
-        if ($npmCmd) {
-            Push-Location $AgentDir
-            try { $r = Invoke-Native -Exe $npmCmd.Source -ArgList @("install", "--no-audit", "--no-fund") -Capture }
-            finally { Pop-Location }
-        }
+if (-not (Test-Path (Join-Path $AgentDir "node_modules"))) {
+    Write-Host "==> agent 依赖：首次安装（npm install，可能要一会儿）..." -ForegroundColor Cyan
+    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    if ($npmCmd) {
+        Push-Location $AgentDir
+        try { $r = Invoke-Native -Exe $npmCmd.Source -ArgList @("install", "--no-audit", "--no-fund") -Capture }
+        finally { Pop-Location }
         if ($r.Code -ne 0) {
-            $tail = @($r.Text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3)
-            Write-Host "[WARN] agent-service 依赖安装失败，跳过（不影响主应用）。npm 输出：" -ForegroundColor Yellow
-            $tail | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow }
+            Write-Host "[WARN] agent 依赖安装失败，工作台内的 /agent 可能不可用。npm 输出：" -ForegroundColor Yellow
+            @($r.Text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3) |
+                ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow }
         }
     }
-    if (Test-Path (Join-Path $AgentDir "node_modules")) {
-        $env:AGENT_PORT = "$AgentPort"
-        $env:BACKEND_URL = "http://127.0.0.1:$BackendPort"
-        # P0-3: token 透传 —— Start-Process 默认继承父进程环境，这里显式写出以防将来改用 -Environment 启动：
-        # BIDPRICING_API_TOKEN 供边车以 X-API-Token 调用 :8000（与 api/app.py 同语义）；
-        # AGENT_API_TOKEN 供边车自身 /approve、/apply-model、/watch 鉴权（前端面板设置里填同一值）。
-        # 两者都未设置时保持本地零配置可用（边车启动时打印安全提示）。
-        if ($env:BIDPRICING_API_TOKEN) { $env:BIDPRICING_API_TOKEN = $env:BIDPRICING_API_TOKEN }
-        if ($env:AGENT_API_TOKEN) { $env:AGENT_API_TOKEN = $env:AGENT_API_TOKEN }
-        Write-Host "==> agent    http://127.0.0.1:$AgentPort/health  ..."
-        $agent = Start-Process -FilePath $nodeCmd.Source `
-            -ArgumentList @("server.mjs") `
-            -WorkingDirectory $AgentDir -PassThru -NoNewWindow `
-            -RedirectStandardOutput (Join-Path $LogDir "agent.out.log") `
-            -RedirectStandardError (Join-Path $LogDir "agent.err.log")
-    }
+    else { Write-Host "[WARN] npm 不可用，跳过 agent 依赖安装。" -ForegroundColor Yellow }
 }
 
-# ============================================================================
 # lshu-workbench 实例（个人工作台，默认 3456）
 # 同为增值组件：任何故障只告警跳过，不阻断主应用。
 # 有意不用 Assert-PortFree 预检：3456 若被「已在跑的工作台」占用，探活会通过
@@ -498,6 +457,12 @@ else {
         # scanner.ts 口径：settings.scanRoot > $env:WORKBENCH_SCAN_ROOT > ~/Desktop。
         # 若曾在设置页改过扫描目录，以设置页为准（DB 里 settings.scanRoot 优先）。
         $env:WORKBENCH_SCAN_ROOT = "E:\工作liam"
+        # agent 已并入本进程（/agent）：token 透传（前端面板设置里填同一值；未设置则本地零配置可用）。
+        # Start-Process 默认继承父进程环境，这里显式写出以防将来改用 -Environment 启动。
+        if ($env:AGENT_API_TOKEN) { $env:AGENT_API_TOKEN = $env:AGENT_API_TOKEN }
+        if ($env:BIDPRICING_API_TOKEN) { $env:BIDPRICING_API_TOKEN = $env:BIDPRICING_API_TOKEN }
+        # agent 回调后端（工具执行）地址：默认 127.0.0.1:8000，随 BIDPRICING_BACKEND_PORT 走。
+        $env:BACKEND_URL = "http://127.0.0.1:$BackendPort"
         Write-Host "==> workbench http://127.0.0.1:$WbPort/api/health  ..."
         $workbench = Start-Process -FilePath $nodeCmd.Source `
             -ArgumentList @("--import", "tsx", "src/index.ts") `
@@ -508,6 +473,7 @@ else {
         Remove-Item Env:\PORT -ErrorAction SilentlyContinue
         Remove-Item Env:\WORKBENCH_DATA_DIR -ErrorAction SilentlyContinue
         Remove-Item Env:\WORKBENCH_SCAN_ROOT -ErrorAction SilentlyContinue
+        Remove-Item Env:\BACKEND_URL -ErrorAction SilentlyContinue
     }
 }
 
@@ -527,9 +493,8 @@ function Wait-HttpOk {
 }
 
 function Stop-All {
-    # -Id 只能出现一次；多进程传数组。未启动的边车（$agent / $workbench）为 $null，过滤掉。
-    $ids = @($backend.Id, $frontend.Id)
-    if ($agent) { $ids = @($ids + $agent.Id) }
+    # -Id 只能出现一次；多进程传数组。未启动的边车（$workbench）为 $null，过滤掉。
+    $ids = @($backend.Id)
     if ($workbench) { $ids = @($ids + $workbench.Id) }
     Stop-Process -Id @($ids) -Force -ErrorAction SilentlyContinue
 }
@@ -547,32 +512,19 @@ if ($backend.HasExited) {
     Stop-All
     exit 1
 }
-if (-not (Wait-HttpOk "http://127.0.0.1:$FrontendPort/" 20)) {
-    Write-Host "[ERR] 前端 20s 内未就绪（http://127.0.0.1:$FrontendPort/）。" -ForegroundColor Red
-    Write-Host "      日志：outputs\logs\frontend.err.log" -ForegroundColor Yellow
-    Stop-All
-    exit 1
-}
-if ($frontend.HasExited) {
-    # 同上：200 应答可能来自占用方而非本脚本拉起的前端。
-    Write-Host "[ERR] 首页有 200 应答，但本脚本拉起的前端进程已退出——应答来自占用 $FrontendPort 的其他服务（假成功拦截）。" -ForegroundColor Red
-    Write-Host "      日志：outputs\logs\frontend.err.log" -ForegroundColor Yellow
+# 前端静态与后端同进程（:8000 的 / 挂 frontend/）：/api/health 已证明进程存活，
+# 这里只确认静态挂载生效（目录缺失时挂载跳过，/ 会 404）。
+if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/" 20)) {
+    Write-Host "[ERR] 前端静态 20s 内未就绪（http://127.0.0.1:$BackendPort/ 应 200）。" -ForegroundColor Red
+    Write-Host "      日志：outputs\logs\backend.err.log" -ForegroundColor Yellow
     Stop-All
     exit 1
 }
 
-# agent（边车）：探活通过但本进程已死 = 端口被既有 agent-service/外来服务占用，
-# 按「复用外来实例」处理（Ctrl+C 时不连它）；探活失败 = 启动失败，停掉本进程并告警跳过。
-if ($agent) {
-    if (Wait-HttpOk "http://127.0.0.1:$AgentPort/health" 30) {
-        if ($agent.HasExited) {
-            Write-Host "[WARN] :$AgentPort/health 已有人应答，但本拉起的 agent 进程已退出——复用在跑的 agent-service（Ctrl+C 时不会停它）。" -ForegroundColor Yellow
-            $agent = $null
-        }
-    } else {
-        Write-Host "[WARN] agent 服务 30s 内未就绪，已跳过（不影响主应用）。日志：outputs\logs\agent.err.log" -ForegroundColor Yellow
-        Stop-Process -Id @($agent.Id) -Force -ErrorAction SilentlyContinue
-        $agent = $null
+# agent 已并入工作台进程（/agent）：只做告警级探活，不阻断。
+if ($workbench) {
+    if (-not (Wait-HttpOk "http://127.0.0.1:$WbPort/agent/health" 15)) {
+        Write-Host "[WARN] /agent 15s 内未就绪（agent 挂载失败或依赖缺失），AI 助手不可用，不影响主应用。日志：outputs\logs\workbench.err.log" -ForegroundColor Yellow
     }
 }
 
@@ -592,9 +544,9 @@ if ($workbench) {
 }
 
 Write-Host ""
-Write-Host "  frontend: http://127.0.0.1:$FrontendPort" -ForegroundColor Green
+Write-Host "  frontend: http://127.0.0.1:$BackendPort  （与后端同进程）" -ForegroundColor Green
 Write-Host "  backend:  http://127.0.0.1:$BackendPort/api/health" -ForegroundColor Green
-if ($agent) { Write-Host "  agent:    http://127.0.0.1:$AgentPort/health  (Pi Durable 边车)" -ForegroundColor Green }
+Write-Host "  agent:    http://127.0.0.1:$WbPort/agent/health  （已并入工作台进程）" -ForegroundColor Green
 if ($workbench) { Write-Host "  workbench: http://127.0.0.1:$WbPort/  (个人工作台；母项目 #workbench 以 iframe 嵌入本地址)" -ForegroundColor Green }
 Write-Host "  logs:     outputs\logs\*.log" -ForegroundColor DarkGray
 Write-Host "Press Ctrl+C to stop all services ..." -ForegroundColor DarkGray
@@ -602,8 +554,7 @@ Write-Host "Press Ctrl+C to stop all services ..." -ForegroundColor DarkGray
 try {
     # -Id 只能出现一次；多进程必须传数组。
     # 写成 -Id $a -Id $b 会以「多次指定了参数 Id」参数绑定失败，停止路径直接报错。
-    $ids = @($backend.Id, $frontend.Id)
-    if ($agent) { $ids = @($ids + $agent.Id) }
+    $ids = @($backend.Id)
     if ($workbench) { $ids = @($ids + $workbench.Id) }
     Wait-Process -Id @($ids) -ErrorAction SilentlyContinue
 }

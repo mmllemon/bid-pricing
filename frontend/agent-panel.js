@@ -23,9 +23,10 @@
   }
   const esc = window.gcEsc;
 
+  // P0 架构收敛（2026-10-07）：agent-service 并入 workbench-server（:3456），挂 /agent 前缀
   const AGENT_BASE = location.protocol.startsWith('http')
-    ? location.protocol + '//' + location.hostname + ':8010'
-    : 'http://127.0.0.1:8010';
+    ? location.protocol + '//' + location.hostname + ':3456/agent'
+    : 'http://127.0.0.1:3456/agent';
 
   // P0-1: 边车鉴权 token（与服务端 AGENT_API_TOKEN 对应）。未设置服务端 token 时留空即可；
   // 设置后 /approve、/apply-model 走请求头，/watch（SSE 不支持自定义头）走 ?token= 查询参数。

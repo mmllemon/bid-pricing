@@ -109,6 +109,14 @@ app.use((_req, res, next) => {
   res.setHeader('Content-Security-Policy', `frame-ancestors ${FRAME_ANCESTORS}`);
   next();
 });
+// P0 架构收敛（2026-10-07）：agent-service（原独立 :8010）并入本进程，挂 /agent 前缀。
+// 必须在 express.json() 之前：handler 用 readBody() 自己读流，body-parser 会先把流消费掉。
+// 前缀剥离：handler 内按 /health、/watch 等裸路径匹配。
+import { agentRequestHandler } from '../../agent-service/server.mjs';
+app.use('/agent', (req, res) => {
+  req.url = req.url.replace(/^\/agent/, '') || '/';
+  agentRequestHandler(req as any, res as any);
+});
 app.use(express.json({ limit: '2mb' }));
 
 const PORT = Number(process.env.PORT || 3456);

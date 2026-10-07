@@ -2,23 +2,17 @@
 
 这是独立的 HTML/CSS/JavaScript 页面：不依赖 Streamlit、不打包、无构建步骤。
 
-直接双击 `index.html` 即可预览；也可以在 `frontend` 目录运行：
-
-```powershell
-python -m http.server 8080
-```
-
-然后打开 <http://localhost:8080>。
-
-当前版本已实现界面、导航、参数填写、文件选择，并已接入 FastAPI/Python 计算接口。
-
-启动后端（在**仓库根目录**执行——路径随仓库位置而变，不要写死绝对路径）：
+启动后端（在**仓库根目录**执行——路径随仓库位置而变，不要写死绝对路径），前端静态由后端同进程 serving（2026-10-07 起不再需要独立的 `:8080`）：
 
 ```powershell
 python -m pip install -r requirements-web.txt
 $env:PYTHONPATH = "src"
 uvicorn api.app:app --reload --port 8000
 ```
+
+然后打开 <http://localhost:8000>。
+
+直接双击 `index.html` 也可预览（file:// 模式，API 自动回退 localhost:8000）。
 
 或直接用仓库根目录的 `.\run.ps1` 一键起「后端 8000 + 前端 8080 + 可选边车」，
 它自带解释器能力探测、端口预检与真实探活（详见该脚本头部注释）。

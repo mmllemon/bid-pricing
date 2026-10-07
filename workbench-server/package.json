@@ -21,6 +21,9 @@
     "dotenv": "^17.4.2",
     "express": "^4.21.1",
     "fast-xml-parser": "^5.2.5",
+    "@earendil-works/chord": "^1.0.3",
+    "@earendil-works/pi-ai": "^1.0.3",
+    "@earendil-works/pi-durable": "^1.0.3",
     "multer": "^2.2.0"
   },
   "devDependencies": {

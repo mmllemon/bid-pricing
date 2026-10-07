@@ -170,7 +170,8 @@ class RunScriptPortHardeningTest(unittest.TestCase):
 
     def test_ports_overridable_via_env(self) -> None:
         """端口撞车时必须能换端口而不改脚本；覆盖值须做合法性校验。"""
-        for env in ("BIDPRICING_BACKEND_PORT", "BIDPRICING_FRONTEND_PORT"):
+        # P0 架构收敛（2026-10-07）：:8080 并入 :8000、:8010 并入 :3456，只剩两个端口变量
+        for env in ("BIDPRICING_BACKEND_PORT", "BIDPRICING_WORKBENCH_PORT"):
             self.assertIn(env, self.text, f"缺少端口覆盖变量 {env}")
         self.assertIn(
             "[int]::TryParse",
@@ -195,16 +196,20 @@ class RunScriptPortHardeningTest(unittest.TestCase):
     def test_probe_success_verifies_spawned_process_alive(self) -> None:
         """探活 200 可能由占用同端口的外来服务答出——须校验自己拉起的进程还活着。"""
         backend_guards = list(re.finditer(r"\$backend\.HasExited", self.text))
-        frontend_guards = list(re.finditer(r"\$frontend\.HasExited", self.text))
         self.assertGreaterEqual(
             len(backend_guards), 2,
             "后端至少两处 HasExited：探活失败分支（报退出码）+ 探活成功后的假成功拦截。")
-        self.assertGreaterEqual(
-            len(frontend_guards), 1,
-            "前端探活通过后必须校验 $frontend 存活，否则外来服务可代答 200。")
+        # P0 架构收敛（2026-10-07）：前端静态已并入后端同进程（:8000 的 / 挂 frontend/），
+        # 不再有独立 $frontend 进程；假成功拦截由后端的 HasExited 覆盖。
+        # 此处只要求：无残留 $frontend 引用，且静态挂载本身被探活（目录缺失时 mount 跳过会 404）。
+        self.assertNotIn("$frontend", self.text, "不应再有独立前端进程变量残留")
+        self.assertIn(
+            'Wait-HttpOk "http://127.0.0.1:$BackendPort/"',
+            self.text,
+            "前端静态（:8000 的 /）必须被探活，确认 mount 生效。")
         banner = self.text.find('Write-Host "  frontend: ')
         self.assertGreater(
-            banner, frontend_guards[-1].start(),
+            banner, backend_guards[-1].start(),
             "假成功拦截必须先于成功横幅。")
 
     def test_false_success_guard_precedes_success_banner(self) -> None:

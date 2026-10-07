@@ -963,6 +963,70 @@ def overview_finalize(id: str = Form(...), bid_amount: str = Form(""), bid_cost:
     return JSONResponse(status_code=200, content={"status": "PASS", "project": rec})
 
 
+# ============ 项目执行四表（2026-10-07）============
+# 收入合同 / 成本台帐 / 进度款 / 签证变更，存 quote.db（与报价方案同库，
+# project_id = 经营概览 UUID）。table ∈ contract/cost/payment/visa。
+
+
+@app.get("/api/project/exec/{table}/list")
+def exec_list(table: str, project_id: str = "") -> JSONResponse:
+    """列出某项目的执行记录。"""
+    try:
+        items = sqlite_store.exec_list(table, project_id.strip())
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    return JSONResponse(status_code=200, content={"status": "PASS", "items": items})
+
+
+@app.post("/api/project/exec/{table}/save")
+async def exec_save(table: str, request: Request) -> JSONResponse:
+    """新增或更新一条执行记录。JSON 体须含 project_id；id 为空=新增。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体不是合法 JSON"})
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体须为 JSON 对象"})
+    try:
+        rec = sqlite_store.exec_save(table, body)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    append_audit(CURRENT_USER, f"project.exec.{table}.save", "PASS",
+                 project_id=rec.get("project_id"), detail={"id": rec.get("id")})
+    return JSONResponse(status_code=200, content={"status": "PASS", "record": rec})
+
+
+@app.post("/api/project/exec/{table}/delete")
+async def exec_delete(table: str, request: Request) -> JSONResponse:
+    """删除一条执行记录。JSON 体 {id}。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体不是合法 JSON"})
+    rid = (body.get("id") or "").strip() if isinstance(body, dict) else ""
+    if not rid:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "id 不能为空"})
+    try:
+        ok = sqlite_store.exec_delete(table, rid)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    if not ok:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "记录不存在或已删除"})
+    append_audit(CURRENT_USER, f"project.exec.{table}.delete", "PASS", detail={"id": rid})
+    return JSONResponse(status_code=200, content={"status": "PASS", "deleted": rid})
+
+
+@app.get("/api/project/exec/summary")
+def exec_summary(project_id: str = "") -> JSONResponse:
+    """执行汇总：project_id 为空=全公司口径，否则单项目口径。
+
+    含合同总额/累计到账/应收未收/资金压力、目标-实际成本偏差、已批/待批签证。
+    """
+    pid = project_id.strip() or None
+    return JSONResponse(status_code=200,
+                        content={"status": "PASS", "summary": sqlite_store.exec_summary(pid)})
+
+
 @app.get("/api/well-library/list")
 def well_library_list() -> JSONResponse:
     """井库列表：用户手动保存的井记录（落盘 well-library.json，不再走浏览器 localStorage）。"""

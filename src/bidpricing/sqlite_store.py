@@ -98,6 +98,59 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts     ON audit_log(ts);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
+-- 项目执行四表（2026-10-07）：收入合同 / 成本台帐 / 进度款 / 签证变更。
+-- project_id 统一为经营概览 projects.json 的项目 UUID，与 plan 表同口径。
+CREATE TABLE IF NOT EXISTS exec_contract (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  contract_no TEXT,
+  client TEXT,
+  amount REAL,
+  signed_at TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exec_contract_project ON exec_contract(project_id);
+CREATE TABLE IF NOT EXISTS exec_cost (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  category TEXT,
+  target REAL,
+  actual REAL,
+  occurred_at TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exec_cost_project ON exec_cost(project_id);
+CREATE TABLE IF NOT EXISTS exec_payment (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  period TEXT,
+  claimed REAL,
+  claimed_at TEXT,
+  status TEXT NOT NULL DEFAULT '待审',
+  received REAL,
+  received_at TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exec_payment_project ON exec_payment(project_id);
+CREATE TABLE IF NOT EXISTS exec_visa (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  no TEXT,
+  kind TEXT NOT NULL DEFAULT '签证',
+  amount REAL,
+  status TEXT NOT NULL DEFAULT '待批',
+  date TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exec_visa_project ON exec_visa(project_id);
 """
 
 
@@ -121,9 +174,13 @@ def _now_iso() -> str:
 _SCHEMA_OBJECTS = (
     ("table", "plan"), ("table", "plan_group"),
     ("table", "plan_slot"), ("table", "audit_log"),
+    ("table", "exec_contract"), ("table", "exec_cost"),
+    ("table", "exec_payment"), ("table", "exec_visa"),
     ("index", "idx_plan_project"), ("index", "idx_plan_saved"),
     ("index", "idx_plan_amount"), ("index", "idx_group_project"),
     ("index", "idx_audit_ts"), ("index", "idx_audit_action"),
+    ("index", "idx_exec_contract_project"), ("index", "idx_exec_cost_project"),
+    ("index", "idx_exec_payment_project"), ("index", "idx_exec_visa_project"),
 )
 
 
@@ -939,3 +996,160 @@ def list_audit(db: Path | str | None = None,
         rec["detail"] = json.loads(raw) if raw else None
         out.append(rec)
     return out
+
+
+# ============ 项目执行四表（2026-10-07）============
+#: 前端表名 → sqlite 真表名（API 层用短名校验，防止 SQL 注入式表名拼接）。
+_EXEC_TABLES = {
+    "contract": "exec_contract",
+    "cost": "exec_cost",
+    "payment": "exec_payment",
+    "visa": "exec_visa",
+}
+#: 各表可写字段（id/project_id/created_at/updated_at 由后端管理，不在白名单）。
+_EXEC_FIELDS = {
+    "contract": ("contract_no", "client", "amount", "signed_at", "note"),
+    "cost": ("category", "target", "actual", "occurred_at", "note"),
+    "payment": ("period", "claimed", "claimed_at", "status", "received",
+                "received_at", "note"),
+    "visa": ("no", "kind", "amount", "status", "date", "note"),
+}
+
+
+def _exec_table(name: str) -> str:
+    try:
+        return _EXEC_TABLES[name]
+    except KeyError:
+        raise ValueError(f"未知执行表：{name}（可选：{', '.join(sorted(_EXEC_TABLES))}）")
+
+
+def _num_or_none(v: Any) -> float | None:
+    if v is None or v == "":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def exec_list(table: str, project_id: str,
+              db: Path | str | None = None) -> list[dict[str, Any]]:
+    """列出某项目某执行表的全部记录（按创建时间正序）。"""
+    t = _exec_table(table)
+    conn = _connect(db)
+    try:
+        rows = conn.execute(
+            f"SELECT * FROM {t} WHERE project_id = ? ORDER BY created_at, id",
+            (project_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
+
+
+def exec_save(table: str, rec: dict[str, Any],
+              db: Path | str | None = None) -> dict[str, Any]:
+    """新增或更新一条执行记录。rec 须含 project_id；id 为空=新增。返回落盘记录。"""
+    t = _exec_table(table)
+    fields = _EXEC_FIELDS[table]
+    pid = (rec.get("project_id") or "").strip()
+    if not pid:
+        raise ValueError("project_id 不能为空")
+    rid = (rec.get("id") or "").strip() or uuid.uuid4().hex
+    now = _now_iso()
+    data: dict[str, Any] = {"id": rid, "project_id": pid}
+    for f in fields:
+        v = rec.get(f)
+        if v is None and f in ("status", "kind"):
+            continue  # 有 NOT NULL DEFAULT 的列：不传=用库默认
+        if f in ("amount", "target", "actual", "claimed", "received"):
+            data[f] = _num_or_none(v)
+        else:
+            data[f] = (str(v).strip() or None) if v is not None else None
+    conn = _connect(db)
+    try:
+        old = conn.execute(
+            f"SELECT project_id, created_at FROM {t} WHERE id = ?", (rid,)).fetchone()
+        if old is None:
+            data["created_at"] = now
+            data["updated_at"] = now
+            cols = ", ".join(data.keys())
+            conn.execute(f"INSERT INTO {t} ({cols}) VALUES ({', '.join('?' * len(data))})",
+                         tuple(data.values()))
+        else:
+            if old["project_id"] != pid:
+                raise ValueError("记录归属项目与传入 project_id 不一致，拒绝跨项目改写")
+            data["created_at"] = old["created_at"]
+            data["updated_at"] = now
+            sets = ", ".join(f"{k} = ?" for k in data if k != "id")
+            conn.execute(f"UPDATE {t} SET {sets} WHERE id = ?",
+                         tuple(v for k, v in data.items() if k != "id") + (rid,))
+        conn.commit()
+    finally:
+        conn.close()
+    return data
+
+
+def exec_delete(table: str, rid: str, db: Path | str | None = None) -> bool:
+    """删除一条执行记录，不存在返回 False。"""
+    t = _exec_table(table)
+    conn = _connect(db)
+    try:
+        cur = conn.execute(f"DELETE FROM {t} WHERE id = ?", (rid,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def _sum_col(conn: sqlite3.Connection, table: str, col: str,
+             project_id: str | None) -> float:
+    sql = f"SELECT COALESCE(SUM({col}), 0) FROM {table}"
+    params: list[Any] = []
+    if project_id:
+        sql += " WHERE project_id = ?"
+        params.append(project_id)
+    return float(conn.execute(sql, params).fetchone()[0] or 0)
+
+
+def exec_summary(project_id: str | None = None,
+                 db: Path | str | None = None) -> dict[str, Any]:
+    """执行汇总：project_id 为空=全公司口径，否则单项目口径。
+
+    资金口径（元）：
+      contract_total  收入合同总额；received_total 累计到账；
+      receivable = contract_total - received_total（应收未收）；
+      fund_pressure = receivable / contract_total（合同额为 0 时为 None）。
+    成本口径：cost_target 目标成本合计；cost_actual 实际成本合计；
+      cost_variance = actual - target（正=超支）。
+    签证口径：visa_approved 已批签证金额；visa_pending 待批签证金额。
+    """
+    conn = _connect(db)
+    try:
+        contract_total = _sum_col(conn, "exec_contract", "amount", project_id)
+        received_total = _sum_col(conn, "exec_payment", "received", project_id)
+        cost_target = _sum_col(conn, "exec_cost", "target", project_id)
+        cost_actual = _sum_col(conn, "exec_cost", "actual", project_id)
+        visa_approved = float(conn.execute(
+            "SELECT COALESCE(SUM(amount),0) FROM exec_visa WHERE status = '已批'"
+            + (" AND project_id = ?" if project_id else ""),
+            ([project_id] if project_id else [])).fetchone()[0] or 0)
+        visa_pending = float(conn.execute(
+            "SELECT COALESCE(SUM(amount),0) FROM exec_visa WHERE status != '已批'"
+            + (" AND project_id = ?" if project_id else ""),
+            ([project_id] if project_id else [])).fetchone()[0] or 0)
+    finally:
+        conn.close()
+    receivable = round(contract_total - received_total, 2)
+    return {
+        "project_id": project_id,
+        "contract_total": round(contract_total, 2),
+        "received_total": round(received_total, 2),
+        "receivable": receivable,
+        "fund_pressure": round(receivable / contract_total, 4) if contract_total else None,
+        "cost_target": round(cost_target, 2),
+        "cost_actual": round(cost_actual, 2),
+        "cost_variance": round(cost_actual - cost_target, 2),
+        "visa_approved": round(visa_approved, 2),
+        "visa_pending": round(visa_pending, 2),
+    }

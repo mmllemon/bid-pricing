@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Wallet } from 'pixelarticons/react';
 import { IconBriefcase, IconChart, IconClose, IconEye, IconPlus, IconSearch } from '../components/icons';
+import { API_BASE, pct, toNum, yf } from './bizShared';
+import type { ProjectOverview } from './bizShared';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * 项目经营（M-01）：母项目「除个人工作台外唯一保留」的功能区，整体迁自
@@ -16,13 +19,6 @@ import { IconBriefcase, IconChart, IconClose, IconEye, IconPlus, IconSearch } fr
  * - 卡片堆叠：列内绝对定位错位下移（TAB_H + i*CAS），悬停/聚焦展开完整指标
  * - 新建/编辑弹窗：11 个可编辑字段 + 3 个自动派生指标实时预览 + 删除
  */
-// P0-8: 后端基地址：优先 window.__API_BASE__ 覆盖；否则按当前主机名推导（支持局域网 IP 访问，
-// 与 tool-cable.js 的 API_BASE 约定一致），file:// 直接打开时回退 localhost。
-// :8000 未运行时 load() 的 catch 会显示错误横幅（降级提示），不再静默空白。
-const API_BASE =
-  (window as unknown as { __API_BASE__?: string }).__API_BASE__
-  || (location.hostname ? location.protocol + '//' + location.hostname + ':8000' : 'http://localhost:8000');
-
 const STAGES = ['投标', '中标在建', '已竣工', '已结算', '售后'];
 const ARCHIVE = '未中标';
 /** 阶段 → 样式类（与母项目 cls() 同义；仅用系统四色，灰阶以描边代替） */
@@ -45,44 +41,6 @@ const SORT_OPTIONS: Array<[string, string]> = [
   ['amount', '报价金额'],
   ['profit', '总毛利'],
 ];
-
-interface ProjectOverview {
-  id: string;
-  name?: string | null;
-  short_name?: string | null;
-  stage?: string | null;
-  limit_total?: number | string | null;
-  bid_open_date?: string | null;
-  bid_amount?: number | string | null;
-  bid_cost?: number | string | null;
-  actual_cost?: number | string | null;
-  actual_revenue?: number | string | null;
-  settle_amount?: number | string | null;
-  completed_at?: string | null;
-  gross_profit?: number | null;
-  gross_margin?: number | null;
-  actual_yield?: number | null;
-}
-
-function toNum(v: unknown): number | null {
-  if (v == null || v === '') return null;
-  const n = Number(v);
-  return Number.isNaN(n) ? null : n;
-}
-
-/** 金额：千分位 + 2 位小数；空值显示「—」（与母项目 yf() 同口径）。 */
-function yf(v: unknown): string {
-  const n = toNum(v);
-  if (n == null) return '—';
-  return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-/** 百分比：内部存 0-1 小数，转百分比保留 2 位（与母项目 pct() 同口径）。 */
-function pct(v: unknown): string {
-  const n = toNum(v);
-  if (n == null) return '—';
-  return (n * 100).toFixed(2) + '%';
-}
 
 /** 派生指标：总毛利/总毛利率/实际收益率（与母项目 deriveProj() 逐行为同）。 */
 function derive(f: Record<string, string>): { gross_profit: number | null; gross_margin: number | null; actual_yield: number | null } {
@@ -116,10 +74,10 @@ interface CardProps {
   p: ProjectOverview;
   index?: number;
   todoCount?: number;
-  onEdit: (p: ProjectOverview) => void;
+  onOpen: (p: ProjectOverview) => void;
 }
 
-function BizCard({ p, index, todoCount, onEdit }: CardProps) {
+function BizCard({ p, index, todoCount, onOpen }: CardProps) {
   const gp = toNum(p.gross_profit);
   const gm = toNum(p.gross_margin);
   const clsV = gm != null ? (gm < 0 ? ' neg' : ' pos') : '';
@@ -137,9 +95,9 @@ function BizCard({ p, index, todoCount, onEdit }: CardProps) {
       tabIndex={0}
       aria-label={`${disp} 项目卡片`}
       style={stacked ? { top: (index as number) * CARD_CASCADE } : undefined}
-      onClick={() => onEdit(p)}
+      onClick={() => onOpen(p)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onEdit(p);
+        if (e.key === 'Enter') onOpen(p);
       }}
     >
       <div className={`biz-tab ${STAGE_CLASS[stage] || 'b-arch'}`} title={tip}>
@@ -160,7 +118,7 @@ function BizCard({ p, index, todoCount, onEdit }: CardProps) {
           <div className="biz-metric"><span className="l">总毛利</span><span className={`v${clsV}`}>{yf(gp)}</span></div>
           <div className="biz-metric"><span className="l">总毛利率</span><span className={`v${clsV}`}>{pct(gm)}</span></div>
         </div>
-        <div className="biz-foot">点击卡片编辑参数 · 阶段下拉为流转唯一入口</div>
+        <div className="biz-foot">点击卡片进入项目主页 · 阶段下拉为流转唯一入口</div>
       </div>
     </div>
   );
@@ -189,14 +147,14 @@ const FORM_FIELDS: Array<{ key: string; label: string; placeholder: string }> = 
   { key: 'settle_amount', label: '结算金额', placeholder: '' },
 ];
 
-interface ModalProps {
+export interface BizModalProps {
   project: ProjectOverview | null;
   todos: TodoLite[];
   onClose: () => void;
   onSaved: () => void;
 }
 
-function BizEditModal({ project, todos, onClose, onSaved }: ModalProps) {
+export function BizEditModal({ project, todos, onClose, onSaved }: BizModalProps) {
   const isNew = !project;
   const [form, setForm] = useState<Record<string, string>>(() => {
     const base = { ...EMPTY_FORM };
@@ -365,7 +323,7 @@ function NumberField({
   );
 }
 
-interface TodoLite {
+export interface TodoLite {
   id: number;
   title: string;
   status?: string;
@@ -373,6 +331,7 @@ interface TodoLite {
 }
 
 export default function BizPage() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectOverview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -382,6 +341,8 @@ export default function BizPage() {
   const [editing, setEditing] = useState<ProjectOverview | null>(null);
   // 待办（:3456 同源 /api，相对路径即可）：按 projectId 聚合到项目卡片/编辑弹窗
   const [todos, setTodos] = useState<TodoLite[]>([]);
+  // 全公司资金汇总（:8000）：应收未收 / 资金压力
+  const [fund, setFund] = useState<{ receivable: number; fund_pressure: number | null } | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -401,6 +362,14 @@ export default function BizPage() {
 
   useEffect(() => {
     load();
+    // 全公司资金汇总：失败不阻塞（:8000 未起时仅无资金 KPI）
+    fetch(`${API_BASE}/api/project/exec/summary`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: unknown) => {
+        const s = (j as { summary?: { receivable?: number; fund_pressure?: number | null } })?.summary;
+        if (s) setFund({ receivable: s.receivable ?? 0, fund_pressure: s.fund_pressure ?? null });
+      })
+      .catch(() => {});
   }, [load]);
 
   useEffect(() => {
@@ -429,6 +398,8 @@ export default function BizPage() {
     { label: '投标中', value: String(bidding), icon: <IconEye size={32} /> },
     { label: '在建中', value: String(building), icon: <IconChart size={32} /> },
     { label: '总毛利合计', value: yf(grossTotal), icon: <Wallet width={32} height={32} /> },
+    { label: '应收未收', value: fund ? yf(fund.receivable) : '—', icon: <IconChart size={32} /> },
+    { label: '资金压力', value: fund?.fund_pressure != null ? pct(fund.fund_pressure) : '—', icon: <IconEye size={32} /> },
   ];
 
   const q = query.trim().toLowerCase();
@@ -450,7 +421,6 @@ export default function BizPage() {
   }, [filtered, sortMap]);
 
   const openNew = () => { setEditing(null); setShowModal(true); };
-  const openEdit = (p: ProjectOverview) => { setEditing(p); setShowModal(true); };
 
   return (
     <div className="ui-page">
@@ -538,7 +508,7 @@ export default function BizPage() {
                     <div className="biz-col-body" style={bodyStyle}>
                       {arr.length === 0
                         ? <div className="biz-col-empty">—</div>
-                        : arr.map((p, i) => <BizCard key={p.id} p={p} index={i} todoCount={todoCountByProject.get(p.id) || 0} onEdit={openEdit} />)}
+                        : arr.map((p, i) => <BizCard key={p.id} p={p} index={i} todoCount={todoCountByProject.get(p.id) || 0} onOpen={(pp) => navigate(`/biz/${pp.id}`)} />)}
                     </div>
                   </div>
                 );
@@ -549,7 +519,7 @@ export default function BizPage() {
               <summary>未中标归档（{archived.length}）</summary>
               {archived.length > 0 && (
                 <div className="biz-arch-grid">
-                  {archived.map((p) => <BizCard key={p.id} p={p} todoCount={todoCountByProject.get(p.id) || 0} onEdit={openEdit} />)}
+                  {archived.map((p) => <BizCard key={p.id} p={p} todoCount={todoCountByProject.get(p.id) || 0} onOpen={(pp) => navigate(`/biz/${pp.id}`)} />)}
                 </div>
               )}
             </details>

@@ -9,6 +9,7 @@ import HotspotsPage from './pages/Hotspots';
 import KnowledgePage from './pages/Knowledge';
 import FinancePage from './pages/Finance';
 import BizPage from './pages/Biz';
+import BizDetailPage from './pages/BizDetail';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/scan" element={<ScanPage />} />
         <Route path="/finance" element={<FinancePage />} />
         <Route path="/biz" element={<BizPage />} />
+        <Route path="/biz/:id" element={<BizDetailPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>

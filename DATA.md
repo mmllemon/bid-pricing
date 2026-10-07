@@ -16,8 +16,8 @@
 
 | 数据 | 文件 | 归属进程 | 表 / 内容 | 备份 |
 |---|---|---|---|---|
-| 报价方案 | `outputs/projects/<user>/.sqlite/quote.db` | :8000 FastAPI | `plan`（方案）、`plan_group`（分组）、`plan_slot`（槽位）、`audit_log`（审计） | 拷整个 `outputs/projects/<user>/` |
-| 项目经营 | `outputs/projects/<user>/projects.json` | :8000 FastAPI | 项目列表（Biz 页；与方案经 `overview_id` 关联） | 同上（同一目录） |
+| 报价方案 | `outputs/projects/<user>/.sqlite/quote.db` | :8000 FastAPI | `plan`（方案）、`plan_group`（分组）、`plan_slot`（槽位）、`audit_log`（审计）、`exec_contract/cost/payment/visa`（执行四表：收入合同/成本台帐/进度款/签证变更，`project_id`=经营概览 UUID） | 拷整个 `outputs/projects/<user>/` |
+| 项目经营 | `outputs/projects/<user>/projects.json` | :8000 FastAPI | 项目列表（Biz 页；报价方案经 `plan.project_id`=项目 UUID 关联；详情页路由 `/biz/:id`：概况/报价/执行/待办四 tab） | 同上（同一目录） |
 | 井库 | `outputs/projects/<user>/well-library.json` | :8000 FastAPI | 手动保存的井（含参数/单价/钢筋表快照）；旧浏览器数据首次访问自动迁移 | 同上（同一目录） |
 | 工作台数据 | `outputs/workbench-data/workbench.db` | :3456 Express | `settings`、`todos`（`project_id` 可空→关联 Biz 项目）、`scan_reports`、`xhs_*`（小红书账号）、`hotspot_*`（热点雷达：微信源走次幂＋`rss:` 源走 RSS 链路）、`productivity_*`（日程/AI分析） | 拷整个目录（WAL 模式：停服务后拷，或连 `-wal`/`-shm` 一起拷） |
 | 知识库文档 | `outputs/workbench-data/knowledge/<id>.md`＋`index.json` | :3456 Express | 知识大脑上传的 .md（按标题切分片段，本地全文检索，不带 AI 问答；2026-10-06 起替代已下线的 :8765 RAG 服务） | 同上（同一目录） |

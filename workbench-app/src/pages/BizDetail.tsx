@@ -1,0 +1,464 @@
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { API_BASE, pct, yf } from './bizShared';
+import type { ExecSummary, ProjectOverview } from './bizShared';
+import { BizEditModal } from './Biz';
+import type { TodoLite } from './Biz';
+
+/**
+ * 项目主页（M-01 详情）：/biz/:id
+ * 一个项目一页，tab 式——概况 / 报价 / 执行 / 待办，一屏回答「这个项目现在怎么样」。
+ * 数据源：:8000 /api/project/overview/*（项目） /api/group/list（报价方案组）
+ *         /api/project/exec/*（执行四表）；:3456 /api/todos（待办，相对路径）。
+ */
+
+type TabKey = 'overview' | 'quote' | 'exec' | 'todos';
+const TABS: Array<[TabKey, string]> = [
+  ['overview', '概况'],
+  ['quote', '报价'],
+  ['exec', '执行'],
+  ['todos', '待办'],
+];
+
+interface SlotInfo {
+  plan_id?: string | null;
+  strategy?: string | null;
+  status?: string | null;
+  summary?: {
+    target_total?: number | null;
+    competitive_budget?: number | null;
+    saved_at?: string | null;
+  } | null;
+}
+
+interface QuoteGroup {
+  group_id: string;
+  group_name?: string | null;
+  project_name?: string | null;
+  finalized?: boolean | number | null;
+  strategy_slots?: Record<string, SlotInfo> | null;
+}
+
+const SLOT_LABEL: Record<string, string> = { A: '均衡', B: '均匀', C: '不平衡' };
+
+/* ---------------- 执行四表配置 ---------------- */
+interface ExecColumn {
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'date' | 'select';
+  options?: string[];
+}
+interface ExecTableDef {
+  key: string;
+  title: string;
+  columns: ExecColumn[];
+}
+const EXEC_TABLES: ExecTableDef[] = [
+  {
+    key: 'contract', title: '收入合同',
+    columns: [
+      { key: 'contract_no', label: '合同编号', type: 'text' },
+      { key: 'client', label: '甲方', type: 'text' },
+      { key: 'amount', label: '合同金额', type: 'number' },
+      { key: 'signed_at', label: '签订日期', type: 'date' },
+      { key: 'note', label: '备注', type: 'text' },
+    ],
+  },
+  {
+    key: 'cost', title: '成本台帐',
+    columns: [
+      { key: 'category', label: '科目', type: 'select', options: ['人工', '材料', '机械', '分包', '其他'] },
+      { key: 'target', label: '目标成本', type: 'number' },
+      { key: 'actual', label: '实际成本', type: 'number' },
+      { key: 'occurred_at', label: '发生日期', type: 'date' },
+      { key: 'note', label: '备注', type: 'text' },
+    ],
+  },
+  {
+    key: 'payment', title: '进度款',
+    columns: [
+      { key: 'period', label: '期次', type: 'text' },
+      { key: 'claimed', label: '申报金额', type: 'number' },
+      { key: 'claimed_at', label: '申报日期', type: 'date' },
+      { key: 'status', label: '状态', type: 'select', options: ['待审', '已批', '驳回'] },
+      { key: 'received', label: '到账金额', type: 'number' },
+      { key: 'received_at', label: '到账日期', type: 'date' },
+      { key: 'note', label: '备注', type: 'text' },
+    ],
+  },
+  {
+    key: 'visa', title: '签证变更',
+    columns: [
+      { key: 'no', label: '编号', type: 'text' },
+      { key: 'kind', label: '类型', type: 'select', options: ['收方', '变更', '签证', '索赔'] },
+      { key: 'amount', label: '金额', type: 'number' },
+      { key: 'status', label: '状态', type: 'select', options: ['待批', '已批'] },
+      { key: 'date', label: '日期', type: 'date' },
+      { key: 'note', label: '备注', type: 'text' },
+    ],
+  },
+];
+
+const MONEY_KEYS = new Set(['amount', 'target', 'actual', 'claimed', 'received']);
+
+function cellText(col: ExecColumn, v: unknown): string {
+  if (v == null || v === '') return '—';
+  if (MONEY_KEYS.has(col.key)) return yf(v);
+  return String(v);
+}
+
+/* ---------------- 单表 CRUD 区 ---------------- */
+function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: string }) {
+  const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Record<string, string> | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch(`${API_BASE}/api/project/exec/${table.key}/list?project_id=${encodeURIComponent(projectId)}`)
+      .then((r) => r.json() as Promise<{ items?: Array<Record<string, unknown>> }>)
+      .then((j) => setRows(j.items ?? []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, [table.key, projectId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openNew = () => {
+    const f: Record<string, string> = {};
+    table.columns.forEach((c) => { f[c.key] = c.type === 'select' ? (c.options?.[0] ?? '') : ''; });
+    setEditing(f);
+  };
+  const openEdit = (row: Record<string, unknown>) => {
+    const f: Record<string, string> = { id: String(row.id ?? '') };
+    table.columns.forEach((c) => {
+      const v = row[c.key];
+      f[c.key] = v == null ? '' : String(v);
+    });
+    setEditing(f);
+  };
+
+  async function save() {
+    if (!editing) return;
+    const body = { ...editing, project_id: projectId };
+    try {
+      const r = await fetch(`${API_BASE}/api/project/exec/${table.key}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = (await r.json()) as { status?: string; reason?: string };
+      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '保存失败');
+      setEditing(null);
+      load();
+    } catch (err) {
+      window.alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  async function del(row: Record<string, unknown>) {
+    if (!window.confirm('确定删除这条记录？此操作不可恢复。')) return;
+    try {
+      const r = await fetch(`${API_BASE}/api/project/exec/${table.key}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id }),
+      });
+      const j = (await r.json()) as { status?: string; reason?: string };
+      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '删除失败');
+      load();
+    } catch (err) {
+      window.alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  const set = (k: string) => (e: { target: { value: string } }) =>
+    setEditing((prev) => (prev ? { ...prev, [k]: e.target.value } : prev));
+
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>{table.title}（{rows.length}）</h3>
+        <button type="button" className="nb-btn nb-btn--ghost" onClick={openNew}>+ 新增</button>
+      </div>
+      {loading ? (
+        <div className="nb-muted">读取中…</div>
+      ) : rows.length === 0 ? (
+        <div className="empty-state"><p>暂无记录，点右上「新增」开始记账。</p></div>
+      ) : (
+        <div className="note-table">
+          <div className="note-table-head">
+            {table.columns.map((c) => <span key={c.key} className="note-th">{c.label}</span>)}
+            <span className="note-th">操作</span>
+          </div>
+          {rows.map((row) => (
+            <div key={String(row.id)} className="note-row">
+              {table.columns.map((c) => (
+                <div key={c.key} className="note-td" title={String(row[c.key] ?? '')}>
+                  {cellText(c, row[c.key])}
+                </div>
+              ))}
+              <div className="note-td">
+                <button type="button" className="nb-btn nb-btn--ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => openEdit(row)}>编辑</button>
+                <button type="button" className="nb-btn nb-btn--ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 6 }} onClick={() => del(row)}>删除</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {editing && (
+        <div className="biz-mask" onClick={() => setEditing(null)}>
+          <div className="biz-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="biz-mhead">
+              <b>{editing.id ? '编辑' : '新增'}{table.title}</b>
+              <button type="button" className="nb-btn nb-btn--ghost biz-x" aria-label="关闭" onClick={() => setEditing(null)}>✕</button>
+            </div>
+            <div className="biz-mform">
+              {table.columns.map((c) => (
+                <label key={c.key} className="biz-fld">
+                  <span>{c.label}</span>
+                  {c.type === 'select' ? (
+                    <select value={editing[c.key] ?? ''} onChange={set(c.key)}>
+                      {(c.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input type={c.type === 'number' ? 'number' : c.type === 'date' ? 'date' : 'text'}
+                      value={editing[c.key] ?? ''} onChange={set(c.key)} />
+                  )}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button type="button" className="nb-btn nb-btn--ghost" onClick={() => setEditing(null)}>取消</button>
+              <button type="button" className="nb-btn" onClick={save}>保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ---------------- 主页 ---------------- */
+export default function BizDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<TabKey>('overview');
+  const [project, setProject] = useState<ProjectOverview | null>(null);
+  const [summary, setSummary] = useState<ExecSummary | null>(null);
+  const [groups, setGroups] = useState<QuoteGroup[]>([]);
+  const [todos, setTodos] = useState<TodoLite[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showEdit, setShowEdit] = useState(false);
+
+  const pid = id ?? '';
+
+  const load = useCallback(() => {
+    if (!pid) return;
+    setLoading(true);
+    setError('');
+    Promise.all([
+      fetch(`${API_BASE}/api/project/overview/list`).then((r) => r.json()),
+      fetch(`${API_BASE}/api/project/exec/summary?project_id=${encodeURIComponent(pid)}`).then((r) => r.json()),
+      fetch(`${API_BASE}/api/group/list?project_id=${encodeURIComponent(pid)}`).then((r) => r.json()),
+      fetch('/api/todos').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ])
+      .then(([ov, sum, grp, td]: Array<{ projects?: ProjectOverview[]; summary?: ExecSummary; groups?: QuoteGroup[] } & unknown>) => {
+        const list = (ov as { projects?: ProjectOverview[] })?.projects ?? [];
+        const found = list.find((p) => p.id === pid) ?? null;
+        if (!found) throw new Error('项目不存在或已删除');
+        setProject(found);
+        setSummary((sum as { summary?: ExecSummary })?.summary ?? null);
+        setGroups((grp as { groups?: QuoteGroup[] })?.groups ?? []);
+        setTodos(Array.isArray(td) ? (td as TodoLite[]) : []);
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : String(e));
+        setProject(null);
+      })
+      .finally(() => setLoading(false));
+  }, [pid]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Esc 关闭编辑弹窗
+  useEffect(() => {
+    if (!showEdit) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowEdit(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showEdit]);
+
+  const myTodos = todos.filter((t) => t.projectId === pid);
+  const quoteUrl = API_BASE + '/';
+
+  return (
+    <div className="ui-page">
+      <div className="ui-page-head">
+        <div>
+          <div className="ui-page-kicker">
+            <button type="button" className="nb-btn nb-btn--ghost" style={{ padding: '2px 10px', fontSize: 12 }}
+              onClick={() => navigate('/biz')}>← 项目经营</button>
+          </div>
+          <h1>{project ? (project.short_name || project.name || '项目主页') : '项目主页'}</h1>
+        </div>
+        {project && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span className="nb-badge">{project.stage || '—'}</span>
+            <button type="button" className="nb-btn nb-btn--ghost" onClick={() => setShowEdit(true)}>编辑项目</button>
+          </div>
+        )}
+      </div>
+
+      {error && <div className="ui-alert ui-alert--error">{error}</div>}
+      {loading && <div className="nb-muted">读取中…</div>}
+
+      {project && !loading && (
+        <>
+          {/* KPI 一览 */}
+          <div className="biz-metrics" style={{ marginBottom: 16 }}>
+            <div className="biz-metric"><span className="l">总限价</span><span className="v">{yf(project.limit_total)}</span></div>
+            <div className="biz-metric"><span className="l">投标报价</span><span className="v">{yf(project.bid_amount)}</span></div>
+            <div className="biz-metric"><span className="l">总毛利</span><span className="v">{yf(project.gross_profit)}</span></div>
+            <div className="biz-metric"><span className="l">总毛利率</span><span className="v">{pct(project.gross_margin)}</span></div>
+            {summary && (
+              <>
+                <div className="biz-metric"><span className="l">合同总额</span><span className="v">{yf(summary.contract_total)}</span></div>
+                <div className="biz-metric"><span className="l">已到账</span><span className="v">{yf(summary.received_total)}</span></div>
+                <div className="biz-metric"><span className="l">应收未收</span><span className="v">{yf(summary.receivable)}</span></div>
+                <div className="biz-metric"><span className="l">成本偏差</span><span className="v">{yf(summary.cost_variance)}</span></div>
+              </>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--nb-line, #e5e5e5)' }}>
+            {TABS.map(([k, label]) => (
+              <button key={k} type="button"
+                className="nb-btn nb-btn--ghost"
+                style={{
+                  borderRadius: '8px 8px 0 0',
+                  fontWeight: tab === k ? 700 : 400,
+                  opacity: tab === k ? 1 : 0.65,
+                }}
+                onClick={() => setTab(k)}>
+                {label}{k === 'todos' && myTodos.length > 0 ? `（${myTodos.length}）` : ''}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'overview' && (
+            <div>
+              <div className="note-table">
+                <div className="note-table-head">
+                  <span className="note-th">字段</span><span className="note-th">内容</span>
+                </div>
+                {[
+                  ['项目名称', project.name || '—'],
+                  ['简称', project.short_name || '—'],
+                  ['阶段', project.stage || '—'],
+                  ['总限价', yf(project.limit_total)],
+                  ['开标日期', project.bid_open_date || '—'],
+                  ['投标报价金额', yf(project.bid_amount)],
+                  ['投标成本测算', yf(project.bid_cost)],
+                  ['实际成本', yf(project.actual_cost)],
+                  ['实际营收', yf(project.actual_revenue)],
+                  ['结算金额', yf(project.settle_amount)],
+                  ['竣工日期', project.completed_at || '—'],
+                  ['实际收益率', pct(project.actual_yield)],
+                ].map(([k, v]) => (
+                  <div key={k} className="note-row">
+                    <div className="note-td nb-muted">{k}</div>
+                    <div className="note-td">{v}</div>
+                  </div>
+                ))}
+              </div>
+              {summary && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ fontSize: 15 }}>资金与成本</h3>
+                  <div className="biz-metrics">
+                    <div className="biz-metric"><span className="l">已批签证</span><span className="v">{yf(summary.visa_approved)}</span></div>
+                    <div className="biz-metric"><span className="l">待批签证</span><span className="v">{yf(summary.visa_pending)}</span></div>
+                    <div className="biz-metric"><span className="l">目标成本</span><span className="v">{yf(summary.cost_target)}</span></div>
+                    <div className="biz-metric"><span className="l">实际成本</span><span className="v">{yf(summary.cost_actual)}</span></div>
+                    <div className="biz-metric"><span className="l">资金压力</span><span className="v">{summary.fund_pressure != null ? pct(summary.fund_pressure) : '—'}</span></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'quote' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span className="nb-muted" style={{ fontSize: 13 }}>该项目的报价方案组（A 均衡 / B 均匀 / C 不平衡）</span>
+                <a className="nb-btn" href={quoteUrl} target="_blank" rel="noreferrer">去报价页 →</a>
+              </div>
+              {groups.length === 0 ? (
+                <div className="empty-state"><p>暂无报价方案组，去报价页关联本项目做一次测算。</p></div>
+              ) : groups.map((g) => (
+                <section key={g.group_id} style={{ marginBottom: 20 }}>
+                  <h3 style={{ fontSize: 15, margin: '0 0 8px' }}>
+                    {g.group_name || g.group_id}
+                    {g.finalized ? <span className="nb-badge" style={{ marginLeft: 8 }}>已定稿</span> : null}
+                  </h3>
+                  <div className="note-table">
+                    <div className="note-table-head">
+                      <span className="note-th">槽位</span><span className="note-th">策略</span>
+                      <span className="note-th">目标总价</span><span className="note-th">竞争性预算</span>
+                      <span className="note-th">状态</span><span className="note-th">保存时间</span>
+                    </div>
+                    {['A', 'B', 'C'].map((letter) => {
+                      const s = g.strategy_slots?.[letter];
+                      return (
+                        <div key={letter} className="note-row">
+                          <div className="note-td"><b>{letter}</b></div>
+                          <div className="note-td">{SLOT_LABEL[letter] || letter}</div>
+                          <div className="note-td">{s?.summary ? yf(s.summary.target_total) : '—'}</div>
+                          <div className="note-td">{s?.summary ? yf(s.summary.competitive_budget) : '—'}</div>
+                          <div className="note-td">{s?.plan_id ? (s.status || '已算') : '空'}</div>
+                          <div className="note-td">{s?.summary?.saved_at || '—'}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+
+          {tab === 'exec' && (
+            <div>
+              {EXEC_TABLES.map((t) => <ExecSection key={t.key} table={t} projectId={pid} />)}
+            </div>
+          )}
+
+          {tab === 'todos' && (
+            <div>
+              {myTodos.length === 0 ? (
+                <div className="empty-state"><p>该项目暂无关联待办。</p></div>
+              ) : (
+                <div className="note-table">
+                  <div className="note-table-head">
+                    <span className="note-th">待办</span><span className="note-th">状态</span>
+                  </div>
+                  {myTodos.map((t) => (
+                    <div key={t.id} className="note-row">
+                      <div className="note-td">{t.title || String(t.id)}</div>
+                      <div className="note-td">{t.status || '进行中'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {showEdit && project && (
+        <BizEditModal project={project} todos={todos} onClose={() => setShowEdit(false)} onSaved={load} />
+      )}
+    </div>
+  );
+}

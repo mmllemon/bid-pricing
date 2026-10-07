@@ -22,11 +22,12 @@
   var isIndex = !!document.getElementById('quoteView');
   var here = (location.pathname.split('/').pop() || 'index.html');
   var hash = (location.hash || '').replace(/^#/, '');
-  // index 的初始激活项与 app.js initDashboard 的兜底（无 hash → workbench）保持一致。
-  var currentModule = isIndex ? (hash || 'workbench') : '';
+  // index 的初始激活项与 app.js initDashboard 的兜底（无 hash → portal）保持一致。
+  var currentModule = isIndex ? (hash || 'portal') : '';
 
   var ICONS = {
     brand: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/>',
+    portal: '<circle cx="12" cy="12" r="3"/><circle cx="5" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/><path d="M5 12h4m6 0h4M12 5v4m0 6v4"/>',
     workbench: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
     quote: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 14h5M8 17h8"/>',
     cost: '<path d="M12 2v20M5 9l7-7 7 7M5 15l7 7 7-7"/>',
@@ -37,6 +38,12 @@
   };
 
   var NAV_GROUPS = [
+    {
+      title: '数字枢纽',
+      items: [
+        { module: 'portal', num: 'P-00', label: '全景大盘', icon: 'portal' },
+      ],
+    },
     {
       title: '工作台',
       items: [

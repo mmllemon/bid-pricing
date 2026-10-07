@@ -1,3 +1,4 @@
+const portalView = document.querySelector('#portalView');
 const quoteView = document.querySelector('#quoteView');
 const moduleView = document.querySelector('#moduleView');
 const workbenchView = document.querySelector('#workbenchView');
@@ -17,14 +18,15 @@ function mountWorkbenchFrame(initialTo) {
 }
 
 // ---- hash 语义（P-W8）----
-// '#workbench' / '#workbench/<sub>' → 工作台（无 sub 视为根页 '/'）；其余仍是单段模块名。
+// '#portal' → 全景大盘；'#workbench' / '#workbench/<sub>' → 工作台；其余单段模块名。
 // 本函数是 hash 的唯一解析入口，运行中改 hash 与首次加载都走它，避免两处兜底不一致。
 function parseHash(raw) {
   const h = raw || '';
+  if (h === 'portal') return { module: 'portal', sub: null };
   if (h === 'workbench' || h.indexOf('workbench/') === 0) {
     return { module: 'workbench', sub: h.length > 'workbench/'.length ? '/' + h.slice('workbench/'.length) : '/' };
   }
-  return { module: h || 'workbench', sub: null };
+  return { module: h || 'portal', sub: null };
 }
 
 // ---- 与工作台 iframe 的通信（跨源）----
@@ -107,12 +109,32 @@ function selectModule(module, sub) {
   // 操作坞只挂在「投标报价」页；其余页面隐藏（各模块后续接入各自专属操作坞）
   const dock = document.querySelector('.floating-dock');
   if (dock) dock.classList.toggle('hidden', module !== 'quote');
-  // 报价页写 'quote' 而不是清空 hash：清空后 URL 变 ...index.html#，此时 location.hash 是空字符串，
-  // 刷新会命中 initDashboard 的「无 hash → 默认个人工作台」分支，把报价页弹回工作台。
-  // 各模块统一写自己的名字，刷新即可原地恢复。
-  if (module === 'quote') { location.hash = 'quote'; quoteView.classList.remove('hidden'); moduleView.classList.add('hidden'); workbenchView.classList.add('hidden'); }
-  else showModule(module, sub);
+
+  if (module === 'portal') {
+    location.hash = 'portal';
+    if (portalView) {
+      portalView.classList.remove('hidden');
+      if (window.PORTAL_VIEW) window.PORTAL_VIEW.mount(portalView);
+    }
+    quoteView.classList.add('hidden');
+    moduleView.classList.add('hidden');
+    workbenchView.classList.add('hidden');
+    return;
+  }
+  if (portalView) {
+    portalView.classList.add('hidden');
+    if (window.PORTAL_VIEW) window.PORTAL_VIEW.stop();
+  }
+  if (module === 'quote') {
+    location.hash = 'quote';
+    quoteView.classList.remove('hidden');
+    moduleView.classList.add('hidden');
+    workbenchView.classList.add('hidden');
+  } else {
+    showModule(module, sub);
+  }
 }
+window.selectModule = selectModule;
 function closeOverlays() {
   if (typeof closePlanHub === 'function') closePlanHub();
   if (typeof closeCompareModal === 'function') closeCompareModal();
@@ -2100,6 +2122,6 @@ async function onGlobalProjectChange() {
   // selectModule → closeOverlays → closePlanHub，避免初始化早期读到 TDZ 中的变量。
   setTimeout(() => {
     const p = parseHash(location.hash.slice(1));
-    if (p.module === 'workbench' || p.module === 'quote' || modulePages[p.module]) selectModule(p.module, p.sub);
+    selectModule(p.module, p.sub);
   }, 0);
 })();

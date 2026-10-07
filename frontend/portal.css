@@ -1,0 +1,927 @@
+/**
+ * 工程智算 · 像素神经网络全景大盘样式 (Pixel Neural Portal)
+ * 纯直角 + 纯黑硬描边 + 像素字体 + 级联贝塞尔伞状开花网络
+ * 拓扑层级：模块主节点 -> 触须生长 -> 二级分支节点 -> 触须依次开花生长 -> 三级实体卡片 -> 深度控制舱
+ */
+
+/* 禁止在全景大盘视图下外层滚动 */
+html:has(.portal-view:not(.hidden)),
+body:has(.portal-view:not(.hidden)) {
+  overflow: hidden !important;
+}
+
+.portal-view {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 16px);
+  min-height: 640px;
+  background: #f8f9fa;
+  border: 2px solid #111111;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  overflow: hidden !important;
+  user-select: none;
+}
+
+/* 点阵工程网格底纹 */
+.portal-view::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.12) 1.2px, transparent 1.2px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* —— 顶栏控制条 —— */
+.portal-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  border-bottom: 2px solid #111111;
+}
+
+.portal-breadcrumb {
+  font-size: 13px;
+  color: #111111;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.portal-breadcrumb .sep {
+  color: #888888;
+  font-family: monospace;
+}
+
+.crumb-link {
+  cursor: pointer;
+  color: #ff6b00;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.crumb-link:hover {
+  filter: brightness(1.2);
+}
+
+.crumb-active {
+  color: #111111;
+  font-weight: 800;
+}
+
+.pixel-pill-btn {
+  height: 30px;
+  padding: 0 12px;
+  background: #ffffff;
+  border: 1.5px solid #111111;
+  box-shadow: 2px 2px 0 #111111;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.pixel-pill-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #111111;
+}
+
+.pixel-pill-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #111111;
+}
+
+/* —— 星尘 Canvas 与 SVG 光缆层 —— */
+.portal-dust-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.portal-threads {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.portal-orbit-ring {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.06);
+  stroke-width: 1.2;
+}
+
+.portal-orbit-ring.ring-0 {
+  stroke: rgba(255, 107, 0, 0.22);
+  stroke-dasharray: 4, 4;
+}
+
+.portal-orbit-ring.ring-1 {
+  stroke-dasharray: 6, 6;
+}
+
+.portal-orbit-ring.ring-2 {
+  stroke-dasharray: 8, 8;
+}
+
+/* —— 中心呼吸聚能枢纽 (Core Hub) —— */
+.portal-core-hub {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 150px;
+  height: 150px;
+  z-index: 10;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+}
+
+.core-halo {
+  position: absolute;
+  inset: -36px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 107, 0, 0.24) 0%, rgba(229, 160, 0, 0.1) 48%, transparent 72%);
+  animation: core-breathe 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes core-breathe {
+  0%, 100% { transform: scale(0.92); opacity: 0.7; }
+  50% { transform: scale(1.16); opacity: 1; }
+}
+
+.core-pixel-box {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2.5px solid #111111;
+  box-shadow: 0 0 24px rgba(255, 107, 0, 0.16), 3px 4px 0 #111111;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
+}
+
+.core-badge {
+  font-family: var(--font-pixel, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ff6b00;
+  margin-bottom: 2px;
+}
+
+.core-title {
+  font-size: 15px;
+  font-weight: 900;
+  color: #111111;
+  letter-spacing: 0.04em;
+}
+
+.core-sub {
+  font-size: 11px;
+  color: #555555;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.pixel-pulse-dot {
+  width: 6px;
+  height: 6px;
+  background: #10b981;
+  animation: dot-pulse 1.8s infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.6); opacity: 0.4; }
+}
+
+/* —— 模块主节点层 (第 1 列) —— */
+.portal-nodes-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.portal-mod-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 80px;
+  height: 80px;
+  background: #ffffff;
+  border: 2px solid #111111;
+  box-shadow: 3px 3px 0 #111111;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto !important;
+  will-change: transform;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: box-shadow 0.2s, border-color 0.2s, opacity 0.3s;
+  z-index: 42;
+}
+
+.portal-mod-node:hover {
+  box-shadow: 5px 5px 0 #111111;
+  border-color: #ff6b00;
+  z-index: 45;
+}
+
+.portal-mod-node.node-active {
+  border-color: #ff6b00;
+  box-shadow: 4px 4px 0 #ff6b00;
+  z-index: 46;
+}
+
+.portal-mod-node.node-dimmed {
+  opacity: 0.48 !important;
+  filter: grayscale(0.5);
+}
+
+.mod-node-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mod-code {
+  font-family: var(--font-pixel, monospace);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mod-icon-badge {
+  font-family: var(--font-pixel, monospace);
+  font-size: 10px;
+  background: #111111;
+  color: #ffffff;
+  padding: 0 4px;
+}
+
+.mod-node-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #111111;
+  line-height: 1.15;
+}
+
+.mod-node-sub {
+  font-size: 9.5px;
+  color: #777777;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* —— 二级分支节点层 (第 2 列，Branch Nodes) —— */
+.portal-branches-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 22;
+  pointer-events: none;
+}
+
+.portal-branch-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 130px;
+  height: 38px;
+  background: #ffffff;
+  border: 1.5px solid #111111;
+  box-shadow: 2px 2px 0 #111111;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  pointer-events: auto !important;
+  will-change: transform;
+  text-align: left;
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.portal-branch-node:hover {
+  box-shadow: 3.5px 3.5px 0 #111111;
+  border-color: #ff6b00;
+  z-index: 24;
+}
+
+.portal-branch-node.branch-active {
+  border-color: #ff6b00;
+  border-width: 2px;
+  box-shadow: 3px 3px 0 #ff6b00;
+  background: #fffdfa;
+  z-index: 25;
+}
+
+.branch-anchor-in {
+  position: absolute;
+  left: -4px;
+  top: 15px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid #111111;
+  pointer-events: none;
+}
+
+.branch-anchor-out {
+  position: absolute;
+  right: -4px;
+  top: 15px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid #111111;
+  pointer-events: none;
+}
+
+.branch-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.branch-code {
+  font-family: var(--font-pixel, monospace);
+  font-size: 10.5px;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 4px;
+}
+
+.branch-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+  white-space: nowrap;
+}
+
+/* —— 三级实体卡片展开层 (第 3 列，Leaf Cards) —— */
+.portal-fan-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 26;
+  pointer-events: none;
+}
+
+.fan-items-list {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.portal-fan-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 260px;
+  height: 48px;
+  background: #ffffff;
+  border: 1.5px solid #111111;
+  box-shadow: 2px 2px 0 #111111;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  pointer-events: auto !important;
+  will-change: transform;
+  text-align: left;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.portal-fan-card:hover {
+  box-shadow: 4px 4px 0 #111111;
+  border-color: #ff6b00;
+  z-index: 28;
+}
+
+.portal-fan-card.item-selected {
+  border-color: #ff6b00;
+  border-width: 2px;
+  box-shadow: 3px 3px 0 #ff6b00;
+  z-index: 29;
+}
+
+/* 卡片左边缘垂直中点锚点 */
+.card-anchor-dot {
+  position: absolute;
+  left: -4px;
+  top: 21px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid #111111;
+  pointer-events: none;
+}
+
+.card-left .pixel-num {
+  font-family: var(--font-pixel, monospace);
+  font-size: 11px;
+  font-weight: 800;
+  color: #ff6b00;
+  background: rgba(255, 107, 0, 0.1);
+  padding: 2px 4px;
+}
+
+.card-mid {
+  flex: 1;
+  overflow: hidden;
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-desc {
+  font-size: 9.5px;
+  color: #666666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stage-tag {
+  font-family: var(--font-pixel, monospace);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border: 1px solid #111111;
+}
+
+.stage-tag.tag-bid {
+  background: #fef08a;
+  color: #854d0e;
+}
+
+.stage-tag.tag-build {
+  background: #bae6fd;
+  color: #0369a1;
+}
+
+.stage-tag.tag-done {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+/* —— 像素深度业务分析抽屉 (第 4 列，Analysis Drawer) —— */
+.portal-analysis-drawer {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  bottom: 0;
+  width: 410px;
+  background: #ffffff;
+  border-left: 2px solid #111111;
+  box-shadow: -6px 0 24px rgba(0, 0, 0, 0.08);
+  padding: 24px;
+  z-index: 35;
+  transform: translateX(100%);
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.portal-analysis-drawer.open {
+  transform: translateX(0);
+}
+
+.ad-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ad-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pixel-tag {
+  font-family: var(--font-pixel, monospace);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 6px;
+}
+
+.pixel-badge {
+  font-size: 11px;
+  color: #555555;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 1px 6px;
+}
+
+.stage-badge {
+  background: #fef08a;
+  color: #854d0e;
+  border-color: #ca8a04;
+  font-weight: 800;
+}
+
+.ad-close-btn {
+  background: #ffffff;
+  border: 1.5px solid #111111;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  box-shadow: 1.5px 1.5px 0 #111111;
+}
+
+.ad-close-btn:hover {
+  background: #111111;
+  color: #ffffff;
+}
+
+.ad-title {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 900;
+  color: #111111;
+}
+
+.ad-sub {
+  font-size: 12px;
+  color: #ff6b00;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.ad-desc {
+  font-size: 12.5px;
+  color: #444444;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+/* Tabs 切换头 */
+.ad-tabs-header {
+  display: flex;
+  border-bottom: 2px solid #111111;
+  margin-bottom: 16px;
+  gap: 4px;
+}
+
+.ad-tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #666666;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.ad-tab-btn:hover {
+  color: #111111;
+}
+
+.ad-tab-btn.active {
+  color: #ff6b00;
+  border-bottom-color: #ff6b00;
+  font-weight: 800;
+}
+
+.ad-tab-content {
+  display: none;
+}
+
+.ad-tab-content.active {
+  display: block;
+}
+
+/* KV 列表与指标网格 */
+.ad-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.kv-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: #f8f9fa;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+
+.kv-item .k {
+  color: #666666;
+}
+
+.kv-item .v {
+  color: #111111;
+  font-weight: 700;
+}
+
+.ad-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.ad-metric-box {
+  background: #f8f9fa;
+  border: 1.5px solid #111111;
+  box-shadow: 2px 2px 0 #111111;
+  padding: 8px;
+  text-align: center;
+}
+
+.ad-metric-box .m-label {
+  display: block;
+  font-size: 10px;
+  color: #777777;
+  margin-bottom: 2px;
+}
+
+.ad-metric-box .m-val {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 阶段流转切换条 */
+.ad-stage-switcher {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.switcher-label {
+  font-size: 11px;
+  color: #666666;
+  font-weight: 700;
+}
+
+.btn-stage-switch {
+  height: 26px;
+  padding: 0 8px;
+  background: #ffffff;
+  border: 1px solid #111111;
+  box-shadow: 1.5px 1.5px 0 #111111;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-stage-switch:hover {
+  background: #fef08a;
+}
+
+.btn-stage-switch.active {
+  background: #ff6b00;
+  color: #ffffff;
+  border-color: #ff6b00;
+}
+
+/* 进度条 */
+.ad-progress-box {
+  background: #f8f9fa;
+  border: 1.5px solid #111111;
+  padding: 10px;
+  margin-bottom: 16px;
+}
+
+.p-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.p-bar {
+  height: 10px;
+  background: #e2e8f0;
+  border: 1px solid #111111;
+  overflow: hidden;
+}
+
+.p-fill {
+  height: 100%;
+  background: #10b981;
+}
+
+/* 文档列表 */
+.ad-doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.doc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8f9fa;
+  border: 1.5px solid #111111;
+  padding: 8px 10px;
+}
+
+.doc-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.doc-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-meta {
+  font-size: 10px;
+  color: #777777;
+}
+
+.doc-btn-view {
+  height: 26px;
+  padding: 0 10px;
+  background: #ffffff;
+  border: 1px solid #111111;
+  box-shadow: 1.5px 1.5px 0 #111111;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 待办列表 */
+.ad-todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.todo-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8f9fa;
+  border: 1px solid #cbd5e1;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.todo-check-box {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.todo-text {
+  font-size: 12px;
+  color: #111111;
+}
+
+.todo-text.done {
+  text-decoration: line-through;
+  color: #888888;
+}
+
+.ad-add-todo-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.ad-add-todo-bar input {
+  flex: 1;
+  height: 32px;
+  border: 1.5px solid #111111;
+  padding: 0 8px;
+  font-size: 11.5px;
+}
+
+.ad-add-todo-bar button {
+  height: 32px;
+  padding: 0 12px;
+  background: #111111;
+  color: #ffffff;
+  border: 1.5px solid #111111;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 操作与穿透按钮 */
+.ad-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+  margin: 12px 0 8px 0;
+}
+
+.pixel-btn-action {
+  width: 100%;
+  height: 36px;
+  background: #fef08a;
+  border: 1.5px solid #111111;
+  box-shadow: 2px 2px 0 #111111;
+  font-size: 12px;
+  font-weight: 800;
+  color: #854d0e;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.ad-actions {
+  margin-top: auto;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pixel-btn-primary {
+  height: 42px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+  border: 2px solid #111111;
+  box-shadow: 3px 3px 0 #111111;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.pixel-btn-primary:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 #111111;
+}
+
+.pixel-btn-secondary {
+  height: 36px;
+  background: #ffffff;
+  border: 1.5px solid #111111;
+  box-shadow: 2px 2px 0 #111111;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #111111;
+  cursor: pointer;
+}
+
+.pixel-btn-secondary:hover {
+  background: #f5f5f5;
+}

@@ -72,3 +72,10 @@
   --text-small: 13px;
   --text-micro: 11px;
 }
+
+/* 线 A：让径向指针的角度成为可过渡变量（节点选中时指向跟随移动，而非硬切）。 */
+@property --focus-angle {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0deg;
+}

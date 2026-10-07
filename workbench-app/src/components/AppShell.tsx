@@ -1,27 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { IconHome, IconTodo, IconChart, IconScan, IconSettings, IconHotspot, IconBrain, IconBriefcase } from './icons';
 import AvatarMascot from './AvatarMascot';
-import { Wallet } from 'pixelarticons/react';
+import { WORKBENCH_NAV as navItems } from '../features/nav/workbenchNav';
 
-/* 独立访问（未内嵌）时的自带侧栏清单。
+/* 独立访问（未内嵌）时的自带侧栏清单来自 features/nav/workbenchNav.tsx（React 侧唯一数据源）。
  *
- * ⚠ 非事实源，仅独立访问使用：内嵌进母项目时下面整块不渲染，导航由母项目外层侧栏
+ * ⚠ 仅独立访问使用：内嵌进母项目时下面整块不渲染，导航由母项目外层侧栏
  *   （frontend/js/sidebar.js 消费 frontend/js/workbench-nav.js）提供，全站只有一条竖栏。
- *   因此这里的文案/图标允许与外层漂移；路径集合由 tests/test_workbench_nav.py 守卫。
- *   保留它的唯一目的：直接打开 http://127.0.0.1:3456/#/todos 时仍可导航。 */
-const navItems = [
-  { to: '/', label: '今日', code: 'H-01', icon: <IconHome /> },
-  { to: '/biz', label: '项目经营', code: 'M-01', icon: <IconBriefcase /> },
-  { to: '/todos', label: '待办', code: 'T-02', icon: <IconTodo /> },
-  { to: '/finance', label: '财务分析', code: 'F-08', icon: <Wallet width={24} height={24} /> },
-  { to: '/performance', label: '内容表现', code: 'C-03', icon: <IconChart /> },
-  { to: '/hotspots', label: '热点雷达', code: 'R-04', icon: <IconHotspot /> },
-  { to: '/knowledge', label: '知识大脑', code: 'K-05', icon: <IconBrain /> },
-  { to: '/scan', label: '扫描报告', code: 'S-06', icon: <IconScan /> },
-  { to: '/settings', label: '设置', code: 'S-07', icon: <IconSettings /> },
-];
+ *   因此这里的文案/图标允许与外层漂移；路径集合由 tests/test_workbench_nav.py 守卫。 */
 
 // 入站导航消息的白名单：只接受本应用真实存在的路由（挡掉被构造出来的任意跳转）。
 const NAV_TOS = new Set(navItems.map((it) => it.to));

@@ -13,6 +13,7 @@ import {
   type HomeCoreMetricKey,
 } from '../features/home/homeMetrics';
 import { HomeContextRow, HomeInsightRow, HomeWorkRow } from '../features/home/HomeDashboard';
+import HomeRadialNav from '../features/home/HomeRadialNav';
 
 const SOURCE_LABEL: Record<string, string> = {
   live: '实时',
@@ -124,6 +125,8 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      <HomeRadialNav slots={slots} todoTotal={today.total} todoStale={today.stale} />
 
       <div className="home-dashboard">
         <HomeContextRow />

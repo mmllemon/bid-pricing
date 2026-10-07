@@ -124,11 +124,25 @@ const stripJsComments = (src) => src
 const stripHtmlComments = (src) => src.replace(/<!--[\s\S]*?-->/g, ' ');
 
 test('R6 坞主 CTA 的不可达回退分支已删', () => {
+  // 判据的写法本身踩过两次坑，都靠变异验证发现：
+  //   ① 最初断言 `!app.includes('calculateBtn.click()')`——原代码里从来没有这个字面串
+  //      （它是 `const t = document.querySelector('#calculateBtn'); if (t) t.click();`），
+  //      于是恒为真、等于没判；
+  //   ② 改按结构判定后又锚错了位置：`#dockCalcBtn` 在 syncDockCta 里也出现一次，
+  //      indexOf 取到的是前一处，切出来的片段根本不含监听器。
+  // 现在锚在监听器本身上，并保留一条正向控制（必须仍有 runRecompute()）防止过度删除。
   const app = stripJsComments(readPage('app.js'));
-  assert.ok(!app.includes('calculateBtn.click()'),
-    '坞主 CTA（#dockCalcBtn）空态置灰（syncDockCta: btn.disabled = !dashActive），'
-    + '原先那条「else → 转发到 preparePanel 主 CTA」永远走不到；留着会让后人误以为空态可用，'
-    + '且若真被走到会绕过 preparePanel 的就绪门控。请保持删除状态。');
+  const anchor = "if (calc) calc.addEventListener('click', () => {";
+  const start = app.indexOf(anchor);
+  assert.ok(start > 0, `未找到坞主 CTA 的监听器（锚点「${anchor}」）——判据前提失效，请同步更新本判据`);
+  const end = app.indexOf('});', start);
+  const handler = app.slice(start, end + 3);
+  assert.ok(!/\.click\(\)/.test(handler),
+    '坞主 CTA（#dockCalcBtn）的监听器里不得转发放点击：空态它已由 syncDockCta 置灰'
+    + '（btn.disabled = !dashActive），空态的行动在 preparePanel 自己的主 CTA 上；'
+    + '若真把点击转发过去，会绕过 preparePanel 的就绪门控。');
+  assert.ok(/runRecompute\(\)/.test(handler),
+    '坞主 CTA 应保留「有结果 → 按当前参数重算」这条路径（防止过度删除）');
 });
 
 test('R9 确认框只有一个创建点：不得再有第二份 #ui-confirm 实现', () => {
@@ -211,4 +225,11 @@ test('R14 工具页不得依赖报价页视图层；三个共用基础件由 sty
   }
   assert.deepEqual(offenders, [],
     `工具页不得依赖只存在于 quote-dashboard.css 的类：\n${offenders.join('\n')}`);
+
+  // 判据自检（防止它悄悄退化成「什么都查不出来」）：
+  // ① 类名提取要有实际产出；② 检测器要能把一个已知的报价页专属类认出来。
+  assert.ok(used.size > 20, `工具页类名提取应产出非平凡结果，实际只有 ${used.size} 个——提取逻辑可能失效`);
+  const qdOnly = simpleOwners.get('plan-hub');
+  assert.ok(qdOnly && [...qdOnly].every((f) => f === 'quote-dashboard.css'),
+    '自检失败：.plan-hub 应被识别为「仅由 quote-dashboard.css 以简单类选择器定义」');
 });

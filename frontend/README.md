@@ -29,9 +29,12 @@ uvicorn api.app:app --reload --port 8000
    契约见其文件头；随后 `js/workbench-nav.js` → `js/sidebar.js` → 其余页面脚本。
    业务脚本一律 `const esc = window.gcEsc;` 之类**别名**，禁止自带实现
    （历史上副本最多长到 6 份，一份漏改就开洞）。
-2. **样式**：`tokens.css`（唯一令牌源）→ `styles.css`（设计系统层）→ 视图层
-   （`quote-dashboard.css` / `tools.css`）→ `results.css` → `agent.css`。
+2. **样式**：`tokens.css`（唯一令牌源）→ `styles.css`（设计系统层 + 跨页共用基础件）
+   → 视图层（`quote-dashboard.css` / `tools.css`）→ `results.css` → `agent.css`。
    `agent.css` 只含 `.agent-*`，与其它样式文件选择器集合无交集，但顺序仍须全站一致。
+   **工具页不加载 `quote-dashboard.css`**（报价页视图层）：实测它们只用到
+   `.title-dot` / `.card-subtitle` / `.tabular` 三个基础件，已收进 `styles.css`；
+   依赖面由判据钉住（新增依赖会红）。
 
 ## 破缓存令牌（`?v=`）规则
 
@@ -48,14 +51,18 @@ uvicorn api.app:app --reload --port 8000
 ```powershell
 cd frontend
 npm ci        # 首次或依赖变更后（jsdom 30 要求 Node ≥ 22.22.2 / 24.15）
-npm test      # node --test，21 项（9 个顶层用例，含 per-page 子测试）
+npm test      # node --test，28 项
 ```
 
 | 文件 | 覆盖 |
 |---|---|
-| `test/smoke.test.mjs` | 6 个页面按真实顺序执行脚本无未捕获错误；`js/escape.js` 必须是每页第一个脚本；`toolEsc === gcEsc` 且五字符全转义；同一资产令牌一致；引用的本地资产都存在；`tool-well` 在「钢筋表非空 + 支室数>0」下不抛错 |
-| `test/quote-flow.test.mjs` | 报价页交互路径：R5 焦点陷阱栈不平衡、R7 预览后导出仍指上一轮结果、R8 空目标报价被占位默认值兜成 `0.00` |
+| `test/smoke.test.mjs` | 6 个页面按真实顺序执行脚本无未捕获错误；`js/escape.js` 必须是每页第一个脚本；`toolEsc === gcEsc` 且五字符全转义；同一资产令牌一致；引用的本地资产都存在；`tool-well` 在「钢筋表非空 + 支室数>0」下不抛错；**静态契约**：坞主 CTA 无不可达回退分支（R6）、确认框只有一个创建点（R9）、孤儿样式表已删且 `:root` 仅在 tokens.css（R12）、工具页不依赖报价页视图层（R14） |
+| `test/quote-flow.test.mjs` | 报价页交互路径：R5 焦点陷阱栈不平衡、R6 坞主 CTA 情境路由、R7 预览后导出仍指上一轮结果、R8 空目标报价被占位默认值兜成 `0.00`、R9 确认框的返回值/焦点陷阱/文案口径 |
 | `test/_harness.mjs` | 共享加载器（内联脚本 → jsdom；fetch 桩；`waitForInit`） |
+
+**静态判据先剥注释再看代码**（`stripJsComments` / `stripHtmlComments`）：本轮实测两条判据被自己的说明性
+注释绊红（注释里为了讲清历史写了 `calculateBtn.click()` 与 `quote-dashboard.css`）——与本仓 CC-12 /
+BB-05 记的是同一条教训：要拦的是**代码路径上的硬拷贝**，不是文档里提到这个词。
 
 **新增测试文件要加进 `package.json` 的 `test` 脚本里**（显式文件列表，不用目录扫描：
 `test/` 下的辅助模块会被 Node 的默认发现当成测试文件，多出一个 0 用例的空条目）。

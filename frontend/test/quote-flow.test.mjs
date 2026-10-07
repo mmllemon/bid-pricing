@@ -47,6 +47,7 @@ function defaultRoutes() {
     '/api/quote/optimize': { json: RESULT_FIXTURE },
     '/api/quote/preview': { json: PREVIEW_FIXTURE },
     '/api/group/list': { json: { status: 'PASS', groups: [] } },
+    '/api/project/recompute': { json: RESULT_FIXTURE },
   };
 }
 
@@ -152,7 +153,91 @@ test('R7 预览后「导出」不得仍指向上一轮结果', async () => {
   window.close();
 });
 
-// ------------------------------------------------------------------ R8
+// ------------------------------------------------------------------ R6
+
+test('R6 坞主 CTA：空态置灰，结果态点它走「按当前参数重算」', async () => {
+  const { window, errors, calls } = await bootQuotePage();
+  const doc = window.document;
+
+  // 空态置灰是有意设计（见 syncDockCta）——所以「空态 → 转发到 preparePanel 主 CTA」
+  // 那条分支永远走不到，已在 app.js 删除（源码级判据见 smoke.test.mjs）。
+  assert.equal(doc.querySelector('#dockCalcBtn').disabled, true,
+    '空态坞主 CTA 应置灰：空态的行动在 preparePanel 自己的主 CTA 上');
+
+  assert.ok(await runToResult(window), '点算后应进入结果态');
+  assert.equal(doc.querySelector('#dockCalcBtn').disabled, false, '结果态应可点');
+
+  doc.querySelector('#dockCalcBtn').click();
+  assert.ok(await waitFor(() => calls.some((c) => c.url.includes('/api/project/recompute'))),
+    '结果态点坞主 CTA 应发出 /api/project/recompute（按当前参数重算）');
+  assert.deepEqual(errors, []);
+  window.close();
+});
+
+// ------------------------------------------------------------------ R9
+
+test('R9 确认框（报价页）：取消/确认/Escape 的返回值与焦点陷阱', async () => {
+  const { window, errors } = await bootQuotePage();
+  const doc = window.document;
+
+  // ① danger 分支：带业务标题，且接报价页的焦点陷阱
+  const p1 = window.uiConfirm('删除该方案组？组内已算槽位方案将一并删除。', { danger: true });
+  await settle(0);
+  const ov = doc.querySelector('#ui-confirm');
+  assert.ok(ov, '应渲染 #ui-confirm');
+  assert.ok(ov.className.includes('danger'), 'danger 应带 danger 类');
+  assert.match(ov.textContent, /删除已定稿方案/, 'danger 的业务标题由调用方注入');
+  assert.equal(doc.body.getAttribute('tabindex'), '-1', 'trap:true 应锁背景');
+  ov.querySelector('[data-act="cancel"]').click();
+  assert.equal(await p1, false, '取消 → false');
+  assert.equal(doc.body.getAttribute('tabindex'), null, '收尾后必须释放焦点陷阱');
+  assert.equal(doc.querySelector('#ui-confirm'), null, '应自行移除');
+
+  // ② 非 danger 分支：无标题、按钮文案为「确认删除」
+  const p2 = window.uiConfirm('删除该方案组？');
+  await settle(0);
+  const ov2 = doc.querySelector('#ui-confirm');
+  assert.ok(!ov2.className.includes('danger'));
+  assert.match(ov2.textContent, /确认删除/);
+  assert.ok(!/删除已定稿方案/.test(ov2.textContent), '非 danger 不应出现定稿专属标题');
+  ov2.querySelector('[data-act="ok"]').click();
+  assert.equal(await p2, true, '确认 → true');
+
+  // ③ Escape（trap 模式挂文档级，所以焦点不在面板里也关得掉）
+  const p3 = window.uiConfirm('再来一次');
+  await settle(0);
+  doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.equal(await p3, false, 'Escape → false');
+  assert.equal(doc.body.getAttribute('tabindex'), null, 'Escape 收尾也必须释放陷阱');
+  assert.deepEqual(errors, []);
+  window.close();
+});
+
+test('R9 确认框（工具页）：无标题、无焦点陷阱（与原件行为一致）', async () => {
+  // 注：tool-well.js 的 uiConfirm 在 IIFE 内、不挂 window；这里直接用共享实现 + 该页传入的
+  // options 验证行为（「tool-well.js 已委托给 window.gcConfirm」由 smoke.test.mjs 静态核对）。
+  const { window, errors } = loadPage('tool-well.html');
+  await settle(0);
+  assert.equal(typeof window.gcConfirm, 'function', '工具页也应加载 confirm.js');
+
+  const p = window.gcConfirm('删除「某井」？该井的保存记录将不可恢复。', {
+    danger: true, ariaLabel: '确认删除', okLabel: '确认删除', trap: false,
+  });
+  await settle(0);
+  const ov = window.document.querySelector('#ui-confirm');
+  assert.ok(ov, '应渲染 #ui-confirm');
+  assert.ok(ov.className.includes('danger'));
+  assert.match(ov.textContent, /确认删除/);
+  assert.ok(!/删除已定稿方案/.test(ov.textContent), '井库删除不该出现方案定稿的文案');
+  assert.equal(window.document.body.getAttribute('tabindex'), null,
+    '工具页没有模态栈：trap:false 不得改动 body[tabindex]');
+  ov.querySelector('[data-act="ok"]').click();
+  assert.equal(await p, true, '确认 → true');
+  assert.deepEqual(errors, []);
+  window.close();
+});
+
+
 
 test('R8 目标总报价留空不得被占位默认值兜成 0.00 提交', async () => {
   const { window, errors, calls } = await bootQuotePage();

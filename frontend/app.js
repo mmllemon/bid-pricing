@@ -213,7 +213,8 @@ const fmt = (value, digits = 2) => {
   return n.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 };
 // 安全转义：所有来自 Excel / 用户输入的字符串在进入 innerHTML 前必须过 esc，防止清单注入。
-const esc = (s) => window.gcEsc ? window.gcEsc(s) : String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));   // 指向共享转义器 js/escape.js（缺失时回退本地实现）
+// 实现唯一在 js/escape.js（本页在 app.js 之前加载它）；这里只做别名，不再自持第二份副本。
+const esc = window.gcEsc;
 const escList = (arr) => (arr || []).map(esc).join('、');
 
 function fillParams(params) {
@@ -1816,7 +1817,10 @@ const AUDIT_ACTIONS = {
   'project.overview.save': '保存项目概览', 'project.overview.finalize': '定稿并回写项目',
   'project.overview.delete': '删除项目概览',
 };
-function escapeHtml(v) { return window.gcEsc ? window.gcEsc(v) : String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }   // 转义统一在 js/escape.js
+// 别名，指向全站唯一实现（js/escape.js）。历史上此处是第二个转义器，已删。
+// 顺带修一处边界：旧回退分支用 String(v)，null/undefined 会渲染成字面量 "undefined"；
+// gcEsc 统一返回空串。
+const escapeHtml = window.gcEsc;
 // 生成 skeleton loading HTML（审计日志 / 方案组 / 其他列表）
 function _skeletonRows(n = 6) {
   const cols = [1, 0.35, 0.2, 0.4, 0.35, 0.5]; // 各列宽度比例
@@ -1861,7 +1865,8 @@ async function loadAudit() {
 function renderAudit(body, rows) {
   if (!rows.length) { body.innerHTML = '<p class="audit-empty">暂无审计记录</p>'; return; }
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const esc = (v) => escapeHtml(v == null ? '' : String(v));
+  // 原此处有一个局部 `const esc`（= escapeHtml 的空值包装），遮蔽了文件级 esc ——
+  // 两道名字同一实现，读代码时极易误认为是两个转义器。已删，直接用文件级 esc。
   const head = ['时间', '操作', '状态', '项目', '方案', '说明'];
   const html = [
     '<div class="table-wrap"><table class="audit-table"><thead><tr>',

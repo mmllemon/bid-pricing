@@ -16,12 +16,14 @@
     if (el && el.classList) el.classList.toggle('invalid', v < 0);
     return v < 0 ? 0 : v;
   };
-  /* HTML 转义（把用户输入拼回 value="..." / 文本节点时用） */
-  window.toolEsc = function (s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[c]);
-  };
+  /* HTML 转义（把用户输入拼回 value="..." / 文本节点时用）。
+     与全站唯一实现 gcEsc（js/escape.js）**同一实现**，此处不重写公式。
+     各工具页已在 tool-common.js 之前加载 escape.js；顺序一旦被改坏，
+     这里立刻抛可读错误，而不是静默留下第二份会各自漂移的副本。 */
+  if (typeof window.gcEsc !== 'function') {
+    throw new Error('tool-common.js 需要先加载 ./js/escape.js（全站唯一转义实现）');
+  }
+  window.toolEsc = window.gcEsc;
   /* 简单防抖 */
   window.toolDebounce = function (fn, ms) {
     let t = 0;

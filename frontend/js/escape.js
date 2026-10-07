@@ -1,13 +1,19 @@
 /* 全站唯一的 HTML 转义实现（frontend/js/escape.js）。
  *
- * 背景：esc() 此前散落 4 份（app.js / workbench.js / workbench.html 内嵌 /
- * toast.js 白名单），其中 workbench 版不转义单引号，属性安全靠「上下文恰好
- * 都用双引号」的隐性约束撑着——一份漏改就开洞。收拢到本模块后：
- *   - 需要转义的页面在各自脚本里把本地 `esc`/`attr` 指向 window.gcEsc，
- *     调用点零改动；
- *   - 转义行为全站唯一，且转义 `'`（属性里单引号也能安全），任何上下文都稳。
+ * 契约（三页以上都依赖它，改前请读完）：
+ *   1. **每个页面都必须在任何业务脚本之前加载本文件**（index.html 放在 js/sidebar.js
+ *      之前；五个工具页放在 js/workbench-nav.js 之前）。
+ *   2. 业务脚本一律 `const esc = window.gcEsc;` 这类**别名**，**禁止自带实现**。
+ *      历史上 esc/escapeHtml/toolEsc 各有副本，共 6 份（app.js 两处、agent-panel.js、
+ *      tool-common.js、tool-well.js，其中 app.js 那份还在 renderAudit 里被同名局部
+ *      变量遮蔽）——「一份漏改就开洞」正是当初把 esc 收拢到本模块的原因；副本又长回来
+ *      等于白收拢。工具页此前不加载本文件，是 agent-panel.js 自带副本的直接原因，
+ *      根因已消除。
+ *   3. 非转义性质的清洗（如 toast.js 的白名单标签过滤）**不是**本实现，也不该改成本实现：
+ *      它要保留 <b>/<br> 语义，与本模块「一律转义」的语义相反。
  *
- * 必须在所有使用它的业务脚本之前加载（index.html 放在 js/sidebar.js 之前）。
+ * 实现：转义 `& < > " '` 五个字符；String() 化并对 null/undefined 返回空串
+ * （调用点因此不必自己判空）。转义 `'` 使属性语境用单引号也安全。
  */
 (function () {
   'use strict';

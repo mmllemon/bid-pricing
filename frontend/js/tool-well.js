@@ -87,6 +87,10 @@
 
   let lastSteelEstKg = 0;   // 含钢量法三行合计（钢筋逐根表的对账基准）
   const rebarBody = $('#rebarRows');
+  /* 盖板钢筋表容器：与 rebarBody 同期取（脚本在 body 末尾，DOM 已就绪）。
+     此前它在钢筋段落用 `var` 声明、靠「recalcWell 首调早于赋值」+ 空值守卫兜着——
+     那正是同一类初始化顺序隐患，现已按本文件既有约定（DOM 引用集中在头部）处理。 */
+  const coverRebarBody = $('#rebarCoverRows');
 
   function recalcWell() {
     const L = num($('#wL')), W = num($('#wW')), D = num($('#wD')), t = num($('#wT'));
@@ -210,7 +214,9 @@
    * 示意图非施工图：两图比例各自独立，随参数实时重绘。
    * 图元与尺寸标注带 data-focus，点击定位并高亮对应输入框。
    */
-  const fnum = v => (+v).toFixed(2);
+  /* 数值格式化。用**函数声明**而不是 const 箭头函数：声明被提升到作用域顶部，
+     首调早于本行也不会踩 TDZ（见下方 recalcWell 的启动路径）。 */
+  function fnum(v) { return (+v).toFixed(2); }
 
   /* 盖板钢筋直径（φ14，与 A-5 口径一致）；定义在头部：recalcWell 首调早于钢筋段落，须可引用 */
   const COVER_REBAR_D = 14;
@@ -536,8 +542,9 @@
     }
     return p;
   }
-  const esc = s => String(s ?? '').replace(/[&<>"']/g,
-    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // 转义统一走共享助手（tool-common.js 的 toolEsc = escape.js 的 gcEsc）。
+  // 与 tool-cable.js:36 / tool-earth.js 同一写法，本文件不再自持第三份副本。
+  const esc = window.toolEsc;
 
   // uiConfirm 已上移 tool-common → window.toolConfirm（P2 抽取）
 
@@ -739,9 +746,11 @@
    * 重量 = 根数 × 单根长 × (d²×0.00617)。与含钢量法三行互相对账。
    * 盖板钢筋（预制盖板）单列一组：随盖板参数自动重算（kg），与主体布筋分开计。
    */
-  const rebarUnitKgPerM = d => 0.00617 * d * d;
-  var coverRebarBody;   // 提前声明：recalcWell 首次调用早于下方赋值（规避 const TDZ）
-  coverRebarBody = $('#rebarCoverRows');
+  /* 钢筋单位重量 kg/m = d²×0.00617。**函数声明**（提升到作用域顶部）：recalcWell 的启动
+     路径会先于本行调用 recalcRebar，原先写成 const 箭头函数时全靠「启动瞬间钢筋表为空、
+     forEach 体一次都不执行」侥幸不炸——靠数据巧合撑着，不是靠代码性质撑着。
+     （另一处同类侥幸：fnum 被 nB>0 的启动路径调用，见文件头部注释。） */
+  function rebarUnitKgPerM(d) { return 0.00617 * d * d; }
 
   function rebarRowHtml(r) {
     r = r || {};
@@ -777,7 +786,7 @@
     if (!coverRebarBody) return;
     const cN = num($('#cCount')), cMN = num($('#cMainN')), cML = num($('#cMainL'));
     const cDN = num($('#cDistN')), cDL = num($('#cDistL'));
-    const w = 0.00617 * COVER_REBAR_D * COVER_REBAR_D;   // 内联计算：本函数会先于 rebarUnitKgPerM 声明处被首调
+    const w = rebarUnitKgPerM(COVER_REBAR_D);   // 与主体布筋同一公式（唯一实现，不再内联一份）
     const row = (no, lenMm, n, note) => `<tr class="rebar-cov">
       <td>${no}</td>
       <td>φ${COVER_REBAR_D}</td>

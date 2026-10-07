@@ -478,9 +478,10 @@
 .intake-slot.loaded .intake-cta{color:var(--text)}
 
 /* ---------- 响应式 ---------- */
-@media (prefers-reduced-motion:reduce){
-  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
-}
+/* 注：prefers-reduced-motion 的动效关闭规则**只在 styles.css 里定义一份**
+   （*,*::before,*::after 的 animation/transition/iteration-count/scroll-behavior）。
+   本文件曾有一份更弱的副本（仅 `*`、且时长 .01ms 而非 .001ms）：两处 !important 同名属性
+   跨文件取值不同，属实测出的真实冲突，且它加载在后会把更严的那份盖松。已删。 */
 @media (max-width:1280px){
   .workbench-layout{grid-template-columns:1fr}
   .kpi-row{grid-template-columns:repeat(2,1fr)}

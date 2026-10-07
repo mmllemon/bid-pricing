@@ -15,11 +15,13 @@
   if (window.__agentPanelReady) return;   // 幂等：重复引入不叠加第二份面板
   window.__agentPanelReady = true;
 
-  // 自带转义实现，避免依赖 js/escape.js（工具页不加载它）。
-  const esc = window.gcEsc || (function () {
-    const MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-    return (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => MAP[c]);
-  })();
+  // 转义统一走全站唯一实现 js/escape.js。此前本文件自带一份副本，理由是「工具页
+  // 不加载 escape.js」——该根因已消除（五个工具页现已在最前面加载它）。这里保留一条
+  // 显式断言：加载顺序被改坏时立刻炸出可读错误，而不是静默退化成第二份实现。
+  if (typeof window.gcEsc !== 'function') {
+    throw new Error('agent-panel.js 需要先加载 ./js/escape.js（全站唯一转义实现）');
+  }
+  const esc = window.gcEsc;
 
   const AGENT_BASE = location.protocol.startsWith('http')
     ? location.protocol + '//' + location.hostname + ':8010'

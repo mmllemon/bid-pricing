@@ -230,7 +230,14 @@ button{font-family:var(--font)}
 .compose-row input::placeholder{color:var(--text-tertiary)}
 .compose-row input:hover{border-color:var(--text-tertiary)}
 .compose-row input:focus{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
-.compose-foot{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px}
+/* 成本构成行脚。**只声明与视图无关的部分**：排列方向与间距都由视图层决定
+   （quote-dashboard.css 的 qd6 强制 row / center / space-between，间距用它的 8px）。
+   此前这里写 column + align-items:flex-start + gap:4px，与 qd6 的 row/8px 直接矛盾——
+   而本文件先加载、特异性相同，所以那三条**永远不生效**：改这里的人会以为改了却没变化。
+   全量比对（逐文件解析选择器 + 逐属性比对）后确认：同上下文下的跨文件属性冲突仅此一处，
+   其余同名选择器要么是视图层的追加（.table-wrap 的高度上限），要么在 @media print 内
+   （tools.css 隐藏导航，有意覆盖）。 */
+.compose-foot{display:flex;margin-top:8px}
 .compose-sum{font-size:12px;font-weight:600;padding:5px 12px;border:var(--line-thin);border-radius:0;background:var(--ui-white);color:var(--text)}
 .compose-sum.bad{background:var(--ui-yellow);color:var(--ui-black);border-color:var(--ui-black)}
 .compose-k{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums}

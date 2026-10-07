@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>工程智算 · 投标报价</title>
   <!-- 设计令牌（单一事实源，必须最先加载） -->
+  <!-- 样式加载顺序（全站统一，勿按页改动）：
+       tokens（唯一令牌源）→ styles（设计系统层）→ quote-dashboard / tools（视图层）→ results → agent。
+       此前 index 与工具页把 agent.css 与 quote-dashboard.css 的顺序写反了——实测两者选择器
+       集合**无交集**（agent.css 只含 .agent-*），所以没有视觉差异；但同一批文件存在两种顺序
+       本身就是隐患：将来任一方新增同名选择器，两个页面就会表现不一致。 -->
   <link rel="stylesheet" href="./tokens.css?v=2026-10-06-v2h" />
-  <link rel="stylesheet" href="./styles.css?v=2026-10-06-v2k" />
-  <link rel="stylesheet" href="./agent.css?v=2026-10-06-agcss4" />
-  <link rel="stylesheet" href="./quote-dashboard.css?v=2026-10-06-v2n" />
+  <link rel="stylesheet" href="./styles.css?v=2026-10-06-v2l" />
+  <link rel="stylesheet" href="./quote-dashboard.css?v=2026-10-06-v2o" />
   <link rel="stylesheet" href="./results.css?v=2026-10-06-v2f" />
+  <link rel="stylesheet" href="./agent.css?v=2026-10-06-agcss4" />
   <!-- 字体：MiSans VF（正文，小米 MiSans，免费商用授权） + LShu Pixel（像素标签，见 tokens.css） -->
   <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css?v=2026-10-06-font1" />
 </head>
@@ -479,7 +484,7 @@
   <script src="./js/sidebar.js?v=2026-10-06-nav4"></script>
   <script src="./js/toast.js?v=2026-09-23-split1"></script>
   <script src="./js/dropdown.js?v=2026-09-23-split1"></script>
-  <script src="./agent-panel.js?v=2026-10-06-agp1"></script>
-  <script src="./app.js?v=2026-10-06-ag10"></script>
+  <script src="./agent-panel.js?v=2026-10-06-agp2"></script>
+  <script src="./app.js?v=2026-10-06-ag11"></script>
 </body>
 </html>

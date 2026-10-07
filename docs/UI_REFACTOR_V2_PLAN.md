@@ -32,7 +32,7 @@
 
 **死代码（不在改动范围）**
 - `workbench.html`（31 行）只是 `location.replace('index.html#workbench')` 的跳转存根。
-- `workbench-standalone.css`（509 行）**全仓库无任何引用**（grep 确认），不进入改动清单。
+- `workbench-standalone.css`（原 509 行，实测 557 行）**全仓库无任何引用**（grep 确认）——**已于 2026-10-06 删除**（见 CHANGELOG「前端技术债清理」；删除后 `:root` 仅剩 `tokens.css`）。
 
 **样式文件规模**
 
@@ -44,7 +44,7 @@
 | workbench.css | 227 | 否（作用域 `#workbenchView`） |
 | agent.css | 222 | 否 |
 | results.css | 23 | 否 |
-| workbench-standalone.css | 509 | 是（**死代码，不动**） |
+| ~~workbench-standalone.css~~ | ~~509~~ | **已删除（2026-10-06）** |
 
 **关键缓冲：现有 token 已被大量使用**
 index.html 的内联 `style="..."` 与内联 SVG 大量引用 `var(--text-secondary)`、`var(--module-2)`、`var(--success)`、`var(--warn)`、`var(--danger)`、`var(--border)`、`var(--surface-card)`。**只要重定义这些变量，这部分会自动跟随换色**——这是本计划能用「别名映射」而非「全量重写」的工程依据。

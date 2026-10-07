@@ -637,35 +637,19 @@ let expandedGroups = new Set(); // 方案中心已展开的组 id
 let hubSelected = new Set();   // 方案中心已勾选对比的槽位方案 id 集合
 let hubView = 'list';          // 方案中心视图：list=方案组卡片 / compare=对比结果
 
-// 应用内确认框：删除只在用户明确点「确认删除」后才执行。
-// 不依赖原生 confirm——某些环境下原生 confirm 会被浏览器静默拦截/自动放行，
-// 造成「还没点确定就删了」的误删。返回 Promise<boolean>。
+// 应用内确认框：**实现唯一在 js/confirm.js**（本页在 app.js 之前加载它）。
+// 这里保留同名薄封装，调用点零改动：danger 语义下的业务文案（「删除已定稿方案」等）
+// 属于本页口径，不该固化进共享模块，因此在调用处注入。
+// （此前这里有一份完整实现，与 js/tool-well.js 的那份各自创建 `#ui-confirm`。）
 function uiConfirm(message, options = {}) {
-  return new Promise(resolve => {
-    let ov = document.getElementById('ui-confirm');
-    if (ov) ov.remove();
-    ov = document.createElement('div');
-    ov.id = 'ui-confirm';
-    ov.className = 'ui-confirm-overlay open' + (options.danger ? ' danger' : '');
-    ov.innerHTML = `<div class="ui-confirm-box" role="alertdialog" aria-modal="true" aria-label="${options.danger ? '删除已定稿方案' : '确认删除'}">
-      ${options.danger ? '<div class="ui-confirm-title">删除已定稿方案</div><div class="ui-confirm-sub">该方案已定稿并回写项目，删除后需重新计算与回写，请谨慎操作。</div>' : ''}
-      <div class="ui-confirm-msg">${esc(message)}</div>
-      <div class="ui-confirm-actions">
-        <button type="button" class="btn-ghost" data-act="cancel">取消</button>
-        <button type="button" class="btn-danger" data-act="ok">${options.danger ? '仍要删除' : '确认删除'}</button>
-      </div></div>`;
-    document.body.appendChild(ov);
-    trapModal();
-    const done = val => { releaseTrap(); ov.remove(); resolve(val); };
-    ov.querySelector('[data-act="cancel"]').addEventListener('click', () => done(false));
-    ov.querySelector('[data-act="ok"]').addEventListener('click', () => done(true));
-    ov.addEventListener('mousedown', e => { if (e.target === ov) done(false); });
-    // 键盘：Escape 取消、Enter 确认（默认焦点在取消上，更安全）
-    document.addEventListener('keydown', function _k(e) {
-      if (!document.contains(ov)) { document.removeEventListener('keydown', _k, true); return; }
-      if (e.key === 'Escape') { e.stopPropagation(); done(false); }
-    }, true);
-    setTimeout(() => { const c = ov.querySelector('[data-act="cancel"]'); if (c) c.focus(); }, 0);
+  const danger = Boolean(options.danger);
+  return window.gcConfirm(message, {
+    danger,
+    title: danger ? '删除已定稿方案' : '',
+    sub: danger ? '该方案已定稿并回写项目，删除后需重新计算与回写，请谨慎操作。' : '',
+    okLabel: danger ? '仍要删除' : '确认删除',
+    ariaLabel: danger ? '删除已定稿方案' : '确认删除',
+    trap: true,   // 报价页有焦点陷阱（planHub/cmpModal/auditModal 共用同一栈）
   });
 }
 
@@ -1713,9 +1697,11 @@ function syncDockCta() {
 function bindDock() {
   const calc = document.querySelector('#dockCalcBtn');
   if (calc) calc.addEventListener('click', () => {
-    // 情境主 CTA：有结果=「按当前参数重算」（runRecompute），无结果=「识别并计算」
+    // 只处理「有结果 → 按当前参数重算」。空态时本按钮置灰（见 syncDockCta：btn.disabled =
+    // !dashActive），原先那条 `else → #calculateBtn.click()` 是**不可达死代码**——
+    // 空态的行动在 preparePanel 自己的主 CTA 上，不从这里转发；留着只会让后人误以为
+    // 坞主键在空态可用，且该分支若真被走到会绕过 preparePanel 的就绪门控。
     if (lastResult) runRecompute();
-    else { const t = document.querySelector('#calculateBtn'); if (t) t.click(); }
   });
   const exportBtn = document.querySelector('#dockExportBtn');
   if (exportBtn) exportBtn.addEventListener('click', () => {

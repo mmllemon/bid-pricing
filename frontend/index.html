@@ -11,7 +11,7 @@
        集合**无交集**（agent.css 只含 .agent-*），所以没有视觉差异；但同一批文件存在两种顺序
        本身就是隐患：将来任一方新增同名选择器，两个页面就会表现不一致。 -->
   <link rel="stylesheet" href="./tokens.css?v=2026-10-06-v2h" />
-  <link rel="stylesheet" href="./styles.css?v=2026-10-06-v2l" />
+  <link rel="stylesheet" href="./styles.css?v=2026-10-06-v2m" />
   <link rel="stylesheet" href="./quote-dashboard.css?v=2026-10-06-v2o" />
   <link rel="stylesheet" href="./results.css?v=2026-10-06-v2f" />
   <link rel="stylesheet" href="./agent.css?v=2026-10-06-agcss4" />
@@ -478,7 +478,9 @@
 
   <div class="toast-stack" id="toastStack" role="status" aria-live="polite"></div>
 
+  <!-- js/escape.js 必须最先加载：全站唯一 HTML 转义实现，其余脚本一律引用它 -->
   <script src="./js/escape.js?v=2026-09-28"></script>
+  <script src="./js/confirm.js?v=2026-10-06-cf1"></script>
   <!-- 工作台 9 页清单（唯一事实源）：必须早于 sidebar.js，后者渲染二级折叠项时消费 window.WB_NAV -->
   <script src="./js/workbench-nav.js?v=2026-10-06-wb1"></script>
   <script src="./js/sidebar.js?v=2026-10-06-nav4"></script>

@@ -163,6 +163,19 @@ button{font-family:var(--font)}
 .table-wrap tbody tr:hover>td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
 .table-wrap tbody tr.selected>td:first-child{box-shadow:inset 4px 0 0 var(--ui-orange)}
 
+/* ---------- 跨页共用基础件（报价页 + 速算工具箱都直接用） ----------
+   为什么收在设计系统层：这几个类在**工具页**也被使用，而工具页此前是靠加载整份
+   quote-dashboard.css（995 行 / 54.9 KB）才拿到它们——为 3 个选择器付整份视图层的
+   解析成本，且报价页的非前缀规则会在工具页"裸生效"（隐性耦合）。
+   依赖面是**实测**出来的，不是估的：jsdom 逐元素 matches 全部 415 个选择器 + 工具页
+   HTML/JS 类名与样式定义的交叉核对，结果只有 .title-dot / .card-subtitle / .tabular
+   三个（含 toast、确认框、自定义下拉等动态路径）。据此刻意不搬任何其他规则。
+   判据：test/smoke.test.mjs「工具页不得加载报价页视图层」「三个基础件由 styles.css 提供」。 */
+.title-dot{width:6px;height:6px;border-radius:50%;background:var(--ui-black);flex-shrink:0}
+.card-subtitle{font-size:12px;color:var(--text-secondary)}
+/* 等宽数字排版：数字列逐行对位（与 quote-dashboard.css 里 #quoteView 作用域的那组同一口径） */
+.tabular{font-variant-numeric:tabular-nums!important;font-feature-settings:"tnum"!important}
+
 /* ---------- 个人工作台（宿主壳：内容由 React 版工作台 :3456 以 iframe 提供） ---------- */
 .workbench-view{min-height:60vh}
 .workbench-view .wb-frame{display:block;width:100%;height:calc(100vh - 104px);min-height:520px;border:0;background:var(--ui-white)}

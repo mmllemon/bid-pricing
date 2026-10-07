@@ -546,7 +546,8 @@
   // 与 tool-cable.js:36 / tool-earth.js 同一写法，本文件不再自持第三份副本。
   const esc = window.toolEsc;
 
-  // uiConfirm 已上移 tool-common → window.toolConfirm（P2 抽取）
+  // 确认弹窗：调用统一走 tool-common 的 window.toolConfirm（P2 抽取），
+  // 其**实现唯一在 js/confirm.js**（全站唯一创建 #ui-confirm 的地方）；本页无模态栈 → 不参与焦点陷阱。
 
   // （井库读写已迁后端：见上方 loadLib/saveLib 异步实现）
 

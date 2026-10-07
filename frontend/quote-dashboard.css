@@ -25,8 +25,8 @@
   font-size:16px;font-weight:700;color:var(--text);
   display:flex;align-items:center;gap:7px;
 }
-.title-dot{width:6px;height:6px;border-radius:50%;background:var(--ui-black);flex-shrink:0}
-.card-subtitle{font-size:12px;color:var(--text-secondary)}
+/* 注：.title-dot / .card-subtitle 已移到 styles.css（设计系统层）——工具页也要用它们，
+   不该为这三个选择器加载整份本文件。本文件保留 #quoteView 作用域内的全部规则。 */
 .field-group{display:flex;flex-direction:column;gap:12px}
 
 /* ---------- 一体化前后缀输入框 ---------- */
@@ -323,8 +323,8 @@
    报价页升级：等宽数字 / 方案库动线 / 安全防线滑块 / 税口径堆叠条 / 双通道资产舱 / 字段徽标
    ============================================================================ */
 
-/* 2) 等宽数字排版（Tabular Nums）：凡数字一律等宽，逐行对位 */
-.tabular,
+/* 2) 等宽数字排版（Tabular Nums）：凡数字一律等宽，逐行对位
+   注：无前缀的 .tabular 已移到 styles.css（工具页数字列也用它）；此处只留 #quoteView 作用域。 */
 #quoteView .kpi-val, #quoteView .kpi-foot b,
 #quoteView .range-val, #quoteView .delta-badge,
 #quoteView table td.num,

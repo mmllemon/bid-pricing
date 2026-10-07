@@ -113,32 +113,21 @@
     });
   };
 
-  /* 确认弹窗（well 页 uiConfirm 上移；与 app.js 的 uiConfirm 同样式类，
-     app.js 保留带焦点陷阱的完整版供报价页用） */
+  /* 确认弹窗：**实现唯一在 js/confirm.js**（各工具页已在 tool-common.js 之前加载它）。
+     这里保留 P2 的 window.toolConfirm 名字与签名，使各工具页调用点零改动。
+     合并说明：P2 曾把 well 页的 uiConfirm 上移到此处，与 app.js 的 uiConfirm 形成
+     **两份各自 createElement `#ui-confirm` 的实现**；两条并行方案已合为一份——
+     报价页（app.js 的 uiConfirm）与工具页（本函数）都只做委托。 */
+  if (typeof window.gcConfirm !== 'function') {
+    throw new Error('tool-common.js 的 toolConfirm 需要先加载 ./js/confirm.js');
+  }
   window.toolConfirm = function (message, options) {
     options = options || {};
-    const danger = options.danger !== false;
-    return new Promise(resolve => {
-      const esc = window.toolEsc || (t => String(t ?? ''));
-      let ov = document.getElementById('ui-confirm');
-      if (ov) ov.remove();
-      ov = document.createElement('div');
-      ov.id = 'ui-confirm';
-      ov.className = 'ui-confirm-overlay open' + (danger ? ' danger' : '');
-      ov.innerHTML = `<div class="ui-confirm-box" role="alertdialog" aria-modal="true" aria-label="确认">`
-        + `<div class="ui-confirm-msg">${esc(message)}</div>`
-        + `<div class="ui-confirm-actions">`
-        + `<button type="button" class="btn-ghost" data-act="cancel">取消</button>`
-        + `<button type="button" class="btn-danger" data-act="ok">${esc(options.okText || '确认删除')}</button>`
-        + `</div></div>`;
-      document.body.appendChild(ov);
-      const done = v => { ov.remove(); resolve(v); };
-      ov.querySelector('[data-act="cancel"]').addEventListener('click', () => done(false));
-      ov.querySelector('[data-act="ok"]').addEventListener('click', () => done(true));
-      ov.addEventListener('mousedown', e => { if (e.target === ov) done(false); });
-      // P2: Esc 只关本弹窗 —— stopPropagation，避免冒泡到 agent-panel/sidebar 的全局 Esc 把面板也关掉（双重绑定）
-      ov.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } });
-      setTimeout(() => { const c = ov.querySelector('[data-act="cancel"]'); if (c) c.focus(); }, 0);
+    return window.gcConfirm(message, {
+      danger: options.danger !== false,               // P2 口径：默认按 danger 呈现
+      okLabel: options.okText || '确认删除',
+      ariaLabel: options.ariaLabel || '确认',
+      trap: false,                                    // 工具页没有模态栈
     });
   };
 

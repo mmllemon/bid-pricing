@@ -53,16 +53,27 @@ console.log(JSON.stringify({ nav, icons: icons ? Object.keys(icons) : [] }));
 
 
 def _load_nav_from_js() -> tuple[list[dict], list[str]]:
-    """用 Node 执行 workbench-nav.js，返回 (WB_NAV 条目, ICONS 键)。"""
+    """用 Node 执行 workbench-nav.js，返回 (WB_NAV 条目, ICONS 键)。
+
+    编码必须**显式**指定：``text=True`` 缺省按本机 locale 解码，而 node 输出永远是 UTF-8。
+    中文 Windows（控制台 CP=936）下这条路径会 UnicodeDecodeError → 读取线程挂掉使
+    ``proc.stdout`` 变成 ``None`` → ``json.loads(None)`` TypeError → setUpClass 抛错，
+    于是**本类 3 项用例静默不运行**（实测：全量从 1619 变 1616，只多一条 error，极难发现）。
+    与 status.run_tests / api/app.py 的导出子进程是同一类事故（见 tests/test_subprocess_encoding.py）。
+    """
     proc = subprocess.run(
         ["node", "-e", _NODE_RUNNER, str(NAV_JS)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
         cwd=str(ROOT),
     )
     if proc.returncode != 0:
         raise RuntimeError(f"执行 workbench-nav.js 失败：{proc.stderr.strip()[:300]}")
+    if not proc.stdout:
+        raise RuntimeError("执行 workbench-nav.js 未产生输出（子进程输出读取失败？）")
     data = json.loads(proc.stdout)
     return data["nav"], data["icons"]
 

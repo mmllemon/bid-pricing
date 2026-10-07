@@ -115,8 +115,12 @@ def _export_xlsx(rec_result: dict, out_id: str) -> str | None:
     tmp_xlsx = WEB_OUTPUT_DIR / f"{out_id}.xlsx.partial"
     atomic_write_text(json_path, json.dumps(rec_result, ensure_ascii=False, indent=2))
     try:
+        # 显式钉住编码：node 输出是 UTF-8，而 text=True 缺省按本机 locale 解码——
+        # 中文 Windows（CP=936）下读取线程会 UnicodeDecodeError 并把 stdout 变成 None。
+        # 本调用只用返回码，故此前未显形；仍按同一口径修，见 tests/test_subprocess_encoding.py。
         subprocess.run(["node", str(ROOT / "build_web_result.mjs"), str(json_path), str(tmp_xlsx)],
-                       cwd=ROOT, check=True, capture_output=True, text=True, timeout=60)
+                       cwd=ROOT, check=True, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=60)
         os.replace(tmp_xlsx, xlsx_path)
         return f"/api/quote/download/{out_id}"
     except (subprocess.SubprocessError, OSError) as exc:

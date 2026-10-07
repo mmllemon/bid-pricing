@@ -109,8 +109,8 @@ test('tool-well 初始化顺序：钢筋表非空 + 支室数 > 0 也不得抛�
 
 const JS_FILES = ['app.js', 'agent-panel.js',
   ...['escape', 'workbench-nav', 'sidebar', 'toast', 'dropdown', 'confirm', 'tool-common',
-    'tool-cable', 'tool-duct', 'tool-earth', 'tool-well'].map((n) => `js/${n}.js`)];
-const TOOL_PAGES = ['tools.html', 'tool-cable.html', 'tool-duct.html', 'tool-earth.html', 'tool-well.html'];
+    'tool-bid', 'tool-cable', 'tool-duct', 'tool-earth', 'tool-well'].map((n) => `js/${n}.js`)];
+const TOOL_PAGES = ['tools.html', 'tool-bid.html', 'tool-cable.html', 'tool-duct.html', 'tool-earth.html', 'tool-well.html'];
 const CSS_FILES = ['tokens.css', 'styles.css', 'quote-dashboard.css', 'results.css', 'tools.css', 'agent.css'];
 
 /* 静态判据必须只看**代码**，不看注释。

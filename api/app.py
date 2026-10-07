@@ -28,9 +28,13 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from bidpricing import bid_package
 from bidpricing import project_overview, project_store
 from bidpricing import sqlite_store
+from bidpricing import unbalanced
 from bidpricing import well_library
+from bidpricing.io.boq import parse_listing as bid_parse_listing
+from bidpricing.io.clean import clean_listing_rows as bid_clean_rows
 from bidpricing.atomic_io import atomic_write_text
 from bidpricing.deployment import log_event, safe_user, user_scope
 from bidpricing.import_preview import build_listing_preview
@@ -983,6 +987,128 @@ async def well_library_save(request: Request):
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
     append_audit(CURRENT_USER, "well.library.save", "PASS", detail={"count": count})
     return JSONResponse(status_code=200, content={"status": "PASS", "count": count})
+
+
+# ---- 不平衡报价（2026-10-07）：投标报价流第一个功能，见 docs/BID_DESIGN.md ----
+
+
+@app.post("/api/bid/parse")
+async def bid_parse(bid_file: UploadFile = File(...), project_id: str = Form("当前项目")):
+    """解析招标清单 xlsx → 规范清单项（编码/名称/单位/工程量/控制价）。
+
+    复用 T01 解析器（表-09 识别、列别名），只取分部分项/措施项明细行。
+    """
+    with tempfile.TemporaryDirectory(prefix="bidpricing-bid-") as temp_dir:
+        xlsx_path = Path(temp_dir) / "bid.xlsx"
+        data, err = await _read_upload_limited(bid_file)
+        if err:
+            return JSONResponse(status_code=413, content={"status": "BLOCKED", "reason": err})
+        xlsx_path.write_bytes(data)
+        try:
+            report = await asyncio.to_thread(bid_parse_listing, xlsx_path, project_id.strip() or "当前项目")
+            clean_rows, clean_rep = await asyncio.to_thread(bid_clean_rows, report.rows, "cap")
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"清单解析失败：{exc}"})
+    items = []
+    for r in clean_rows:
+        d = r.to_dict()
+        if d.get("q0") is None or d["q0"] <= 0:
+            continue
+        items.append({
+            "key": f"{d.get('unit_work') or ''}|{d.get('item_id') or ''}".strip("|") or d.get("item_name"),
+            "item_id": d.get("item_id") or "",
+            "name": d.get("item_name") or "",
+            "unit": d.get("unit") or "",
+            "qty": d.get("q0"),
+            "cap": d.get("cap"),  # 无控制价 → None
+            "cost": None,          # 成本单价由用户测算后填写
+            "strategy": "normal",
+        })
+    return JSONResponse(status_code=200, content={
+        "status": "PASS",
+        "items": items,
+        "parse": {
+            "n_rows": len(report.rows),
+            "n_items": len(items),
+            "n_failed": len(report.failures),
+            "no_cap": len(clean_rep.no_cap_items),
+        },
+    })
+
+
+@app.post("/api/bid/allocate")
+async def bid_allocate(request: Request):
+    """不平衡报价分配。JSON 体 {items, target_total, m_min?, m_max?, locked?}。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体不是合法 JSON"})
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体必须是对象"})
+    try:
+        target_total = float(body.get("target_total"))
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "target_total 非法"})
+    result = await asyncio.to_thread(
+        unbalanced.allocate,
+        body.get("items") or [],
+        target_total,
+        float(body.get("m_min", 0.0)),
+        float(body.get("m_max", 0.3)),
+        body.get("weights"),
+        body.get("locked"),
+    )
+    status = "PASS" if result["ok"] else "BLOCKED"
+    code = 200 if result["ok"] else 400
+    return JSONResponse(status_code=code, content={"status": status, **result})
+
+
+@app.get("/api/bid/packages")
+def bid_packages_list() -> JSONResponse:
+    """报价包摘要列表。"""
+    return JSONResponse(status_code=200, content={"status": "PASS", "items": bid_package.list_packages()})
+
+
+@app.post("/api/bid/packages")
+async def bid_packages_save(request: Request):
+    """报价包整包保存。JSON 体即 BidPackage（含 bid_id/items/...）。"""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": "请求体不是合法 JSON"})
+    try:
+        bid_id = bid_package.save_package(body if isinstance(body, dict) else {})
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    append_audit(CURRENT_USER, "bid.package.save", "PASS", detail={"bid_id": bid_id})
+    return JSONResponse(status_code=200, content={"status": "PASS", "bid_id": bid_id})
+
+
+@app.get("/api/bid/packages/{bid_id}")
+def bid_packages_get(bid_id: str) -> JSONResponse:
+    """读出单个报价包全文。"""
+    try:
+        pkg = bid_package.get_package(bid_id)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    if pkg is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "报价包不存在"})
+    return JSONResponse(status_code=200, content={"status": "PASS", "package": pkg})
+
+
+@app.delete("/api/bid/packages/{bid_id}")
+def bid_packages_delete(bid_id: str) -> JSONResponse:
+    """删除报价包（需前端二次确认）。"""
+    try:
+        ok = bid_package.delete_package(bid_id)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    if not ok:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "报价包不存在"})
+    append_audit(CURRENT_USER, "bid.package.delete", "PASS", detail={"bid_id": bid_id})
+    return JSONResponse(status_code=200, content={"status": "PASS"})
+
+
 # ---- P0 架构收敛（2026-10-07）：:8080 并入 :8000 ----
 # 前端静态（frontend/，vanilla 页）改由本 FastAPI 同进程 serving，run.ps1 不再起
 # python http.server :8080。挂载放在所有 /api 路由之后，API 优先匹配；html=True

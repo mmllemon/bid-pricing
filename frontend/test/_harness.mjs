@@ -18,6 +18,7 @@ export const FE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 export const PAGES = [
   'index.html',
   'tools.html',
+  'tool-bid.html',
   'tool-cable.html',
   'tool-duct.html',
   'tool-earth.html',

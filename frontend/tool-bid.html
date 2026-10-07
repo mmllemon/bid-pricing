@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>工程智算 · 不平衡报价</title>
+  <!-- 设计令牌（单一事实源，必须最先加载） -->
+  <link rel="stylesheet" href="./tokens.css?v=2026-10-06-v2h" />
+  <link rel="stylesheet" href="./styles.css?v=2026-10-06-v2m" />
+  <!-- 工具页**不**加载 quote-dashboard.css（报价页视图层）：只用 .title-dot / .card-subtitle /
+       .tabular 三个基础件，已在 styles.css 提供。判据见 test/smoke.test.mjs -->
+  <link rel="stylesheet" href="./tools.css?v=2026-10-06-tools5" />
+  <link rel="stylesheet" href="./agent.css?v=2026-10-06-agcss4" />
+  <!-- 字体：MiSans VF（正文） + LShu Pixel（像素标签，见 tokens.css） -->
+  <link rel="stylesheet" href="./assets/fonts/misans/MiSansVF.min.css?v=2026-10-06-font1" />
+  <style>
+    .bid-table-wrap { overflow-x: auto; margin-top: 10px; }
+    table.bid-table { border-collapse: collapse; width: 100%; min-width: 1080px; font-size: 13px; }
+    table.bid-table th, table.bid-table td { border: 1px solid var(--line, #e5e5e5); padding: 6px 8px; text-align: right; white-space: nowrap; }
+    table.bid-table th { background: var(--bg-soft, #f7f7f7); font-weight: 600; }
+    table.bid-table td.l, table.bid-table th.l { text-align: left; }
+    table.bid-table td.c, table.bid-table th.c { text-align: center; }
+    table.bid-table input[type="number"], table.bid-table input[type="text"] { width: 92px; }
+    table.bid-table input.cost-missing { border-color: var(--warn, #d97706); }
+    table.bid-table select { width: 86px; }
+    .bid-kpi-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+    .bid-kpi { border: 1px solid var(--line, #e5e5e5); border-radius: 8px; padding: 8px 14px; min-width: 130px; }
+    .bid-kpi .bid-kpi-label { font-size: 12px; color: var(--muted, #888); }
+    .bid-kpi .bid-kpi-val { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .bid-kpi.bad .bid-kpi-val { color: var(--danger, #c0392b); }
+    .bid-kpi.good .bid-kpi-val { color: var(--ok, #1e7e34); }
+    .bound-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #fff3cd; color: #856404; }
+    .lock-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #e2e3e5; color: #383d41; }
+    .prob-list { color: var(--warn, #b45309); font-size: 13px; margin: 8px 0; }
+    .prob-list li { margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- 窄屏抽屉式侧栏：汉堡按钮 + 遮罩（宽屏隐藏） -->
+    <div id="sidebarSlot"></div>
+
+    <!-- ===== 主内容区 ===== -->
+    <main class="main-content">
+      <div class="breadcrumb"><a href="./tools.html" class="crumb-link">工具箱</a> <span>/</span> 不平衡报价</div>
+
+      <section class="card tool-card" id="tool-bid">
+        <div class="card-head">
+          <span class="card-title"><span class="title-dot"></span>不平衡报价</span>
+          <span class="card-subtitle">招标清单导入 → 成本测算 → 目标总价约束下按策略分配单项报价 → 导出投标清单</span>
+        </div>
+
+        <!-- 1. 报价包 + 清单导入 -->
+        <div class="tool-group">
+          <div class="tool-subhead">报价包与清单导入</div>
+          <div class="tool-grid">
+            <label class="field"><span class="field-label">项目名称</span><input id="bProjName" type="text" placeholder="如 XX 10kV 外线工程" /></label>
+            <label class="field"><span class="field-label">招标清单 xlsx</span><input id="bFile" type="file" accept=".xlsx" /></label>
+            <label class="field"><span class="field-label">报价包</span>
+              <select id="bPkgSel"><option value="">（新建）</option></select>
+            </label>
+          </div>
+          <div class="chip-row" style="margin-top:8px">
+            <button type="button" class="chip" id="bParseBtn">解析清单</button>
+            <button type="button" class="chip" id="bSaveBtn">保存报价包</button>
+            <button type="button" class="chip" id="bDelBtn">删除报价包</button>
+            <span class="hint" id="bParseHint">支持标准招标清单（表-09 分部分项 / 施工技术措施）。成本单价需自行测算填写。</span>
+          </div>
+        </div>
+
+        <!-- 2. 分配参数 -->
+        <div class="tool-group">
+          <div class="tool-subhead">分配参数</div>
+          <div class="tool-grid">
+            <label class="field"><span class="field-label">目标总价 T</span><input id="bTarget" class="tabular" type="number" min="0" step="0.01" placeholder="投标总价" /><span class="unit-suffix">元</span></label>
+            <label class="field" data-tip="报价单价相对成本的下浮/上浮下限；0 = 不亏本；让利时可填负数"><span class="field-label">m_min</span><input id="bMMin" class="tabular" type="number" step="0.01" value="0" /></label>
+            <label class="field" data-tip="无控制价时，报价单价相对成本的上浮上限"><span class="field-label">m_max</span><input id="bMMax" class="tabular" type="number" step="0.05" value="0.30" /></label>
+            <label class="field"><span class="field-label">批量策略</span>
+              <span style="display:flex;gap:6px">
+                <input id="bKw" type="text" placeholder="关键字，如 土方" style="width:110px" />
+                <select id="bKwStrategy" style="width:96px">
+                  <option value="early">前期</option>
+                  <option value="increase">预计增</option>
+                  <option value="decrease">预计减</option>
+                  <option value="normal">正常</option>
+                </select>
+                <button type="button" class="chip" id="bKwBtn">应用</button>
+              </span>
+            </label>
+          </div>
+          <div class="chip-row" style="margin-top:8px">
+            <button type="button" class="chip" id="bAllocBtn" style="font-weight:700">一键分配</button>
+            <button type="button" class="chip" id="bCopyBtn">复制投标清单 TSV</button>
+            <button type="button" class="chip" id="bCsvBtn">下载 CSV</button>
+            <span class="hint">策略权重：前期/预计增 1.5，正常 1.0，预计减 0.5；让利时自动反转。</span>
+          </div>
+        </div>
+
+        <!-- 3. KPI -->
+        <div class="tool-group">
+          <div class="tool-subhead">汇总</div>
+          <div class="bid-kpi-row" id="bKpis">
+            <div class="bid-kpi"><div class="bid-kpi-label">控制价合计</div><div class="bid-kpi-val tabular" id="kCap">—</div></div>
+            <div class="bid-kpi"><div class="bid-kpi-label">成本合计</div><div class="bid-kpi-val tabular" id="kCost">—</div></div>
+            <div class="bid-kpi"><div class="bid-kpi-label">目标总价</div><div class="bid-kpi-val tabular" id="kTarget">—</div></div>
+            <div class="bid-kpi"><div class="bid-kpi-label">实际总价</div><div class="bid-kpi-val tabular" id="kActual">—</div></div>
+            <div class="bid-kpi"><div class="bid-kpi-label">利润 / 利润率</div><div class="bid-kpi-val tabular" id="kProfit">—</div></div>
+            <div class="bid-kpi"><div class="bid-kpi-label">尾差</div><div class="bid-kpi-val tabular" id="kResidual">—</div></div>
+          </div>
+          <ul class="prob-list" id="bProblems" hidden></ul>
+        </div>
+
+        <!-- 4. 明细表 -->
+        <div class="tool-group">
+          <div class="tool-subhead">清单明细 <span class="hint">成本单价必填（未填按 0 参与分配并标黄）；报价单价可手工改，改后点"一键分配"按锁定重算</span></div>
+          <div class="bid-table-wrap">
+            <table class="bid-table" id="bTable">
+              <thead><tr>
+                <th class="l">编码</th><th class="l">名称</th><th class="c">单位</th>
+                <th>工程量</th><th>控制价</th><th>成本单价</th><th class="c">策略</th>
+                <th>报价单价</th><th>合价</th><th class="c">状态</th><th class="c">锁定</th>
+              </tr></thead>
+              <tbody id="bRows"><tr><td colspan="11" class="c" style="color:var(--muted,#888)">先解析招标清单，或载入已保存的报价包</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <p class="hint" style="margin:6px 0 30px;">
+        本页为投标报价辅助工具，不替代招标文件实质性要求与 GB 50500 计价规范；单项报价是否超控制价、是否触发低价评审，以招标文件为准。
+      </p>
+    </main>
+  </div>
+
+  <!-- js/escape.js 必须最先加载：全站唯一 HTML 转义实现，其余脚本一律引用它 -->
+  <script src="./js/escape.js?v=2026-09-28"></script>
+  <script src="./js/confirm.js?v=2026-10-06-cf1"></script>
+  <script src="./js/workbench-nav.js?v=2026-10-06-wb1"></script>
+  <script src="./js/sidebar.js?v=2026-10-06-nav4"></script>
+  <script src="./agent-panel.js?v=2026-10-06-agp2"></script>
+  <script src="./js/dropdown.js?v=2026-09-23-split1"></script>
+  <!-- tool-common.js 为工具页共用：?v= 必须各页一致，否则改这份共享脚本时只有部分页面生效 -->
+  <script src="./js/tool-common.js?v=2026-10-06-tc2"></script>
+  <script src="./js/tool-bid.js?v=2026-10-07-bd1"></script>
+</body>
+</html>

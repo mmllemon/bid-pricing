@@ -264,5 +264,7 @@
   if (typeof initCustomSelect === 'function') {
     initCustomSelect('#eRuleSet');
   }
-  window.addEventListener('pagehide', saveNow);
+  // 离开页面立即落盘一次（不等防抖）。同 tool-cable.js：P2 改名后此处曾引用已不存在的
+  // saveNow，加载即 ReferenceError（由前端冒烟判据抓出）。
+  window.addEventListener('pagehide', () => window.toolStore.save(STORE_KEY, collectState()));
 })();

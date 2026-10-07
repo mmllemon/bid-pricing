@@ -230,5 +230,8 @@
   /* 电压等级接项目自定义下拉（毛玻璃组件），与土方页放坡口径视觉统一；恢复在初始化之前 */
   if (typeof initCustomSelect === 'function') initCustomSelect('#cVolt');
   recalcCable();
-  window.addEventListener('pagehide', saveNow);
+  // 离开页面立即落盘一次（不等防抖）。注意：P2 把保存函数改名为 collectState（交给
+  // toolAutosave 用），此处若仍写旧的 saveNow 会在**加载时**抛 ReferenceError 并中断本
+  // IIFE 余下语句——由前端冒烟「各页脚本执行无未捕获错误」判据抓出。
+  window.addEventListener('pagehide', () => window.toolStore.save(STORE_KEY, collectState()));
 })();

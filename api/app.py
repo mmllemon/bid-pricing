@@ -28,7 +28,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from bidpricing import project_overview, project_store
+from bidpricing import project_docs, project_overview, project_store
 from bidpricing import sqlite_store
 from bidpricing import well_library
 from bidpricing.atomic_io import atomic_write_text
@@ -155,12 +155,14 @@ def _validate_quote_params(*, vat_rate, surtax_rate, target_total, fixed_pretax,
     return None
 
 
-async def _read_upload_limited(file: UploadFile, max_mb: int = _MAX_UPLOAD_MB) -> tuple[bytes | None, str | None]:
+async def _read_upload_limited(file: UploadFile, max_mb: int = _MAX_UPLOAD_MB,
+                              check_xlsx: bool = True) -> tuple[bytes | None, str | None]:
     """分块读取 UploadFile 并检查体积；超限立即中止返回 (None, reason)，正常返回 (data, None)。
 
     分块的目的：此前 ``await file.read()`` 一次性把整个上传读进内存再查上限，
     一个 2GB 的恶意上传会先吃满 2GB 内存才被拒绝。现在每读 1MB 核一次累计
     体积，超限即刻中止，内存占用被封在上限 + 1MB 以内。
+    check_xlsx=False 时跳过 xlsx 魔数校验（项目文档等通用上传用）。
     """
     limit_bytes = max_mb * 1024 * 1024
     chunks: list[bytes] = []
@@ -177,7 +179,7 @@ async def _read_upload_limited(file: UploadFile, max_mb: int = _MAX_UPLOAD_MB) -
             )
         chunks.append(chunk)
     data = b"".join(chunks)
-    if not _is_xlsx_magic(data):
+    if check_xlsx and not _is_xlsx_magic(data):
         return None, "上传文件格式错误：仅接受 .xlsx 文件（ZIP 魔数校验失败）"
     return data, None
 
@@ -1025,6 +1027,62 @@ def exec_summary(project_id: str = "") -> JSONResponse:
     pid = project_id.strip() or None
     return JSONResponse(status_code=200,
                         content={"status": "PASS", "summary": sqlite_store.exec_summary(pid)})
+
+
+# ============ 项目文档（2026-10-07）============
+# 按项目归档：招标文件/图纸/合同等，落盘 outputs/projects/<user>/docs/<项目id>/。
+
+
+@app.get("/api/project/docs/list")
+def docs_list(project_id: str = "") -> JSONResponse:
+    """列出某项目文档（含分类/大小/上传时间）。"""
+    try:
+        items = project_docs.list_docs(project_id)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    return JSONResponse(status_code=200, content={"status": "PASS", "items": items})
+
+
+@app.post("/api/project/docs/upload")
+async def docs_upload(project_id: str = Form(""), category: str = Form("其他"),
+                      file: UploadFile = File(...)) -> JSONResponse:
+    """上传一个文档。10MB 上限（与报价清单同口径，可用 BIDPRICING_MAX_UPLOAD_MB 覆盖）。"""
+    data, err = await _read_upload_limited(file, check_xlsx=False)
+    if err or data is None:
+        return JSONResponse(status_code=413, content={"status": "BLOCKED", "reason": err or "读取上传失败"})
+    try:
+        meta = project_docs.save_doc(project_id, file.filename or "未命名", data, category)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    append_audit(CURRENT_USER, "project.docs.upload", "PASS",
+                 project_id=project_id.strip(), detail={"name": meta["name"], "size": meta["size"]})
+    return JSONResponse(status_code=200, content={"status": "PASS", "doc": meta})
+
+
+@app.get("/api/project/docs/download")
+def docs_download(project_id: str = "", name: str = ""):
+    """下载文档（按存储文件名）。"""
+    try:
+        fp = project_docs.doc_path(project_id, name)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    if fp is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "文档不存在或已删除"})
+    return FileResponse(fp, filename=name)
+
+
+@app.post("/api/project/docs/delete")
+def docs_delete(project_id: str = Form(""), name: str = Form("")) -> JSONResponse:
+    """删除一个文档。"""
+    try:
+        ok = project_docs.delete_doc(project_id, name)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": str(exc)})
+    if not ok:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "文档不存在或已删除"})
+    append_audit(CURRENT_USER, "project.docs.delete", "PASS",
+                 project_id=project_id.strip(), detail={"name": name})
+    return JSONResponse(status_code=200, content={"status": "PASS", "deleted": name})
 
 
 @app.get("/api/well-library/list")

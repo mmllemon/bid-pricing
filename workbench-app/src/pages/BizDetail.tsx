@@ -12,11 +12,12 @@ import type { TodoLite } from './Biz';
  *         /api/project/exec/*（执行四表）；:3456 /api/todos（待办，相对路径）。
  */
 
-type TabKey = 'overview' | 'quote' | 'exec' | 'todos';
+type TabKey = 'overview' | 'quote' | 'exec' | 'docs' | 'todos';
 const TABS: Array<[TabKey, string]> = [
   ['overview', '概况'],
   ['quote', '报价'],
   ['exec', '执行'],
+  ['docs', '文档'],
   ['todos', '待办'],
 ];
 
@@ -105,6 +106,123 @@ function cellText(col: ExecColumn, v: unknown): string {
   if (v == null || v === '') return '—';
   if (MONEY_KEYS.has(col.key)) return yf(v);
   return String(v);
+}
+
+/* ---------------- 文档区 ---------------- */
+const DOC_CATEGORIES = ['招标文件', '图纸', '合同', '签证', '结算', '其他'];
+
+interface DocItem {
+  name: string;
+  original?: string;
+  category?: string;
+  size?: number;
+  uploaded_at?: string;
+}
+
+function fmtSize(n: unknown): string {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v < 0) return '—';
+  if (v < 1024) return `${v} B`;
+  if (v < 1048576) return `${(v / 1024).toFixed(1)} KB`;
+  return `${(v / 1048576).toFixed(1)} MB`;
+}
+
+function DocsSection({ projectId }: { projectId: string }) {
+  const [docs, setDocs] = useState<DocItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [category, setCategory] = useState('其他');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch(`${API_BASE}/api/project/docs/list?project_id=${encodeURIComponent(projectId)}`)
+      .then((r) => r.json() as Promise<{ items?: DocItem[] }>)
+      .then((j) => setDocs(j.items ?? []))
+      .catch(() => setDocs([]))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function onFile(e: { target: { files?: FileList | null; value: string } }) {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    const data = new FormData();
+    data.append('project_id', projectId);
+    data.append('category', category);
+    data.append('file', f);
+    setUploading(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/project/docs/upload`, { method: 'POST', body: data });
+      const j = (await r.json()) as { status?: string; reason?: string };
+      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '上传失败');
+      load();
+    } catch (err) {
+      window.alert(`上传失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function del(name: string) {
+    if (!window.confirm(`确定删除文档「${name}」？此操作不可恢复。`)) return;
+    const data = new FormData();
+    data.append('project_id', projectId);
+    data.append('name', name);
+    try {
+      const r = await fetch(`${API_BASE}/api/project/docs/delete`, { method: 'POST', body: data });
+      const j = (await r.json()) as { status?: string; reason?: string };
+      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '删除失败');
+      load();
+    } catch (err) {
+      window.alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return (
+    <section>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span className="nb-muted" style={{ fontSize: 13 }}>分类：</span>
+        <select value={category} onChange={(e) => setCategory(e.target.value)}>
+          {DOC_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <label className="nb-btn" style={{ cursor: 'pointer' }}>
+          {uploading ? '上传中…' : '+ 上传文档'}
+          <input type="file" style={{ display: 'none' }} disabled={uploading} onChange={onFile} />
+        </label>
+        <span className="nb-muted" style={{ fontSize: 12 }}>单文件 10MB 上限 · 按项目归档，备份跟着项目目录走</span>
+      </div>
+      {loading ? (
+        <div className="nb-muted">读取中…</div>
+      ) : docs.length === 0 ? (
+        <div className="empty-state"><p>暂无文档。招标文件、图纸、合同扫描件都可以传上来按项目归档。</p></div>
+      ) : (
+        <div className="note-table">
+          <div className="note-table-head">
+            <span className="note-th">文件名</span><span className="note-th">分类</span>
+            <span className="note-th">大小</span><span className="note-th">上传时间</span>
+            <span className="note-th">操作</span>
+          </div>
+          {docs.map((d) => (
+            <div key={d.name} className="note-row">
+              <div className="note-td" title={d.original || d.name}>{d.original || d.name}</div>
+              <div className="note-td">{d.category || '其他'}</div>
+              <div className="note-td">{fmtSize(d.size)}</div>
+              <div className="note-td">{d.uploaded_at || '—'}</div>
+              <div className="note-td">
+                <a className="nb-btn nb-btn--ghost" style={{ padding: '2px 8px', fontSize: 12 }}
+                  href={`${API_BASE}/api/project/docs/download?project_id=${encodeURIComponent(projectId)}&name=${encodeURIComponent(d.name)}`}>
+                  下载
+                </a>
+                <button type="button" className="nb-btn nb-btn--ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 6 }} onClick={() => del(d.name)}>删除</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 /* ---------------- 单表 CRUD 区 ---------------- */
@@ -433,6 +551,8 @@ export default function BizDetailPage() {
               {EXEC_TABLES.map((t) => <ExecSection key={t.key} table={t} projectId={pid} />)}
             </div>
           )}
+
+          {tab === 'docs' && <DocsSection projectId={pid} />}
 
           {tab === 'todos' && (
             <div>

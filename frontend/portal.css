@@ -10,6 +10,36 @@ body:has(.portal-view:not(.hidden)) {
   overflow: hidden !important;
 }
 
+/* ===== 沉浸态：进场收壳、出场还壳 =====
+ * 大盘是顶层门户，应该像 neural 首页那样铺满整屏。
+ * 只在大盘激活时生效，其余页面一根头发不动；退场时侧栏滑回、主区恢复内边距。 */
+.app-shell .sidebar { transition: margin-left var(--dur-slow) var(--ease-out); }
+.app-shell .main-content { transition: padding var(--dur-slow) var(--ease-out); }
+
+.app-shell.shell-immersive .sidebar {
+  margin-left: calc(-1 * var(--sidebar-w));
+}
+
+.app-shell.shell-immersive .main-content {
+  padding: 0;
+  max-width: none;
+}
+
+.app-shell.shell-immersive .sb-toggle {
+  display: none !important;
+}
+
+.app-shell.shell-immersive .portal-view {
+  height: 100vh;
+  min-height: 0;
+  border: 0;
+}
+
+@media (max-width: 768px) {
+  /* 窄屏下侧栏本是固定抽屉：沉浸态直接隐藏，避免与 margin 位移叠加 */
+  .app-shell.shell-immersive .sidebar { display: none; }
+}
+
 .portal-view {
   position: relative;
   width: 100%;
@@ -147,69 +177,107 @@ body:has(.portal-view:not(.hidden)) {
   position: absolute;
   top: 0;
   left: 0;
-  width: 150px;
-  height: 150px;
+  width: 340px;
+  height: 340px;
   z-index: 10;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   will-change: transform;
+  /* 位移按左上角算、缩放以左上角为基点，核心中心才能精确落在 (x,y) */
+  transform-origin: 0 0;
 }
 
+/* 展开态：核心退为左侧一个小据点，隐去徽标与副标题，只留名字 */
+.portal-view.stage-module .core-badge,
+.portal-view.stage-item .core-badge,
+.portal-view.stage-module .core-sub,
+.portal-view.stage-item .core-sub { display: none; }
+
+/* 呼吸光晕：中心一颗活的核心 */
 .core-halo {
   position: absolute;
-  inset: -36px;
+  inset: -28px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 107, 0, 0.24) 0%, rgba(229, 160, 0, 0.1) 48%, transparent 72%);
-  animation: core-breathe 4.5s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(255, 107, 0, 0.22) 0%, rgba(229, 160, 0, 0.09) 46%, transparent 70%);
+  animation: core-breathe 5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* 三层同心像素轨道环（虚线直角环，像素语言） */
+.core-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(17, 17, 17, 0.22);
+  pointer-events: none;
+}
+.core-ring.r0 { inset: 6px; animation: core-spin 26s linear infinite; }
+.core-ring.r1 { inset: -22px; border-color: rgba(255, 107, 0, 0.34); animation: core-spin 40s linear infinite reverse; }
+.core-ring.r2 { inset: -50px; border-style: dotted; animation: core-spin 60s linear infinite; }
+
+/* 雷达扫线 */
+.core-radar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 260px;
+  height: 2px;
+  margin-left: -130px;
+  transform-origin: 50% 50%;
+  background: repeating-linear-gradient(90deg, rgba(255, 107, 0, 0.5) 0 6px, transparent 6px 14px);
+  opacity: 0.5;
+  animation: core-spin 7s linear infinite;
   pointer-events: none;
 }
 
 @keyframes core-breathe {
-  0%, 100% { transform: scale(0.92); opacity: 0.7; }
-  50% { transform: scale(1.16); opacity: 1; }
+  0%, 100% { transform: scale(0.9); opacity: 0.62; }
+  50% { transform: scale(1.14); opacity: 1; }
 }
+
+@keyframes core-spin { to { transform: rotate(360deg); } }
 
 .core-pixel-box {
   position: relative;
-  width: 130px;
-  height: 130px;
+  width: 238px;
+  height: 238px;
   border-radius: 50%;
   background: #ffffff;
   border: 2.5px solid #111111;
-  box-shadow: 0 0 24px rgba(255, 107, 0, 0.16), 3px 4px 0 #111111;
+  box-shadow: 0 0 28px rgba(255, 107, 0, 0.18), 3px 4px 0 #111111;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 8px;
+  padding: 18px;
+  z-index: 1;
 }
 
 .core-badge {
   font-family: var(--font-pixel, monospace);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: #ff6b00;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .core-title {
-  font-size: 15px;
+  font-size: 28px;
   font-weight: 900;
   color: #111111;
   letter-spacing: 0.04em;
 }
 
 .core-sub {
-  font-size: 11px;
+  font-size: 13px;
   color: #555555;
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .pixel-pulse-dot {
@@ -236,16 +304,17 @@ body:has(.portal-view:not(.hidden)) {
   position: absolute;
   top: 0;
   left: 0;
-  width: 80px;
-  height: 80px;
+  width: 120px;
+  height: 120px;
   background: #ffffff;
   border: 2px solid #111111;
   box-shadow: 3px 3px 0 #111111;
-  padding: 6px 8px;
+  padding: 10px 12px;
   text-align: left;
   cursor: pointer;
   pointer-events: auto !important;
   will-change: transform;
+  transform-origin: 0 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -278,32 +347,34 @@ body:has(.portal-view:not(.hidden)) {
 
 .mod-code {
   font-family: var(--font-pixel, monospace);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .mod-icon-badge {
   font-family: var(--font-pixel, monospace);
-  font-size: 10px;
+  font-size: 12px;
   background: #111111;
   color: #ffffff;
-  padding: 0 4px;
+  padding: 0 5px;
 }
 
 .mod-node-name {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 800;
   color: #111111;
   line-height: 1.15;
 }
 
 .mod-node-sub {
-  font-size: 9.5px;
+  font-size: 11px;
   color: #777777;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 展开态下选中的模块被放大，字体随容器缩放，无需单独调 */
 
 /* —— 二级分支节点层 (第 2 列，Branch Nodes) —— */
 .portal-branches-layer {

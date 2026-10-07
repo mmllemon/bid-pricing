@@ -112,6 +112,8 @@ function selectModule(module, sub) {
 
   if (module === 'portal') {
     location.hash = 'portal';
+    // 沉浸：大盘铺满整屏，进入时收起左侧栏；其余页面不受影响
+    document.querySelector('.app-shell')?.classList.add('shell-immersive');
     if (portalView) {
       portalView.classList.remove('hidden');
       if (window.PORTAL_VIEW) window.PORTAL_VIEW.mount(portalView);
@@ -121,6 +123,7 @@ function selectModule(module, sub) {
     workbenchView.classList.add('hidden');
     return;
   }
+  document.querySelector('.app-shell')?.classList.remove('shell-immersive');
   if (portalView) {
     portalView.classList.add('hidden');
     if (window.PORTAL_VIEW) window.PORTAL_VIEW.stop();

@@ -112,51 +112,66 @@
     var mods = global.PORTAL_DATA ? global.PORTAL_DATA.modules : [];
 
     if (st === 'hub') {
-      var s = narrow ? clamp(W * 0.45, 140, 200) : clamp(Math.min(W, H) * 0.32, 160, 240);
-      var cy = narrow ? H * 0.48 : H * 0.52;
+      // 对齐 neural 首页构图：一颗足够大的核心锚定全场，模块均布在扁椭圆上贴向边缘。
+      var s = narrow ? clamp(W * 0.34, 150, 210) : clamp(Math.min(W, H) * 0.43, 240, 380);
+      var cy = narrow ? H * 0.5 : H * 0.52;
       res.orb = { x: W / 2, y: cy, s: s };
 
-      var rx = narrow ? W * 0.38 : Math.min(W * 0.38, 520);
-      var ry = narrow ? H * 0.28 : Math.min(H * 0.34, 270);
+      var rx = narrow ? W * 0.36 : Math.min(W * 0.37, 560);
+      var ry = narrow ? H * 0.31 : Math.min(H * 0.31, 272);
 
       mods.forEach(function (m, i) {
-        var a = (m.angle + 6 * Math.sin(t * 0.18 + i * 1.6)) * Math.PI / 180;
-        var r = 1 + 0.04 * Math.sin(t * 0.22 + i);
+        // 卫星均布在一圈上（从正上方起逆时针），避免角度不均造成两两聚堆
+        var base = -90 + (i * 360) / Math.max(mods.length, 1);
+        var a = (base + 5 * Math.sin(t * 0.16 + i * 1.6)) * Math.PI / 180;
+        var r = 1 + 0.035 * Math.sin(t * 0.2 + i);
         res.jelly[m.id] = {
           x: W / 2 + Math.cos(a) * rx * r,
-          y: cy + Math.sin(a) * ry * r + 8 * Math.sin(t * 0.85 + i * 2.1),
-          s: narrow ? 68 : clamp(W * 0.08, 76, 96),
+          y: cy + Math.sin(a) * ry * r + 6 * Math.sin(t * 0.7 + i * 2.1),
+          s: narrow ? 78 : clamp(W * 0.099, 104, 124),
           o: 1,
-          tilt: 5 * Math.sin(t * 0.6 + i)
+          tilt: 0
         };
       });
     } else {
-      // 模块展开态或子项下钻分析态
-      var ox = narrow ? 36 : Math.max(45, W * 0.045);
+      // 展开态：核心退左，三列「模块 → 分支 → 卡片」整体居中铺开，列距收敛而不留大片空白。
+      var drawerW = L.stage === 'item' ? 420 : 0;   // 抽屉打开时占用的右侧宽度
+      var availRight = W - drawerW - 24;            // 三列可用的右边界
+      var ox = narrow ? 44 : Math.max(52, W * 0.05);
       var cy2 = H * 0.5;
-      res.orb = { x: ox, y: cy2, s: 84 };
+      res.orb = { x: ox, y: cy2, s: narrow ? 110 : 150 };
 
-      // 第 1 列：主模块列队
-      var col1_x = ox + (narrow ? 45 : 60);
-      var gap = Math.min(64, (H - 120) / Math.max(mods.length, 1));
+      // 模块列：N 个纵向排开，卡片必须小于行距，否则会互相压住
+      var step = Math.min(122, (H - 150) / Math.max(mods.length, 1));
+      var cardSel = Math.min(104, step - 6);
+      var cardOther = Math.min(84, step - 6);
 
-      mods.forEach(function (m, i) {
+      // 三列宽度与列距（居中铺开）
+      var cardW = 120, branchW = 130, leafW = 262;
+      var gapA = narrow ? 150 : 200;
+      var gapB = narrow ? 170 : 220;
+      var totalW = cardW + gapA + branchW + gapB + leafW;
+      var startX = Math.max(ox + 96, (availRight - totalW) / 2);
+      var col1_x = startX + cardW / 2;
+      var col2_x = startX + cardW + gapA;
+      var col3_x = startX + cardW + gapA + branchW + gapB;
+
+      mods.forEach(function (m) {
         var sel = m.id === L.mod;
         var k = slotOf(L.mod, m.id);
         res.jelly[m.id] = {
           x: col1_x + (sel ? 16 : 0),
-          y: cy2 + (k - Math.floor(mods.length / 2)) * gap + 3 * Math.sin(t * 0.8 + i * 2),
-          s: sel ? 80 : 56,
-          o: sel ? 1 : 0.48,
-          tilt: 3 * Math.sin(t * 0.5 + i)
+          y: cy2 + (k - (mods.length - 1) / 2) * step,
+          s: sel ? cardSel : cardOther,
+          o: sel ? 1 : 0.5,
+          tilt: 0
         };
       });
 
       // 第 2 列：二级分支节点 (Branch Nodes)
       var brs = global.PORTAL_DATA.getBranches(L.mod);
       var bn = brs.length;
-      var col2_x = col1_x + 16 + 80 * 0.5 + 85;
-      var bSpan = Math.max(0, bn - 1) * 70;
+      var bSpan = Math.max(0, bn - 1) * 76;
 
       res.branches = {
         x: col2_x,
@@ -167,8 +182,7 @@
       // 第 3 列：三级实体卡片 (Leaf Cards)
       var leafItems = global.PORTAL_DATA.getItems(L.mod, L.branch);
       var ln = leafItems.length;
-      var col3_x = col2_x + 130 + (narrow ? 35 : 65);
-      var lSpan = Math.min(H - 140, Math.max(0, ln - 1) * 58);
+      var lSpan = Math.min(H - 150, Math.max(0, ln - 1) * 60);
 
       res.leaves = {
         x: col3_x,
@@ -189,8 +203,8 @@
     svgCache.branchThreads = [];
     svgCache.leafThreads = [];
 
-    // 1. 同心轨道环
-    [140, 240, 360].forEach(function (cr, cidx) {
+    // 1. 同心轨道环（与放大的核心配套）
+    [220, 380, 540].forEach(function (cr, cidx) {
       var c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       c.setAttribute('class', 'portal-orbit-ring ring-' + cidx);
       svgThreads.appendChild(c);
@@ -303,7 +317,7 @@
 
     var orbEl = document.getElementById('portalCoreHub');
     if (orbEl) {
-      orbEl.style.transform = 'translate3d(' + (ox - os / 2) + 'px, ' + (oy - os / 2) + 'px, 0) scale(' + (os / 150) + ')';
+      orbEl.style.transform = 'translate3d(' + (ox - os / 2) + 'px, ' + (oy - os / 2) + 'px, 0) scale(' + (os / 340) + ')';
       orbEl.style.opacity = clamp(oo, 0, 1);
     }
 
@@ -356,7 +370,7 @@
 
       var el = document.getElementById('portal-mod-' + m.id);
       if (el) {
-        el.style.transform = 'translate3d(' + (x - s / 2) + 'px, ' + (y - s / 2) + 'px, 0) scale(' + (s / 80) + ') rotate(' + tg.tilt + 'deg)';
+        el.style.transform = 'translate3d(' + (x - s / 2) + 'px, ' + (y - s / 2) + 'px, 0) scale(' + (s / 120) + ') rotate(' + tg.tilt + 'deg)';
         el.style.opacity = clamp(o, 0, 1);
         el.classList.toggle('node-active', m.id === live.mod);
         el.classList.toggle('node-dimmed', live.stage !== 'hub' && m.id !== live.mod);
@@ -1028,17 +1042,30 @@
     // 1. 顶栏控制条
     var topBar = document.createElement('div');
     topBar.className = 'portal-top-bar';
-    topBar.innerHTML = '<div class="portal-breadcrumb" id="portalBreadcrumb"></div><div class="portal-top-actions"><button type="button" class="pixel-pill-btn" id="portalResetBtn">重置大盘视角</button></div>';
+    topBar.innerHTML = '<div class="portal-breadcrumb" id="portalBreadcrumb"></div><div class="portal-top-actions"><button type="button" class="pixel-pill-btn" id="portalNavToggle" aria-label="展开侧栏导航">☰ 导航</button><button type="button" class="pixel-pill-btn" id="portalResetBtn">重置大盘视角</button></div>';
     container.appendChild(topBar);
     breadcrumbEl = topBar.querySelector('#portalBreadcrumb');
     var resetBtn = topBar.querySelector('#portalResetBtn');
     if (resetBtn) resetBtn.onclick = returnToHub;
+    // 沉浸态下侧栏已收走，留一个可逆的出口：点一下把壳叫回来（再点收起）
+    var navToggle = topBar.querySelector('#portalNavToggle');
+    if (navToggle) navToggle.onclick = function () {
+      var shell = document.querySelector('.app-shell');
+      if (!shell) return;
+      var immersive = shell.classList.toggle('shell-immersive');
+      navToggle.textContent = immersive ? '☰ 导航' : '›› 收起导航';
+    };
 
     // 2. 星尘粒子 Canvas
     dustCanvas = document.createElement('canvas');
     dustCanvas.className = 'portal-dust-canvas';
     container.appendChild(dustCanvas);
-    dustCtx = dustCanvas.getContext('2d');
+    // jsdom 未装 canvas 包：getContext 会返回 null 并向 virtualConsole 抛 jsdomError（try/catch 拦不住），
+    // 故先探测全局 CanvasRenderingContext2D；不存在则整个星尘层降级关闭（非必需视觉）。
+    // （该错误会让前端冒烟「各页无未捕获错误」判据变红，属真实回归，不可省。）
+    dustCtx = typeof CanvasRenderingContext2D !== 'undefined'
+      ? dustCanvas.getContext('2d')
+      : null;
 
     // 3. SVG 贝塞尔光纤层
     svgThreads = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1049,7 +1076,7 @@
     var core = document.createElement('div');
     core.id = 'portalCoreHub';
     core.className = 'portal-core-hub';
-    core.innerHTML = '<div class="core-halo"></div><div class="core-pixel-box"><div class="core-badge">DIGITAL CORE</div><div class="core-title">工程智算</div><div class="core-sub"><span class="pixel-pulse-dot"></span> 枢纽在线</div></div>';
+    core.innerHTML = '<div class="core-halo"></div><div class="core-ring r0"></div><div class="core-ring r1"></div><div class="core-ring r2"></div><div class="core-radar"></div><div class="core-pixel-box"><div class="core-badge">DIGITAL CORE</div><div class="core-title">工程智算</div><div class="core-sub"><span class="pixel-pulse-dot"></span> 枢纽在线</div></div>';
     core.onclick = returnToHub;
     container.appendChild(core);
 

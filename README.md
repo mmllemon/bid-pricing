@@ -112,6 +112,26 @@ CHANGELOG.md                            里程碑变更历史
 DEVELOPMENT.md                          早期任务状态板（内容已并入 STATE.md，保留作沿革）
 ```
 
+## 文档地图
+
+新接手先读这三份，其他按需查：
+
+| 顺序 | 文档 | 回答什么 |
+|---|---|---|
+| 1 | [`docs/STATE.md`](docs/STATE.md) | 现在到哪了（自动生成，勿手改） |
+| 2 | [`docs/PROJECT.md`](docs/PROJECT.md) | 项目是什么、用户流程、业务口径、接手起手式 |
+| 3 | `docs/adr/` | 为什么这么做（33 项决策记录） |
+
+| 按需查 | 文档 | 说明 |
+|---|---|---|
+| 任务板 | `docs/tasks.json` | 68 项路线任务机器可读状态 |
+| 变更历史 | `CHANGELOG.md` | 里程碑级变更 |
+| 治理协议 | `docs/GOVERNANCE.md`、`docs/ITERATION_AND_MAINTENANCE.md` | 记录体系与跨会话延续机制 |
+| 审查报告 | `docs/代码结构与治理审查.md`（现行） | 代码结构与治理专项 |
+| 审查报告 | `docs/优化建议.md`、`docs/前端UI_UX深度审查.md`（视觉类已作废） | 前端 UI/UX 专项，视觉结论以 V2 计划为准 |
+| 草稿计划 | `docs/UI_REFACTOR_V2_PLAN.md`、`docs/V3_INTEGRATION_PLAN.md` | 待批准，批了就执行归档 |
+```
+
 ## 两条设计原则
 
 **1. 契约制品先冻结，再开发。** `config/` 下的受控制品，其

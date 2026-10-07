@@ -1,8 +1,12 @@
 # V3 集成计划：导航单一事实源 · AI 助手全局悬浮 · 工作台融合
 
-> 状态：**待批准（Draft）**
+> 状态：**待批准（Draft，1.1 节认知已过时见下）**
 > 创建日期：2026-10-06
 > 注（2026-10-07）：`lshu-workbench-v0.1.0/` 只读参照已删除（git rm，3.3M/208 文件），本文中提及它的段落为历史记录，不再有效。
+>
+> 2026-10-07 注：§1.1 所列三处认知（workbench 副本不可装、后端规模超预期、app.py 无路由分层）
+> 均为收编前的判断。现状：workbench-server 已可运行（better-sqlite3 用预编译二进制，
+> 实测可用）；`api/wb_proxy.py` 已从 `app.py` 独立。读 §1.1 时以现状为准。
 > 适用仓库：`d:\Lee-proj\TRAE\bid-pricing-build\bid-pricing`
 > 参照规范：`c:\Users\leema\.trae-cn\skills\lshu-workbench\app\DESIGN.md`、`docs/UI_REFACTOR_V2_PLAN.md`
 > 备份基线：git tag `pre-wb-merge-20261006`（指向 `ba554d4`）；`outputs\projects\leema\.sqlite\quote.db.bak-prewbmerge-20261006-140331`

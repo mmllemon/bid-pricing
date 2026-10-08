@@ -9,14 +9,21 @@
 - **计算内核**：固定格式 Excel 解析（限价/成本清单）、复合主键匹配、Phase 1 普通优化、Phase 2 C13 结算调整 MILP、独立复算验证。
 - **网页平台**（FastAPI + 原生 JS）：导入预览、方案保存/打开/复制/重算/定稿、多方案对比、低价确认留痕（是否废标以招标文件为准）、Excel 导出。
 - **个人工作台**：项目经营概览看板（投标/中标在建/完工/结算/售后）、方案库、项目档案，多用户目录隔离。
-- **质量基线**：1393 项单元/契约/回归测试通过，ADR 决策记录 34 项。
+- **质量基线**：全量测试结果以自动生成的 [`docs/STATE.md`](docs/STATE.md) 「四、质量门」为准
+  （**不在本文拄写具体项数**——手写计数必过期，本仓已有先例）；ADR 决策记录见 `docs/adr/`。
+  跑全量**得用 pytest**：`tests/` 下有 4 个模块是裸函数 `def test_`（共 31 项），
+  `unittest discover` **会跳过它们且不报错、照样报 OK**（实测），数字不可与 CI 比较。
+  模型本身仍「零第三方依赖可运行」（CI 的 minimal 档专跑此约束）。
 
 ## 快速开始
 
 无需安装，标准库即可运行：
 
 ```bash
-# 全量测试
+# 全量测试（口径与 CI 一致；需 pytest，先装：python -m pip install -r requirements-dev.txt）
+PYTHONPATH=src python -m pytest tests/ -q
+
+# 只看零依赖档能跑的部分（会静默跳过 31 个 pytest 风格用例，不等于全量）
 PYTHONPATH=src python -m unittest discover -s tests -t . -v
 
 # 规则集指纹自检（T00-07/T00-08 机械判据）

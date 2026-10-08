@@ -1,0 +1,25 @@
+# 测试依赖（本地与 CI 共用这一份；版本上限由 tests/test_requirements_consistency.py 守一致性）
+#
+# 为什么必须有 pytest：
+#   tests/ 下有 4 个 pytest 风格模块（test_project_docs / test_project_exec /
+#   test_solve_unbalanced / test_unbalanced），它们是**裸函数式** def test_ + fixture。
+#   `python -m unittest discover` 对它们有两种坏行为：
+#     ① 本机没装 pytest 时 → 模块 import 失败，生成 _FailedTest（全量里表现为 errors）；
+#     ② 本机装了 pytest 时 → 模块能 import，但 discover 只收集 unittest.TestCase 子类，
+#        **裸函数用例被静默跳过**，一个都不跑，而计数照报 OK。
+#   也就是说"全量 1647 项 OK"这个数字，在 unittest 口径下**系统性地少跑**了这几个模块。
+#   CI 用 `python -m pytest tests/` 跑的是更大的集合。同一个"全量测试"名字下存在两种口径，
+#   本地与 CI 的数字不可比。修法：两边都用 pytest（见 README / DEVELOPMENT 的验证命令）。
+#
+# 为什么还要装 fastapi + python-multipart：
+#   test_project_credential 在用例内 `from api.app import …`，导入 FastAPI；
+#   api/app.py 的文件上传接口依赖 python-multipart。CI 此前把这三行版本**inline 写在
+#   workflow 里**，与本文件是两套真相，会各自漂移——现在 CI 装本文件。
+#
+# 注意：**不要**在这里 `-r requirements-web.txt`。那份含 pulp / highspy，
+# 会把 CI 的 minimal 依赖档（验证「零第三方依赖即可运行」这条硬约束）变成 solver 档。
+# 一致性由测试保证，不用文件包含来表达。
+
+pytest>=8,<9
+fastapi>=0.115,<1
+python-multipart>=0.0.9,<1

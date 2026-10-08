@@ -178,8 +178,11 @@ Phase 0 输入门 = BLOCKED
 ## 六、可复现的验证命令
 
 ```bash
-# 89 项单元测试（在"未落值"与"已落值"两种项目状态下均通过 —— 已显式验证隔离性）
-PYTHONPATH=src python -m unittest discover -s tests -t .
+# 全量测试（口径与 CI 一致）。项数不在本文件拄写——见文件头「计数会过期」声明，
+# 现行数字只认自动生成的 docs/STATE.md。
+# ⚠ 必须用 pytest：tests/ 下有 4 个模块是裸函数 def test_（共 31 项），
+#    `unittest discover` 在装了 pytest 的机器上会跳过它们且不报错、照样报 OK（实测）。
+PYTHONPATH=src python -m pytest tests/ -q
 
 # 规则集指纹自检（含 SEGMENT 作用域的退化登记）
 PYTHONPATH=src python -m bidpricing.cli ruleset-selftest

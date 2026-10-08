@@ -314,10 +314,14 @@ class RunTestsEncodingTest(unittest.TestCase):
         return types.SimpleNamespace(**base)
 
     def test_pins_utf8_on_both_sides(self):
-        """父进程按 UTF-8 解码 + 子进程按 UTF-8 输出，两端都得钉住。"""
+        """父进程按 UTF-8 解码 + 子进程按 UTF-8 输出，两端都得钉住。
+
+        显式传 runner="unittest"：不依赖本机装没装 pytest，否则同一断言会因环境
+        不同而选不同 argv——那止本函数要修的毛病，不能让测试自身也得病。
+        """
         with mock.patch("bidpricing.status.subprocess.run",
                         return_value=self._fake()) as run:
-            res = run_tests(repo_root())
+            res = run_tests(repo_root(), runner="unittest")
         kw = run.call_args.kwargs
         self.assertEqual(kw["encoding"], "utf-8")
         self.assertEqual(kw["errors"], "replace")
@@ -337,7 +341,7 @@ class RunTestsEncodingTest(unittest.TestCase):
             "bidpricing.status.subprocess.run",
             return_value=self._fake(stdout=None, stderr=None, returncode=1),
         ):
-            res = run_tests(repo_root())
+            res = run_tests(repo_root(), runner="unittest")
         self.assertIsNone(res["ran"])
         self.assertFalse(res["ok"])
         self.assertIsInstance(res["detail"], str)
@@ -351,10 +355,96 @@ class RunTestsEncodingTest(unittest.TestCase):
                 returncode=1,
             ),
         ):
-            res = run_tests(repo_root())
+            res = run_tests(repo_root(), runner="unittest")
         self.assertEqual(res["ran"], 1616)
         self.assertFalse(res["ok"])
         self.assertIn("failures=3", res["detail"])
+
+
+class TestRunnerSelectionTest(unittest.TestCase):
+    """质量门的跑法口径：必须优先 pytest，回退时要诚实标出降级。
+
+    来由（2026-10-08 实测，不是推演）：tests/ 下有 4 个 pytest 风格模块
+    （test_project_docs / test_project_exec / test_solve_unbalanced / test_unbalanced），
+    共 31 个裸函数 `def test_` 用例、0 个 unittest.TestCase。实测两分支：
+
+      * 没装 pytest → discover 报 FAILED(errors=…)（会暴露）；
+      * 装了 pytest → discover **一个都不跑这 31 项且不报错**，returncode 0 → 报 OK。
+
+    docs/STATE.md 那句「单元测试 N 项，结果通过」就是这么生成的——静默跳过还宣称通过。
+    故口径跟 CI 统一用 pytest；回退不得伪装成同等可信。本类不依赖本机实际装了什么
+    （find_spec 被 mock），也不真跑子进程。
+    """
+
+    def test_prefers_pytest_when_available(self):
+        from bidpricing.status import _detect_test_runner
+        with mock.patch("importlib.util.find_spec", return_value=object()):
+            self.assertEqual(_detect_test_runner(), "pytest")
+
+    def test_falls_back_to_unittest_when_pytest_missing(self):
+        from bidpricing.status import _detect_test_runner
+        with mock.patch("importlib.util.find_spec", return_value=None):
+            self.assertEqual(_detect_test_runner(), "unittest")
+
+    def test_probe_failure_does_not_break_snapshot(self):
+        """探测本身报错（如奇怪环境）得回退，不能把整条 status 带崩。"""
+        from bidpricing.status import _detect_test_runner
+        with mock.patch("importlib.util.find_spec", side_effect=ValueError("weird env")):
+            self.assertEqual(_detect_test_runner(), "unittest")
+
+    def test_pytest_argv_and_count_from_pytest_tail_line(self):
+        """pytest 尾行没有 `Ran N tests`；只认 unittest 格式就会把质量门算成「未运行」。"""
+        from bidpricing.status import run_tests
+        fake = types.SimpleNamespace(
+            stdout="..........................\n1647 passed, 3 skipped in 45.20s\n",
+            stderr="", returncode=0)
+        with mock.patch("bidpricing.status.subprocess.run", return_value=fake) as run:
+            res = run_tests(repo_root(), runner="pytest")
+        self.assertEqual(run.call_args.args[0][-2:], ["tests/", "-q"])
+        self.assertEqual(res["ran"], 1647)
+        self.assertTrue(res["ok"])
+        self.assertFalse(res["degraded"])
+        self.assertIn("1647 passed", res["detail"])
+
+    def test_pytest_failures_and_errors_count_toward_ran(self):
+        """失败项也得计入跑了多少——只数 passed 会把「31 项全挂」报成「0 项未运行」。"""
+        from bidpricing.status import _parse_test_counts
+        ran, tail = _parse_test_counts(
+            "5 failed, 2 errors, 1600 passed, 3 skipped in 40s\n", "pytest")
+        self.assertEqual(ran, 1607)
+        self.assertIn("failed", tail)
+
+    def test_unittest_fallback_is_marked_degraded(self):
+        """降级必须带旗标：回退口径的绿灯不能和正常绿灯长得一样。"""
+        from bidpricing.status import run_tests
+        fake = types.SimpleNamespace(
+            stdout="Ran 1616 tests in 48s\n\nOK\n", stderr="", returncode=0)
+        with mock.patch("bidpricing.status.subprocess.run", return_value=fake):
+            res = run_tests(repo_root(), runner="unittest")
+        self.assertTrue(res["ok"])
+        self.assertTrue(res["degraded"], "unittest 口径必须标为降级")
+
+    def test_render_shows_runner_and_degraded_warning(self):
+        """快照里要看得出用的是哪个 runner；降级时绿门上必须插黄旗。
+
+        快照结构直接复用 RenderTest._snap（那里已验证过 render 所需键集），只改 tests 一块。
+        """
+        from bidpricing.status import render
+
+        def _snap(runner, degraded):
+            s = RenderTest()._snap()
+            s["tests"] = {"ran": 1616, "ok": True, "detail": "OK",
+                           "runner": runner, "degraded": degraded}
+            return s
+
+        out_py = render(_snap("pytest", False))
+        self.assertIn("pytest tests/", out_py)
+        self.assertNotIn("降级口径", out_py)
+
+        out_un = render(_snap("unittest", True))
+        self.assertIn("unittest discover", out_un)
+        self.assertIn("降级口径", out_un)
+        self.assertIn("requirements-dev.txt", out_un)
 
 
 class CliEncodingTest(unittest.TestCase):

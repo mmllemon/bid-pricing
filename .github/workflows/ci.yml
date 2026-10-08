@@ -60,19 +60,21 @@ jobs:
         if: matrix.deps == 'solver'
         run: |
           python -m pip install --upgrade pip
-          # 与 requirements-web.txt 同口径：PuLP 4.0 会移除 PULP_CBC_CMD，
-          # 故上界必须钉在 <4，否则候选后端会随版本静默失效。
-          pip install "pulp>=3.3,<4" "highspy>=1.11,<2"
+          # 版本上界不再在 workflow 里 inline 写一遗：写两处就会各自漂移，与本仓
+          # 刚修过的几类「手工清单 ↔ 真实来源」同源。统一以 requirements-web.txt 为
+          # 准（其中 pulp 的 `<4` 上界仍在文件里注释着原因：PuLP 4.0 会移除
+          # PULP_CBC_CMD，不钉住则候选后端随版本静默失效）。
+          pip install -r requirements-web.txt
 
       - name: 装配测试依赖（两档都要）
-        # pytest：unittest discover 遇到 pytest 风格的测试模块（test_project_exec /
-        # test_project_docs / test_solve_unbalanced / test_unbalanced，2026-10-07 起）
-        # 会 import 失败（_FailedTest）；且 discover 对裸函数测试是静默跳过。
-        # pytest 一把跑全量，同时兼容 unittest 风格（已本地验证：除已知 gate0/
-        # parity 失败外无新增问题）。
+        # 单一来源：requirements-dev.txt（pytest + fastapi + python-multipart）。
+        # 为何必须有 pytest：tests/ 下 4 个模块是裸函数 def test_（共 31 项、
+        # 0 个 unittest.TestCase）。`unittest discover` 在**装了 pytest 的机器上**会
+        # 跳过它们且不报错、returncode 0 报 OK；没装时才 FAILED(errors)——即「补齐
+        # 依赖反而把缺口藏起来」。所以本地与 CI 都得用 pytest，口径才可比。
         # fastapi + python-multipart：api/app.py 导入需要（test_project_credential
-        # 在方法内 from api.app import …）。求解器包仍按档区分，这里只装测试框架。
-        run: pip install pytest "fastapi>=0.115,<1" "python-multipart>=0.0.9,<1"
+        # 在方法内 from api.app import …）。求解器包仍按档区分，这里不装。
+        run: pip install -r requirements-dev.txt
 
       - name: 依赖档自述（防止把 SKIP 读成 PASS）
         run: |

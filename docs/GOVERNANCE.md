@@ -45,7 +45,7 @@ cat docs/STATE.md
 # 2. 复算快照（不要相信任何未复算过的数字，包括快照本身）
 PYTHONPATH=src python -m bidpricing.cli status
 PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01
-PYTHONPATH=src python -m unittest discover -s tests
+PYTHONPATH=src python -m pytest tests/ -q
 
 # 3. 读决策记录（了解为什么走到这里、有哪些路已被否决）
 ls docs/adr/ && grep -l "反面清单\|不得" docs/adr/*.md
@@ -174,7 +174,7 @@ ls -t ../.workbuddy/memory/*.md | head -3
 ```bash
 cd bid-pricing
 python tools/extract_tasks.py --check          \
-  && PYTHONPATH=src python -m unittest discover -s tests \
+  && PYTHONPATH=src python -m pytest tests/ -q \
   && PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01 \
   && PYTHONPATH=src python -m bidpricing.cli contract-check
 ```

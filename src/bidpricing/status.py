@@ -302,8 +302,56 @@ def collect_advisories(root: Path) -> list[str]:
     return out
 
 
-def run_tests(root: Path, timeout: int = 180) -> dict:
+def _detect_test_runner() -> str:
+    """选跑测试的工具：优先 pytest，回退 unittest。
+
+    为何不能就用 unittest（实测，非推演）：tests/ 下有 4 个 pytest 风格模块
+    （test_project_docs / test_project_exec / test_solve_unbalanced / test_unbalanced），
+    共 **31 个裸函数** `def test_` 用例、**0 个** `unittest.TestCase`：
+
+      * 本机没装 pytest → 模块 import 失败，discover 报 `FAILED (errors=…)`——会痛，会暴露；
+      * 本机装了 pytest → discover 只收 TestCase 子类，裸函数**一个都不跑且不报错**，
+        returncode 0 → 报 `OK`。
+
+    即「补齐依赖反而把缺口藏起来」。docs/STATE.md 的「质量门：单元测试 N 项，结果通过」
+    正是在装了 pytest 的机器上用 unittest 生成的——它静默跳过了那 31 项却宣称通过。
+    口径必须跟 CI 一致用 pytest；实在回退时不得伪装成同等可信（见 degraded）。
+    """
+    try:
+        import importlib.util
+        if importlib.util.find_spec("pytest") is not None:
+            return "pytest"
+    except (ImportError, ValueError):  # noqa: BLE001 探测本身不得弄坏快照
+        pass
+    return "unittest"
+
+
+def _parse_test_counts(blob: str, runner: str) -> tuple[int | None, str]:
+    """从输出取「跑了多少项」+ 一句话结果；unittest / pytest 两套尾行都得认。
+
+    pytest `-q` 尾行形如 `1647 passed, 3 skipped in 45.2s`，**没有** unittest 那种
+    `Ran N tests`；只认一种，换工具后质量门会变成「未运行」。
+    """
+    if runner == "pytest":
+        # findall 返回 (数字, 词)，要的是 {词: 数字}——顺序写反会得到 int("failed")。
+        nums: dict[str, int] = {}
+        for v, k in re.findall(r"(\d+)\s+(passed|failed|errors?|skipped)", blob):
+            nums[k] = int(v)
+        ran = nums.get("passed")
+        if ran is not None:
+            ran += nums.get("failed", 0) + nums.get("errors", 0) + nums.get("error", 0)
+        tail = next((ln.strip() for ln in reversed(blob.splitlines())
+                     if re.search(r"\d+\s+(passed|failed|error)", ln)), "")
+        return ran, tail
+    m = re.search(r"Ran (\d+) tests?", blob)
+    return (int(m.group(1)) if m else None), ""
+
+
+def run_tests(root: Path, timeout: int = 180, *, runner: str | None = None) -> dict:
     """现场运行测试套件。不接受缓存结果——缓存会撒谎。
+
+    `runner=None` 自动探测；测试可显式传 "pytest"/"unittest"，使断言**不依赖本机装了什么**——
+    否则同一套断言会因环境不同而时绿时红，正是本函数要修的毛病。
 
     子进程输出**显式**按 UTF-8 读写（``encoding`` + ``errors`` + 传
     ``PYTHONIOENCODING`` 给孩子进程）：``text=True`` 缺省按本机 locale 解码，
@@ -315,9 +363,17 @@ def run_tests(root: Path, timeout: int = 180) -> dict:
     这条坑的教训与其它判据同源：不显式指定编码，等于把「能不能生成快照」
     交给运行环境的区域设置。显式指定后，控制台是 GBK 还是 UTF-8 都一样。
     """
+    runner = runner or _detect_test_runner()
+    # 自述解释器：质量门的数字得说得出是在哪个 Python 上跑出来的——
+    # 本仓存在 CI 3.12 / 本地 3.14 / 声明 >=3.11 三个版本并存的情况，
+    # 不自述就无法追溯「这个 OK 是谁验的」。
+    interp = sys.version.split()[0]
+    argv = ([sys.executable, "-m", "pytest", "tests/", "-q"]
+            if runner == "pytest"
+            else [sys.executable, "-m", "unittest", "discover", "-s", "tests"])
     try:
         out = subprocess.run(
-            [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
+            argv,
             cwd=str(root),
             capture_output=True,
             text=True,
@@ -327,17 +383,28 @@ def run_tests(root: Path, timeout: int = 180) -> dict:
             env={**_env(), "PYTHONPATH": "src", "PYTHONIOENCODING": "utf-8"},
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        return {"ran": None, "ok": None, "detail": f"无法运行：{exc}"}
+        return {"ran": None, "ok": None, "detail": f"无法运行：{exc}",
+                "runner": runner, "degraded": runner == "unittest", "python": interp}
 
     # 读取线程异常时子进程对象仍会返回，但两个流可能是 None——不设兜底就会在
     # 拼接处抛 TypeError，把「子进程没读成」伪装成「状态模块自身坏了」。
     blob = (out.stdout or "") + (out.stderr or "")
-    m = re.search(r"Ran (\d+) tests?", blob)
-    count = int(m.group(1)) if m else None
+    count, tail = _parse_test_counts(blob, runner)
+    ok = out.returncode == 0
+    if ok:
+        detail = tail or "OK"
+    else:
+        detail = (tail
+                  or (blob.strip().splitlines()[-1] if blob.strip() else "失败"))
     return {
         "ran": count,
-        "ok": out.returncode == 0,
-        "detail": "OK" if out.returncode == 0 else blob.strip().splitlines()[-1] if blob.strip() else "失败",
+        "ok": ok,
+        "detail": detail,
+        "runner": runner,
+        "python": interp,
+        # 回退 unittest 是**降级**：它会静默跳过裸函数用例仍报 OK，数字与 pytest
+        # 口径不可比较。必须标出来，由渲染层写明——不能让降级后的绿灯和正常绿灯长得一样。
+        "degraded": runner == "unittest",
     }
 
 
@@ -399,7 +466,8 @@ def collect(
     if run_test_suite:
         tests = run_tests(root)
     else:
-        tests = {"ran": None, "ok": None, "detail": "已跳过（run_test_suite=False）"}
+        tests = {"ran": None, "ok": None, "detail": "已跳过（run_test_suite=False）",
+                 "runner": None, "degraded": False, "python": None}
 
     # 跨制品一致性：与闸门正交的第四条验证环。此处**现场复算**而非读缓存，
     # 与测试同理——缓存过的结论会撒谎。
@@ -712,14 +780,31 @@ def render(snap: dict, *, state_path: Path | None = None) -> str:
         "## 四、质量门",
         "",
         f"- 单元测试：**{t['ran'] if t['ran'] is not None else '未运行'}** 项，"
-        f"结果 **{'通过' if t['ok'] else '未通过' if t['ok'] is not None else '未知'}**（{t.get('detail', '')}）",
+        f"结果 **{'通过' if t['ok'] else '未通过' if t['ok'] is not None else '未知'}**（{t.get('detail', '')}）"
+        f"—— 跑法：`{t.get('runner') or '未运行'}`"
+        f"，解释器：`{t.get('python') or '未记录'}`",
         "",
     ]
 
+    # 降级提醒：本机能跑 unittest 却跑不了 pytest 时，discover 会静默跳过
+    # tests/ 里的裸函数用例（实测 31 项）并照样报 OK——这跟「全量通过」不是一回事，
+    # 必得在绿门上插一道看得见的黄旗，否则数字会骗人。
+    if t.get("degraded"):
+        L += [
+            "> ⚠ **本快照的测试数字是降级口径**：本机没装 pytest，回退到 `unittest discover`。",
+            "> 该口径**不收集裸函数 `def test_` 用例**且**不报错**（实测：装了 pytest 后",
+            "> 四个 pytest 风格模块共 31 项被静默跳过、returncode 仍为 0）。",
+            "> 下方数字与 CI 的 pytest 口径**不可比较**。补依赖后重跑本命令：",
+            "> `python -m pip install -r requirements-dev.txt`",
+            "",
+        ]
+
     if t["ran"] is not None:
+        _cmd = ("python -m pytest tests/ -q" if t.get("runner") == "pytest"
+                else "python -m unittest discover -s tests")
         L += [
             "```bash",
-            "cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests",
+            f"cd bid-pricing && PYTHONPATH=src {_cmd}",
             "```",
             "",
         ]
@@ -807,8 +892,8 @@ def render(snap: dict, *, state_path: Path | None = None) -> str:
         "PYTHONPATH=src python -m bidpricing.cli status --write",
         "# 2. 闸门机械判定",
         "PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01",
-        "# 3. 全量测试",
-        "PYTHONPATH=src python -m unittest discover -s tests",
+        "# 3. 全量测试（口径与 CI 一致；未装 pytest 时先装：pip install -r requirements-dev.txt）",
+        "PYTHONPATH=src python -m pytest tests/ -q",
         "# 4. 规则集指纹自检（含退化条件登记）",
         "PYTHONPATH=src python -m bidpricing.cli ruleset-selftest",
         "```",

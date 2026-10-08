@@ -11,11 +11,14 @@ name: CI
 #   solver  —— 装配 PuLP + HiGHS，使 T04-02B/C 的 CC-09 / BB-* 判据由 SKIP 转实跑
 # 两档都必须绿：只跑有依赖的那档，会把「零依赖」这条硬约束悄悄丢掉。
 #
-# 不在此处做的三件事（有意）：
+# 不在此处做的两件事（有意）：
 #   1. 不跑 `status --write`：它会现场跑全套测试并改写 docs/STATE.md，属交互动作，不是 CI 判据。
-#   2. 不装 Node/前端依赖：workbench-app / workbench-server 是增值组件，其构建失败不该阻断主应用。
-#   3. 不锁 Windows runner：中文 Windows（GBK 控制台）的编码问题已由
+#   2. 不锁 Windows runner：中文 Windows（GBK 控制台）的编码问题已由
 #      tests/test_status.py::CliEncodingTest 用 PYTHONIOENCODING=gbk:strict 复现覆盖。
+#
+# Node 侧（workbench-app / workbench-server）是独立 job：工具链故障不阻断
+#   Python 主判据，反之亦然（见 frontend-smoke / workbench-server-tests 两 job）。
+#   注：早期注释写过「不装 Node/前端依赖」，与实际存在的 Node job 自相矛盾，已改。
 
 on:
   push:
@@ -160,4 +163,35 @@ jobs:
 
       - name: 冒烟
         working-directory: workbench-app
+        run: npm test
+
+  workbench-server-tests:
+    # Express 边车（workbench-server）的回归：含 quoteProxy 分流、agent 挂载、
+    # 调度器、财务对账等 32 个测试文件（221 用例）。
+    #
+    # 为什么单独成 job（2026-10-08）：这层此前**一个测试都没进 CI**，导致
+    # 「后端加了 /api/graph/* 但 quoteProxy 的 QUOTE_PREFIXES 漏登记」这类
+    # 分流错误无人拦（图谱页经唯一入口 :3456 直接 404，而 :8000 直连 200）。
+    # 与 frontend-smoke 同理：工具链/依赖出问题不该把另一侧一起判红。
+    #
+    # 依赖源：workbench-server 有 package-lock.json 与 pnpm-lock.yaml 两份锁，
+    # 本仓 run.ps1 走的是 npm，故此处用 npm ci 对齐本地实跑路径。
+    name: 边车回归（vitest）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 与 frontend-smoke 同 Node 主版；better-sqlite3 预编译产物按此版本取。
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: workbench-server/package-lock.json
+
+      - name: 安装依赖（用锁文件，保证可复现）
+        working-directory: workbench-server
+        run: npm ci --no-audit --no-fund
+
+      - name: 回归
+        working-directory: workbench-server
         run: npm test

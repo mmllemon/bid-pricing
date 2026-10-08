@@ -98,6 +98,28 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts     ON audit_log(ts);
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
+
+-- 项目主表（B-P1-2 双真相收敛，2026-10-08）：项目概览从 projects.json 迁入 SQLite，
+-- 此处为唯一真相源。plan/plan_group/exec_* 的 project_id 逻辑上引用此表 id。
+-- 不做硬外键（避免级联误删），删项目时应用层检查关联方案（见 project_overview.delete_project）。
+CREATE TABLE IF NOT EXISTS project (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  short_name    TEXT,
+  stage         TEXT NOT NULL DEFAULT '投标',
+  limit_total   REAL,
+  bid_open_date TEXT,
+  bid_amount    REAL,
+  bid_cost      REAL,
+  actual_cost   REAL,
+  actual_revenue REAL,
+  settle_amount REAL,
+  completed_at  TEXT,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_project_stage ON project(stage);
+CREATE INDEX IF NOT EXISTS idx_project_updated ON project(updated_at);
 -- 项目执行四表（2026-10-07）：收入合同 / 成本台帐 / 进度款 / 签证变更。
 -- project_id 统一为经营概览 projects.json 的项目 UUID，与 plan 表同口径。
 CREATE TABLE IF NOT EXISTS exec_contract (
@@ -492,6 +514,83 @@ def delete_plan(plan_id: str, db: Path | str | None = None) -> bool:
                      " WHERE plan_id = ?", (plan_id,))
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+# ===== 项目主表 CRUD（B-P1-2 双真相收敛：SQLite 为唯一真相源）=====
+
+_PROJECT_COLS = ("id", "name", "short_name", "stage", "limit_total", "bid_open_date",
+                 "bid_amount", "bid_cost", "actual_cost", "actual_revenue",
+                 "settle_amount", "completed_at", "created_at", "updated_at")
+
+
+def _project_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {k: row[k] for k in _PROJECT_COLS if k in row.keys()}
+
+
+def list_projects(db: Path | str | None = None) -> list[dict[str, Any]]:
+    """列出全部项目，按 created_at 倒序。"""
+    conn = _connect(db)
+    try:
+        rows = conn.execute("SELECT * FROM project ORDER BY created_at DESC").fetchall()
+    finally:
+        conn.close()
+    return [_project_row_to_dict(r) for r in rows]
+
+
+def get_project(pid: str, db: Path | str | None = None) -> dict[str, Any] | None:
+    """按 id 取项目，不存在返回 None。"""
+    conn = _connect(db)
+    try:
+        row = conn.execute("SELECT * FROM project WHERE id = ?", (pid,)).fetchone()
+    finally:
+        conn.close()
+    return _project_row_to_dict(row) if row else None
+
+
+def save_project(rec: dict[str, Any], db: Path | str | None = None) -> dict[str, Any]:
+    """新增或全量更新项目（按 id upsert）。返回写入后的记录。"""
+    conn = _connect(db)
+    try:
+        cols = [c for c in _PROJECT_COLS if c in rec]
+        placeholders = ", ".join(["?"] * len(cols))
+        updates = ", ".join([f"{c} = excluded.{c}" for c in cols if c != "id"])
+        conn.execute(
+            f"INSERT INTO project ({', '.join(cols)}) VALUES ({placeholders})"
+            f" ON CONFLICT(id) DO UPDATE SET {updates}",
+            [rec[c] for c in cols],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return get_project(rec["id"], db)
+
+
+def delete_project(pid: str, db: Path | str | None = None) -> bool:
+    """删除项目；不存在返回 False。
+
+    注意：调用方（project_overview.delete_project）负责先检查关联方案，
+    此处不做级联，由应用层决定拒绝还是清理。
+    """
+    conn = _connect(db)
+    try:
+        cur = conn.execute("DELETE FROM project WHERE id = ?", (pid,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def count_project_plans(pid: str, db: Path | str | None = None) -> int:
+    """统计某项目的关联方案数（plan + plan_group），供删项目保护用。"""
+    conn = _connect(db)
+    try:
+        n1 = conn.execute(
+            "SELECT COUNT(*) FROM plan WHERE project_id = ?", (pid,)).fetchone()[0]
+        n2 = conn.execute(
+            "SELECT COUNT(*) FROM plan_group WHERE project_id = ?", (pid,)).fetchone()[0]
+        return (n1 or 0) + (n2 or 0)
     finally:
         conn.close()
 
@@ -1000,6 +1099,37 @@ def import_json_tree(source_dir: Path | str | None = None,
                 _upsert_slot_row(gid, letter, s, db)
         groups += 1
     return plans, groups
+
+
+def import_projects_json(source_dir: Path | str | None = None,
+                         db: Path | str | None = None) -> int:
+    """把 ``projects.json`` 的项目概览幂等迁入 SQLite project 表（B-P1-2）。
+
+    按 id upsert，可安全重跑。返回导入的项目数。
+    调用方负责在迁移成功后把 projects.json 改名 .bak（30 天后手动删）。
+    """
+    import json
+    source = PROJECTS_DIR if source_dir is None else Path(source_dir)
+    pj = source / "projects.json"
+    if not pj.exists():
+        return 0
+    try:
+        data = json.loads(pj.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(data, list):
+        return 0
+    n = 0
+    for rec in data:
+        if not isinstance(rec, dict) or not rec.get("id"):
+            continue
+        # 只取 project 表的列，多余字段忽略
+        filtered = {k: rec.get(k) for k in _PROJECT_COLS if k in rec}
+        if not filtered.get("name", "").strip():
+            continue
+        save_project(filtered, db)
+        n += 1
+    return n
 
 
 # ---------------------------------------------------------------------------

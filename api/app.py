@@ -65,6 +65,21 @@ if not sqlite_store.resolve_db_path().exists():
     except Exception as exc:  # noqa: BLE001 迁移失败不阻止服务启动
         print(f"[bidpricing] SQLite 种子迁移失败（将跳过）：{exc}")
 
+# B-P1-2 双真相收敛：projects.json → SQLite project 表一次性迁移（幂等）。
+# 迁移成功后把 projects.json 改名 .bak（保留 30 天，用户手动删）。
+# 此后 project_overview.* 全走 SQLite，projects.json 不再写入。
+try:
+    _pj = USER_PROJECTS / "projects.json"
+    if _pj.exists():
+        _n = sqlite_store.import_projects_json(source_dir=USER_PROJECTS)
+        if _n >= 0:
+            _bak = USER_PROJECTS / "projects.json.bak"
+            if not _bak.exists():
+                _pj.rename(_bak)
+                print(f"[bidpricing] projects.json 已迁入 SQLite（{_n} 个项目），原文件改名 .bak（30 天后可手动删）")
+except Exception as exc:  # noqa: BLE001 迁移失败不阻止服务启动
+    print(f"[bidpricing] projects.json 迁移失败（将跳过）：{exc}")
+
 
 #: 单个上传文件上限（MB）。超过则直接拒绝，避免内存占用异常放大。
 #: 清单 xlsx 通常在数 MB 以内，10 MB 上限足够容容。
@@ -889,10 +904,27 @@ def overview_save(pid: str = Form(""), name: str = Form(""), short_name: str = F
 
 @app.post("/api/project/overview/delete")
 def overview_delete(id: str = Form(...)):
-    if not project_overview.delete_project(id.strip()):
-        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在或已删除"})
+    try:
+        if not project_overview.delete_project(id.strip()):
+            return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在或已删除"})
+    except project_overview.ProjectHasPlansError as e:
+        # B-P1-2 删项目保护：有关联方案时拒绝，前端弹确认
+        return JSONResponse(status_code=409, content={"status": "HAS_PLANS", "reason": str(e), "plan_count": e.count})
     append_audit(CURRENT_USER, "project.overview.delete", "PASS", project_id=id.strip())
     return JSONResponse(status_code=200, content={"status": "PASS"})
+
+
+@app.get("/api/project/overview/export")
+def overview_export():
+    """导出视图：按需生成 projects.json 内容（B-P1-2，不再作为写入源）。"""
+    import json
+    from fastapi.responses import Response
+    data = project_overview.export_json()
+    return Response(
+        content=json.dumps(data, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=projects.json"},
+    )
 
 
 @app.post("/api/project/overview/finalize")

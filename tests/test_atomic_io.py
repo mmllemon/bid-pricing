@@ -75,30 +75,34 @@ class AtomicWriteTest(unittest.TestCase):
 
 
 class ProjectOverviewAtomicWriteTest(unittest.TestCase):
-    """``project_overview._write_all`` 必须复用 atomic_io，而非手写 tmp+replace。"""
+    """B-P1-2 后：project_overview 走 SQLite（WAL+事务保证原子性），
+    不再经由 atomic_write_text 写 projects.json。"""
 
     def setUp(self) -> None:
-        from bidpricing import project_store
+        from bidpricing import project_store, sqlite_store
         self._tmp = tempfile.TemporaryDirectory()
         self._saved = project_store.PROJECTS_DIR
         project_store.PROJECTS_DIR = Path(self._tmp.name)
+        sqlite_store.PROJECTS_DIR = Path(self._tmp.name)
 
     def tearDown(self) -> None:
-        from bidpricing import project_store
+        from bidpricing import project_store, sqlite_store
         project_store.PROJECTS_DIR = self._saved
+        # sqlite_store.PROJECTS_DIR 恢复为默认值（由 app.py 启动时重设）
         self._tmp.cleanup()
 
-    def test_write_all_routes_through_atomic_io(self) -> None:
-        called = {"n": 0}
-        real = atomic_io.atomic_write_text
-
-        def spy(path, text):
-            called["n"] += 1
-            return real(path, text)
-
-        with mock.patch.object(project_overview, "atomic_write_text", side_effect=spy):
-            project_overview.create_project({"name": "原子写项目"})
-        self.assertGreaterEqual(called["n"], 1, "create_project 的落盘应经由 atomic_write_text")
+    def test_write_goes_through_sqlite(self) -> None:
+        """create_project 应写入 SQLite project 表（而非 JSON 文件）。"""
+        from bidpricing import sqlite_store
+        rec = project_overview.create_project({"name": "原子写项目"})
+        self.assertTrue(rec.get("id"))
+        # 直接查 SQLite 确认落盘
+        row = sqlite_store.get_project(rec["id"])
+        self.assertIsNotNone(row)
+        self.assertEqual(row["name"], "原子写项目")
+        # 不应再产生 projects.json
+        pj = Path(self._tmp.name) / "projects.json"
+        self.assertFalse(pj.exists(), "不应再写 projects.json")
 
     def test_create_project_persists_and_no_leftover_tmp(self) -> None:
         rec = project_overview.create_project({"name": "落盘项目"})

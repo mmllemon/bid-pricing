@@ -1,7 +1,10 @@
 """项目经营概览数据集（H-013）：项目全生命周期参数与阶段流转的持久化。
 
-与方案库存放同一用户目录（outputs/projects/<user>/），采用单个 projects.json
-文件保存全部项目记录，默认目录在**调用时**解析（沿用 project_store 的用户隔离约定）。
+B-P1-2 双真相收敛（2026-10-08）：SQLite project 表为唯一真相源，
+本模块为薄封装层（保持原函数签名，前端/API 零改动）。
+projects.json 降级为导出视图，不再作为写入源。
+
+与方案库存放同一用户目录（outputs/projects/<user>/）。
 纯逻辑、不依赖 FastAPI，可独立单测。
 
 阶段(stage)取值：投标 / 中标在建 / 已竣工 / 已结算 / 售后 / 未中标。
@@ -13,19 +16,18 @@
 """
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from bidpricing import project_store
-from bidpricing.atomic_io import atomic_write_text
+from bidpricing import sqlite_store
 
 #: 阶段候选值（下拉唯一选项，也是页面分栏依据）。
 STAGES = ("投标", "中标在建", "已竣工", "已结算", "售后", "未中标")
 
-_FILE_NAME = "projects.json"
+_FILE_NAME = "projects.json"  # 仅导出视图用，不再写入
 #: 前端可编辑的字段白名单（派生字段与 id/时间戳不在此列）。
 EDITABLE = ("name", "short_name", "limit_total", "bid_open_date", "stage", "bid_amount",
             "bid_cost", "actual_cost", "actual_revenue", "settle_amount",
@@ -81,39 +83,28 @@ def derive(proj: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_all() -> list[dict[str, Any]]:
-    p = _path()
-    if not p.exists():
-        return []
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    return data if isinstance(data, list) else []
+    """从 SQLite 读取全部项目（B-P1-2 后为唯一真相源）。"""
+    return sqlite_store.list_projects()
 
 
 def _write_all(projects: list[dict[str, Any]]) -> None:
-    # B-P1-3：此前是自造的 .tmp+replace —— 临时名固定（并发写同一文件会互相踩踏）
-    # 且无 fsync（断电后可能留下零长度/截断文件）。改用全仓统一入口：
-    # mkstemp 保证临时名唯一 + fsync + os.replace，读者只会看到完整旧文件或完整新文件。
-    atomic_write_text(_path(), json.dumps(projects, ensure_ascii=False, indent=2))
+    """已废弃：保留空壳防止旧代码误调，实际写入走 SQLite。"""
+    raise RuntimeError("projects.json 已降级为导出视图，写入请走 sqlite_store")
 
 
 def list_projects() -> list[dict[str, Any]]:
     """返回全部项目（含派生指标），按创建时间倒序。"""
-    out = [derive(p) for p in load_all()]
+    out = [derive(p) for p in sqlite_store.list_projects()]
     out.sort(key=lambda r: r.get("created_at") or "", reverse=True)
     return out
 
 
 def get_project(pid: str) -> dict[str, Any] | None:
-    for p in load_all():
-        if p.get("id") == pid:
-            return p
-    return None
+    rec = sqlite_store.get_project(pid)
+    return derive(rec) if rec else None
 
 
 def create_project(fields: dict[str, Any]) -> dict[str, Any]:
-    projects = load_all()
     now = _now_iso()
     rec = {k: fields.get(k) for k in EDITABLE if k in fields}
     if not rec.get("name", "").strip():
@@ -124,36 +115,51 @@ def create_project(fields: dict[str, Any]) -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
     })
-    projects.append(rec)
-    _write_all(projects)
+    sqlite_store.save_project(rec)
     return derive(rec)
 
 
 def update_project(pid: str, fields: dict[str, Any]) -> dict[str, Any] | None:
     """按 id 更新可编辑字段；跨用户隔离由上层按目录保证。返回更新后的记录。"""
-    projects = load_all()
-    for i, p in enumerate(projects):
-        if p.get("id") != pid:
-            continue
-        for k in EDITABLE:
-            if k in fields:
-                p[k] = fields[k]
-        if fields.get("stage") and fields["stage"] not in STAGES:
-            raise ValueError(f"未知的项目阶段：{fields['stage']}")
-        p["updated_at"] = _now_iso()
-        projects[i] = p
-        _write_all(projects)
-        return derive(p)
-    return None
+    existing = sqlite_store.get_project(pid)
+    if not existing:
+        return None
+    for k in EDITABLE:
+        if k in fields:
+            existing[k] = fields[k]
+    if fields.get("stage") and fields["stage"] not in STAGES:
+        raise ValueError(f"未知的项目阶段：{fields['stage']}")
+    existing["updated_at"] = _now_iso()
+    sqlite_store.save_project(existing)
+    return derive(existing)
+
+
+class ProjectHasPlansError(ValueError):
+    """删除项目时有关联方案，拒绝删除（用户选方案 A）。"""
+    def __init__(self, pid: str, count: int):
+        super().__init__(f"项目 {pid} 还有 {count} 个关联方案，拒绝删除；请先删除方案或转移项目")
+        self.pid = pid
+        self.count = count
 
 
 def delete_project(pid: str) -> bool:
-    projects = load_all()
-    remaining = [p for p in projects if p.get("id") != pid]
-    if len(remaining) == len(projects):
+    """删除项目。不存在返回 False。
+
+    B-P1-2 删项目保护（用户选方案 A）：有关联方案时抛 ProjectHasPlansError
+    拒绝删除，防止 SQLite 里留下无主方案。
+    """
+    existing = sqlite_store.get_project(pid)
+    if not existing:
         return False
-    _write_all(remaining)
-    return True
+    n = sqlite_store.count_project_plans(pid)
+    if n > 0:
+        raise ProjectHasPlansError(pid, n)
+    return sqlite_store.delete_project(pid)
+
+
+def export_json() -> list[dict[str, Any]]:
+    """导出视图：生成 projects.json 内容（按需调用，不再作为写入源）。"""
+    return list_projects()
 
 
 def finalize(pid: str, bid_amount: Any, bid_cost: Any) -> dict[str, Any] | None:

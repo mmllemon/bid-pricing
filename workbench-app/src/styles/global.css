@@ -7216,6 +7216,7 @@ body:has(.portal-view:not(.hidden)) {
 }
 
 .card-title {
+  font-family: var(--font-pixel);
   font-size: 12px;
   font-weight: 800;
   color: #111111;
@@ -7712,6 +7713,7 @@ a.nav-item { text-decoration: none; color: inherit; }
    于是「标题裸奔、副标题有样式」。这里补一条无前缀规则，视觉与报价页对齐。
    注意它是全局选择器：报价页不受影响（#quoteView .card-title 特异性更高）。 */
 .card-title{
+  font-family: var(--font-pixel);
   font-size: 16px; font-weight: 700; color: var(--text);
   display: flex; align-items: center; gap: 7px;
 }

@@ -8457,11 +8457,86 @@ details.spec .hint { margin: 6px 0; }
   transition: none; /* FLIP 接管，用 JS 驱动 transform */
 }
 .portal-analysis-drawer.expanded {
-  left: 0;
-  width: 100%;
-  border-left: none;
+  left: 160px;
+  width: calc(100% - 160px);
+  border-left: 2px solid #111;
   padding: 32px 48px;
 }
 .portal-analysis-drawer.expanded .ec-summary-top {
   grid-template-columns: repeat(4, 1fr);
+}
+
+/* ===== 展开态左侧项目导航（2026-10-08） ===== */
+.project-sidebar {
+  position: fixed;
+  left: 0;
+  top: 56px; /* 导航栏下方 */
+  bottom: 0;
+  width: 160px;
+  background: #fff;
+  border-right: 2px solid #111;
+  padding: 16px 12px;
+  overflow-y: auto;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ps-current {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px;
+  background: #111;
+  color: #fff;
+  border: 2px solid #111;
+  cursor: pointer;
+  text-align: left;
+}
+.ps-current:hover { background: #333; }
+.ps-code {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.ps-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  word-break: break-all;
+}
+.ps-stage {
+  font-size: 11px;
+  background: #ff5a1f;
+  color: #fff;
+  padding: 1px 6px;
+}
+.ps-section { display: flex; flex-direction: column; gap: 6px; }
+.ps-heading {
+  font-size: 11px;
+  color: #999;
+  letter-spacing: 0.1em;
+}
+.ps-item, .ps-anchor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+}
+.ps-item:hover, .ps-anchor:hover {
+  border-color: #111;
+  background: #f8f8f8;
+}
+.ps-item .ps-name {
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

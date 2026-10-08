@@ -333,6 +333,15 @@ export default function PortalPage() {
           onExpandChange={(expanded) => {
             engineRef.current?.setDocked(expanded);
           }}
+          projects={leafItems}
+          onSelectProject={(id) => {
+            // 展开态切换项目：保持展开，换数据
+            const eng = engineRef.current;
+            if (eng) {
+              eng.selectItem(id);
+              syncFromEngine();
+            }
+          }}
           onEnter={() => {
             if (!activeModule) return;
             if (activeModule.id === 'quote') window.location.href = '/#quote';

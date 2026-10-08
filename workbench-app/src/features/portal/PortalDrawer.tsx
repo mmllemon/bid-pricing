@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { PortalItem, PortalModule } from './portalData';
 import { ExpandableCard } from './ExpandableCard';
+import { ProjectSidebar } from './ProjectSidebar';
 import { getPortalConfig } from './portalConfig';
 
 /**
@@ -16,6 +17,8 @@ export function PortalDrawer({
   onClose,
   onEnter,
   onExpandChange,
+  projects,
+  onSelectProject,
 }: {
   open: boolean;
   module?: PortalModule;
@@ -23,6 +26,10 @@ export function PortalDrawer({
   onClose: () => void;
   onEnter: () => void;
   onExpandChange?: (expanded: boolean) => void;
+  /** 同模块项目列表（展开态侧边栏用） */
+  projects?: PortalItem[];
+  /** 展开态切换项目 */
+  onSelectProject?: (id: string) => void;
 }) {
   const [tab, setTab] = useState('tab-overview');
   const [cardExpanded, setCardExpanded] = useState(false);
@@ -40,6 +47,11 @@ export function PortalDrawer({
     }
     onExpandChange?.(true);
     setCardExpanded(true);
+  };
+
+  const doCollapse = () => {
+    onExpandChange?.(false);
+    setCardExpanded(false);
   };
 
   // React 提交后（DOM 已是 Last 态）再量尺寸、播动画
@@ -94,6 +106,16 @@ export function PortalDrawer({
   }
 
   return (
+    <>
+      {/* 展开态左侧项目导航（2026-10-08） */}
+      {cardExpanded && item && projects && onSelectProject && (
+        <ProjectSidebar
+          current={item}
+          projects={projects}
+          onSelect={onSelectProject}
+          onCollapse={doCollapse}
+        />
+      )}
     <aside
       ref={drawerRef}
       className={`portal-analysis-drawer${open ? ' open' : ''}${cardExpanded ? ' expanded' : ''}`}
@@ -276,5 +298,6 @@ export function PortalDrawer({
         <button type="button" className="pixel-btn-secondary" onClick={onClose}>返回上一层</button>
       </div>
     </aside>
+    </>
   );
 }

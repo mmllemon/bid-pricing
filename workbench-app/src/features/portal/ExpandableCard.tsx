@@ -170,7 +170,7 @@ export function ExpandableCard({
   return (
     <div className="expandable-card detail">
       {/* 详情态保留摘要指标（2026-10-08 修：之前展开后指标消失） */}
-      <div className="ec-summary-top">
+      <div className="ec-summary-top" id="ec-summary">
         {topFields.map((key) => (
           <div className="ec-metric" key={key}>
             <span className="ec-label">{FIELD_DICT[key]?.label || key}</span>
@@ -180,7 +180,7 @@ export function ExpandableCard({
           </div>
         ))}
       </div>
-      <div className="ec-detail-list">
+      <div className="ec-detail-list" id="ec-units">
         {allUnits.map((u) => {
           // 后端直接给了 payable，优先用；没有才自己算
           const unpaid = u.payable ?? (u.amount ?? 0) - (u.paid ?? 0);

@@ -169,6 +169,17 @@ export function ExpandableCard({
   const allUnits = [...clients, ...suppliers, ...laborUnits];
   return (
     <div className="expandable-card detail">
+      {/* 详情态保留摘要指标（2026-10-08 修：之前展开后指标消失） */}
+      <div className="ec-summary-top">
+        {topFields.map((key) => (
+          <div className="ec-metric" key={key}>
+            <span className="ec-label">{FIELD_DICT[key]?.label || key}</span>
+            <strong className="ec-val" data-font="data">
+              {formatValue(key, getItemField(item, key))}
+            </strong>
+          </div>
+        ))}
+      </div>
       <div className="ec-detail-list">
         {allUnits.map((u) => {
           // 后端直接给了 payable，优先用；没有才自己算
@@ -201,7 +212,12 @@ export function ExpandableCard({
           );
         })}
         {allUnits.length === 0 && !loading && (
-          <div className="ec-empty">暂无关联单位数据</div>
+          <div className="ec-empty">
+            该项目暂无执行数据（收入合同/分包/材料），去「项目经营」页补录后这里会自动显示。
+          </div>
+        )}
+        {loading && (
+          <div className="ec-empty">正在加载关联单位…</div>
         )}
       </div>
     </div>

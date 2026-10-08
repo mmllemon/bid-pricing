@@ -8457,8 +8457,9 @@ details.spec .hint { margin: 6px 0; }
   transition: none; /* FLIP 接管，用 JS 驱动 transform */
 }
 .portal-analysis-drawer.expanded {
-  width: 100%;
-  border-left: none;
+  left: 140px;
+  width: calc(100% - 140px);
+  border-left: 2px solid #111;
   padding: 32px 48px;
 }
 .portal-analysis-drawer.expanded .ec-summary-top {

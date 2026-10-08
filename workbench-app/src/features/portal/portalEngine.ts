@@ -98,17 +98,18 @@ export function targets(
   const leafItemsOf = (mod: string, branch: string | null): PortalItem[] =>
     itemOverride ?? getItems(mod, branch as string);
 
-  // 停靠态（2026-10-08 Step B）：选中模块钉在左侧成侧边导航，其余淡出
+  // 停靠态（2026-10-08 Step B）：全部模块在左侧垂直排成侧边导航，选中高亮
   if (L.docked && L.stage === 'module' && L.mod) {
-    const res: Layout = { orb: { x: 0, y: 0, s: 0 }, jelly: {}, branches: null, leaves: null };
-    const cy = H / 2;
-    MODULES.forEach((m) => {
+    const res: Layout = { orb: { x: -200, y: -200, s: 0 }, jelly: {}, branches: null, leaves: null };
+    const startY = 140;
+    const gap = 84;
+    MODULES.forEach((m, i) => {
       const sel = m.id === L.mod;
       res.jelly[m.id] = {
-        x: 80,
-        y: cy,
-        s: sel ? 48 : 0,
-        o: sel ? 1 : 0,
+        x: 60,
+        y: startY + i * gap,
+        s: sel ? 40 : 30,
+        o: sel ? 1 : 0.7,
         tilt: 0,
       };
     });

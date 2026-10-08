@@ -842,6 +842,9 @@ select.nb-input {
 /* 顶栏导航态（P0-3 前端整合）：无侧栏，主导航在顶栏 */
 .shell--topnav {
   flex-direction: column;
+  /* 锁定视口高度，子元素用 flex 分配空间，避免内容把顶栏顶走 */
+  height: 100vh;
+  overflow: hidden;
 }
 
 .site-topbar {
@@ -851,6 +854,8 @@ select.nb-input {
   position: sticky;
   top: 0;
   z-index: var(--z-nav);
+  /* flex 布局下不被压缩，导航栏永远在最上 */
+  flex-shrink: 0;
 }
 
 .site-topbar-main {
@@ -7686,9 +7691,16 @@ body:has(.portal-view:not(.hidden)) {
   height: auto;
   min-height: 0;
   border: 0;
+  /* flex 填充顶栏剩余空间，代替硬编码 calc(100vh - 56px) */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 .shell--topnav .portal-stage {
-  height: calc(100vh - 56px);
+  /* 高度由 flex 容器决定，不再硬编码视口减法，顶栏变高也不会错位 */
+  height: auto;
+  flex: 1;
   min-height: 560px;
 }
 

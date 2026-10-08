@@ -123,29 +123,30 @@ jobs:
         run: python -m unittest discover -s tests -t .
 
   frontend-smoke:
-    # 前端静态站的判据：用 jsdom 按页面**真实顺序**执行脚本，抓「文本看着对、运行就炸」的
-    # 问题（初始化顺序/TDZ、escape.js 加载顺序、转义实现唯一性、破缓存令牌一致性、死链）。
+    # React 工作台（workbench-app）的判据：vitest 单元/组件测试。
+    # 2026-10-08 P4 重构删除了原生 frontend/（1949 文件），前端唯一入口改为
+    # workbench-app（React 18+TS+Vite）；旧 job 仍指向已不存在的 frontend/，
+    # cache-dependency-path 与 working-directory 全部失效，job 必挂。
     #
     # 独立 job（不并进上面的 Python job）：前端工具链出问题不该把 Python 侧判据一起判红，
-    # 反之亦然。本仓其余 node 工程（workbench-app / workbench-server / agent-service）是
-    # 增值组件，CI 仍不构建它们。
-    name: 前端冒烟（jsdom）
+    # 反之亦然。
+    name: 前端冒烟（vitest）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          # jsdom 30 的 engines 为 ^22.22.2 || ^24.15.0 || >=26.0.0 —— 旧版本会装不上，
-          # 故这里跟着 jsdom 走；升级 jsdom 时先看它的 engines。
+          # vite 8 要求 Node ^20.19.0 || >=22.12.0；jsdom 25 要求 >=18。
+          # 取 24；升级 vite/jsdom 时先看它们的 engines 字段。
           node-version: "24"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: workbench-app/package-lock.json
 
       - name: 安装依赖（用锁文件，保证可复现）
-        working-directory: frontend
+        working-directory: workbench-app
         run: npm ci --no-audit --no-fund
 
       - name: 冒烟
-        working-directory: frontend
+        working-directory: workbench-app
         run: npm test

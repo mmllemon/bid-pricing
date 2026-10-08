@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import PageHead from '../components/PageHead';
 import { api } from '../api/client';
 import type { AppSettings, XhsAccountInfo, XhsVerificationStatus, HotspotStatus, KnowledgeStatus, ConnectorStatus } from '../types';
 import ActionProgress from '../components/ActionProgress';
@@ -258,12 +259,7 @@ export default function SettingsPage() {
   if (backend === 'offline' || backend === 'error') {
     return (
       <div className="ui-page">
-        <div className="ui-page-head">
-          <div>
-            <div className="ui-page-kicker">S-07 · SETTINGS</div>
-            <h1>设置</h1>
-          </div>
-        </div>
+        <PageHead zh="设置" en="Settings" sub="把工作台调成你的样子。" subEn="Make it yours." />
         <div className="ui-alert ui-alert--error">
           <h2 className="nb-section-title" style={{ fontSize: 20 }}>后端未连接</h2>
           <p style={{ fontSize: 14, lineHeight: 1.7 }}>
@@ -293,12 +289,7 @@ export default function SettingsPage() {
 
   return (
     <div className="ui-page">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">S-07 · SETTINGS</div>
-          <h1>设置</h1>
-        </div>
-      </div>
+      <PageHead zh="设置" en="Settings" sub="把工作台调成你的样子。" subEn="Make it yours." />
 
       <div className="grid-2 setting-section" style={{ alignItems: 'start' }}>
         <div className="ui-module">

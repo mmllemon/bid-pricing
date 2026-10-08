@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import PageHead from '../components/PageHead';
 import { API_BASE, pct, yf } from './bizShared';
 import type { ExecSummary, ProjectOverview } from './bizShared';
 import { BizEditModal } from './Biz';
@@ -482,21 +483,21 @@ export default function BizDetailPage() {
 
   return (
     <div className="ui-page">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">
-            <button type="button" className="nb-btn nb-btn--ghost" style={{ padding: '2px 10px', fontSize: 12 }}
-              onClick={() => navigate('/biz')}>← 项目经营</button>
-          </div>
-          <h1>{project ? (project.short_name || project.name || '项目主页') : '项目主页'}</h1>
-        </div>
+      <PageHead
+        zh="项目主页"
+        en="Project"
+        sub={project ? (project.short_name || project.name || '项目主页') : '项目主页'}
+        subEn={project?.stage ? `Stage: ${project.stage}` : undefined}
+      >
+        <button type="button" className="nb-btn nb-btn--ghost" style={{ padding: '2px 10px', fontSize: 12 }}
+          onClick={() => navigate('/biz')}>← 项目经营</button>
         {project && (
-          <div className="flex items-center gap-2">
+          <>
             <span className="nb-badge">{project.stage || '—'}</span>
             <button type="button" className="nb-btn nb-btn--ghost" onClick={() => setShowEdit(true)}>编辑项目</button>
-          </div>
+          </>
         )}
-      </div>
+      </PageHead>
 
       {error && <div className="ui-alert ui-alert--error">{error}</div>}
       {loading && <div className="nb-muted">读取中…</div>}

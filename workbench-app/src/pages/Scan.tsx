@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PageHead from '../components/PageHead';
 import { api } from '../api/client';
 import type { ScanReport } from '../types';
 import { formatNumber } from '../components/widgets';
@@ -33,15 +34,11 @@ export default function ScanPage() {
 
   return (
     <div className="ui-page">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">S-06 · SCAN</div>
-          <h1>扫描报告</h1>
-        </div>
+      <PageHead zh="扫描报告" en="Scan" sub="桌面文件，一扫便知。" subEn="Scan your desktop — know what's there.">
         <button className="nb-btn nb-btn--primary" onClick={runScan} disabled={scanProgress.running}>
           {scanProgress.running ? '扫描中…' : '重新扫描桌面'}
         </button>
-      </div>
+      </PageHead>
 
       <ActionProgress progress={scanProgress.progress} onRetry={runScan} />
 

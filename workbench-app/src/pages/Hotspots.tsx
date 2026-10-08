@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import PageHead from '../components/PageHead';
 import { api } from '../api/client';
 import type {
   HotspotStatus,
@@ -459,11 +460,7 @@ export default function HotspotsPage() {
 
   return (
     <div className="ui-page">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">R-04 · RADAR</div>
-          <h1>热点雷达</h1>
-        </div>
+      <PageHead zh="热点雷达" en="Radar" sub="行业动态，先人一步。" subEn="Industry moves, caught early.">
         {tab === 'live' ? (
           <button className="nb-btn nb-btn--primary" onClick={runSync} disabled={syncing || fetchProgress.running}>
             {fetchProgress.running ? '抓取中…' : '立即抓取'}
@@ -515,7 +512,7 @@ export default function HotspotsPage() {
             {historyLoading ? '读取中…' : '刷新历史'}
           </button>
         )}
-      </div>
+      </PageHead>
 
       {tab === 'live' ? (
         <ActionProgress progress={fetchProgress.progress} onRetry={runSync} />

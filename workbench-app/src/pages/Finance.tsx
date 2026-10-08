@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import PageHead from '../components/PageHead';
 import { Wallet } from 'pixelarticons/react';
 import { api } from '../api/client';
 import ActionProgress from '../components/ActionProgress';
@@ -141,11 +142,7 @@ export default function FinancePage() {
 
   return (
     <div className="ui-page finance-page">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">F-08 · MONEY LEDGER</div>
-          <h1 className="finance-page-title">财务分析</h1>
-        </div>
+      <PageHead zh="财务分析" en="Money Ledger" sub="钱花在哪，一目了然。" subEn="Know where every yuan goes.">
         <button
           type="button"
           className="nb-btn nb-btn--primary"
@@ -154,7 +151,7 @@ export default function FinancePage() {
         >
           {syncing ? '正在更新…' : '更新账本'}
         </button>
-      </div>
+      </PageHead>
 
       <section className={`finance-source-strip finance-source-strip--${freshness.tone}`} aria-live="polite">
         <div className="finance-source-icon" aria-hidden="true"><Wallet width={24} height={24} /></div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PageHead from '../components/PageHead';
 import { api } from '../api/client';
 import type {
   KnowledgeStatus,
@@ -216,11 +217,7 @@ export default function KnowledgePage() {
 
   return (
     <div className="ui-page">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">K-05 · KNOWLEDGE</div>
-          <h1>知识大脑</h1>
-        </div>
+      <PageHead zh="知识大脑" en="Knowledge" sub="你的知识，随时可搜。" subEn="Your knowledge, searchable in seconds.">
         <div className="flex items-center gap-2">
           <span className="nb-badge nb-badge--olive">本地全文检索</span>
           {status && (
@@ -229,7 +226,7 @@ export default function KnowledgePage() {
             </button>
           )}
         </div>
-      </div>
+      </PageHead>
 
       {statusMsg && (
         <div className="ui-alert ui-alert--error">

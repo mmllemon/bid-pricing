@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import PageHead from '../components/PageHead';
 import { api } from '../api/client';
 import type { NotePerformance, XhsPeriod, XhsPeriodView, XhsAccountInfo } from '../types';
 import { MetricCard, formatDuration, formatMetricValue, formatNumber } from '../components/widgets';
@@ -149,24 +150,14 @@ export default function PerformancePage() {
 
   return (
     <div className="ui-page">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">C-03 · CONTENT</div>
-          <h1 className="nb-section-title" style={{ marginBottom: 0 }}>
-            内容表现
-            {account && account.verificationStatus === 'verified' && (
-              <span className="nb-badge">
-                {account.displayName} · 已验证
-              </span>
-            )}
-            {account && account.verificationStatus === 'mismatch' && (
-              <span className="nb-badge nb-badge--red">
-                账号不匹配
-              </span>
-            )}
-          </h1>
-        </div>
-        <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+      <PageHead zh="内容表现" en="Content" sub="数据说话，内容迭代。" subEn="Let the numbers guide your next piece.">
+        <div className="flex gap-2" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+          {account && account.verificationStatus === 'verified' && (
+            <span className="nb-badge">{account.displayName} · 已验证</span>
+          )}
+          {account && account.verificationStatus === 'mismatch' && (
+            <span className="nb-badge nb-badge--red">账号不匹配</span>
+          )}
           <button className="nb-btn nb-btn--ghost" onClick={verifyAccount} disabled={verifyProgress.running}>
             {verifyProgress.running ? '验证中…' : '验证并同步账号'}
           </button>
@@ -174,7 +165,7 @@ export default function PerformancePage() {
             {syncProgress.running ? '同步中…' : '重新同步'}
           </button>
         </div>
-      </div>
+      </PageHead>
 
       <ActionProgress progress={verifyProgress.progress} onRetry={verifyAccount} />
       <ActionProgress progress={syncProgress.progress} onRetry={runSync} />

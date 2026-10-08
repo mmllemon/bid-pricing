@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import PageHead from '../components/PageHead';
 import { Barcode, Calendar, Check, File, Message, Receipt, Sparkles, StickyNote } from 'pixelarticons/react';
 import { api } from '../api/client';
 import { useConfirm } from '../components/confirm';
@@ -366,11 +367,7 @@ export default function TodosPage() {
   const receiptProgressTotal = Math.max(totalCheckable, completedCount);
   return (
     <div className="ui-page todo-v4">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">T-02 · JOB QUEUE</div>
-          <h1>待办智能中枢</h1>
-        </div>
+      <PageHead zh="待办智能中枢" en="Job Queue" sub="今天，先做最重要的事。" subEn="Do the most important thing first.">
         <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
           <ClickSpark className="todo-plan-spark" color="#FFD12E">
             <button className="nb-btn nb-btn--primary" onClick={planToday} disabled={planProgress.running || syncing}>
@@ -384,7 +381,7 @@ export default function TodosPage() {
             运行详情
           </button>
         </div>
-      </div>
+      </PageHead>
 
       <ActionProgress progress={syncProgress.progress} onRetry={syncNow} />
       <ActionProgress progress={planProgress.progress} onRetry={planToday} />

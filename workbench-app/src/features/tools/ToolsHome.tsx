@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { ToolShell } from './ToolShell';
+import PageHead from '../../components/PageHead';
 
 /**
  * 速算工具箱首页（P2 前端整合：由 frontend/tools.html 迁入 React）。
@@ -35,7 +36,12 @@ const CARDS: { to: string; title: string; sub?: string; desc: string; icon: Reac
 export default function ToolsHome() {
   return (
     <>
-      <div className="breadcrumb">工具箱 <span>/</span> 配电土建速算</div>
+      <PageHead
+        zh="工具箱"
+        en="Toolbox"
+        sub="配电土建速算，一处搞定。"
+        subEn="Quick calculators for power distribution & civil works — all local, no upload."
+      />
       <p className="hint" style={{ margin: '0 0 18px' }}>
         纯本地速算，数据不上传。各工具内的构件口径与单价均为<b>可编辑的参考默认值</b>，
         使用前请按当期信息价、施工图与所套定额核对；金额口径（含税/税前）请自行统一。

@@ -59,7 +59,7 @@ export default function ToolDuct() {
   }, [r, p.D, p.gap, p.cover]);
 
   return (
-    <ToolShell id="tool-duct" title="排管断面布置" subtitle="孔数 → 标准排列 → 包封尺寸 → 沟底宽建议，可一键送入土方工具">
+    <ToolShell id="tool-duct" en="Duct" title="排管断面布置" subtitle="孔数 → 标准排列 → 包封尺寸 → 沟底宽建议，可一键送入土方工具">
       <div className="tool-grid" style={{ marginBottom: 12 }}>
         <div className="tool-subhead">断面孔数</div>
         <NumField id="dCircuits" label="回路数 n" value={p.circuits} onChange={(v) => {

@@ -1,26 +1,23 @@
 import type { ReactNode } from 'react';
+import PageHead from '../../components/PageHead';
 
 /**
  * 工具页共用布局件（P2 前端整合）。
  * 沿用原生工具页的类名（tools.css 已并入 global.css），不改样式契约。
  */
 
-/** 工具页外壳：面包屑 + 卡片（标题/副标题 + 内容）。 */
+/** 工具页外壳：PageHead 页头 + 卡片（标题/副标题 + 内容）。 */
 export function ToolShell({
-  title, subtitle, children, id,
+  title, subtitle, children, id, en,
 }: {
   title: string; subtitle: string; children: ReactNode; id: string;
+  /** 英文名，用于页头 eyebrow，如 "Cable" */
+  en: string;
 }) {
   return (
     <>
-      <div className="breadcrumb">
-        <a href="#/tools" className="crumb-link">工具箱</a> <span>/</span> {title}
-      </div>
+      <PageHead zh={title} en={en} sub={title} subEn={subtitle} />
       <section className="card tool-card" id={id}>
-        <div className="card-head">
-          <span className="card-title"><span className="title-dot" />{title}</span>
-          <span className="card-subtitle">{subtitle}</span>
-        </div>
         {children}
       </section>
       <p className="hint" style={{ margin: '6px 0 30px' }}>

@@ -32,7 +32,7 @@ export default function ToolCable() {
   const voltOptions: [string, string][] = [['lv', '0.6/1kV'], ['mv', '8.7/15kV'], ['hv', '26/35kV']];
 
   return (
-    <ToolShell id="tool-cable" title="电缆价格速算" subtitle="导体成本 = Σ(芯数×截面) × 密度 × 金属价 / 1e6；含税 = 不含税 × (1+增值税率)">
+    <ToolShell id="tool-cable" en="Cable" title="电缆价格速算" subtitle="导体成本 = Σ(芯数×截面) × 密度 × 金属价 / 1e6；含税 = 不含税 × (1+增值税率)">
       <div className="tool-grid" style={{ marginBottom: 12 }}>
         <NumField id="cCu" label="铜价" value={cu} onChange={setCu} step={100} suffix="元/吨" />
         <NumField id="cAl" label="铝价" value={al} onChange={setAl} step={100} suffix="元/吨" />

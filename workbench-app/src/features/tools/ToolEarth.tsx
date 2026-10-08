@@ -44,7 +44,7 @@ export default function ToolEarth() {
   const clearHandoff = () => { try { localStorage.removeItem('bidpricing.handoff.v1'); } catch { /* ignore */ } setHandoff(null); };
 
   return (
-    <ToolShell id="tool-earth" title="挖方与回填速算" subtitle="挖方 V = L × (a + m·h) × h（梯形断面）；回填 = 挖方 − 管位占置">
+    <ToolShell id="tool-earth" en="Earthwork" title="挖方与回填速算" subtitle="挖方 V = L × (a + m·h) × h（梯形断面）；回填 = 挖方 − 管位占置">
       <div className="tool-grid" style={{ marginBottom: 12 }}>
         <NumField id="eDig" label="挖方单价" value={prices.dig} onChange={(v) => setPrices((s) => ({ ...s, dig: v }))} step={0.5} suffix="元/m³" tip="全线统一的人工挖沟槽综合单价" />
         <NumField id="eBack" label="回填夯实单价" value={prices.back} onChange={(v) => setPrices((s) => ({ ...s, back: v }))} step={0.5} suffix="元/m³" />

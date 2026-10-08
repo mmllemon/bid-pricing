@@ -257,7 +257,7 @@ export default function ToolWell() {
   );
 
   return (
-    <ToolShell id="tool-well" title="电缆井工程量速算" subtitle="垫层、底板、井壁（砖砌/混凝土）、顶板、井筒、钢筋、模板、抹面、井盖、爬梯逐项工程量与合价">
+    <ToolShell id="tool-well" en="Manhole" title="电缆井工程量速算" subtitle="垫层、底板、井壁（砖砌/混凝土）、顶板、井筒、钢筋、模板、抹面、井盖、爬梯逐项工程量与合价">
       <div className="chip-row" role="group" aria-label="井型预设">
         {PRESETS.map((pr) => (
           <button key={pr.key} type="button" className={`chip${presetOn === pr.key ? ' on' : ''}`}

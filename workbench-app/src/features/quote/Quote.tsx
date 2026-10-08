@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import PageHead from '../../components/PageHead';
 import { computeCompliance, computeInputVat, marginRatePercent, type QuoteResult } from './quoteCalc';
 import { QuoteParams, VOLT_DEFAULT_COMP } from './QuoteParams';
 import { QuoteKpi } from './QuoteKpi';
@@ -421,7 +422,12 @@ export default function QuotePage() {
 
   return (
     <div className="page page-quote" id="quoteView">
-      <div className="breadcrumb">投标报价 <span>/</span> 优化沙盘</div>
+      <PageHead
+        zh="投标报价"
+        en="Quote"
+        sub="算得准，才敢报。"
+        subEn="Price it right — three strategies, one sandbox. All calculations stay local."
+      />
 
       {message && (
         <div className={`ui-alert ui-alert--${message.kind === 'error' ? 'error' : message.kind === 'success' ? 'success' : message.kind === 'warn' ? 'warn' : 'info'}`} role="status">

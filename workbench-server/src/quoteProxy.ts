@@ -7,8 +7,13 @@
  * 前端整合后浏览器只访问 :3456，故 :3456 需把报价域的 /api/* 同源反代到 :8000。
  *
  * 分流边界（两边零重叠，已逐条核对）：
- *   报价域前缀：quote / project / group / well-library / audit / metal-prices
+ *   报价域前缀：quote / project / group / graph / well-library / audit / metal-prices
  *   工作台前缀：finance / health / hotspots / knowledge / productivity / scan / settings / todos / weather / xhs
+ *
+ * 回归（2026-10-08）：新增「关联图谱」时后端加了 /api/graph/*，本表漏登记 'graph'，
+ * 前端经唯一入口 :3456 调 /api/graph/units 得 404（直连 :8000 才 200）。
+ * 现由 tests/test_frontend_proxy_prefixes.py 机械比对「后端路由首段 ⊆ 本表 ∪ 工作台本地段」，
+ * 再漏登记即红。
  *
  * 实现选择：用 Node 内置 fetch（Node 24 内置），不引入 http-proxy 依赖。
  * 注意：
@@ -26,6 +31,7 @@ const QUOTE_PREFIXES = new Set([
   'quote',
   'project',
   'group',
+  'graph',
   'well-library',
   'audit',
   'metal-prices',

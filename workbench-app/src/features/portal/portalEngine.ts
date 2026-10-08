@@ -100,7 +100,8 @@ export function targets(
 
   // 停靠态（2026-10-08 Step B 修：不显示模块列表，抽屉全宽只看项目）
   // 之前把 7 个模块钉在左边是错的——用户点的是项目，项目节点反而消失了。
-  if (L.docked && L.stage === 'module' && L.mod) {
+  // 注意：点项目卡后 stage 是 'item' 不是 'module'（2026-10-08 修：之前写错导致 docked 永不生效）
+  if (L.docked && (L.stage === 'module' || L.stage === 'item') && L.mod) {
     const res: Layout = { orb: { x: -1000, y: -1000, s: 0 }, jelly: {}, branches: null, leaves: null };
     MODULES.forEach((m) => {
       res.jelly[m.id] = { x: -1000, y: -1000, s: 0, o: 0, tilt: 0 };

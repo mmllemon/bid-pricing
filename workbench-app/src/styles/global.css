@@ -147,7 +147,8 @@ img {
   gap: 8px;
   min-height: 44px;
   min-width: 44px;
-  font-family: var(--font-pixel);
+  /* 像素字体规范：中文按钮文字走 --font，避免 CJK 回退到 monospace 断裂 */
+  font-family: var(--font);
   font-weight: 400;
   font-synthesis: none;
   font-size: 14px;
@@ -396,6 +397,112 @@ select.nb-input {
   margin-bottom: var(--space-5);
   border-bottom: var(--line-strong);
   flex-wrap: wrap;
+}
+
+/* ===== PageHead：子页面统一页头（布局骨架借鉴 neural-creator-dashboard） =====
+ * 浅色 + 四色 + 裁角语言。像素字体仅用于 eyebrow 英文（装饰），中文走 --font。 */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
+  border-bottom: var(--line-strong);
+  position: relative;
+}
+/* 裁角血缘：页头底边右端 45° 切角，与全站卡片语言呼应 */
+.page-head::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  background: var(--ui-orange);
+  clip-path: polygon(100% 0, 0 100%, 100% 100%);
+  pointer-events: none;
+}
+.page-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--ui-orange);
+  margin: 0 0 6px;
+}
+.page-eyebrow span {
+  font-family: var(--font);
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+.page-title {
+  font-size: 28px;
+  line-height: 1.25;
+  margin: 0 0 4px;
+  letter-spacing: 0.02em;
+}
+.page-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.page-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: 2px;
+}
+
+/* ===== kpi-band：通栏 KPI 横条（借鉴参考项目作品库） ===== */
+.kpi-band {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  background: var(--ui-white);
+  border: var(--line-strong);
+  margin-bottom: var(--space-5);
+  position: relative;
+}
+.kpi-band > div {
+  padding: 14px 18px;
+  border-right: var(--line);
+  position: relative;
+}
+.kpi-band > div:last-child {
+  border-right: 0;
+}
+.kpi-band .kpi-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.kpi-band .kpi-label em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-left: 6px;
+}
+.kpi-band .kpi-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+/* stagger 入场：卡片逐张延迟 */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise-in {
+  animation: rise-in 0.35s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise-in { animation: none; }
 }
 
 .ui-status-copy {
@@ -690,7 +797,8 @@ select.nb-input {
   background: none;
   color: var(--ui-black);
   text-decoration: none;
-  font-family: var(--font-pixel);
+  /* 像素字体规范：导航中文走 --font */
+  font-family: var(--font);
   font-size: var(--text-small);
   font-weight: 700;
   white-space: nowrap;
@@ -720,6 +828,19 @@ select.nb-input {
 
 .site-nav-btn--active {
   background: var(--ui-orange);
+  position: relative;
+}
+/* 裁角血缘：激活态右上 45° 切角，与全站卡片语言呼应 */
+.site-nav-btn--active::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background: var(--ui-white);
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+  pointer-events: none;
 }
 
 .site-nav-btn--active:hover {
@@ -4303,6 +4424,34 @@ select.nb-input {
 
 .biz-card .biz-main {
   display: none;
+}
+
+/* 收款进度条：借鉴参考项目作品卡的数据条 */
+.biz-recv {
+  position: relative;
+  height: 18px;
+  background: var(--ui-gray-100, #f0f0f0);
+  border: var(--line);
+  margin: 8px 0 4px;
+  overflow: hidden;
+}
+.biz-recv i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--ui-orange);
+  transition: width 0.3s ease-out;
+}
+.biz-recv span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: var(--ui-black);
+  mix-blend-mode: normal;
 }
 
 .biz-card.flat .biz-tab {

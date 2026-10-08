@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Wallet } from 'pixelarticons/react';
-import { IconBriefcase, IconChart, IconClose, IconEye, IconPlus, IconSearch } from '../components/icons';
+import { IconClose, IconPlus, IconSearch } from '../components/icons';
 import { API_BASE, pct, toNum, yf } from './bizShared';
 import type { ProjectOverview } from './bizShared';
 import { useNavigate } from 'react-router-dom';
+import PageHead from '../components/PageHead';
 
 /**
  * 项目经营（M-01）：母项目「除个人工作台外唯一保留」的功能区，整体迁自
@@ -86,15 +85,21 @@ function BizCard({ p, index, todoCount, onOpen }: CardProps) {
   const tip = short && p.name && short !== p.name ? `${short} · ${p.name}` : disp;
   const stacked = typeof index === 'number';
   const stage = p.stage || '—';
+  // 收款进度条：已收（actual_revenue）/ 合同额（bid_amount），借鉴参考项目作品卡的数据条
+  const recv = toNum(p.actual_revenue);
+  const contract = toNum(p.bid_amount);
+  const recvRate = recv != null && contract ? Math.max(0, Math.min(1, recv / contract)) : null;
 
   return (
     <div
-      className={`biz-card${stacked ? ' stacked' : ' flat'}`}
+      className={`biz-card${stacked ? ' stacked' : ' flat'} rise-in`}
       data-stage={stage}
       role="button"
       tabIndex={0}
       aria-label={`${disp} 项目卡片`}
-      style={stacked ? { top: (index as number) * CARD_CASCADE } : undefined}
+      style={stacked
+        ? { top: (index as number) * CARD_CASCADE, animationDelay: `${(index as number) * 60}ms` }
+        : { animationDelay: '0ms' }}
       onClick={() => onOpen(p)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') onOpen(p);
@@ -110,6 +115,12 @@ function BizCard({ p, index, todoCount, onOpen }: CardProps) {
           <span className="nb-badge">{stage}</span>
           {(todoCount || 0) > 0 && <span className="nb-badge">待办 {todoCount}</span>}
         </div>
+        {recvRate != null && (
+          <div className="biz-recv" title={`已收 ${yf(recv)} / 合同额 ${yf(contract)}`}>
+            <i style={{ width: `${Math.round(recvRate * 100)}%` }} />
+            <span>收款 {Math.round(recvRate * 100)}%</span>
+          </div>
+        )}
         <div className="biz-metrics">
           <div className="biz-metric"><span className="l">总限价</span><span className="v">{yf(p.limit_total)}</span></div>
           <div className="biz-metric"><span className="l">开标日期</span><span className="v">{p.bid_open_date || '—'}</span></div>
@@ -406,13 +417,13 @@ export default function BizPage() {
   const building = projects.filter((p) => p.stage === '中标在建').length;
   const grossTotal = projects.reduce((acc, p) => acc + (toNum(p.gross_profit) ?? 0), 0);
 
-  const metrics: Array<{ label: string; value: string; icon: ReactNode }> = [
-    { label: '项目总数', value: String(projects.length), icon: <IconBriefcase size={32} /> },
-    { label: '投标中', value: String(bidding), icon: <IconEye size={32} /> },
-    { label: '在建中', value: String(building), icon: <IconChart size={32} /> },
-    { label: '总毛利合计', value: yf(grossTotal), icon: <Wallet width={32} height={32} /> },
-    { label: '应收未收', value: fund ? yf(fund.receivable) : '—', icon: <IconChart size={32} /> },
-    { label: '资金压力', value: fund?.fund_pressure != null ? pct(fund.fund_pressure) : '—', icon: <IconEye size={32} /> },
+  const metrics: Array<{ label: string; en: string; value: string }> = [
+    { label: '项目总数', en: 'Total', value: String(projects.length) },
+    { label: '投标中', en: 'Bidding', value: String(bidding) },
+    { label: '在建中', en: 'Running', value: String(building) },
+    { label: '总毛利合计', en: 'Gross profit', value: yf(grossTotal) },
+    { label: '应收未收', en: 'Receivable', value: fund ? yf(fund.receivable) : '—' },
+    { label: '资金压力', en: 'Pressure', value: fund?.fund_pressure != null ? pct(fund.fund_pressure) : '—' },
   ];
 
   const q = query.trim().toLowerCase();
@@ -437,15 +448,14 @@ export default function BizPage() {
 
   return (
     <div className="ui-page">
-      <div className="ui-page-head">
-        <div>
-          <div className="ui-page-kicker">M-01 · PROJECT OPS</div>
-          <h1>项目经营</h1>
-        </div>
+      <PageHead zh="项目库" en="Projects" sub="每个项目，都是一盘生意。" subEn="Every project is a business — stages, money and risks at a glance.">
         <button className="nb-btn nb-btn--ghost" onClick={load} disabled={loading}>
           {loading ? '读取中…' : '刷新'}
         </button>
-      </div>
+        <button type="button" className="nb-btn nb-btn--primary" onClick={openNew}>
+          <IconPlus size={16} /> 新建项目
+        </button>
+      </PageHead>
 
       {error && (
         <div className="ui-alert ui-alert--error">
@@ -453,18 +463,13 @@ export default function BizPage() {
         </div>
       )}
 
-      <section className="ui-module" aria-label="项目经营指标">
-        <div className="home-metric-grid">
-          {metrics.map((m) => (
-            <div className="ui-metric home-core-metric" key={m.label}>
-              <div className="home-core-metric-head">
-                <div className="ui-metric-label">{m.label}</div>
-                <span className="home-core-metric-icon" aria-hidden="true">{m.icon}</span>
-              </div>
-              <div className="ui-data">{m.value}</div>
-            </div>
-          ))}
-        </div>
+      <section className="kpi-band" aria-label="项目经营指标">
+        {metrics.map((m) => (
+          <div key={m.label}>
+            <span className="kpi-label">{m.label}<em>{m.en}</em></span>
+            <span className="kpi-value">{m.value}</span>
+          </div>
+        ))}
       </section>
 
       <section className="ui-module" aria-label="项目全生命周期看板">
@@ -483,10 +488,6 @@ export default function BizPage() {
               aria-label="搜索项目"
             />
           </div>
-          <span className="biz-toolbar-spacer" />
-          <button type="button" className="nb-btn nb-btn--primary" onClick={openNew}>
-            <IconPlus size={16} /> 新建项目
-          </button>
         </div>
 
         {loading && projects.length === 0 ? (

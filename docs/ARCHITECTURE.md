@@ -29,7 +29,7 @@
 | 数据 | 位置 | 说明 |
 |------|------|------|
 | 报价方案/组 | SQLite（`outputs/projects/<user>/quote.db`） | 唯一真相源 |
-| 项目概览 | SQLite + `projects.json`（导出视图） | ⚠️ 双真相待收敛（B-P1-2） |
+| 项目概览 | SQLite `project` 表 | ✅ B-P1-2 已收敛（2026-10-08） |
 | 执行七表 | SQLite（同库） | 收入合同/成本台帐/进度款/签证变更 |
 | 项目文档 | 文件（`outputs/projects/<user>/docs/`）+ 元数据进库 | |
 | 待办/知识库 | Node 侧 better-sqlite3 | 工作台数据 |

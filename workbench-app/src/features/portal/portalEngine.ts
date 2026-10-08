@@ -407,6 +407,14 @@ export class PortalEngine {
     if (coreEl) {
       coreEl.style.transform = `translate3d(${ox - os / 2}px, ${oy - os / 2}px, 0) scale(${os / 340})`;
       coreEl.style.opacity = String(clamp(oo, 0, 1));
+    } else if (this.refs.stage) {
+      // 防御：core ref 若因重挂丢失，从 stage 里重查一次，避免圆球卡在左上角 (0,0)
+      const el = this.refs.stage.querySelector('.portal-core-hub') as HTMLElement | null;
+      if (el) {
+        this.refs.core = el;
+        el.style.transform = `translate3d(${ox - os / 2}px, ${oy - os / 2}px, 0) scale(${os / 340})`;
+        el.style.opacity = String(clamp(oo, 0, 1));
+      }
     }
 
     // 2. 星尘 canvas

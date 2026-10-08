@@ -149,22 +149,15 @@ export function targets(
   } else {
     const cy2 = H * 0.52;
     const coreS = narrow ? 112 : 158;
-    const coreR = coreS / 2;
-    const coreCx = narrow ? 76 : 120;
+    // 2026-10-08 标注1：列按页面宽度自适应分布，不再挤在左侧
+    const coreCx = W * 0.07;
+    const col1_x = W * 0.20;  // 模块列
+    const col2_x = W * 0.42;  // 分支列
+    const col3_x = W * 0.66;  // 项目卡列
 
     const step = Math.min(96, (H - 170) / Math.max(mods.length, 1));
     const cardSel = Math.min(98, step - 6);
     const cardOther = Math.min(78, step - 6);
-
-    const cardW = 120, branchW = 130;
-    const coreGap = narrow ? 16 : 24;
-    const gapA = narrow ? 70 : 100;
-    const gapB = narrow ? 100 : 150;
-
-    const d1 = coreR + coreGap + cardSel / 2;
-    const col1_x = coreCx + d1;
-    const col2_x = col1_x + cardW / 2 + gapA;
-    const col3_x = col2_x + branchW + gapB;
 
     res.orb = { x: coreCx, y: cy2, s: coreS };
 
@@ -543,10 +536,13 @@ export class PortalEngine {
         const dx = x - ox, dy = y - oy;
         const dist = Math.hypot(dx, dy) || 1;
         const ux = dx / dist, uy = dy / dist;
-        const x1 = ox + ux * os * 0.35, y1 = oy + uy * os * 0.35;
+        // 2026-10-08 标注2：触须从圆心单点分出（不再从圆边各取一点），带弧度伸向各模块
+        const x1 = ox, y1 = oy;
         const x2 = x - ux * s * 0.4, y2 = y - uy * s * 0.4;
-        const bend = L.stage === 'hub' ? 22 * Math.sin(t * 0.5 + i) : 4;
-        const c1x = x1 + dx * 0.35 - uy * bend, c1y = y1 + dy * 0.35 + ux * bend;
+        // 弧度：hub 态呼吸摆动 + 基础弧度，非 hub 态保持小弧度
+        const baseBend = L.stage === 'hub' ? 34 : 10;
+        const bend = baseBend * Math.sin(t * 0.5 + i) + baseBend * 0.6;
+        const c1x = x1 + dx * 0.3 - uy * bend, c1y = y1 + dy * 0.3 + ux * bend;
         const c2x = x1 + dx * 0.7 + uy * bend, c2y = y1 + dy * 0.7 - ux * bend;
         const dPath = `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`;
         const isActive = m.id === L.mod;

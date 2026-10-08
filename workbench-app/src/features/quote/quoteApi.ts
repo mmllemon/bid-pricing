@@ -48,3 +48,26 @@ export function previewQuote(limitFile: File, costFile: File, projectId: string,
 export function optimizeQuote(form: FormData) {
   return postForm<import('./quoteCalc').QuoteResult & { status: string; reason?: string; cost_input_tax?: { user_hint?: string } }>('/quote/optimize', form);
 }
+
+/** 项目经营概览列表（用于「关联投标项目」下拉）。 */
+export interface OverviewProject {
+  id: string; name: string; short_name?: string; stage?: string; bid_amount?: string; limit_total?: string;
+}
+export async function listOverviewProjects(): Promise<OverviewProject[]> {
+  const r = await fetch(BASE + '/project/overview/list');
+  const j = await r.json().catch(() => ({}));
+  return Array.isArray(j?.projects) ? j.projects : [];
+}
+
+/** 定稿并回写项目经营概览（仅写投标报价金额）。 */
+export function finalizeOverview(overviewId: string, bidAmount: string) {
+  const data = new FormData();
+  data.append('id', overviewId);
+  data.append('bid_amount', bidAmount);
+  return postForm<{ status: string; reason?: string }>('/project/overview/finalize', data);
+}
+
+/** 把当前方案标记为已定稿（write=0：不按方案存储值二次覆盖刚回写的金额）。 */
+export async function markPlanFinalized(planId: string): Promise<void> {
+  await fetch(`${BASE}/project/mark-finalized?id=${encodeURIComponent(planId)}&write=0`, { method: 'POST' }).catch(() => { /* 标记失败不阻断回写 */ });
+}

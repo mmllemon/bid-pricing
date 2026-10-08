@@ -16,11 +16,12 @@ export const VOLT_DEFAULT_COMP: TaxComp[] = [
   { key: 'service', label: '劳务及措施', proportion: 0.35, input_vat_rate: 0.09 },
 ];
 
-export function QuoteParams({ params, set, comp, setComp, capFile, costFile, onFile, onPreview, previewing, capStat, costStat }: {
+export function QuoteParams({ params, set, comp, setComp, projects, capFile, costFile, onFile, onPreview, previewing, capStat, costStat }: {
   params: QuoteParamsState;
   set: (p: Partial<QuoteParamsState>) => void;
   comp: TaxComp[];
   setComp: (fn: (cs: TaxComp[]) => TaxComp[]) => void;
+  projects: { id: string; name: string; bid_amount?: string }[];
   capFile: string | null;
   costFile: string | null;
   onFile: (kind: 'cap' | 'cost', f: File | null) => void;
@@ -61,8 +62,14 @@ export function QuoteParams({ params, set, comp, setComp, capFile, costFile, onF
         <div className="field-group">
           <label className="field" data-tip="从「项目经营概览」选择处于投标阶段的项目">
             <span className="field-label">关联投标项目</span>
-            <select id="projectId" value={params.projectId} onChange={(e) => set({ projectId: e.target.value })}>
+            <select id="projectId" value={params.projectId} onChange={(e) => {
+              const pid = e.target.value;
+              const proj = projects.find((p) => p.id === pid);
+              // 选中项目时带入目标总报价（取项目投标报价金额）
+              set({ projectId: pid, ...(proj && proj.bid_amount ? { targetTotal: String(proj.bid_amount) } : {}) });
+            }}>
               <option value="">— 请先选择关联投标项目 —</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
           <div style={{ display: 'flex', gap: 10 }}>

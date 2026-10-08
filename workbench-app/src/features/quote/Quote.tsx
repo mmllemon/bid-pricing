@@ -1,11 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { computeCompliance, computeInputVat, marginRatePercent, type QuoteResult } from './quoteCalc';
 import { QuoteParams, VOLT_DEFAULT_COMP } from './QuoteParams';
 import { QuoteKpi } from './QuoteKpi';
 import { QuoteTable } from './QuoteTable';
 import { QuotePreview } from './QuotePreview';
 import { QuoteReady, StatusCapsule, computeReady } from './QuoteReady';
-import { previewQuote, optimizeQuote } from './quoteApi';
+import { QuoteActions } from './QuoteActions';
+import { previewQuote, optimizeQuote, listOverviewProjects, finalizeOverview, markPlanFinalized, type OverviewProject } from './quoteApi';
 import type { QuotePreviewResult } from './quoteApi';
 import { buildTaxOverride, type TaxComp } from './quoteCalc';
 
@@ -58,6 +59,12 @@ export default function QuotePage() {
   const [calculating, setCalculating] = useState(false);
   const [message, setMessage] = useState<{ text: string; kind: 'info' | 'error' | 'success' } | null>(null);
   const [taxComp, setTaxComp] = useState<TaxComp[]>(VOLT_DEFAULT_COMP);
+  const [projects, setProjects] = useState<OverviewProject[]>([]);
+
+  // 拉「关联投标项目」下拉（仅投标阶段）
+  useEffect(() => {
+    void listOverviewProjects().then((list) => setProjects(list.filter((p) => !p.stage || p.stage === '投标')));
+  }, []);
   const set = (patch: Partial<QuoteParamsState>) => setParams((s) => ({ ...s, ...patch }));
 
   const onFile = (kind: 'cap' | 'cost', f: File | null) => {
@@ -150,6 +157,30 @@ export default function QuotePage() {
 
   const hasResult = Boolean(result);
 
+  /** 定稿并回写项目经营概览（仅写投标报价金额）。 */
+  const runFinalize = useCallback(async () => {
+    const amt = Number(params.targetTotal);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setMessage({ text: '定稿回写取消：目标总报价为空或非正数，没有可写回的金额。请先填写有效的目标总报价。', kind: 'error' });
+      return;
+    }
+    if (!params.projectId) {
+      setMessage({ text: '定稿回写需要先选择「关联投标项目」。', kind: 'error' });
+      return;
+    }
+    const proj = projects.find((p) => p.id === params.projectId);
+    const ok = window.confirm(`将本次目标总报价 ${amt.toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元写回为「${proj?.name ?? ''}」的投标报价金额？投标成本测算不随本次回写，请在「项目经营概览」中手动填写。`);
+    if (!ok) return;
+    try {
+      await finalizeOverview(params.projectId, String(amt));
+      const planId = result?.plan_id as string | undefined;
+      if (planId) await markPlanFinalized(planId);
+      setMessage({ text: `已定稿并回写项目经营概览：该项目的投标报价金额已更新为 ${amt.toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元。`, kind: 'success' });
+    } catch (e) {
+      setMessage({ text: `定稿回写失败：${(e as Error).message}`, kind: 'error' });
+    }
+  }, [params.targetTotal, params.projectId, projects, result]);
+
   return (
     <div className="page page-quote" id="quoteView">
       <div className="breadcrumb">投标报价 <span>/</span> 优化沙盘</div>
@@ -166,6 +197,7 @@ export default function QuotePage() {
           set={set}
           comp={taxComp}
           setComp={setTaxComp}
+          projects={projects}
           capFile={capName}
           costFile={costName}
           onFile={onFile}
@@ -180,7 +212,11 @@ export default function QuotePage() {
           {!hasResult && preview && <QuotePreview res={preview} />}
           {hasResult && <StatusCapsule text="推演完成" />}
           {hasResult && <QuoteKpi result={result} compliance={compliance} vat={vat} marginRate={margin} />}
-          {hasResult && <QuoteTable items={(result?.items ?? []) as never} totalCount={(result?.items ?? []).length} />}
+          {hasResult && <QuoteTable
+            items={(result?.items ?? []) as never}
+            totalCount={(result?.items ?? []).length}
+            actions={<QuoteActions result={result as QuoteResult} savedPlan={Boolean(result?.plan_id)} canFinalize={Boolean(params.projectId)} onFinalize={runFinalize} />}
+          />}
         </section>
       </div>
     </div>

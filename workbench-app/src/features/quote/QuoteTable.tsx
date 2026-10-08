@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { filterDashItems, sortDashItems, pageDashItems, ratioTagClass, type DashFilter, type QuoteItem } from './quoteCalc';
 
 /**
@@ -10,7 +11,7 @@ const fmt = (v: unknown, d = 2) => {
   return Number.isFinite(n) ? n.toLocaleString('zh-CN', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—';
 };
 
-export function QuoteTable({ items, totalCount }: { items: QuoteItem[]; totalCount: number }) {
+export function QuoteTable({ items, totalCount, actions }: { items: QuoteItem[]; totalCount: number; actions?: ReactNode }) {
   const [filter, setFilter] = useState<DashFilter>('all');
   // 毛利排序：由 KPI 毛利卡穿透触发（块 3 接），当前保留状态位
   const [sortMargin] = useState(false);
@@ -34,7 +35,7 @@ export function QuoteTable({ items, totalCount }: { items: QuoteItem[]; totalCou
           )}
         </div>
         <div className="table-toolbar-side">
-          <div className="result-actions" id="resultActions" />
+          {actions ?? <div className="result-actions" id="resultActions" />}
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="tabular" id="tableCount">合计清单项: {totalCount} 项（显示 {rows.length}）</span>
             <span style={{ color: 'var(--text-tertiary)' }}>共 10 列，可左右滚动查看</span>
@@ -76,22 +77,29 @@ export function QuoteTable({ items, totalCount }: { items: QuoteItem[]; totalCou
               const ratio = Number(row['报价比率']);
               const qty = Number(row['工程量'] ?? 0);
               const quote = Number(row['最优报价单价'] ?? 0);
+              const total = qty * quote;
               const tag = ratioTagClass(row);
-              const ratioPercent = Number.isFinite(ratio) ? `${(ratio * 100).toFixed(1)}%` : '—';
+              const ratioFinite = Number.isFinite(ratio);
+              const ratioPercent = ratioFinite ? `${(ratio * 100).toFixed(1)}%` : '—';
               const tagLabel = tag === 'risk' ? (row['报价状态'] === 'MANUAL_REVIEW' ? '人工报价' : '需复核')
                 : tag === 'early' ? `早结倾斜 ${ratioPercent}` : `平准 ${ratioPercent}`;
               return (
                 <tr key={i}>
-                  <td>{String(row['项目编码'] ?? '')}</td>
-                  <td>{String(row['子目名称与规格'] ?? '')}</td>
-                  <td>{String(row['单位'] ?? '')}</td>
-                  <td className="num">{fmt(qty)}</td>
-                  <td className="num">{fmt(row['最高限价'])}</td>
-                  <td className="num">{fmt(row['有效成本'])}</td>
-                  <td className="num">{fmt(quote)}</td>
-                  <td className="num">{ratioPercent}</td>
-                  <td className="num">{fmt(qty * quote)}</td>
-                  <td><span className={`tag ${tag}`}>{tagLabel}</span></td>
+                  <td className="tabular cell-code">{String(row['项目编码'] ?? '')}</td>
+                  <td><strong>{String(row['项目名称'] ?? '')}</strong></td>
+                  <td>{String(row['单位'] ?? '—')}</td>
+                  <td className="num tabular">{fmt(qty, 3)}</td>
+                  <td className="cap num tabular">{fmt(row['最高限价'])}</td>
+                  <td className="cost num tabular">{fmt(row['有效成本单价'] ?? row['含税成本单价'])}</td>
+                  <td className="quote num tabular">{fmt(quote)}</td>
+                  <td className="num tabular">
+                    <span className="ratio-pill-cell">
+                      <span className="mini-progress"><span className="mini-progress-fill" style={{ width: `${ratioFinite ? Math.min(ratio * 100, 100) : 0}%` }} /></span>
+                      <span>{ratioFinite ? ratioPercent : '—'}</span>
+                    </span>
+                  </td>
+                  <td className="num tabular cell-total">{fmt(total)}</td>
+                  <td><span className={`status-tag ${tag}`}>{tagLabel}</span><span className="note-cell">{String(row['说明'] ?? '')}</span></td>
                 </tr>
               );
             })}

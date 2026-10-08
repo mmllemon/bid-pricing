@@ -90,9 +90,13 @@ export function getModuleLevels(modId: string | null): number {
 export function targets(
   L: { size: { w: number; h: number }; stage: Stage; mod: string | null; branch: string | null; time: number; reduced?: boolean; docked?: boolean },
   t: number,
+  itemOverride?: PortalItem[] | null,
 ): Layout {
   const W = L.size.w;
   const H = L.size.h;
+  // 真数据源 override（2026-10-08）：有接口数据时用它算数量
+  const leafItemsOf = (mod: string, branch: string | null): PortalItem[] =>
+    itemOverride ?? getItems(mod, branch as string);
 
   // 停靠态（2026-10-08 Step B）：选中模块钉在左侧成侧边导航，其余淡出
   if (L.docked && L.stage === 'module' && L.mod) {
@@ -178,7 +182,7 @@ export function targets(
     if (modLevels <= 2) {
       res.branches = null;
       // 扁平化所有分支的 items
-      const allItems = getBranches(L.mod as string).flatMap((b) => getItems(L.mod as string, b.id));
+      const allItems = itemOverride ?? getBranches(L.mod as string).flatMap((b) => getItems(L.mod as string, b.id));
       const ln = allItems.length;
       const lSpan = Math.min(H - 150, Math.max(0, ln - 1) * 60);
       res.leaves = { x: col2_x, y0: cy2 - lSpan / 2, gap: ln > 1 ? lSpan / (ln - 1) : 0 };
@@ -188,7 +192,7 @@ export function targets(
       const bSpan = Math.max(0, bn - 1) * 76;
       res.branches = { x: col2_x, y0: cy2 - bSpan / 2, gap: bn > 1 ? bSpan / (bn - 1) : 0 };
 
-      const leafItems = getItems(L.mod as string, L.branch as string);
+      const leafItems = leafItemsOf(L.mod as string, L.branch);
       const ln = leafItems.length;
       const lSpan = Math.min(H - 150, Math.max(0, ln - 1) * 60);
       res.leaves = { x: col3_x, y0: cy2 - lSpan / 2, gap: ln > 1 ? lSpan / (ln - 1) : 0 };
@@ -203,6 +207,8 @@ export class PortalEngine {
   private sv: Sv = { orbits: [], modThreads: {}, branchThreads: [], leafThreads: [] };
   private raf = 0;
   private lastTime = 0;
+  /** 真数据源 override（2026-10-08）：React 把接口数据灌进来，引擎定位用它而不用静态 getItems */
+  private itemOverride: PortalItem[] | null = null;
   private state = {
     stage: 'hub' as Stage,
     mod: null as string | null,
@@ -305,7 +311,7 @@ export class PortalEngine {
     this.sv.leafThreads.forEach((it) => it.g.remove());
     this.sv.leafThreads = [];
 
-    getItems(mod.id, this.state.branch as string).forEach(() => {
+    this.getLeafItems(mod.id, this.state.branch).forEach(() => {
       const g = document.createElementNS(NS, 'g');
       const path = document.createElementNS(NS, 'path');
       path.setAttribute('fill', 'none');
@@ -334,8 +340,9 @@ export class PortalEngine {
     if (lv > 2 && !brId && brs.length > 0) brId = (brs.find((b) => b.isDefault) ?? brs[0]).id;
 
     const now = performance.now();
-    // flat 模式：leafState 按扁平化 items 初始化
-    const flatItems = lv <= 2 ? brs.flatMap((b) => getItems(modId, b.id)) : getItems(modId, brId);
+    // flat 模式：leafState 按扁平化 items 初始化；有 override 时用接口数据
+    const flatItems = this.itemOverride
+      ?? (lv <= 2 ? brs.flatMap((b) => getItems(modId, b.id)) : getItems(modId, brId));
     Object.assign(this.state, {
       stage: 'module' as Stage,
       mod: modId,
@@ -348,6 +355,22 @@ export class PortalEngine {
     });
     this.rebuildBranchSvg(mod);
     this.rebuildLeafSvg(mod);
+  }
+
+  /** 设置真数据源（React 调）：有接口数据时引擎用它定位，否则用静态 */
+  setItemOverride(items: PortalItem[] | null) {
+    this.itemOverride = items;
+    // 重置 leafState 以匹配新数量
+    if (items) {
+      this.state.leafState = items.map(() => null);
+      this.state.leafStart = performance.now();
+    }
+  }
+
+  /** 取叶子项：优先 override，否则静态 */
+  private getLeafItems(mod: string, branch: string | null): PortalItem[] {
+    if (this.itemOverride) return this.itemOverride;
+    return getItems(mod, branch as string);
   }
 
   /** 停靠/取消停靠（2026-10-08 Step B）：抽屉展开时选中模块钉在左侧 */
@@ -363,7 +386,7 @@ export class PortalEngine {
     this.state.branch = branchId;
     this.state.item = null;
     this.state.leafStart = performance.now();
-    this.state.leafState = getItems(this.state.mod, branchId).map(() => null);
+    this.state.leafState = this.getLeafItems(this.state.mod, branchId).map(() => null);
     this.rebuildLeafSvg(mod);
   }
 
@@ -446,7 +469,7 @@ export class PortalEngine {
 
     const t = L.time;
     const S = L.springs;
-    const T = targets(L, t);
+    const T = targets(L, t, this.itemOverride);
 
     // 1. 中心核心弹簧
     const ox = spring(S.orb.x, T.orb.x, dt);
@@ -603,10 +626,11 @@ export class PortalEngine {
     const isFlat = T.leaves && L.mod && !L.branch && getModuleLevels(L.mod) <= 2;
     if ((T.leaves && L.mod && L.branch) || isFlat) {
       const currentMod2 = MODULES.find((m) => m.id === L.mod);
-      // 可变深度：flat 模式用扁平化 items，origin 从模块位置算
-      const leafItems = isFlat
-        ? getBranches(L.mod as string).flatMap((b) => getItems(L.mod as string, b.id))
-        : getItems(L.mod as string, L.branch as string);
+      // 可变深度：flat 模式用扁平化 items，origin 从模块位置算；有 override 时用接口数据
+      const leafItems = this.itemOverride
+        ?? (isFlat
+          ? getBranches(L.mod as string).flatMap((b) => getItems(L.mod as string, b.id))
+          : getItems(L.mod as string, L.branch as string));
       const branches2 = getBranches(L.mod as string);
       const activeBrIdx = branches2.findIndex((b) => b.id === L.branch);
       const activeBrState = L.branchState[activeBrIdx];

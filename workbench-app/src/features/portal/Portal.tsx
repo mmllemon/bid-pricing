@@ -148,6 +148,17 @@ export default function PortalPage() {
   const currentBranch = branches.find((b) => b.id === branch);
   const currentItem = leafItems.find((it) => it.id === item);
 
+  // 真数据源同步给引擎（2026-10-08）：接口数据到了就灌给引擎定位，否则清掉用静态
+  useEffect(() => {
+    const eng = engineRef.current;
+    if (!eng) return;
+    if (fromApi) {
+      eng.setItemOverride(apiItems);
+    } else {
+      eng.setItemOverride(null);
+    }
+  }, [fromApi, apiItems]);
+
   const totalItems = useMemo(
     () => MODULES.reduce((s, m) => s + getItems(m.id).length, 0),
     [],

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { PortalItem, PortalModule } from './portalData';
 import { ExpandableCard } from './ExpandableCard';
 import { getPortalConfig } from './portalConfig';
@@ -28,14 +28,11 @@ export function PortalDrawer({
   docked?: boolean;
 }) {
   const [tab, setTab] = useState('tab-overview');
-  const [cardExpanded, setCardExpanded] = useState(false);
+  // docked 是唯一源（2026-10-08 收敛：删本地 cardExpanded，单源=引擎）
+  const expanded = Boolean(docked);
   const drawerRef = useRef<HTMLElement>(null);
   const firstRectRef = useRef<DOMRect | null>(null);
 
-  // docked 变 false（ESC/返回）时强制收起，避免 stale 的 true 导致下次直接展开
-  useEffect(() => {
-    if (!docked) setCardExpanded(false);
-  }, [docked]);
   // 跟踪 item 切换以重置展开态（必须在 early return 之前，Hooks 规则）
   const [lastItemId, setLastItemId] = useState<string | null>(null);
 
@@ -47,12 +44,12 @@ export function PortalDrawer({
       firstRectRef.current = el.getBoundingClientRect();
     }
     onExpandChange?.(true);
-    setCardExpanded(true);
+    // expanded 由 docked prop 驱动，父级 syncFromEngine 后重渲染
   };
 
   // React 提交后（DOM 已是 Last 态）再量尺寸、播动画
   useLayoutEffect(() => {
-    if (!cardExpanded) return;
+    if (!expanded) return;
     const el = drawerRef.current;
     const first = firstRectRef.current;
     if (!el || !first) return;
@@ -82,7 +79,7 @@ export function PortalDrawer({
       el.style.transformOrigin = '';
     }, 650);
     return () => clearTimeout(timer);
-  }, [cardExpanded]);
+  }, [expanded]);
 
   if (!module || !item) {
     return <aside className={`portal-analysis-drawer${open ? ' open' : ''}`} />;
@@ -94,20 +91,15 @@ export function PortalDrawer({
 
   const isBiz = module.id === 'biz' && Boolean(item.profile);
 
-  // 重置展开态（切换卡片时）；若已在展开态则保持展开，只换数据
+  // 切换卡片时只更新 lastItemId；展开态由 docked 单源控制，切项目保持展开
   if (lastItemId !== item.id) {
     setLastItemId(item.id);
-    if (!cardExpanded) {
-      setCardExpanded(false);
-      onExpandChange?.(false);
-    }
-    // 已展开时：保持 cardExpanded=true，docked 继续，ExpandableCard 按新 item.id 重拉数据
   }
 
   return (
     <aside
       ref={drawerRef}
-      className={`portal-analysis-drawer${open ? ' open' : ''}${cardExpanded ? ' expanded' : ''}`}
+      className={`portal-analysis-drawer${open ? ' open' : ''}${expanded ? ' expanded' : ''}`}
       role="complementary"
       aria-label="深度分析"
     >
@@ -127,7 +119,7 @@ export function PortalDrawer({
         <ExpandableCard
           module={module}
           item={item}
-          expanded={cardExpanded}
+          expanded={expanded}
           onExpand={doExpand}
         />
       ) : isBiz ? (

@@ -57,7 +57,7 @@ export default function PortalPage() {
     return [];
   })();
 
-  /** 把引擎状态同步到 React 低频状态（交互后调用，非每帧）。 */
+  /** 把引擎状态同步到 React 低频状态（交互后调用，非每帧）。docked 唯一源是引擎。 */
   const syncFromEngine = useCallback(() => {
     const s = engineRef.current?.current;
     if (!s) return;
@@ -66,6 +66,7 @@ export default function PortalPage() {
     setBranch(s.branch);
     setItem(s.item);
     setPaused(s.paused);
+    setDocked(s.docked);
   }, []);
 
   // 建引擎（挂载一次）
@@ -117,14 +118,13 @@ export default function PortalPage() {
 
   const doReturnToModule = useCallback(() => {
     engineRef.current?.returnToModule();
-    setDocked(false);
-    syncFromEngine();
+    syncFromEngine(); // docked 由引擎单源同步
   }, [syncFromEngine]);
 
   const doStepBack = useCallback(() => {
     engineRef.current?.stepBack();
-    setDocked(false); // ESC 回退时清 docked（2026-10-08 修）
-    syncFromEngine();
+    syncFromEngine(); // docked 由引擎单源同步
+
   }, [syncFromEngine]);
 
   const togglePause = useCallback(() => {
@@ -335,8 +335,9 @@ export default function PortalPage() {
           item={currentItem}
           onClose={doReturnToModule}
           onExpandChange={(expanded) => {
+            // docked 唯一源是引擎：设完同步回 React（单源，不再本地 setDocked）
             engineRef.current?.setDocked(expanded);
-            setDocked(expanded);
+            syncFromEngine();
           }}
           docked={docked}
           onEnter={() => {

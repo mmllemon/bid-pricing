@@ -279,7 +279,7 @@ export default function SettingsPage() {
               错误信息：{backendMsg}
             </div>
           )}
-          <button className="nb-btn nb-btn--denim" style={{ marginTop: 16 }} onClick={loadBackend}>
+          <button className="nb-btn nb-btn--denim mt-3" onClick={loadBackend}>
             重试连接
           </button>
         </div>

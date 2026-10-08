@@ -94,7 +94,7 @@ export default function ScanPage() {
               {selected.clusters.length === 0 ? (
                 <p className="nb-muted" style={{ fontSize: 13 }}>未识别到明显的项目簇。</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="flex flex-col gap-2">
                   {selected.clusters.map((c) => (
                     <div key={c.name} className="cluster-row">
                       <span className="nb-badge">{c.fileCount} 文件</span>

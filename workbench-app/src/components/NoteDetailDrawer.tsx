@@ -217,7 +217,7 @@ export default function NoteDetailDrawer({ noteId, title, onClose }: Props) {
           <div className="drawer-body">
             {/* 标题/发布时间 */}
             {(d.title || d.publishedAt) && (
-              <div style={{ marginBottom: 16 }}>
+              <div className="mb-3">
                 {d.publishedAt && <div className="nb-muted" style={{ fontSize: 12 }}>发布于 {d.publishedAt}</div>}
               </div>
             )}

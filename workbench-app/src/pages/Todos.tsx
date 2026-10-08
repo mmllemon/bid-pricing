@@ -789,8 +789,7 @@ export default function TodosPage() {
                 <label className="setting-label">截止时间</label>
                 <input className="nb-input" type="datetime-local" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
                 <button
-                  className="nb-btn nb-btn--ghost"
-                  style={{ marginTop: 8 }}
+                  className="nb-btn nb-btn--ghost mt-2"
                   onClick={async () => {
                     await api.editTodo(selected.id, {
                       title: selected.title,

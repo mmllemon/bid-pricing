@@ -50,7 +50,7 @@ export function QuoteReady({
           )}
         </button>
       </div>
-      {balanceText && <div className="hint" style={{ marginTop: 8 }}>{balanceText}</div>}
+      {balanceText && <div className="hint mt-2">{balanceText}</div>}
     </div>
   );
 }

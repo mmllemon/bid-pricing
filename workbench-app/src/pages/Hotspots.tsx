@@ -1019,7 +1019,7 @@ export default function HotspotsPage() {
             </div>
             <div className="drawer-body">
               {curatedDrawer.summary && (
-                <div className="kb-draft-block" style={{ marginBottom: 16 }}>
+                <div className="kb-draft-block mb-3">
                   {curatedDrawer.summary}
                 </div>
               )}

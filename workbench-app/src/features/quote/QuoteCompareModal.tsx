@@ -90,7 +90,7 @@ export function QuoteCompareModal({ open, res, onClose }: { open: boolean; res: 
 
           {diffEntries.length > 0 && (
             <>
-              <div className="result-head" style={{ marginTop: 16 }}>
+              <div className="result-head mt-3">
                 <div><h3>单价差异明细（相对基准）</h3><p>仅列出基准中存在报价的项目；空表示该方案未含此项目。</p></div>
               </div>
               <div className="table-wrap">

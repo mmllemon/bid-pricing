@@ -491,7 +491,7 @@ export default function BizDetailPage() {
           <h1>{project ? (project.short_name || project.name || '项目主页') : '项目主页'}</h1>
         </div>
         {project && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="flex items-center gap-2">
             <span className="nb-badge">{project.stage || '—'}</span>
             <button type="button" className="nb-btn nb-btn--ghost" onClick={() => setShowEdit(true)}>编辑项目</button>
           </div>
@@ -504,7 +504,7 @@ export default function BizDetailPage() {
       {project && !loading && (
         <>
           {/* KPI 一览 */}
-          <div className="biz-metrics" style={{ marginBottom: 16 }}>
+          <div className="biz-metrics mb-3">
             <div className="biz-metric"><span className="l">总限价</span><span className="v">{yf(project.limit_total)}</span></div>
             <div className="biz-metric"><span className="l">投标报价</span><span className="v">{yf(project.bid_amount)}</span></div>
             <div className="biz-metric"><span className="l">总毛利</span><span className="v">{yf(project.gross_profit)}</span></div>
@@ -562,7 +562,7 @@ export default function BizDetailPage() {
                 ))}
               </div>
               {summary && (
-                <div style={{ marginTop: 16 }}>
+                <div className="mt-3">
                   <h3 style={{ fontSize: 15 }}>资金与成本</h3>
                   <div className="biz-metrics">
                     <div className="biz-metric"><span className="l">已批签证</span><span className="v">{yf(summary.visa_approved)}</span></div>

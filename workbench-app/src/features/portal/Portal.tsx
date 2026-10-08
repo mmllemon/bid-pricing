@@ -117,11 +117,13 @@ export default function PortalPage() {
 
   const doReturnToModule = useCallback(() => {
     engineRef.current?.returnToModule();
+    setDocked(false);
     syncFromEngine();
   }, [syncFromEngine]);
 
   const doStepBack = useCallback(() => {
     engineRef.current?.stepBack();
+    setDocked(false); // ESC 回退时清 docked（2026-10-08 修）
     syncFromEngine();
   }, [syncFromEngine]);
 

@@ -336,6 +336,7 @@ export class PortalEngine {
   selectModule(modId: string, targetBranchId?: string) {
     const mod = MODULES.find((m) => m.id === modId);
     if (!mod) return;
+    this.state.docked = false; // 切模块时清 docked（2026-10-08 修）
     const brs: PortalBranch[] = mod.branches || [];
     // 可变深度（2026-10-08）：levels<=2 不自动选分支，走 flat 模式
     const lv = getModuleLevels(modId);
@@ -407,10 +408,11 @@ export class PortalEngine {
     if (this.state.stage !== 'item') return;
     this.state.stage = 'module';
     this.state.item = null;
+    this.state.docked = false; // 退出展开态，清 docked（2026-10-08 修：ESC 后布局乱）
   }
 
   returnToHub() {
-    Object.assign(this.state, { stage: 'hub' as Stage, mod: null, branch: null, item: null, branchState: [], leafState: [] });
+    Object.assign(this.state, { stage: 'hub' as Stage, mod: null, branch: null, item: null, docked: false, branchState: [], leafState: [] });
     this.sv.branchThreads.forEach((it) => it.g.remove());
     this.sv.branchThreads = [];
     this.sv.leafThreads.forEach((it) => it.g.remove());

@@ -92,10 +92,18 @@ jobs:
       # 退出码语义：gate-check 只在 **Gate 0a 未通过**时返回 1。
       # 这是刻意设计——Gate 0b 只挡 WP4 求解层，业务口径未就位不该让 WP1/WP2/WP3 的
       # 开发被判红。所以 Gate 0b 的契约完整性由下面那条独立判据负责。
+      #
+      # ⚠ 步骤间默认「前一步失败则后一步 skip」——那会让下面四道正交判据全被遮蔽。
+      #   实测代价：Gate 因行尾问题 BLOCKED 的那段时期，制品完整性 / contract-check /
+      #   指纹自检 / 全量测试从未执行过（job 日志里全是 [skipped]），而 CI 存在的理由
+      #   正是防「判据写了却没人跑」。故显式 !cancelled()：只要没被取消就都要跑，
+      #   让一次 push 暴露**全部**问题，而不是只暴露最前面的那个。
+      #   用 !cancelled() 而非 always()：作业被取消时不徒劳地跑子进程。
       - name: Gate 0 机械判据（退出码＝Gate 0a）
         run: python -m bidpricing.cli gate-check --contract-date 2026-03-01
 
       - name: 契约制品完整性（注册表hash == 制品内容）
+        if: ${{ !cancelled() }}
         run: |
           python - <<'PY'
           from bidpricing.artifact import compute_artifact_hash, load_registry, parse_records
@@ -129,13 +137,17 @@ jobs:
           PY
 
       - name: 跨制品一致性（说法是否自相矛盾）
+        if: ${{ !cancelled() }}
         run: python -m bidpricing.cli contract-check
 
       - name: 规则集指纹自检
+        if: ${{ !cancelled() }}
         run: python -m bidpricing.cli ruleset-selftest
 
       - name: 全量测试
         # pytest 兼容 unittest 风格 + 真正执行 pytest 风格模块（见上）。
+        # ⚠ 这一条此前从未执行过（被 Gate 失败遮蔽）。
+        if: ${{ !cancelled() }}
         run: python -m pytest tests/ -q
 
   frontend-smoke:

@@ -38,6 +38,10 @@
 *.toml  text eol=lf
 *.txt   text eol=lf
 *.sh    text eol=lf
+# run.ps1 靠 UTF-8 BOM 保命（见 tests/test_run_script.py），字节原样保真即可：
+# 它历史上一直是 LF 且 PowerShell 5.1 跳得好好的，写 eol=crlf 反而会在 checkout 时
+# 无谓改文件。故取 -text（不转换、也不依赖克隆者的 autocrlf）。
+*.ps1   -text
 
 # --- 受控制品与配置：字节原样保真，禁止任何行尾转换（必须写在上面之后）---
 # 覆盖 config/ 全域，而不只是当前被 hash 的 7 个：新增制品一旦被 freeze 进注册表，

@@ -1,9 +1,8 @@
 /**
  * 报价域 API 客户端（P3 前端整合）
  * 同源基址：浏览器只访问 :3456，报价域 /api/* 由 workbench-server 反代到 :8000（见 quoteProxy.ts）。
- * 与原生 app.js 的 API_BASE 语义一致，但统一走同源相对路径，不再硬编码端口。
+ * P2-7：统一走 apiClient（超时 30s + 统一错误解析）。
  */
-const BASE = '/api';
 
 export interface QuotePreviewResult {
   status: string;
@@ -22,16 +21,12 @@ export interface QuotePreviewResult {
   project_id?: string;
 }
 
+/** P2-7：改用统一 apiClient（超时 30s + 统一错误解析） */
+import { api } from '../../api/client';
+
 async function postForm<T>(path: string, form: FormData): Promise<T> {
-  const r = await fetch(BASE + path, { method: 'POST', body: form });
-  const text = await r.text().catch(() => '');
-  let json: unknown = {};
-  try { json = text ? JSON.parse(text) : {}; } catch { json = { status: 'ERROR', reason: text }; }
-  if (!r.ok) {
-    const reason = (json as { reason?: string; detail?: string })?.reason || (json as { detail?: string })?.detail || `HTTP ${r.status}`;
-    throw new Error(reason);
-  }
-  return json as T;
+  // FormData 不走 JSON Content-Type，用 api.request 透传
+  return api.request<T>(path, { method: 'POST', body: form } as RequestInit);
 }
 
 /** 预览导入资料（限价 + 成本两个 xlsx）。 */
@@ -54,8 +49,7 @@ export interface OverviewProject {
   id: string; name: string; short_name?: string; stage?: string; bid_amount?: string; limit_total?: string;
 }
 export async function listOverviewProjects(): Promise<OverviewProject[]> {
-  const r = await fetch(BASE + '/project/overview/list');
-  const j = await r.json().catch(() => ({}));
+  const j = await api.request<{ projects?: OverviewProject[] }>('/project/overview/list');
   return Array.isArray(j?.projects) ? j.projects : [];
 }
 
@@ -69,7 +63,7 @@ export function finalizeOverview(overviewId: string, bidAmount: string) {
 
 /** 把当前方案标记为已定稿（write=0：不按方案存储值二次覆盖刚回写的金额）。 */
 export async function markPlanFinalized(planId: string): Promise<void> {
-  await fetch(`${BASE}/project/mark-finalized?id=${encodeURIComponent(planId)}&write=0`, { method: 'POST' }).catch(() => { /* 标记失败不阻断回写 */ });
+  await api.request(`/project/mark-finalized?id=${encodeURIComponent(planId)}&write=0`, { method: 'POST' }).catch(() => { /* 标记失败不阻断回写 */ });
 }
 
 /* ==================== 方案组（/api/group/*） ==================== */
@@ -95,8 +89,7 @@ function formData(pairs: Record<string, string>): FormData {
 
 /** 拉当前项目的方案组。 */
 export async function listGroups(projectId: string): Promise<PlanGroup[]> {
-  const r = await fetch(`${BASE}/group/list?project_id=${encodeURIComponent(projectId)}`);
-  const j = await r.json().catch(() => ({}));
+  const j = await api.request<{ groups?: PlanGroup[] }>(`/group/list?project_id=${encodeURIComponent(projectId)}`);
   return Array.isArray(j?.groups) ? j.groups : [];
 }
 export function renameGroup(groupId: string, name: string) { return postForm<{ status: string; reason?: string }>('/group/rename', formData({ group_id: groupId, name })); }
@@ -111,9 +104,8 @@ export interface PlanRecord {
   preview?: unknown;
 }
 export async function getPlan(id: string): Promise<PlanRecord | null> {
-  const r = await fetch(`${BASE}/project/get?id=${encodeURIComponent(id)}`);
-  const j = await r.json().catch(() => ({}));
-  return j?.status === 'PASS' ? j.plan : null;
+  const j = await api.request<{ status?: string; plan?: PlanRecord }>(`/project/get?id=${encodeURIComponent(id)}`);
+  return j?.status === 'PASS' ? j.plan ?? null : null;
 }
 
 /** 按当前参数重算指定方案。 */
@@ -143,8 +135,7 @@ export interface AuditRow {
   project_id?: string; plan_id?: string; detail?: unknown;
 }
 export async function listAudit(limit = 100): Promise<AuditRow[]> {
-  const r = await fetch(`${BASE}/audit/list?limit=${limit}`);
-  const j = await r.json().catch(() => ({}));
+  const j = await api.request<{ status?: string; reason?: string; audit?: AuditRow[] }>(`/audit/list?limit=${limit}`);
   if (j?.status !== 'PASS') throw new Error(j?.reason || '读取失败');
   return Array.isArray(j.audit) ? j.audit : [];
 }

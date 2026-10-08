@@ -39,16 +39,30 @@ import { parseApiError, parseNetworkError } from './parseApiError';
 
 const BASE = '/api';
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+// P2-7：统一超时（30s），避免请求 hang 死无反馈
+const TIMEOUT_MS = 30_000;
+
+async function request<T>(path: string, options?: RequestInit & { timeout?: number }): Promise<T> {
   const method = String(options?.method || 'GET').toUpperCase();
+  const timeout = options?.timeout ?? TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
   let res: Response;
   try {
+    // FormData 让浏览器自动设 multipart boundary，不手动设 Content-Type
+    const isForm = options?.body instanceof FormData;
     res = await fetch(`${BASE}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
+      ...(isForm ? {} : { headers: { 'Content-Type': 'application/json' } }),
       ...options,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw parseNetworkError(method, `${path}（请求超时 ${timeout}ms）`);
+    }
     throw parseNetworkError(method, path);
+  } finally {
+    clearTimeout(timer);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -67,6 +81,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // P2-7：暴露底层 request，供未迁移的裸 fetch 逐步接入统一错误处理
+  request,
   // 健康检查
   health: () => request<{ ok: boolean; time: string; buildId?: string; promptVersion?: string; schemaVersion?: string }>('/health'),
 

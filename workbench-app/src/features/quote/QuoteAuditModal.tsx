@@ -9,6 +9,7 @@ const AUDIT_ACTIONS: Record<string, string> = {
   'quote.optimize': '测算优化', 'plan.save': '保存方案', 'plan.finalize': '方案定稿',
   'plan.delete': '删除方案', 'group.create': '新建方案组', 'group.copy': '复制方案组',
   'group.delete': '删除方案组', 'group.rename': '重命名方案组', 'plan.compare': '方案对比',
+  'group.finalize': '方案组定稿', 'plan.recompute': '方案重算', 'plan.copy': '复制方案',
 };
 
 function detailText(d: unknown): string {

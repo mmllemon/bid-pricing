@@ -660,6 +660,9 @@ def group_create(project_id: str = Form(""), project_name: str = Form(""),
                  name: str = Form(""), target_total: float = Form(None)) -> JSONResponse:
     g = create_group(project_id.strip() or None, project_name.strip() or None,
                      group_name=name.strip() or None, target_total=target_total)
+    # B-P1-9：建组是状态变更起点，无审计则后续 GROUP 操作全无可追溯性。
+    append_audit(CURRENT_USER, "group.create", "PASS",
+                 project_id=project_id.strip() or None, group_id=g.get("group_id"))
     return JSONResponse(status_code=200, content={"status": "PASS", "group": g})
 
 
@@ -671,6 +674,8 @@ def group_rename(group_id: str = Form(...), name: str = Form("")) -> JSONRespons
         return JSONResponse(status_code=409, content={"status": "LOCKED", "reason": str(exc)})
     if not ok:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
+    append_audit(CURRENT_USER, "group.rename", "PASS",
+                 group_id=group_id.strip(), detail={"name": name.strip()})
     return JSONResponse(status_code=200, content={"status": "PASS", "group_id": group_id.strip()})
 
 
@@ -678,6 +683,8 @@ def group_rename(group_id: str = Form(...), name: str = Form("")) -> JSONRespons
 def group_set_finalized(group_id: str = Form(...), finalized: int = Form(1)) -> JSONResponse:
     if not group_finalize(group_id.strip(), finalized=finalized == 1):
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
+    append_audit(CURRENT_USER, "group.finalize", "PASS",
+                 group_id=group_id.strip(), detail={"finalized": finalized == 1})
     return JSONResponse(status_code=200, content={"status": "PASS", "group_id": group_id.strip(), "finalized": finalized == 1})
 
 
@@ -686,6 +693,8 @@ def group_copy(group_id: str = Form(...), name: str = Form("")) -> JSONResponse:
     new = copy_group(group_id.strip(), group_name=name.strip() or None)
     if new is None:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
+    append_audit(CURRENT_USER, "group.copy", "PASS",
+                 group_id=new.get("group_id"), detail={"from": group_id.strip(), "name": new.get("group_name")})
     return JSONResponse(status_code=200, content={"status": "PASS", "group": new})
 
 
@@ -697,6 +706,8 @@ def group_delete(group_id: str = Form(...), keep_plans: int = Form(0)) -> JSONRe
         return JSONResponse(status_code=409, content={"status": "LOCKED", "reason": str(exc)})
     if not ok:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案组不存在或已删除"})
+    append_audit(CURRENT_USER, "group.delete", "PASS",
+                 group_id=group_id.strip(), detail={"keep_plans": keep_plans == 1})
     return JSONResponse(status_code=200, content={"status": "PASS", "deleted": group_id.strip()})
 
 
@@ -724,6 +735,8 @@ def project_copy(id: str, name: str = "") -> JSONResponse:
     copy["finalized"] = False  # 副本不继承定稿状态，避免同项目出现多份『已定稿』
     copy.pop("finalized_at", None)
     save_plan(copy, plan_id=new_id)
+    append_audit(CURRENT_USER, "plan.copy", "PASS",
+                 plan_id=new_id, detail={"from": id, "name": new_name})
     return JSONResponse(status_code=200, content={"status": "PASS", "plan_id": new_id, "name": new_name})
 
 
@@ -785,6 +798,8 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
         save_plan(merged, plan_id=id)
     except (PlanOwnershipError, StoreWriteLockedError) as exc:
         return JSONResponse(status_code=409, content={"status": "BLOCKED", "reason": str(exc)})
+    append_audit(CURRENT_USER, "plan.recompute", "PASS",
+                 project_id=payload.get("project_id"), plan_id=id, detail={"strategy": strategy})
     return JSONResponse(status_code=200, content=payload)
 
 
@@ -797,6 +812,7 @@ def project_delete(id: str) -> JSONResponse:
         return JSONResponse(status_code=409, content={"status": "LOCKED", "reason": str(exc)})
     if not ok:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
+    append_audit(CURRENT_USER, "plan.delete", "PASS", plan_id=id)
     return JSONResponse(status_code=200, content={"status": "PASS", "deleted": id})
 
 
@@ -829,6 +845,8 @@ def project_mark_finalized(id: str, finalized: int = 1, write: int = 1) -> JSONR
         if matched is not None and target not in (None, ""):
             if project_overview.finalize(matched.get("id"), target, ""):
                 wrote = True
+    append_audit(CURRENT_USER, "plan.finalize", "PASS", plan_id=id,
+                 detail={"finalized": finalized == 1, "wrote_back": wrote})
     return JSONResponse(status_code=200, content={"status": "PASS", "finalized": id, "wrote_back": wrote})
 
 
@@ -855,7 +873,12 @@ def project_compare(id: str = Form(...), base: str = Form("")) -> JSONResponse:
     base_id = base.strip() or None
     if base_id is not None and base_id not in {r["id"] for r in records}:
         return JSONResponse(status_code=400, content={"status": "BLOCKED", "reason": f"基准方案 {base_id} 不在本次对比列表中"})
-    return JSONResponse(status_code=200, content=compare_plans(records, base_id=base_id))
+    payload = compare_plans(records, base_id=base_id)
+    # B-P1-9：对比是只读操作，但它是“多方案并列决策”的关键留痕（谁何时比了哪几个方案）。
+    append_audit(CURRENT_USER, "plan.compare", "PASS",
+                 project_id=payload.get("project"),
+                 detail={"plan_ids": payload.get("plan_ids"), "base": base_id})
+    return JSONResponse(status_code=200, content=payload)
 
 
 @app.get("/api/audit/list")

@@ -2,14 +2,13 @@ import { useState } from 'react';
 import { calcCableRows, VOLT_MAT, type CableRow } from './toolsCalc';
 import { ToolShell, NumField, ResultStrip, fmt } from './ToolShell';
 import { useConfirm } from '../../components/confirm';
+import { api } from '../../api/client';
 
 /**
  * 电缆价格速算（P2 前端整合：由 frontend/tool-cable.html + tool-cable.js 迁入 React）
  * 计算走 toolsCalc.calcCableRows（纯函数，有判据）。
  * 保留：电压等级切换覆盖材料系数的 confirm、逐行复制/删除、长江现货拉取。
  */
-
-const API_BASE = (window as unknown as { __API_BASE__?: string }).__API_BASE__ || 'http://localhost:8000';
 
 const emptyCableRow = (matRatio: number | '' = ''): CableRow => ({
   metal: 'cu', spec: '', len: 0, pullPts: 0, pullLen: 0, qty: 1, loss: 1.0, matRatio,
@@ -59,12 +58,11 @@ export default function ToolCable() {
             <button type="button" className="btn-secondary" onClick={async () => {
               setPriceStatus('拉取中…');
               try {
-                const r = await fetch(API_BASE + '/api/metal-prices');
-                const d = await r.json().catch(() => ({}));
-                if (!r.ok || d.status !== 'PASS') throw new Error(d?.error || ('HTTP ' + r.status));
+                const d = await api.request<{ status?: string; error?: string; cu?: number; al?: number; date?: string }>('/metal-prices');
+                if (d.status !== 'PASS') throw new Error(d?.error || '请求失败');
                 if (d.cu) setCu(d.cu);
                 if (d.al) setAl(d.al);
-                setPriceStatus(`已更新（${d.date || '当日'}长江现货）：1#铜 ${fmt(d.cu, 0)} / A00铝 ${fmt(d.al, 0)} 元/吨`);
+                setPriceStatus(`已更新（${d.date || '当日'}长江现货）：1#铜 ${fmt(d.cu ?? 0, 0)} / A00铝 ${fmt(d.al ?? 0, 0)} 元/吨`);
               } catch (e) {
                 setPriceStatus('拉取失败：' + (e as Error).message + '。请确认后端已启动，或手动输入。');
               }

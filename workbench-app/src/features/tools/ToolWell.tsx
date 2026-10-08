@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { calcWell, WELL_UNITS, type WellInput } from './wellCalc';
 import { ToolShell, ResultStrip, fmt } from './ToolShell';
+import { api } from '../../api/client';
 
 /**
  * 电缆井工程量速算（P2 前端整合：由 frontend/tool-well.html + tool-well.js 迁入 React）
@@ -48,9 +49,7 @@ const A5_PRESET: RebarRow[] = [
 
 const emptyRebar = (): RebarRow => ({ no: '', d: 14, len: 1000, span: 0, sp: 150, n: 1, note: '' });
 
-/** 井库后端基地址（与原生工具页同口径）。 */
-const API_BASE = (window as unknown as { __API_BASE__?: string }).__API_BASE__
-  || (typeof location !== 'undefined' && location.hostname ? `${location.protocol}//${location.hostname}:8000` : 'http://localhost:8000');
+/** 井库后端基地址（与原生工具页同口径）。P2-7：已迁到 apiClient，此处保留注释。 */
 
 /** 单根重 kg = 根数 × 单根长(mm)/1000 × (d²×0.00617)。 */
 const rebarKg = (r: RebarRow) => r.n * (r.len / 1000) * rebarUnitKgPerM(r.d);
@@ -112,15 +111,13 @@ export default function ToolWell() {
       },
     };
     try {
-      const listRes = await fetch(`${API_BASE}/api/well-library/list`);
-      const listJson = await listRes.json().catch(() => ({}));
+      const listJson = await api.request<{ items?: unknown[] }>('/well-library/list').catch(() => ({} as { items?: unknown[] }));
       const list = Array.isArray(listJson?.items) ? listJson.items : [];
       list.unshift(rec);
-      const r = await fetch(`${API_BASE}/api/well-library/save`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: list }),
+      const j = await api.request<{ status?: string; reason?: string }>('/well-library/save', {
+        method: 'POST', body: JSON.stringify({ items: list }),
       });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.status !== 'PASS') throw new Error(j?.reason || ('HTTP ' + r.status));
+      if (j.status !== 'PASS') throw new Error(j?.reason || '保存失败');
       setLibMsg(`已保存「${rec.name}」`);
       setSaveName('');
     } catch (e) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { API_BASE, pct, toNum, yf } from './bizShared';
+import { pct, toNum, yf } from './bizShared';
+import { api } from '../api/client';
 import type { ProjectOverview } from './bizShared';
 import { IconClose } from '../components/icons';
 
@@ -29,18 +30,16 @@ export default function BizQuickView({
     setDocCount(null);
     const pid = project.id;
     // 报价方案组数
-    fetch(`${API_BASE}/api/group/list?project_id=${encodeURIComponent(pid)}`)
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((j: unknown) => {
-        const g = (j as { groups?: unknown[] })?.groups;
+    api.request<{ groups?: unknown[] }>(`/group/list?project_id=${encodeURIComponent(pid)}`)
+      .then((j) => {
+        const g = j?.groups;
         setGroupCount(Array.isArray(g) ? g.length : 0);
       })
       .catch(() => setGroupCount(0));
     // 文档数
-    fetch(`${API_BASE}/api/project/docs/list?project_id=${encodeURIComponent(pid)}`)
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((j: unknown) => {
-        const items = (j as { items?: unknown[] })?.items;
+    api.request<{ items?: unknown[] }>(`/project/docs/list?project_id=${encodeURIComponent(pid)}`)
+      .then((j) => {
+        const items = j?.items;
         setDocCount(Array.isArray(items) ? items.length : 0);
       })
       .catch(() => setDocCount(0));

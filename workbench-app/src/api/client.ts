@@ -39,6 +39,24 @@ import { parseApiError, parseNetworkError } from './parseApiError';
 
 const BASE = '/api';
 
+// P2-7：agent token 透传（与 AgentPanel.getToken 约定一致）
+function getAgentToken(): string {
+  try {
+    return sessionStorage.getItem('agent_api_token') || localStorage.getItem('agent_api_token') || '';
+  } catch {
+    return '';
+  }
+}
+
+// P2-7：支持 window.__API_BASE__ 覆盖（与 bizShared.API_BASE 约定一致）
+function apiBase(): string {
+  if (typeof window !== 'undefined') {
+    const override = (window as unknown as { __API_BASE__?: string }).__API_BASE__;
+    if (override) return override.replace(/\/$/, '') + '/api';
+  }
+  return BASE;
+}
+
 // P2-7：统一超时（30s），避免请求 hang 死无反馈
 const TIMEOUT_MS = 30_000;
 
@@ -47,13 +65,19 @@ async function request<T>(path: string, options?: RequestInit & { timeout?: numb
   const timeout = options?.timeout ?? TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
+  // 已带前缀的路径（/agent 等）不拼 /api
+  const url = path.startsWith('/agent') ? path : `${apiBase()}${path}`;
   let res: Response;
   try {
     // FormData 让浏览器自动设 multipart boundary，不手动设 Content-Type
     const isForm = options?.body instanceof FormData;
-    res = await fetch(`${BASE}${path}`, {
-      ...(isForm ? {} : { headers: { 'Content-Type': 'application/json' } }),
-      ...options,
+    const baseHeaders: Record<string, string> = isForm ? {} : { 'Content-Type': 'application/json' };
+    const token = getAgentToken();
+    if (token) baseHeaders['X-API-Token'] = token;
+    const { headers: optHeaders, ...restOpts } = options || {};
+    res = await fetch(url, {
+      ...restOpts,
+      headers: { ...baseHeaders, ...((optHeaders as Record<string, string>) || {}) },
       signal: controller.signal,
     });
   } catch (e) {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IconClose, IconPlus, IconSearch } from '../components/icons';
-import { API_BASE, pct, toNum, yf } from './bizShared';
+import { pct, toNum, yf } from './bizShared';
+import { api } from '../api/client';
 import type { ProjectOverview } from './bizShared';
 import { useNavigate } from 'react-router-dom';
 import PageHead from '../components/PageHead';
@@ -207,9 +208,8 @@ export function BizEditModal({ project, todos, onClose, onSaved }: BizModalProps
     if (project?.id) data.append('pid', project.id);
     setSaving(true);
     try {
-      const r = await fetch(`${API_BASE}/api/project/overview/save`, { method: 'POST', body: data });
-      const j = (await r.json()) as { status?: string; reason?: string };
-      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '保存失败');
+      const j = await api.request<{ status?: string; reason?: string }>('/project/overview/save', { method: 'POST', body: data });
+      if (j.status !== 'PASS') throw new Error(j.reason || '保存失败');
       onSaved();
       onClose();
     } catch (err) {
@@ -229,9 +229,8 @@ export function BizEditModal({ project, todos, onClose, onSaved }: BizModalProps
     const data = new FormData();
     data.append('id', project.id);
     try {
-      const r = await fetch(`${API_BASE}/api/project/overview/delete`, { method: 'POST', body: data });
-      const j = (await r.json()) as { status?: string; reason?: string };
-      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '删除失败');
+      const j = await api.request<{ status?: string; reason?: string }>('/project/overview/delete', { method: 'POST', body: data });
+      if (j.status !== 'PASS') throw new Error(j.reason || '删除失败');
       onSaved();
       onClose();
     } catch (err) {
@@ -372,11 +371,7 @@ export default function BizPage() {
   const load = useCallback(() => {
     setLoading(true);
     setError('');
-    fetch(`${API_BASE}/api/project/overview/list`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ projects?: ProjectOverview[] }>;
-      })
+    api.request<{ projects?: ProjectOverview[] }>('/project/overview/list')
       .then((json) => setProjects(json?.projects ?? []))
       .catch((e: unknown) => {
         setProjects([]);
@@ -388,10 +383,9 @@ export default function BizPage() {
   useEffect(() => {
     load();
     // 全公司资金汇总：失败不阻塞（:8000 未起时仅无资金 KPI）
-    fetch(`${API_BASE}/api/project/exec/summary`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: unknown) => {
-        const s = (j as { summary?: { receivable?: number; fund_pressure?: number | null } })?.summary;
+    api.request<{ summary?: { receivable?: number; fund_pressure?: number | null } }>('/project/exec/summary')
+      .then((j) => {
+        const s = j?.summary;
         if (s) setFund({ receivable: s.receivable ?? 0, fund_pressure: s.fund_pressure ?? null });
       })
       .catch(() => {});
@@ -399,8 +393,7 @@ export default function BizPage() {
 
   useEffect(() => {
     // 待办列表：失败不阻塞项目页（:3456 未起或接口异常时仅无聚合显示）
-    fetch('/api/todos')
-      .then((r) => (r.ok ? r.json() : []))
+    api.request<unknown>('/todos')
       .then((j: unknown) => setTodos(Array.isArray(j) ? (j as TodoLite[]) : []))
       .catch(() => setTodos([]));
   }, []);

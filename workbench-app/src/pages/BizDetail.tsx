@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageHead from '../components/PageHead';
 import { API_BASE, pct, yf } from './bizShared';
+import { api } from '../api/client';
 import type { ExecSummary, ProjectOverview } from './bizShared';
 import { BizEditModal } from './Biz';
 import type { TodoLite } from './Biz';
@@ -180,8 +181,7 @@ function DocsSection({ projectId }: { projectId: string }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch(`${API_BASE}/api/project/docs/list?project_id=${encodeURIComponent(projectId)}`)
-      .then((r) => r.json() as Promise<{ items?: DocItem[] }>)
+    api.request<{ items?: DocItem[] }>(`/project/docs/list?project_id=${encodeURIComponent(projectId)}`)
       .then((j) => setDocs(j.items ?? []))
       .catch(() => setDocs([]))
       .finally(() => setLoading(false));
@@ -199,9 +199,8 @@ function DocsSection({ projectId }: { projectId: string }) {
     data.append('file', f);
     setUploading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/project/docs/upload`, { method: 'POST', body: data });
-      const j = (await r.json()) as { status?: string; reason?: string };
-      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '上传失败');
+      const j = await api.request<{ status?: string; reason?: string }>('/project/docs/upload', { method: 'POST', body: data });
+      if (j.status !== 'PASS') throw new Error(j.reason || '上传失败');
       load();
     } catch (err) {
       toast(`上传失败：${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -216,9 +215,8 @@ function DocsSection({ projectId }: { projectId: string }) {
     data.append('project_id', projectId);
     data.append('name', name);
     try {
-      const r = await fetch(`${API_BASE}/api/project/docs/delete`, { method: 'POST', body: data });
-      const j = (await r.json()) as { status?: string; reason?: string };
-      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '删除失败');
+      const j = await api.request<{ status?: string; reason?: string }>('/project/docs/delete', { method: 'POST', body: data });
+      if (j.status !== 'PASS') throw new Error(j.reason || '删除失败');
       load();
     } catch (err) {
       toast(`删除失败：${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -280,8 +278,7 @@ function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: str
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch(`${API_BASE}/api/project/exec/${table.key}/list?project_id=${encodeURIComponent(projectId)}`)
-      .then((r) => r.json() as Promise<{ items?: Array<Record<string, unknown>> }>)
+    api.request<{ items?: Array<Record<string, unknown>> }>(`/project/exec/${table.key}/list?project_id=${encodeURIComponent(projectId)}`)
       .then((j) => setRows(j.items ?? []))
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
@@ -307,13 +304,11 @@ function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: str
     if (!editing) return;
     const body = { ...editing, project_id: projectId };
     try {
-      const r = await fetch(`${API_BASE}/api/project/exec/${table.key}/save`, {
+      const j = await api.request<{ status?: string; reason?: string }>(`/project/exec/${table.key}/save`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const j = (await r.json()) as { status?: string; reason?: string };
-      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '保存失败');
+      if (j.status !== 'PASS') throw new Error(j.reason || '保存失败');
       setEditing(null);
       load();
     } catch (err) {
@@ -324,13 +319,11 @@ function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: str
   async function del(row: Record<string, unknown>) {
     if (!(await confirm('确定删除这条记录？', { danger: true, title: '删除记录', sub: '此操作不可恢复。', okLabel: '仍要删除', ariaLabel: '删除记录' }))) return;
     try {
-      const r = await fetch(`${API_BASE}/api/project/exec/${table.key}/delete`, {
+      const j = await api.request<{ status?: string; reason?: string }>(`/project/exec/${table.key}/delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: row.id }),
       });
-      const j = (await r.json()) as { status?: string; reason?: string };
-      if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '删除失败');
+      if (j.status !== 'PASS') throw new Error(j.reason || '删除失败');
       load();
     } catch (err) {
       toast(`删除失败：${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -447,19 +440,19 @@ export default function BizDetailPage() {
     setLoading(true);
     setError('');
     Promise.all([
-      fetch(`${API_BASE}/api/project/overview/list`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/project/exec/summary?project_id=${encodeURIComponent(pid)}`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/group/list?project_id=${encodeURIComponent(pid)}`).then((r) => r.json()),
-      fetch('/api/todos').then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      api.request<{ projects?: ProjectOverview[] }>('/project/overview/list'),
+      api.request<{ summary?: ExecSummary }>(`/project/exec/summary?project_id=${encodeURIComponent(pid)}`),
+      api.request<{ groups?: QuoteGroup[] }>(`/group/list?project_id=${encodeURIComponent(pid)}`),
+      api.request<TodoLite[]>('/todos').catch(() => [] as TodoLite[]),
     ])
-      .then(([ov, sum, grp, td]: Array<{ projects?: ProjectOverview[]; summary?: ExecSummary; groups?: QuoteGroup[] } & unknown>) => {
-        const list = (ov as { projects?: ProjectOverview[] })?.projects ?? [];
+      .then(([ov, sum, grp, td]: [{ projects?: ProjectOverview[] }, { summary?: ExecSummary }, { groups?: QuoteGroup[] }, TodoLite[]]) => {
+        const list = ov?.projects ?? [];
         const found = list.find((p) => p.id === pid) ?? null;
         if (!found) throw new Error('项目不存在或已删除');
         setProject(found);
-        setSummary((sum as { summary?: ExecSummary })?.summary ?? null);
-        setGroups((grp as { groups?: QuoteGroup[] })?.groups ?? []);
-        setTodos(Array.isArray(td) ? (td as TodoLite[]) : []);
+        setSummary(sum?.summary ?? null);
+        setGroups(grp?.groups ?? []);
+        setTodos(Array.isArray(td) ? td : []);
       })
       .catch((e: unknown) => {
         setError(e instanceof Error ? e.message : String(e));

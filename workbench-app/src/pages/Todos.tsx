@@ -87,11 +87,6 @@ function weekdayLabel(dateKey: string): string {
   return d.toLocaleDateString('zh-CN', { weekday: 'long' });
 }
 
-// :8000 基地址（项目经营数据）：与 Biz.tsx 同口径，window.__API_BASE__ 覆盖；按主机名推导支持局域网
-const API_BASE_8000 =
-  (window as unknown as { __API_BASE__?: string }).__API_BASE__
-  || (location.hostname ? `${location.protocol}//${location.hostname}:8000` : 'http://localhost:8000');
-
 interface ProjectLite {
   id: string;
   name?: string | null;
@@ -152,8 +147,8 @@ export default function TodosPage() {
         api.getAiSuggestions().catch(() => ({ suggestions: [] as Array<{ id: number; title: string; confidence: number; reasonCode?: string; reason_code?: string }>, count: 0 })),
         api.getTodayOverview(date, timezone),
         api.getTodayDayPlan(date, timezone).catch(() => ({ plan: null })),
-        // 项目列表（:8000）：待办挂项目用下拉；失败不阻塞待办页
-        fetch(`${API_BASE_8000}/api/project/overview/list`).then((r) => (r.ok ? r.json() : { projects: [] })).catch(() => ({ projects: [] })),
+        // 项目列表（:8000，经 :3456 反代）：待办挂项目用下拉；失败不阻塞待办页
+        api.request<{ projects?: ProjectLite[] }>('/project/overview/list').catch(() => ({ projects: [] })),
       ]);
       setTodos(list);
       setProjects(((projJson as { projects?: ProjectLite[] }).projects ?? []));

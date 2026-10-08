@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from '../../api/client';
 
 /**
  * AI 测算助手（P4 前端整合：由 frontend/agent-panel.js + agent.css 迁入 React）
@@ -54,12 +55,7 @@ function setToken(t: string) {
     localStorage.removeItem('agent_api_token');
   } catch { /* ignore */ }
 }
-const headers = (extra?: Record<string, string>) => {
-  const h: Record<string, string> = { ...(extra || {}) };
-  const t = getToken();
-  if (t) h['X-API-Token'] = t;
-  return h;
-};
+/** P2-7：headers() 已废弃，token 改由 apiClient 自动透传（X-API-Token）。SSE 仍用 getToken() 拼 query。 */
 
 type Msg = { role: 'user' | 'bot' | 'err'; text: string; time: string };
 type Approval = { key: string; tool: string; args: Record<string, unknown>; decided?: boolean; result?: string; resultKind?: '' | 'ok' | 'bad' };
@@ -99,7 +95,7 @@ export default function AgentPanel() {
 
   const refreshHealth = useCallback(async () => {
     try {
-      const h = await (await fetch('/agent/health')).json();
+      const h = await api.request<{ [k: string]: unknown }>('/agent/health');
       setHealth({
         off: false,
         warn: !h.model_available,
@@ -184,17 +180,17 @@ export default function AgentPanel() {
     setMsgs((m) => [...m, { role: 'user', text: content, time: now() }]);
     setWorking(true);
     try {
-      const res = await fetch('/agent/submit', {
+      const data = await api.request<{ status?: string; answer?: string; error?: string }>('/agent/submit', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ content }),
       });
-      const data = await res.json();
-      if (data.status === 'done' && data.answer) setMsgs((m) => [...m, { role: 'bot', text: data.answer, time: now() }]);
-      else if (data.error) setMsgs((m) => [...m, { role: 'err', text: data.error + (res.status === 503 ? '（agent 未就绪）' : ''), time: now() }]);
+      if (data.status === 'done' && data.answer) setMsgs((m) => [...m, { role: 'bot', text: data.answer as string, time: now() }]);
+      else if (data.error) setMsgs((m) => [...m, { role: 'err', text: data.error as string, time: now() }]);
       else setMsgs((m) => [...m, { role: 'err', text: '提交未成功：' + JSON.stringify(data).slice(0, 400), time: now() }]);
     } catch (e) {
-      setMsgs((m) => [...m, { role: 'err', text: '连接 agent 失败：' + (e as Error).message, time: now() }]);
+      const msg = (e as Error).message || '';
+      const hint = msg.includes('503') ? '（agent 未就绪）' : '';
+      setMsgs((m) => [...m, { role: 'err', text: '连接 agent 失败：' + msg + hint, time: now() }]);
     } finally {
       setBusy(false);
       setWorking(false);
@@ -206,7 +202,7 @@ export default function AgentPanel() {
     setApprovals((list) => list.map((a) => a.key === key
       ? { ...a, decided: true, result: allow ? '已批准，执行中…' : '已拒绝，该操作不会执行', resultKind: allow ? 'ok' : 'bad' } : a));
     try {
-      await fetch('/agent/approve', { method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ key, allow }) });
+      await api.request('/agent/approve', { method: 'POST', body: JSON.stringify({ key, allow }) });
     } catch { /* ignore */ }
     noteDecided(key);
   }, [noteDecided]);
@@ -215,7 +211,7 @@ export default function AgentPanel() {
     setApplyMsg({ text: '', kind: '' });
     setSettingsOpen(true);
     try {
-      const c = await (await fetch('/agent/model-config')).json();
+      const c = await api.request<{ active: { provider: string; model: string }; available: { provider: string; models: string[] }[]; custom: { id?: string; baseUrl?: string; apiKey?: string; models?: string[] } | null }>('/agent/model-config');
       setCfg(c);
       const avail: { provider: string; models: string[] }[] = c.available || [];
       const activeIn = avail.find((a) => a.provider === c.active.provider);
@@ -245,9 +241,8 @@ export default function AgentPanel() {
       body = { provider: selProvider, model: selModel, test: testConn };
     }
     try {
-      const res = await fetch('/agent/apply-model', { method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify(body) });
-      const data = await res.json();
-      if (res.ok && data.ok) {
+      const data = await api.request<{ ok?: boolean; active: { provider: string; model: string }; test?: string; error?: string }>('/agent/apply-model', { method: 'POST', body: JSON.stringify(body) });
+      if (data.ok) {
         setApplyMsg({
           text: `已切换到 ${data.active.provider}/${data.active.model}${data.test ? ' · 测试' + (data.test === 'pong' ? '通过 ✓' : '：' + String(data.test).slice(0, 120)) : ''}`,
           kind: 'ok',

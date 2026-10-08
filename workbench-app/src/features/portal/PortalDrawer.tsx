@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PortalItem, PortalModule } from './portalData';
 import { ExpandableCard } from './ExpandableCard';
 import { getPortalConfig } from './portalConfig';
@@ -16,6 +16,7 @@ export function PortalDrawer({
   onClose,
   onEnter,
   onExpandChange,
+  docked,
 }: {
   open: boolean;
   module?: PortalModule;
@@ -23,11 +24,18 @@ export function PortalDrawer({
   onClose: () => void;
   onEnter: () => void;
   onExpandChange?: (expanded: boolean) => void;
+  /** 引擎 docked 态（展开态）；false 时强制收起卡片（2026-10-08 修 ESC 后 stale） */
+  docked?: boolean;
 }) {
   const [tab, setTab] = useState('tab-overview');
   const [cardExpanded, setCardExpanded] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const firstRectRef = useRef<DOMRect | null>(null);
+
+  // docked 变 false（ESC/返回）时强制收起，避免 stale 的 true 导致下次直接展开
+  useEffect(() => {
+    if (!docked) setCardExpanded(false);
+  }, [docked]);
   // 跟踪 item 切换以重置展开态（必须在 early return 之前，Hooks 规则）
   const [lastItemId, setLastItemId] = useState<string | null>(null);
 

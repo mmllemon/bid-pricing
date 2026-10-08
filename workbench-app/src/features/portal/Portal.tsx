@@ -338,6 +338,7 @@ export default function PortalPage() {
             engineRef.current?.setDocked(expanded);
             setDocked(expanded);
           }}
+          docked={docked}
           onEnter={() => {
             if (!activeModule) return;
             if (activeModule.id === 'quote') window.location.href = '/#quote';

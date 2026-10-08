@@ -27,15 +27,23 @@ from bidpricing import project_overview, project_store
 
 class ProjectCredentialTest(unittest.TestCase):
     def setUp(self) -> None:
+        # 注意：经营概览的 SQLite 落盘走 sqlite_store.PROJECTS_DIR（调用时解析），
+        # 不是 project_store.PROJECTS_DIR——只 patch 后者的话，create_project 会
+        # 把"凭证项目"写进真实 quote.db。两个都 patch，保证测试完全隔离。
         from bidpricing import project_store as _ps
+        from bidpricing import sqlite_store as _ss
         self._tmp = tempfile.TemporaryDirectory()
-        self._saved = _ps.PROJECTS_DIR
+        self._saved_ps = _ps.PROJECTS_DIR
+        self._saved_ss = _ss.PROJECTS_DIR
         _ps.PROJECTS_DIR = Path(self._tmp.name)
+        _ss.PROJECTS_DIR = Path(self._tmp.name)
         self._proj = project_overview.create_project({"name": "凭证项目"})
 
     def tearDown(self) -> None:
         from bidpricing import project_store as _ps
-        _ps.PROJECTS_DIR = self._saved
+        from bidpricing import sqlite_store as _ss
+        _ps.PROJECTS_DIR = self._saved_ps
+        _ss.PROJECTS_DIR = self._saved_ss
         self._tmp.cleanup()
 
     def test_empty_and_sentinel_pass(self) -> None:

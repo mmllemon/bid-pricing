@@ -61,6 +61,12 @@ jobs:
           # 故上界必须钉在 <4，否则候选后端会随版本静默失效。
           pip install "pulp>=3.3,<4" "highspy>=1.11,<2"
 
+      - name: 装配 Web 依赖（两档都要）
+        # api/app.py 的导入需要 fastapi；带 Form 的路由需要 python-multipart。
+        # tests/test_project_credential.py 在方法内 from api.app import …，
+        # 不装则 4 项全 error。求解器包仍按档区分，这里只装 Web 框架。
+        run: pip install "fastapi>=0.115,<1" "python-multipart>=0.0.9,<1"
+
       - name: 依赖档自述（防止把 SKIP 读成 PASS）
         run: |
           python - <<'PY'

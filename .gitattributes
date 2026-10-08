@@ -1,0 +1,68 @@
+# 行尾策略（治理级，不是风格级）
+#
+# 为什么必须有这个文件：受控制品的 hash 是对**文件原始字节**取 SHA-256
+# （`src/bidpricing/artifact.py::compute_artifact_hash` → `path.read_bytes()`）。
+# 开发者机器的**全局** `~/.gitconfig` 里 core.autocrlf=input，git 提交时会把 CRLF
+# 转成 LF 存进索引。于是「工作树里的字节」与「仓库里的字节」不同，同一个已签署
+# 制品在两台机器上算出两个 hash。
+#
+# 实际后果（2026-10-08 实测）：干净检出的 `gate-check` 对 9 个受控制品报
+# 「hash 失配：制品已变更但未重新冻结（契约失效）」，Gate 0a/0b 双双 BLOCKED；
+# CI 自 2026-10-07 上线起 **90 次运行 0 次成功**，且 Gate 之后的 contract-check、
+# 全量测试等步骤被连带 skipped——这道为防「静默失效」而建的门禁自己静默失效了。
+# 逐字节核对确认这些制品**内容级失配为 0**，差异纯粹是行尾：git 擅自改写了
+# 用户 2026-09-17 以四角色签署过的字节（`config/gate0_registry.json` 的 approvals 块）。
+#
+# 结论：哈希治理不能依赖克隆者的个人 git 配置。属性优先级高于 autocrlf，
+# 故在此显式声明「哈希所覆盖的字节不可转换」。
+#
+# ⚠ 顺序即语义：git 属性**后匹配者胜**。下面 -text 段必须排在通用 text 段之后，
+#   否则会被 `*.json text eol=lf` 反向覆盖（写反过一次，由 check-attr 抓出，
+#   现由 tests/test_gitattributes_fidelity.py 机械守住）。
+
+# --- 源码与文本：以 LF 为权威，检出也用 LF ---
+# 目的不是美观，是让「本地能跑」与「CI 能跑」不再取决于操作系统的换行习惯。
+*.py    text eol=lf
+*.pyi   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.jsx   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.txt   text eol=lf
+*.sh    text eol=lf
+
+# --- 受控制品与配置：字节原样保真，禁止任何行尾转换（必须写在上面之后）---
+# 覆盖 config/ 全域，而不只是当前被 hash 的 7 个：新增制品一旦被 freeze 进注册表，
+# 默认已在保护范围内，不需要有人记得回来改这个文件——本仓已反复栽在
+# 「手工清单 ↔ 真实来源」漂移上（_SCHEMA_OBJECTS、QUOTE_PREFIXES 同族）。
+config/** -text
+
+# --- 二进制：显式声明，防 git 误判（误判会静默破坏内容）---
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.bmp    binary
+*.ico    binary
+*.woff   binary
+*.woff2  binary
+*.otf    binary
+*.ttf    binary
+*.pdf    binary
+*.xlsx   binary
+*.xls    binary
+*.db     binary
+*.sqlite binary
+*.sqlite-wal binary
+*.sqlite-shm binary
+*.zip    binary
+*.gz     binary

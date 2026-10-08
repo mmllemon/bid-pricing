@@ -82,13 +82,16 @@ class ProjectOverviewAtomicWriteTest(unittest.TestCase):
         from bidpricing import project_store, sqlite_store
         self._tmp = tempfile.TemporaryDirectory()
         self._saved = project_store.PROJECTS_DIR
+        self._saved_ss = sqlite_store.PROJECTS_DIR
         project_store.PROJECTS_DIR = Path(self._tmp.name)
         sqlite_store.PROJECTS_DIR = Path(self._tmp.name)
 
     def tearDown(self) -> None:
         from bidpricing import project_store, sqlite_store
         project_store.PROJECTS_DIR = self._saved
-        # sqlite_store.PROJECTS_DIR 恢复为默认值（由 app.py 启动时重设）
+        # 两个模块级变量都要还原：只恢复 project_store 会把 sqlite_store 的
+        # PROJECTS_DIR 漏在已删除的临时目录上，后续测试写库直接报错。
+        sqlite_store.PROJECTS_DIR = self._saved_ss
         self._tmp.cleanup()
 
     def test_write_goes_through_sqlite(self) -> None:

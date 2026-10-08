@@ -12,6 +12,10 @@ def user_dir(tmp_path, monkeypatch):
     d = tmp_path / "projects"
     d.mkdir()
     monkeypatch.setattr(project_store, "PROJECTS_DIR", str(d))
+    # create_project 写 SQLite，库路走 sqlite_store.resolve_db_path()，读的是
+    # sqlite_store.PROJECTS_DIR——两个都要 patch，否则生产库被测试脏数据污染。
+    from bidpricing import sqlite_store
+    monkeypatch.setattr(sqlite_store, "PROJECTS_DIR", str(d))
     # 造一个真实项目（project_docs 要求项目存在）
     from bidpricing import project_overview
     rec = project_overview.create_project({"name": "测试项目"})

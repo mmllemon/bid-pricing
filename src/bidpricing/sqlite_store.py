@@ -238,14 +238,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-#: _SCHEMA 建立的对象清单：四表 + 六索引。探测要求**全部齐备**才跳过
-#: executescript——为什么连索引一起探：_SCHEMA 里混着 CREATE TABLE 与
-#: CREATE INDEX，只探表的话，「建了表但索引没建全」的库（历史版本或
-#: 建库中断）会被误判为完整而缺索引。全部 DDL 都是 IF NOT EXISTS，
-#: 多跑一次 executescript 只是慢一点，少跑则可能缺对象——探测宁严勿松。
+#: _SCHEMA 建立的对象清单（与 _SCHEMA 内的 CREATE TABLE / CREATE INDEX 一一对应，
+#: 改 _SCHEMA 必须同步改这里）。探测要求**全部齐备**才跳过 executescript——
+#: 为什么连索引一起探：_SCHEMA 里混着 CREATE TABLE 与 CREATE INDEX，只探表的
+#: 话，「建了表但索引没建全」的库（历史版本或建库中断）会被误判为完整而缺索引。
+#: 全部 DDL 都是 IF NOT EXISTS，多跑一次 executescript 只是慢一点，少跑则可能缺
+#: 对象——探测宁严勿松。
+#: 回归（2026-10-08）：B-P1-2 给 _SCHEMA 加 project 表时漏登记本清单，老库被判
+#: 「完整」而跳过建表，/api/overview 全线 500（no such table: project）。
+#: tests/test_sqlite_schema_registry.py 机械比对两份清单，拦住这类漂移。
 _SCHEMA_OBJECTS = (
     ("table", "plan"), ("table", "plan_group"),
     ("table", "plan_slot"), ("table", "audit_log"),
+    ("table", "project"),
     ("table", "exec_contract"), ("table", "exec_cost"),
     ("table", "exec_payment"), ("table", "exec_visa"),
     ("table", "exec_settlement"),
@@ -253,6 +258,7 @@ _SCHEMA_OBJECTS = (
     ("index", "idx_plan_project"), ("index", "idx_plan_saved"),
     ("index", "idx_plan_amount"), ("index", "idx_group_project"),
     ("index", "idx_audit_ts"), ("index", "idx_audit_action"),
+    ("index", "idx_project_stage"), ("index", "idx_project_updated"),
     ("index", "idx_exec_contract_project"), ("index", "idx_exec_cost_project"),
     ("index", "idx_exec_payment_project"), ("index", "idx_exec_visa_project"),
     ("index", "idx_exec_settlement_project"),

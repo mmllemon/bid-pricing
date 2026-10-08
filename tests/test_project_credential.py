@@ -14,7 +14,10 @@
   - 真实概览 id → 放行；
   - 其余任意字符串 → 403 FORBIDDEN。
 
-隔离：patch `project_store.PROJECTS_DIR` 到临时目录（与 test_atomic_io.py 同口径）。
+隔离：同时 patch `project_store.PROJECTS_DIR` 与 `sqlite_store.PROJECTS_DIR` 到临时
+目录（与 test_atomic_io.py 同口径）。只 patch 前者会漏：project_overview.create_project
+经 sqlite_store.resolve_db_path() 读的是后者，回归（2026-10-08）：「凭证项目」曾因此
+被写进生产库 outputs/projects/leema/.sqlite/quote.db。
 """
 from __future__ import annotations
 

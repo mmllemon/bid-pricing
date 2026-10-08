@@ -25,14 +25,11 @@ APP_PY = ROOT / "api" / "app.py"
 REQUIRED_AUDIT_ENDPOINTS: dict[str, str] = {
     # 报价
     "optimize_quote": "quote.optimize",
-    # 方案
-    "project_copy": "plan.copy",
+    # 方案（project_copy/project_delete 已于 2026-10-08 作为孤儿路由删除，无 UI 调用）
     "project_recompute": "plan.recompute",
-    "project_delete": "plan.delete",
     "project_mark_finalized": "plan.finalize",
     "project_compare": "plan.compare",
-    # 方案组
-    "group_create": "group.create",
+    # 方案组（group_create 已于 2026-10-08 作为孤儿路由删除，建组走 optimize）
     "group_rename": "group.rename",
     "group_set_finalized": "group.finalize",
     "group_copy": "group.copy",

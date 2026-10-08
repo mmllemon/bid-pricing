@@ -39,10 +39,14 @@
   --notch-md: 10px;
   --shadow-action: 2px 2px 0 var(--ui-black);
 
-  /* ===== 字体 ===== */
+  /* ===== 字体 =====
+   * 像素字体规范：
+   * - --font-pixel：装饰用（eyebrow 英文、栏目标题 .card-title、展示标题）
+   * - --font-mono：正文数字用可读等宽（金额、指标、计数），不用像素字体保证可读性
+   */
   --font-pixel: "LShu Pixel", "MiSans VF", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
   --font-display: var(--font-pixel);
-  --font-mono: var(--font-pixel);
+  --font-mono: "MiSans VF", "HarmonyOS Sans SC", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
 
   /* ===== 字阶 ===== */
   --text-display: 48px;

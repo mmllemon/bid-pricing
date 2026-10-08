@@ -355,10 +355,14 @@ export class PortalEngine {
       if (!sz) return;
       const w = sz.clientWidth || window.innerWidth;
       const h = sz.clientHeight || window.innerHeight;
+      // 每帧同步尺寸（不只依赖 canvas 变化）：窗口缩放/旋转/侧栏显隐时
+      // clientWidth 会变，必须实时跟进，否则模块卡片定位错乱
+      if (this.state.size.w !== w || this.state.size.h !== h) {
+        this.state.size = { w, h };
+      }
       if (this.refs.dustCanvas && (this.refs.dustCanvas.width !== w || this.refs.dustCanvas.height !== h)) {
         this.refs.dustCanvas.width = w;
         this.refs.dustCanvas.height = h;
-        this.state.size = { w, h };
       }
       try {
         this.step(now);

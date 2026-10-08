@@ -5,7 +5,7 @@
 
 # 项目状态快照
 
-> 生成于 **2026-10-08 10:00:41** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-10-08 11:12:31** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
@@ -19,8 +19,8 @@
 
 ## 一、版本锚点
 
-- 提交：`b177a20` ｜ 累计 215 次提交 ｜ 未推送 0 次提交
-- 最新提交信息：feat(B-P1-9): close audit gaps on group/plan state changes + add coverage guard
+- 提交：`70bbe3e` ｜ 累计 218 次提交 ｜ 未推送 0 次提交
+- 最新提交信息：feat(B-P1-5): enforce project_id existence on optimize + group/create + guard test
 - 最近里程碑标签：`pre-wb-merge-20261006`
 - 工作区：干净
 
@@ -73,7 +73,7 @@
 
 ## 四、质量门
 
-- 单元测试：**1630** 项，结果 **通过**（OK）
+- 单元测试：**1634** 项，结果 **通过**（OK）
 
 ```bash
 cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests

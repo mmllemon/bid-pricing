@@ -403,16 +403,23 @@ export class PortalEngine {
     const os = spring(S.orb.s, T.orb.s, dt, 40);
     const oo = spring(S.orb.o, 1, dt, 30);
 
+    // 渲染层安全钳：弹簧若因异常 dt/NaN 发散，强制钳回合理范围，
+    // 圆球永远不会巨大化或飞出视口（用户 2026-10-08 反馈圆球顶出视口）
+    const W = L.size.w, H = L.size.h;
+    const osSafe = Number.isFinite(os) ? clamp(os, 120, 420) : 300;
+    const oxSafe = Number.isFinite(ox) ? clamp(ox, 0, W) : W / 2;
+    const oySafe = Number.isFinite(oy) ? clamp(oy, 0, H) : H * 0.47;
+
     const coreEl = this.refs.core;
     if (coreEl) {
-      coreEl.style.transform = `translate3d(${ox - os / 2}px, ${oy - os / 2}px, 0) scale(${os / 340})`;
+      coreEl.style.transform = `translate3d(${oxSafe - osSafe / 2}px, ${oySafe - osSafe / 2}px, 0) scale(${osSafe / 340})`;
       coreEl.style.opacity = String(clamp(oo, 0, 1));
     } else if (this.refs.stage) {
       // 防御：core ref 若因重挂丢失，从 stage 里重查一次，避免圆球卡在左上角 (0,0)
       const el = this.refs.stage.querySelector('.portal-core-hub') as HTMLElement | null;
       if (el) {
         this.refs.core = el;
-        el.style.transform = `translate3d(${ox - os / 2}px, ${oy - os / 2}px, 0) scale(${os / 340})`;
+        el.style.transform = `translate3d(${oxSafe - osSafe / 2}px, ${oySafe - osSafe / 2}px, 0) scale(${osSafe / 340})`;
         el.style.opacity = String(clamp(oo, 0, 1));
       }
     }
@@ -459,9 +466,14 @@ export class PortalEngine {
       const o = spring(j.o, tg.o, dt, 40);
       j.cur = { x, y, s };
 
+      // 渲染层安全钳（同核心）：防弹簧发散导致卡片巨大化/飞出视口
+      const xSafe = Number.isFinite(x) ? clamp(x, -40, W + 40) : W / 2;
+      const ySafe = Number.isFinite(y) ? clamp(y, -40, H + 40) : H / 2;
+      const sSafe = Number.isFinite(s) ? clamp(s, 40, 200) : 120;
+
       const el = this.refs.modNodes[m.id];
       if (el) {
-        el.style.transform = `translate3d(${x - s / 2}px, ${y - s / 2}px, 0) scale(${s / 120}) rotate(${tg.tilt}deg)`;
+        el.style.transform = `translate3d(${xSafe - sSafe / 2}px, ${ySafe - sSafe / 2}px, 0) scale(${sSafe / 120}) rotate(${tg.tilt}deg)`;
         el.style.opacity = String(clamp(o, 0, 1));
         el.classList.toggle('node-active', m.id === L.mod);
         el.classList.toggle('node-dimmed', L.stage !== 'hub' && m.id !== L.mod);

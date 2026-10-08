@@ -4743,6 +4743,1583 @@ select.nb-input {
 }
 
 /* ============================================================
+   基础件层（P3 前端整合：由 frontend/styles.css 并入全文）
+   母项目现行基础件标准（.card/.field/.btn/.compose-* 等），报价页依赖它。
+   ============================================================ */
+/* ============================================================
+   工程智算 · 投标报价 —— 全局基础层
+   V2 设计语言：黑白极简 · 橙/黄专色 · 像素秩序 · 打印终端感
+   颜色/间距/圆角/阴影/字体/层级等全部令牌见 tokens.css（单一事实源），
+   本文件不定义任何令牌，只消费。
+   ============================================================ */
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--page-bg);color:var(--text);
+  font-family:var(--font);font-size:14px;line-height:1.55;
+  font-synthesis:none;text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  /* 数字微排版：等宽数字 + 字体特性（tnum 位权对齐 / cv01 字形统一） */
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1,"cv01" 1;
+}
+.hidden{display:none!important}
+a{color:var(--accent-600);text-decoration:none}
+button{font-family:var(--font)}
+/* 全局键盘焦点环（WCAG 2.1 SC 2.4.7）：仅键盘导航时显示，不干扰鼠标点击 */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:inherit}
+
+/* ---------- 布局骨架 ---------- */
+.app-shell{display:flex;min-height:100vh}
+
+/* ---------- 侧边栏（白底 + 右侧 2px 黑竖线，无渐变无阴影） ---------- */
+.sidebar{
+  width:var(--sidebar-w);flex-shrink:0;
+  background:var(--ui-white);
+  color:var(--text);
+  border-right:var(--line-strong); /* V2：右侧 2px 黑竖线 */
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;
+}
+.brand{display:flex;align-items:center;gap:var(--space-3);padding:20px;border-bottom:var(--line-thin)}
+.brand-mark{
+  width:40px;height:40px;
+  background:var(--ui-black);color:var(--ui-white);display:grid;place-items:center;flex-shrink:0;
+}
+.brand-mark svg{width:22px;height:22px}
+.brand-text strong{font-family:var(--font-pixel);font-size:16px;font-weight:400;display:block;line-height:1.3;letter-spacing:.02em;color:var(--text)}
+.brand-text small{color:var(--text-secondary);font-size:12px;display:block;margin-top:2px;letter-spacing:.02em;font-weight:500}
+
+/* 中间导航：可独立滚动 */
+.nav-scroll{flex:1;overflow-y:auto;padding:10px 12px 12px}
+.nav-scroll::-webkit-scrollbar{width:6px}
+.nav-scroll::-webkit-scrollbar-thumb{background:var(--drawer-text-mute);border-radius:0}
+.nav-group{margin-bottom:32px}
+.nav-group:last-child{margin-bottom:0}
+.nav-group-title{
+  font-family:var(--font-pixel);font-size:12px;font-weight:400;letter-spacing:.1em;
+  color:var(--text-tertiary);padding:8px 12px 6px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;width:100%;
+  border:var(--line-thin);background:var(--ui-white);color:var(--text);
+  padding:10px 12px;
+  font-size:14px;font-weight:500;cursor:pointer;text-align:left;
+  transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
+  margin-bottom:var(--space-2);
+}
+.nav-item svg{width:18px;height:18px;flex-shrink:0;color:currentColor}
+/* 未上线模块：灰显但仍可点进占位页，所以用 --text-secondary（≈5:1）而不是压 opacity 到不可读；
+   右侧索引位换成「建设中」标记，说明这一项为什么是灰的。
+   放在 .nav-item:hover / .nav-item.active 之前，让悬停与选中态照常赢回黑色。 */
+.nav-item.nav-soon{color:var(--text-secondary)}
+.nav-item.nav-soon svg{opacity:.6}
+.nav-num.nav-soon-tag{color:var(--text-secondary);letter-spacing:.02em}
+.nav-item.nav-soon:hover .nav-num.nav-soon-tag{color:var(--ui-black)}
+.nav-item:hover{background:var(--ui-yellow);color:var(--ui-black)}
+.nav-item.active{background:var(--ui-orange);color:var(--ui-black);font-weight:700;border:var(--line-strong)}
+.nav-item.active svg{color:var(--ui-black)}
+.nav-item:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
+/* 导航编号：本项目的模块索引（Q-01 报价 / C-02 实施成本 / A-03 AI 助手 / L-04 台账 / S-05 结算 / T-06 工具箱 / W-00 工作台） */
+.nav-num{margin-left:auto;font-family:var(--font-pixel);font-size:12px;letter-spacing:.04em;color:var(--text-tertiary)}
+.nav-item.active .nav-num{color:var(--ui-black)}
+
+/* ---------- 工作台二级折叠（P-W8：9 页并入外层，全站只有一条竖栏） ----------
+   父行 = 折叠开关（右侧 chevron），二级项缩进一档表示层级。
+   不使用 display:none 之外的隐藏技巧；字号与父行一致（14px），
+   因为像素字体只在 12px 网格整数倍上清晰，缩进已足够表达层级。 */
+.nav-parent .nav-chev{width:14px;height:14px;flex-shrink:0;margin-left:8px;transition:transform var(--dur-fast)}
+.nav-parent.is-collapsed .nav-chev{transform:rotate(-90deg)}
+/* 子项处于激活态时给父行一条橙色竖标（硬 inset，无模糊），收起状态下也能看出当前在哪 */
+.nav-parent.has-active{box-shadow:inset 4px 0 0 var(--ui-orange)}
+/* 树状线 + 缩进表达层级；二级项更紧凑，避免 16 项把侧栏撑到一屏之外 */
+.nav-sublist{margin-left:12px;padding-left:10px;border-left:var(--line-thin)}
+.nav-sublist.is-collapsed{display:none}
+.nav-sub{padding-top:7px;padding-bottom:7px;margin-bottom:4px}
+.nav-sub svg{width:16px;height:16px}
+
+/* 底部用户区 + 版本号 */
+.sidebar-foot{padding:12px 16px 16px;border-top:var(--line-thin)}
+.user-block{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.avatar{
+  width:32px;height:32px;
+  background:var(--ui-black);color:var(--ui-white);
+  display:grid;place-items:center;font-family:var(--font-pixel);font-size:12px;font-weight:400;flex-shrink:0;
+}
+.user-meta{display:flex;flex-direction:column;line-height:1.35}
+.user-name{font-size:12px;font-weight:600;color:var(--text)}
+.user-scope{font-size:12px;color:var(--text-tertiary)}
+.version-line{font-family:var(--font-pixel);font-size:12px;color:var(--text-tertiary);text-align:left;padding-top:var(--space-1);letter-spacing:.02em}
+
+/* ---------- 主内容区 ---------- */
+/* 主内容水平 padding 对齐 DESIGN §7.1：≥1440 → 32px；≤1280 → 24px；≤1024 → 16px */
+.main-content{flex:1;min-width:0;padding:24px 32px 80px;max-width:1680px;margin:0 auto}
+@media (max-width:1280px){.main-content{padding-left:24px;padding-right:24px}}
+@media (max-width:1024px){.main-content{padding-left:16px;padding-right:16px}}
+.breadcrumb{font-size:12px;color:var(--text-secondary);margin-bottom:8px}
+.breadcrumb span{margin:0 6px;color:var(--text-tertiary)}
+.page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:24px}
+/* H1 用像素字体：字号须落在 12px 网格的整数倍（原 28px = 2.33× 会发糊），故取 36px（3×）；
+   同时去掉负字距——像素字体靠字形栅格对齐，负字距会把字形推到半像素上。 */
+.page-header h1{font-size:36px;font-weight:400;margin:0;letter-spacing:0}
+.page-sub{color:var(--text-secondary);margin:6px 0 0;font-size:12px}
+.status-pill{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--ui-white);color:var(--text);border:var(--line-thin);
+  font-size:12px;font-weight:600;padding:5px 12px;white-space:nowrap;
+}
+
+/* ---------- 卡片（一级模块 · DESIGN §8.1） ---------- */
+.card{
+  position:relative;
+  background:var(--ui-white);border:var(--line-strong);
+  border-radius:0;box-shadow:none;
+  padding:var(--card-pad) 20px;margin-bottom:16px;
+}
+/* 统一裁角（右上角 45° 切角）：外层伪元素实现，不用 clip-path，避免裁掉 .field[data-tip] 气泡与 focus ring */
+.card::before{
+  content:"";position:absolute;top:-2px;right:-2px;width:0;height:0;pointer-events:none;
+  border-top:calc(var(--notch-md) / 2) solid var(--ui-white);
+  border-right:calc(var(--notch-md) / 2) solid var(--ui-white);
+  border-bottom:calc(var(--notch-md) / 2) solid transparent;
+  border-left:calc(var(--notch-md) / 2) solid transparent;
+}
+.card::after{
+  content:"";position:absolute;top:-2px;right:-2px;pointer-events:none;
+  width:calc(var(--notch-md) * 1.414);height:2px;background:var(--ui-black);
+  transform-origin:0 50%;
+  transform:translate(calc(var(--notch-md) * 0.414), -1px) rotate(45deg);
+}
+/* 窄屏取消装饰性裁角（DESIGN §10） */
+@media (max-width:768px){.card::before,.card::after{display:none}}
+/* 标题行 40px 高 + 1px 黑底分隔线 */
+.card-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  min-height:40px;margin-bottom:16px;padding-bottom:10px;border-bottom:var(--line-thin);
+}
+
+/* ---------- 表格（设计系统层：唯一真相源 · DESIGN §8.7） ---------- */
+/* 容器结构与单元格规范统一收敛于此；视图级差异（如对比卡高度上限）留在各自样式文件 */
+.table-wrap{overflow:auto;border-radius:0;border:var(--line-strong);background:var(--ui-white)}
+.table-wrap table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.table-wrap th,.table-wrap td{text-align:left;border-bottom:var(--line-thin);padding:9px 12px}
+/* 表头：白底 + 黑粗字 + 2px 黑底线 */
+.table-wrap th{color:var(--text);font-weight:700;background:var(--ui-white);border-bottom:var(--line-strong);position:sticky;top:0;z-index:var(--z-sticky)}
+.table-wrap tbody tr:last-child td{border-bottom:0}
+/* 行 hover：黄色 4px 左条（不填满整行）；选中：橙色 4px 左条 */
+.table-wrap tbody tr:hover>td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
+.table-wrap tbody tr.selected>td:first-child{box-shadow:inset 4px 0 0 var(--ui-orange)}
+
+/* ---------- 跨页共用基础件（报价页 + 速算工具箱都直接用） ----------
+   为什么收在设计系统层：这几个类在**工具页**也被使用，而工具页此前是靠加载整份
+   quote-dashboard.css（995 行 / 54.9 KB）才拿到它们——为 3 个选择器付整份视图层的
+   解析成本，且报价页的非前缀规则会在工具页"裸生效"（隐性耦合）。
+   依赖面是**实测**出来的，不是估的：jsdom 逐元素 matches 全部 415 个选择器 + 工具页
+   HTML/JS 类名与样式定义的交叉核对，结果只有 .title-dot / .card-subtitle / .tabular
+   三个（含 toast、确认框、自定义下拉等动态路径）。据此刻意不搬任何其他规则。
+   判据：test/smoke.test.mjs「工具页不得加载报价页视图层」「三个基础件由 styles.css 提供」。 */
+.title-dot{width:6px;height:6px;border-radius:50%;background:var(--ui-black);flex-shrink:0}
+.card-subtitle{font-size:12px;color:var(--text-secondary)}
+/* 等宽数字排版：数字列逐行对位（与 quote-dashboard.css 里 #quoteView 作用域的那组同一口径） */
+.tabular{font-variant-numeric:tabular-nums!important;font-feature-settings:"tnum"!important}
+
+/* ---------- 个人工作台（宿主壳：内容由 React 版工作台 :3456 以 iframe 提供） ---------- */
+.workbench-view{min-height:60vh}
+.workbench-view .wb-frame{display:block;width:100%;height:calc(100vh - 104px);min-height:520px;border:0;background:var(--ui-white)}
+@media (max-width:560px){.workbench-view .wb-frame{height:calc(100vh - 152px)}}
+.card-head h2{font-size:16px;font-weight:700;margin:0;letter-spacing:-.01em}
+.card-head p{font-size:12px;color:var(--text-secondary);margin:3px 0 0;text-align:right}
+
+/* ---------- 参数区：三列分组（组标题带竖条） ---------- */
+.param-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.param-group{display:flex;flex-direction:column;gap:10px}
+.param-group-title{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;font-weight:600;color:var(--text);letter-spacing:.02em;
+  padding-bottom:7px;border-bottom:1px solid var(--border);margin-bottom:0;
+}
+.param-group-title::before{content:"";width:3px;height:13px;border-radius:0;background:var(--accent)}
+.field{display:flex;flex-direction:column;gap:5px;position:relative}
+.field-label{font-size:12px;font-weight:500;color:var(--text-secondary)}
+.field-label em{font-style:normal;color:var(--text-tertiary);font-weight:500;margin-left:4px;font-size:12px}
+.field input:not([type=checkbox]){
+  width:100%;padding:6px 12px;border:var(--line-thin);border-radius:0;
+  font-size:14px;font-family:var(--font);font-weight:400;color:var(--text);
+  background:var(--ui-white);transition:border-color var(--dur-fast);
+}
+/* placeholder：黑色 + 降低透明度（DESIGN §8.5） */
+.field input:not([type=checkbox])::placeholder{color:var(--ui-black);opacity:.45;font-weight:400}
+.field input:not([type=checkbox]):hover{border-color:var(--ui-orange)}
+.field input:not([type=checkbox]):focus{border-color:var(--ui-orange)}
+.field input:not([type=checkbox]):focus-visible{outline:2px solid var(--ui-orange);outline-offset:2px}
+.field input[type=number]{text-align:right;font-variant-numeric:tabular-nums}
+.field input.invalid{border-color:var(--ui-orange);box-shadow:inset 0 0 0 1px var(--ui-orange)}
+.field input.invalid:focus{border-color:var(--ui-orange)}
+.field.check{flex-direction:row;align-items:center;gap:8px;margin-top:3px}
+/* 开启态用橙色实心，不用绿色（DESIGN §8.5） */
+.field.check input{accent-color:var(--ui-orange);width:16px;height:16px;cursor:pointer}
+.field.check span{font-size:12px;color:var(--text-secondary);cursor:pointer}
+/* 成本构成（分项多税率精算）面板 —— 沿用 .field 控件语言与卡片分隔线风格 */
+/* 成本税口径已改为第 4 列，与各组并列，不再独占整行 */
+.compose-table{
+  display:flex;flex-direction:column;margin-top:4px;
+  border:1px solid var(--border);border-radius:var(--radius-tile);
+  background:var(--surface-nested);overflow:hidden;
+}
+.compose-row{
+  display:grid;grid-template-columns:1fr 78px 78px;align-items:center;gap:8px;
+  padding:7px 10px;
+}
+.compose-row + .compose-row{border-top:1px solid var(--border)}
+.compose-row.compose-head{
+  padding-top:9px;padding-bottom:9px;
+  background:var(--surface-card);
+  font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--text-secondary);
+  border-bottom:1px solid var(--border);
+}
+.compose-row.compose-head span:nth-child(2),
+.compose-row.compose-head span:nth-child(3){text-align:right}
+.compose-row .comp-label{font-size:14px;font-weight:500;color:var(--text)}
+.compose-row input{
+  width:100%;padding:4px 5px;
+  border:var(--line-thin);border-radius:0;
+  font-size:14px;font-family:var(--font);
+  text-align:right;font-variant-numeric:tabular-nums;color:var(--text);
+  background:var(--ui-white);transition:border-color var(--dur-fast);
+}
+.compose-row input::placeholder{color:var(--text-tertiary)}
+.compose-row input:hover{border-color:var(--text-tertiary)}
+.compose-row input:focus{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
+/* 成本构成行脚。**只声明与视图无关的部分**：排列方向与间距都由视图层决定
+   （quote-dashboard.css 的 qd6 强制 row / center / space-between，间距用它的 8px）。
+   此前这里写 column + align-items:flex-start + gap:4px，与 qd6 的 row/8px 直接矛盾——
+   而本文件先加载、特异性相同，所以那三条**永远不生效**：改这里的人会以为改了却没变化。
+   全量比对（逐文件解析选择器 + 逐属性比对）后确认：同上下文下的跨文件属性冲突仅此一处，
+   其余同名选择器要么是视图层的追加（.table-wrap 的高度上限），要么在 @media print 内
+   （tools.css 隐藏导航，有意覆盖）。 */
+.compose-foot{display:flex;margin-top:8px}
+.compose-sum{font-size:12px;font-weight:600;padding:5px 12px;border:var(--line-thin);border-radius:0;background:var(--ui-white);color:var(--text)}
+.compose-sum.bad{background:var(--ui-yellow);color:var(--ui-black);border-color:var(--ui-black)}
+.compose-k{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+#composeWrap.hidden{display:none}
+/* 构成块内说明文案：压缩占位，避免整块被长说明撑高 */
+#composeWrap .corner-tip{margin:2px 0 8px;font-size:12px;line-height:1.62;max-width:none}
+/* 兜底：.field 内任何原生 select（未接入自定义组件时）也与输入框同一控件语言，
+   不出现浏览器原生框；接入 initCustomSelect 后原生 select 会被 cs-hidden 隐藏，互不冲突。 */
+.field select{
+  width:100%;padding:6px 32px 6px 12px;
+  border:var(--line-thin);border-radius:0;
+  font-size:14px;font-family:var(--font);font-weight:400;color:var(--text);
+  background-color:var(--ui-white);
+  appearance:none;-webkit-appearance:none;
+  background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 12px center;background-size:14px;
+  cursor:pointer;transition:border-color var(--dur-fast);
+}
+.field select:hover, .plan-select:hover{border-color:var(--ui-orange)}
+.field select:focus, .plan-select:focus{border-color:var(--ui-orange)}
+.field select:focus-visible, .plan-select:focus-visible{outline:2px solid var(--ui-orange);outline-offset:2px}
+/* 自定义下拉组件位于 .field 内时，撤销其默认 flex:1（避免列布局下被纵向拉伸） */
+.field .cs{flex:0 0 auto;min-width:0;width:100%}
+
+/* 底部条：说明 + 确认人 */
+.card-corner{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
+.corner-tip{font-size:12px;color:var(--text-secondary);line-height:1.7;margin:0;max-width:640px}
+.card-corner .field{width:200px;max-width:100%;flex-shrink:0}
+
+/* 输入框悬停说明 tooltip：白底 + 2px 黑框 + 0 圆角，无模糊阴影（DESIGN §8.9） */
+.field[data-tip]::after{
+  content:attr(data-tip);
+  position:absolute;left:0;bottom:calc(100% + 8px);
+  background:var(--ui-white);
+  color:var(--text);font-size:12px;line-height:1.5;font-weight:500;
+  padding:7px 11px;border:var(--line-strong);border-radius:0;white-space:normal;
+  /* max-width 取字段自身宽度：气泡自字段左缘向右展开，宽度不超过字段 → 右边界永不越出，无需 JS 翻转 */
+  width:max-content;max-width:min(280px,100%);
+  opacity:0;visibility:hidden;transform:translateY(4px);
+  transition:opacity var(--dur-fast),transform var(--dur-fast),visibility var(--dur-fast);
+  z-index:var(--z-tooltip);pointer-events:none;
+}
+.field[data-tip]::before{
+  content:"";position:absolute;left:14px;bottom:calc(100% + 2px);
+  border:6px solid transparent;border-top-color:var(--ui-black);
+  opacity:0;visibility:hidden;transition:opacity var(--dur-fast),visibility var(--dur-fast);z-index:var(--z-tooltip);
+}
+.field[data-tip]:hover::after,
+.field[data-tip]:hover::before,
+.field[data-tip]:focus-within::after,
+.field[data-tip]:focus-within::before,
+.field[data-tip]:focus-visible::after,
+.field[data-tip]:focus-visible::before{opacity:1;visibility:visible;transform:translateY(0)}
+
+.hint{font-size:12px;color:var(--text-secondary);margin:16px 0 0;line-height:1.6}
+
+/* ---------- 上传区 ---------- */
+.upload-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.upload-card{
+  background:var(--ui-white);border:2px dashed var(--ui-black);border-radius:0;
+  padding:24px;display:flex;flex-direction:column;gap:6px;min-height:140px;
+  cursor:pointer;transition:border-color var(--dur-fast),background-color var(--dur-fast);
+}
+.upload-card:hover{border-color:var(--ui-orange)}
+.upload-icon{width:36px;height:36px;color:var(--text);margin-bottom:4px}
+.upload-icon svg{width:100%;height:100%}
+.upload-card strong{font-size:16px;font-weight:600}
+.upload-card small{color:var(--text-secondary);font-size:12px}
+.upload-card input{display:none}
+.file-name{color:var(--text-tertiary);font-size:12px;margin-top:auto;padding-top:12px}
+.file-name.selected{color:var(--text);font-weight:600}
+
+/* ---------- 消息（成功=黑左条 / 错误=橙左条，DESIGN §8.10） ---------- */
+.message{
+  margin-top:16px;padding:10px 16px;border-radius:0;
+  background:var(--ui-white);border:var(--line-thin);border-left:4px solid var(--ui-black);
+  color:var(--text);font-size:12px;line-height:1.6;
+}
+.message.success{background:var(--ui-white);color:var(--text);border-left-color:var(--ui-black)}
+.message.error{background:var(--ui-white);color:var(--text);border-left-color:var(--ui-orange)}
+
+/* ---------- 按钮（DESIGN §8.3） ---------- */
+.action-row{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.btn-primary,.btn-secondary,.btn-ghost,.download-button{
+  display:inline-flex;align-items:center;gap:6px;justify-content:center;
+  border-radius:0;font-size:14px;font-weight:600;font-family:var(--font);
+  padding:10px 16px;cursor:pointer;
+  transition:background-color var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast),transform var(--dur-fast);
+  white-space:nowrap;
+}
+.btn-primary svg{width:16px;height:16px}
+.btn-primary{background:var(--ui-orange);color:var(--ui-black);border:var(--line-strong);box-shadow:var(--shadow-action)}
+.btn-primary:hover{background:var(--ui-yellow);color:var(--ui-black)}
+.btn-primary:active{transform:translateY(1px)}
+.btn-primary:disabled{opacity:.38;cursor:not-allowed;box-shadow:none}
+.btn-primary:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
+.btn-secondary{background:var(--ui-white);color:var(--text);border:var(--line-strong)}
+.btn-secondary:hover{background:var(--ui-yellow);color:var(--ui-black)}
+.btn-secondary:disabled{opacity:.38;cursor:not-allowed}
+.btn-ghost{background:var(--ui-white);color:var(--text);border:var(--line-thin)}
+.btn-ghost:hover{background:var(--ui-yellow);color:var(--ui-black)}
+.download-button{background:var(--ui-white);color:var(--text);border:var(--line-thin);padding:8px 16px;font-size:12px}
+.download-button:hover{background:var(--ui-yellow);color:var(--ui-black)}
+
+/* ---------- 方案选择下拉 ---------- */
+.plan-select{
+  flex:1;min-width:200px;padding:9px 12px;
+  border:var(--line-thin);
+  border-radius:0;
+  font-size:14px;font-family:var(--font);color:var(--text);cursor:pointer;
+  appearance:none;-webkit-appearance:none;
+  background-color:var(--ui-white);
+  background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 12px center;background-size:14px;
+  padding-right:32px;
+  transition:border-color var(--dur-fast);
+}
+/* hover/focus 与 .field select 收敛（见上） */
+
+/* ---- 自定义下拉（替代原生 select）：白底黑框直角，与输入框同一控件语言 ---- */
+.cs-hidden{display:none!important}
+.cs{position:relative;flex:1;min-width:200px}
+.cs-trigger{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  width:100%;padding:6px 12px;
+  border:var(--line-thin);
+  border-radius:0;
+  font-size:14px;font-family:var(--font);color:var(--text);cursor:pointer;
+  background-color:var(--ui-white);
+  transition:border-color var(--dur-fast);
+}
+.cs-trigger:hover{border-color:var(--ui-orange)}
+.cs-trigger:focus{border-color:var(--ui-orange)}
+.cs-trigger:focus-visible{outline:2px solid var(--ui-orange);outline-offset:2px}
+.cs-trigger svg{width:16px;height:16px;color:var(--text);flex-shrink:0}
+.cs-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.cs-list{
+  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:var(--z-sidebar);
+  margin:0;padding:4px;list-style:none;max-height:320px;overflow:auto;
+  border:var(--line-strong);border-radius:0;
+  background:var(--ui-white);
+}
+.cs-opt{
+  padding:9px 12px;border-radius:0;
+  font-size:12px;color:var(--text);cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:background-color var(--dur-fast),color var(--dur-fast);
+}
+.cs-opt:hover{background:var(--ui-yellow)}
+.cs-opt.cs-selected{background:var(--ui-orange);color:var(--ui-black);font-weight:700}
+.cs-list::-webkit-scrollbar{width:6px}
+.cs-list::-webkit-scrollbar-thumb{background:var(--ui-black)}
+.compare-bar{margin-top:12px;padding-top:16px;border-top:var(--line-thin)}
+.compare-checks{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:10px}
+.compare-check{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--text-secondary)}
+.compare-check input{accent-color:var(--ui-orange)}
+
+/* ---------- 模块占位页（空状态：黑图标 + 说明 + 至多一个操作，DESIGN §8.10） ---------- */
+.module-view{min-height:60vh}
+.module-empty{
+  border:2px dashed var(--ui-black);border-radius:0;
+  background:var(--ui-white);padding:56px 32px;text-align:center;
+}
+.module-icon{
+  width:64px;height:64px;margin:0 auto 16px;
+  background:var(--ui-white);border:var(--line-strong);color:var(--text);
+  display:grid;place-items:center;font-size:28px;
+}
+.module-empty h2{font-size:20px;margin:0 0 8px;font-weight:700;letter-spacing:-.02em}
+.module-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:28px 0;text-align:left}
+.module-cards article{
+  background:var(--ui-white);border:var(--line-thin);border-radius:0;
+  padding:16px;display:flex;flex-direction:column;gap:4px;
+  transition:outline-color var(--dur-fast);
+}
+.module-cards article:hover{outline:2px solid var(--ui-orange);outline-offset:-2px}
+.module-cards strong{font-size:14px;font-weight:600}
+.module-cards span{color:var(--text-secondary);font-size:12px;line-height:1.6}
+
+/* ---------- 响应式（统一 4 档：1280/1024/768/560） ---------- */
+@media (max-width:1280px){
+  .param-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:1024px){
+  .upload-grid{grid-template-columns:1fr}
+  .module-cards{grid-template-columns:1fr}
+}
+@media (max-width:768px){
+  .param-grid{grid-template-columns:1fr}
+}
+/* ---------- 侧栏收起（宽屏隐藏控件，窄屏抽屉式） ---------- */
+.sb-toggle{display:none}
+.sb-backdrop{display:none}
+@media (max-width:768px){
+  /* 汉堡按钮：固定左上角，浮于内容之上 */
+.sb-toggle{display:grid;place-items:center;position:fixed;top:12px;left:12px;z-index:var(--z-toggle);width:44px;height:44px;border:var(--line-strong);background:var(--ui-white);color:var(--text);cursor:pointer;padding:0;transition:background var(--dur-fast)}
+  .sb-toggle:hover{background:var(--ui-yellow)}
+  .sb-toggle:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
+  .sb-toggle .ic-burger,.sb-toggle .ic-close{width:21px;height:21px}
+  .sb-toggle .ic-close{display:none}
+  .app-shell.sb-open .sb-toggle .ic-burger{display:none}
+  .app-shell.sb-open .sb-toggle .ic-close{display:block}
+  /* 遮罩：打开时渐显，点击关闭 */
+.sb-backdrop{display:block;position:fixed;inset:0;background:var(--ui-overlay);z-index:var(--z-backdrop);opacity:0;pointer-events:none;transition:opacity var(--dur-slow)}
+  .app-shell.sb-open .sb-backdrop{opacity:1;pointer-events:auto}
+  /* 侧栏：转为固定抽屉，默认滑出左侧 */
+  .app-shell{display:block}
+.sidebar{position:fixed;left:0;top:0;bottom:0;height:100vh;z-index:var(--z-overlay);transform:translateX(-105%);transition:transform var(--dur-slow) var(--ease-out)}
+  .app-shell.sb-open .sidebar{transform:translateX(0)}
+  /* 主内容占满全宽，顶部为汉堡按钮让位 */
+  .main-content{max-width:none;padding:72px 16px 80px}
+  .card-corner{flex-direction:column;align-items:stretch}
+  .card-corner .field{width:100%}
+  .card-head{flex-direction:column}
+  .card-head p{text-align:left}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
+
+/* ---------- 确认弹窗（报价定稿回写） ---------- */
+.modal-mask{position:fixed;inset:0;background:var(--ui-overlay);display:flex;align-items:center;justify-content:center;z-index:var(--z-modal);animation:fadeIn var(--dur-base) ease}
+.modal{background:var(--ui-white);border:var(--line-strong);border-radius:0;padding:24px;width:440px;max-width:92vw;max-height:90vh;overflow-y:auto;animation:modalEnter var(--dur-slow) ease}
+.modal h3{margin:0 0 12px;font-size:16px;font-weight:700;letter-spacing:-.01em}
+.modal p{margin:0 0 20px;font-size:14px;line-height:1.7;color:var(--text);word-break:break-all}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px}
+@keyframes fadeIn{from{opacity:0}}
+@keyframes modalEnter{from{opacity:0}}
+
+/* ---------- 方案库：项目下的方案数据行（DESIGN §8.2：行间 1px 黑线，不做卡片嵌套） ---------- */
+.plan-cards{display:flex;flex-direction:column;gap:0;margin-top:4px;border:var(--line-thin)}
+.plan-card{
+  display:flex;align-items:center;gap:12px;justify-content:space-between;
+  padding:12px 16px;border:0;border-bottom:var(--line-thin);border-radius:0;
+  background:var(--ui-white);cursor:pointer;transition:background-color var(--dur-fast);
+}
+.plan-card:last-child{border-bottom:0}
+.plan-card:hover{background:var(--ui-yellow)}
+.plan-card.sel{box-shadow:inset 4px 0 0 var(--ui-orange);background:var(--ui-white)}
+.plan-card:focus-visible{outline:2px solid var(--ui-orange);outline-offset:-2px}
+.plan-card-main{min-width:0}
+.plan-card-title{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:700;color:var(--text)}
+.plan-card-badge{
+  flex-shrink:0;font-size:12px;font-weight:600;line-height:1;padding:3px 6px;border-radius:0;vertical-align:1px;
+  color:var(--ui-black);background:var(--ui-orange);
+}
+.plan-card.finalized{box-shadow:inset 0 0 0 2px var(--ui-orange)}
+.plan-card-meta{font-size:12px;font-weight:400;color:var(--text-tertiary)}
+.plan-card-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.plan-card-fin{
+  flex-shrink:0;padding:6px 12px;font-size:12px;border:var(--line-thin);border-radius:0;cursor:pointer;
+  color:var(--text);background:var(--ui-white);transition:background-color var(--dur-fast),border-color var(--dur-fast);
+}
+.plan-card-fin:hover{background:var(--ui-yellow)}
+.plan-card-fin.is-on{background:var(--ui-orange);border-color:var(--ui-black);color:var(--ui-black)}
+.plan-card-fin.is-on:hover{background:var(--ui-yellow)}
+.plan-card-info{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plan-card-del{
+  flex-shrink:0;padding:6px 12px;font-size:12px;border:var(--line-thin);border-radius:0;cursor:pointer;
+  color:var(--text);background:var(--ui-white);transition:background-color var(--dur-fast),color var(--dur-fast);
+}
+.plan-card-del:hover{background:var(--ui-orange);color:var(--ui-black)}
+.plan-card-del.is-disabled{opacity:.38;cursor:not-allowed;pointer-events:none}
+
+/* ---------- 应用内确认框（替换原生 confirm，防止误删） ---------- */
+.ui-confirm-overlay{position:fixed;inset:0;background:var(--ui-overlay);display:flex;align-items:center;justify-content:center;z-index:var(--z-portal);animation:fadeIn var(--dur-fast)}
+.ui-confirm-box{background:var(--ui-white);border:var(--line-strong);border-radius:0;padding:20px;width:min(360px,90vw)}
+.ui-confirm-msg{font-size:14px;color:var(--text);margin-bottom:16px;line-height:1.6;word-break:break-all}
+.ui-confirm-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px}
+.ui-confirm-sub{font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.55}
+.ui-confirm-overlay.danger .ui-confirm-box{border-color:var(--ui-orange)}
+.ui-confirm-actions{display:flex;justify-content:flex-end;gap:10px}
+.btn-danger{border:var(--line-strong);border-radius:0;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;background:var(--ui-orange);color:var(--ui-black);transition:background-color var(--dur-fast),color var(--dur-fast)}
+.btn-danger:hover{background:var(--ui-black);color:var(--ui-white)}
+
+/* ============================================================
+   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   ------------------------------------------------------------
+   覆盖：导航标签与编号、页面 H1、模块短标题、按钮 / Tab / Chip /
+   Badge、时间日期、数据指标、短状态码。
+   不覆盖：长段说明、记录/笔记正文、表单输入内容（§5.1 第 203 行），
+   以及用户/项目数据串（方案名、物料名），一律保持 --font（MiSans）。
+   规范依据 §5.1 第 205 行：像素字体元素统一 font-weight:400 +
+   font-synthesis:none，不以浏览器合成粗体建立层级。
+   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
+   （.brand-text strong / .nav-group-title / .nav-num / .avatar /
+     .version-line 已在上方原规则中直接声明，此处不重复。）
+   ============================================================ */
+.nav-item,                              /* 导航标签文字 */
+.page-header h1,                        /* 页面 H1 */
+.btn-primary,.btn-secondary,.btn-ghost,.download-button, /* 按钮 */
+.btn-danger,
+.status-pill,                           /* Badge / 状态药丸 */
+.ui-confirm-title{                      /* 模块短标题（确认框标题） */
+  font-family:var(--font-pixel);
+  font-weight:400;
+  font-synthesis:none;
+}
+/* ============================================================
+   投标报价沙盘样式（P3 前端整合：由 frontend/quote-dashboard.css + results.css 并入）
+   ============================================================ */
+/* ============================================================================
+   报价页 · 投标报价优化工作台（决策沙盘）
+   V2：黑白极简 + 橙/黄专色。布局令牌统一见 tokens.css
+   规则：橙色只作背景/边框/色块，不作白底文字；无渐变/模糊/阴影（主按钮除外）
+   ============================================================================ */
+
+/* ---------- 双栏布局 ---------- */
+/* 参数栏随视口收缩：1281px 视口下右栏仅约 680px，固定 390px 会把明细表第 6 列挤出可视区。
+   clamp 让参数栏在 300~390px 之间随容器比例变化，宽度优先让给结果区。 */
+.workbench-layout{
+  display:grid;grid-template-columns:clamp(300px,24%,390px) minmax(0,1fr);
+  gap:20px;align-items:stretch;
+}
+.param-column{min-width:0;display:flex;flex-direction:column;gap:16px}
+.param-column > .card{margin-bottom:0}
+.canvas-column{min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px}
+
+/* ---------- 卡片基础 ---------- */
+#quoteView .card{position:relative}
+#quoteView .card-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;padding-bottom:10px;border-bottom:var(--line-thin);
+}
+#quoteView .card-title{
+  font-size:16px;font-weight:700;color:var(--text);
+  display:flex;align-items:center;gap:7px;
+}
+/* 注：.title-dot / .card-subtitle 已移到 styles.css（设计系统层）——工具页也要用它们，
+   不该为这三个选择器加载整份本文件。本文件保留 #quoteView 作用域内的全部规则。 */
+.field-group{display:flex;flex-direction:column;gap:12px}
+
+/* ---------- 一体化前后缀输入框 ---------- */
+.input-affix{
+  display:flex;align-items:center;background:var(--ui-white);
+  border:var(--line-thin);border-radius:0;
+  padding:0 8px;transition:border-color var(--dur-fast);
+}
+.input-affix:focus-within{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
+.input-prefix{font-size:12px;color:var(--text-tertiary);font-weight:500;margin-right:3px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.input-suffix{font-size:12px;color:var(--text-secondary);background:var(--ui-white);border:var(--line-thin);padding:2px 5px;border-radius:0;margin-left:3px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.input-affix input{
+  flex:1;min-width:0;border:none;outline:none;height:30px;font-size:14px;
+  font-family:var(--font);color:var(--text);background:transparent;width:100%;
+}
+
+/* ---------- 安全防线比率滑块 ---------- */
+.range-box{
+  background:var(--ui-white);border:var(--line-thin);
+  border-radius:0;padding:12px 16px;margin-top:4px;
+}
+.range-meta{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.range-val{font-size:14px;font-weight:700;color:var(--text)}
+#quoteView input[type=range]{
+  width:100%;height:5px;background:var(--ui-black);border-radius:0;outline:none;
+  -webkit-appearance:none;appearance:none;cursor:pointer;
+}
+/* 滑块为键盘可操作控件（方向键），必须给出可见焦点环 */
+#quoteView input[type=range]:focus-visible{outline:2px solid var(--ui-orange);outline-offset:3px}
+#quoteView input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:0;
+  background:var(--ui-white);border:2px solid var(--ui-black);
+  cursor:grab;
+}
+.ticks{display:flex;justify-content:space-between;font-size:12px;color:var(--text-tertiary);margin-top:5px}
+
+/* ---------- 低价风控留痕：紧凑警示条（不打断操作，点击展开留痕表单） ---------- */
+.risk-alert-box{
+  position:relative;overflow:visible;margin-top:8px;font-size:12px;
+  display:none;
+}
+.risk-alert-box.active{display:block;animation:qdFadeIn var(--dur-base) var(--ease-out)}
+.risk-summary{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:var(--ui-white);border:2px solid var(--ui-orange);border-left-width:4px;
+  border-radius:0;padding:6px 10px 6px 12px;
+  color:var(--text);font-size:12px;font-weight:600;cursor:pointer;
+  transition:border-color var(--dur-fast),background var(--dur-fast);
+}
+.risk-summary:hover{background:var(--ui-yellow)}
+.risk-summary:focus-visible{outline:2px solid var(--ui-orange);outline-offset:2px}
+.risk-chev{width:14px;height:14px;margin-left:auto;flex-shrink:0;color:var(--ui-black);transition:transform var(--dur-base) var(--ease-out)}
+.risk-alert-box.open .risk-chev{transform:rotate(180deg)}
+.risk-fields-wrap{display:none;padding:9px 2px 0}
+.risk-alert-box.open .risk-fields-wrap{display:block;animation:qdFadeIn var(--dur-base) var(--ease-out)}
+.risk-hint{color:var(--text-secondary);margin-bottom:2px}
+.risk-alert-box strong{font-weight:600}
+.risk-alert-box input{
+  margin-top:8px;width:100%;padding:6px 9px;border:var(--line-thin);
+  border-radius:0;background:var(--ui-white);font-size:14px;color:var(--text);font-family:var(--font);
+}
+.risk-alert-box input:focus{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
+
+/* ---------- 双通道清单上传舱 ---------- */
+.upload-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.upload-slot{
+  background:var(--ui-white);border:2px dashed var(--ui-black);
+  border-radius:0;padding:16px 12px;text-align:center;cursor:pointer;
+  transition:border-color var(--dur-base),background var(--dur-base);
+}
+.upload-slot:hover{background:var(--ui-yellow);border-style:solid;border-color:var(--ui-black)}
+.upload-slot:focus-within{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
+.upload-slot svg{width:22px;height:22px;color:var(--ui-black);margin-bottom:4px;display:block;margin-left:auto;margin-right:auto}
+.upload-slot strong{display:block;font-size:12px;color:var(--text)}
+.upload-slot > span{font-size:12px;color:var(--text-tertiary)}
+.upload-slot input[type=file]{display:none}
+.upload-slot .file-tag{
+  font-size:12px;color:var(--text);font-weight:600;background:var(--ui-white);
+  border:var(--line-thin);padding:2px 7px;border-radius:0;margin-top:8px;display:inline-block;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* ---------- 方案切换：同一条分段控制条 ---------- */
+.scheme-switcher-bar{
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;
+  background:var(--ui-white);border:var(--line-thin);
+  border-radius:0;padding:6px 10px;
+}
+.scheme-tabs{display:flex;gap:0;flex-wrap:wrap}
+.scheme-tab{
+  border:var(--line-thin);border-right:none;background:var(--ui-white);padding:7px 16px;border-radius:0;
+  font-size:12px;font-weight:600;color:var(--text);cursor:pointer;
+  transition:background var(--dur-fast),color var(--dur-fast);display:flex;align-items:center;gap:6px;
+}
+.scheme-tab:last-child{border-right:var(--line-thin)}
+.scheme-tab:hover{background:var(--ui-yellow)}
+.scheme-tab.active{background:var(--ui-orange);color:var(--ui-black)}
+.scheme-tab.active svg,.scheme-tab.active .tab-indicator{color:var(--ui-black)}
+.scheme-tab .tab-indicator{width:6px;height:6px;border-radius:50%;background:var(--ui-black)}
+.scheme-tab:focus-visible,.filter-chip:focus-visible,.kpi-card:focus-visible,
+.dock-btn:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
+
+/* ---------- 4 联 KPI 看板（单色收敛，类别仅靠序号） ---------- */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi-card{
+  background:var(--ui-white);border:var(--line-strong);
+  border-top-width:4px;
+  border-radius:0;padding:16px;
+  position:relative;cursor:pointer;transition:border-color var(--dur-base),background var(--dur-base);
+}
+.kpi-card.kpi-bamboo,.kpi-card.kpi-ochre,.kpi-card.kpi-blue{border-top-color:var(--ui-black)}
+.kpi-card:hover{border-color:var(--ui-orange)}
+.kpi-card.active-drill{border-color:var(--ui-orange);box-shadow:inset 4px 0 0 var(--ui-orange)}
+/* 钻取穿透指示：激活卡片底部向下微三角，建立「该指标正在过滤下方清单」的心智链接 */
+.kpi-card.active-drill::after{
+  content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);
+  width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;
+  border-top:5px solid var(--ui-orange);
+}
+.kpi-card[tabindex]:focus-visible{border-color:var(--ui-orange);outline:3px solid var(--ui-orange);outline-offset:2px}
+
+/* 标题行预留两行高度：四张卡的标题长度不一（「测算总报价 (含税)」带 hover 提示时折两行，
+   「测算进项抵扣总额」只有一行），不预留的话值/图形/底注三行的基线会各差 18px。
+   KPI 卡在网格里本来就等高，预留不增加页面高度，只把多出的留白放进最矮的卡。 */
+.kpi-label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;min-height:38px}
+.kpi-title{font-size:12px;font-weight:500;color:var(--text-secondary)}
+.kpi-drill-hint{font-size:12px;color:var(--text-tertiary);opacity:0;transition:opacity var(--dur-fast);white-space:nowrap}
+.kpi-card:hover .kpi-drill-hint{opacity:1}
+.kpi-val{
+  font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.02em;
+  display:flex;align-items:baseline;gap:5px;margin-bottom:4px;flex-wrap:wrap;
+}
+.delta-badge{
+  font-size:12px;font-weight:600;padding:1px 6px;border-radius:0;
+  border:var(--line-thin);
+  display:inline-flex;align-items:center;gap:2px;white-space:nowrap;
+}
+.delta-badge.gain{background:var(--ui-white);color:var(--text)}
+.delta-badge.warn{background:var(--ui-yellow);color:var(--text)}
+.delta-badge.neutral{background:var(--ui-white);color:var(--text-secondary)}
+.sparkline-svg{width:100%;height:28px;margin:4px 0;display:block}
+/* KPI 视觉槽：四张卡的图形统一放进等高容器，底注基线因此对齐；
+   6px 方角色带承担原卡 3 的行内三段条（原实现用了 3px 圆角，与全站直角规则冲突）。 */
+.kpi-vis{height:28px;display:flex;align-items:center;margin:6px 0 4px}
+.kpi-vis .sparkline-svg{width:100%;height:28px;margin:0}
+.kpi-scale{display:flex;width:100%;height:6px;border:1px solid var(--ui-black);background:var(--ui-white)}
+.kpi-scale > i{display:block;height:100%}
+.kpi-scale > .seg-safe{background:var(--success)}
+.kpi-scale > .seg-early{background:var(--warn)}
+.kpi-scale > .seg-risk{background:var(--danger)}
+.kpi-foot{
+  font-size:12px;color:var(--text-tertiary);display:flex;justify-content:space-between;
+  gap:6px;flex-wrap:wrap;border-top:var(--line-thin);padding-top:5px;margin-top:0;
+}
+.kpi-foot .kpi-foot-status{font-weight:600;color:var(--text)}
+
+/* ---------- 明细审查表 ---------- */
+/* 明细表撑满右栏剩余高度，底部与左栏（报价资料卡）对齐，行多时表内纵向滚动 */
+.table-section{
+  background:var(--ui-white);border:var(--line-strong);
+  border-radius:0;padding:var(--card-pad) 20px;
+  flex:1 1 auto;min-height:260px;display:flex;flex-direction:column;
+}
+.table-toolbar{
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
+  flex-wrap:wrap;gap:10px;flex-shrink:0;
+}
+.filter-chips{display:flex;gap:6px;flex-wrap:wrap}
+.filter-chip{
+  border:var(--line-thin);background:var(--ui-white);
+  padding:4px 11px;border-radius:0;font-size:12px;font-weight:500;
+  color:var(--text);cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
+}
+.filter-chip:hover{background:var(--ui-yellow);border-color:var(--ui-black);color:var(--text)}
+.filter-chip.active{background:var(--ui-orange);color:var(--ui-black);border-color:var(--ui-black);font-weight:600}
+
+.table-scroll{overflow:auto;border:var(--line-thin);border-radius:0;background:var(--ui-white);flex:1 1 auto;min-height:0}
+/* 横向滚动条常显：改前用 overlay 滚动条，最后一列被切在卡片边界上而无任何可滚动提示。
+   注意 10 列合计约 1316px，而 1440 视口下容器只有 737px，横向滚动是这张表的固有形态。
+   这里只用 ::-webkit-scrollbar 而不再写 scrollbar-width/scrollbar-color：
+   Chromium 只要看到 scrollbar-width 就改用自带的 Fluent 细滚动条，反而忽略下面这套规则，
+   实测滑块几乎看不见。去掉之后滑块由本文件完全接管：12px 轨道 + 实心黑滑块。 */
+.table-scroll::-webkit-scrollbar{width:12px;height:12px}
+.table-scroll::-webkit-scrollbar-track{background:var(--ui-white);border-top:var(--line-thin)}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--ui-black)}
+.table-scroll::-webkit-scrollbar-corner{background:var(--ui-white)}
+.table-scroll table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.table-scroll th{
+  background:var(--ui-white);color:var(--text);font-weight:700;text-align:left;
+  padding:9px 10px;border-bottom:var(--line-strong);position:sticky;top:0;z-index:var(--z-sticky);
+}
+.table-scroll th.num,.table-scroll td.num{text-align:right;padding-right:14px}
+/* 数字列语义类：从 JS 内联色收拢到 CSS 单点可调（P0-1） */
+.table-scroll td.cell-code{color:var(--text-secondary)}
+.table-scroll td.cap{color:var(--text-secondary)}
+.table-scroll td.cost{color:var(--text-tertiary)}
+.table-scroll td.quote{color:var(--text);font-weight:700}
+.table-scroll td.cell-total{font-weight:600}
+.table-scroll td{padding:9px 10px;border-bottom:var(--line-thin);color:var(--text)}
+.table-scroll tbody tr:hover > td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
+.table-scroll tbody tr.selected > td:first-child{box-shadow:inset 4px 0 0 var(--ui-orange)}
+.table-scroll tbody tr:last-child td{border-bottom:none}
+/* 冻结首两列：横向滚动时「项目编码 / 项目名称」保持可见；第二列偏移由 JS 实测 --frozen-w 同步 */
+.table-scroll th:nth-child(1),
+.table-scroll td:nth-child(1):not([colspan]){
+  position:sticky;left:0;z-index:calc(var(--z-sticky) + 1);background:var(--ui-white);
+}
+.table-scroll th:nth-child(2),
+.table-scroll td:nth-child(2){
+  position:sticky;left:var(--frozen-w,110px);z-index:calc(var(--z-sticky) + 1);background:var(--ui-white);
+  border-right:var(--line-thin);
+}
+.table-scroll thead th:nth-child(1),
+.table-scroll thead th:nth-child(2){z-index:calc(var(--z-sticky) + 2);background:var(--ui-white)}
+
+.ratio-pill-cell{display:inline-flex;align-items:center;gap:6px}
+.mini-progress{
+  width:42px;height:4px;background:var(--ui-white);border:1px solid var(--ui-black);border-radius:0;overflow:hidden;display:inline-block;
+}
+.mini-progress-fill{height:100%;background:var(--ui-black);transition:width var(--dur-slow) var(--ease-out)}
+.status-tag{font-size:12px;font-weight:600;padding:2px 7px;border:var(--line-thin);border-radius:0;display:inline-block;white-space:nowrap;background:var(--ui-white);color:var(--text)}
+.status-tag.early{background:var(--ui-yellow);color:var(--text)}
+.status-tag.safe{background:var(--ui-white);color:var(--text)}
+.status-tag.risk{background:var(--ui-white);color:var(--text);border:2px solid var(--ui-orange)}
+.note-cell{font-size:12px;color:var(--text-secondary);margin-left:6px}
+
+/* ---------- 常驻悬浮操作坞 ---------- */
+/* right 由 32px 让到 92px：给右下角 AI 助手 FAB（48px 宽 + 12px 间距）腾位，两者不重叠。 */
+.floating-dock{
+  position:fixed;bottom:24px;right:92px;z-index:var(--z-floating);
+  background:var(--ui-white);
+  border:var(--line-strong);border-radius:0;padding:6px 10px;
+  display:flex;align-items:center;gap:8px;
+}
+.dock-btn{
+  border:var(--line-thin);padding:8px 16px;border-radius:0;font-size:12px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);color:var(--text);background:var(--ui-white);
+}
+.dock-btn.primary{background:var(--ui-orange);color:var(--ui-black);border:var(--line-strong);box-shadow:var(--shadow-action)}
+.dock-btn.primary:hover{background:var(--ui-yellow);color:var(--ui-black)}
+.dock-btn.primary:active{transform:translateY(1px)}
+.dock-btn.secondary{border:var(--line-strong)}
+.dock-btn.secondary:hover{background:var(--ui-yellow);border-color:var(--ui-black)}
+.dock-btn:disabled{opacity:.38;cursor:not-allowed}
+
+/* ---------- 方案对比抽屉 ---------- */
+.diff-backdrop{
+  position:fixed;inset:0;background:var(--ui-overlay);
+  z-index:var(--z-drawer-backdrop);opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease-out);
+}
+.diff-backdrop.open{opacity:1;pointer-events:auto}
+.diff-drawer{
+  position:fixed;top:0;right:0;bottom:0;width:480px;max-width:92vw;z-index:var(--z-drawer);
+  background:var(--ui-white);border-left:var(--line-strong);
+  display:flex;flex-direction:column;
+  transform:translateX(105%);transition:transform var(--dur-base) var(--ease-out);
+}
+.diff-drawer.open{transform:translateX(0)}
+.diff-header{
+  padding:16px 24px;border-bottom:var(--line-thin);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.diff-header h3{margin:0;font-size:16px;font-weight:700}
+.diff-body{padding:24px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px}
+.diff-compare-card{background:var(--ui-white);padding:16px;border-radius:0;border:var(--line-thin)}
+
+/* ---------- Toast（语义由左侧色条 + 文案承载，不靠橙黄文字） ---------- */
+/* Toast 堆叠容器：右上角垂直堆叠，最多 3 条，新条从上方滑入 */
+.toast-stack{
+  position:fixed;top:24px;right:24px;z-index:var(--z-toast);
+  display:flex;flex-direction:column;gap:8px;align-items:flex-end;
+  max-width:420px;width:max-content;
+  pointer-events:none;
+}
+.toast-pill{
+  background:var(--ui-white);color:var(--text);padding:8px 16px;
+  border:var(--line-strong);border-left-width:4px;border-radius:0;
+  font-size:12px;font-weight:500;
+  display:flex;align-items:center;gap:6px;
+  opacity:0;
+  pointer-events:auto;
+  transition:opacity var(--dur-base) var(--ease-out);
+  max-width:100%;
+}
+.toast-pill.show{opacity:1}
+.toast-pill.leaving{opacity:0}
+.toast-pill.toast-success{border-left-color:var(--ui-black)}
+.toast-pill.toast-error{border-left-color:var(--ui-orange)}
+.toast-pill.toast-warn{border-left-color:var(--ui-yellow)}
+
+@keyframes qdFadeIn{from{opacity:0}to{opacity:1}}
+
+/* ============================================================================
+   报价页升级：等宽数字 / 方案库动线 / 安全防线滑块 / 税口径堆叠条 / 双通道资产舱 / 字段徽标
+   ============================================================================ */
+
+/* 2) 等宽数字排版（Tabular Nums）：凡数字一律等宽，逐行对位
+   注：无前缀的 .tabular 已移到 styles.css（工具页数字列也用它）；此处只留 #quoteView 作用域。 */
+#quoteView .kpi-val, #quoteView .kpi-foot b,
+#quoteView .range-val, #quoteView .delta-badge,
+#quoteView table td.num,
+#quoteView .f-val, #quoteView .comp-formula-badge .f-val,
+#quoteView input.tabular, #quoteView .ratio-pill-cell span:last-child,
+#quoteView .mini-progress ~ span{
+  font-variant-numeric:tabular-nums !important;
+  font-feature-settings:"tnum" !important;
+}
+#quoteView input[type=number]{font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield}
+/* 金额/税率输入去掉原生上下箭头，数字位数多时不挤压输入区 */
+#quoteView input[type=number]::-webkit-outer-spin-button,
+#quoteView input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+/* 1) 方案库操作动线：次级工具组 + 主 CTA */
+.plan-util-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 8px}
+.plan-util{
+  border:var(--line-thin);background:var(--ui-white);color:var(--text);
+  padding:7px 0;border-radius:0;font-size:12px;font-weight:500;cursor:pointer;
+  transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
+}
+.plan-util:hover{background:var(--ui-yellow);border-color:var(--ui-black);color:var(--text)}
+.plan-util:focus-visible,.plan-main-act:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
+.plan-main-act{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--ui-orange);color:var(--ui-black);border:var(--line-strong);
+  padding:10px 16px;border-radius:0;font-size:12px;font-weight:600;cursor:pointer;
+  box-shadow:var(--shadow-action);transition:background var(--dur-fast),color var(--dur-fast);
+}
+.plan-main-act:hover{background:var(--ui-yellow);color:var(--ui-black)}
+.plan-main-act:active{transform:translateY(1px)}
+.plan-main-act svg{width:16px;height:16px;color:inherit}
+.plan-main-act:disabled{opacity:.38;cursor:not-allowed}
+
+/* 3) 安全防线双向 Range：区间带以橙色半透明色块表达，废标/安全分界为黑色细线 */
+.guardrail{
+  background:var(--ui-white);border:var(--line-thin);border-radius:0;
+  padding:12px 16px;margin-top:4px;
+  transition:border-color var(--dur-fast);
+}
+.guardrail-track{position:relative;height:24px;margin-top:2px}
+.guardrail-zones{
+  position:absolute;left:0;right:0;top:5px;height:9px;border-radius:0;
+  background:var(--ui-white);border:var(--line-thin);
+  display:flex;align-items:center;font-size:12px;color:var(--text-secondary);
+}
+/* 安全防线为组件内局部层叠：以 z 阶梯基线 --z-sticky 起算，不使用全局浮层层级 */
+.guardrail-zones .gz-serious{padding-left:4px;font-weight:600;position:relative;z-index:calc(var(--z-sticky) + 1)}
+.guardrail-zones .gz-line{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--ui-black);z-index:calc(var(--z-sticky) + 1)}
+.guardrail-zones .gz-safe{margin-left:auto;padding-right:4px;font-weight:600;color:var(--text);position:relative;z-index:calc(var(--z-sticky) + 1)}
+.guardrail-fill{
+  position:absolute;top:5px;height:9px;border-radius:0;z-index:var(--z-sticky);
+  background:var(--ui-orange);opacity:.32;
+  pointer-events:none;
+  transition:left var(--dur-fast) var(--ease-out),width var(--dur-fast) var(--ease-out);
+}
+/* 风险态：轨道改为橙色 2px 描边（静态提示，不做呼吸闪烁） */
+.guardrail.is-risk{
+  border-color:var(--ui-orange);border-width:2px;
+}
+#quoteView .guardrail input[type=range]{position:relative;z-index:calc(var(--z-sticky) + 1);height:24px;background:transparent}
+#quoteView .guardrail input[type=range]::-webkit-slider-runnable-track{height:9px;border-radius:0;background:transparent}
+#quoteView .guardrail input[type=range]::-webkit-slider-thumb{margin-top:-4px}
+#quoteView .guardrail input[type=range]::-moz-range-track{background:transparent;height:9px}
+.guardrail-legend{display:flex;gap:16px;margin-top:6px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
+.guardrail-legend span{display:inline-flex;align-items:center;gap:5px}
+.guardrail-legend i{width:8px;height:8px;border-radius:50%}
+.gl-red i{background:var(--ui-orange)}
+.gl-safe i{background:var(--ui-black)}
+
+/* 3b) 低价风控留痕：行内角标 + 双输入 + 确认芯片 */
+.risk-corner{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;
+  background:var(--ui-white);border:2px solid var(--ui-orange);
+  color:var(--text);font-size:12px;font-weight:700;letter-spacing:.04em;
+  padding:2px 8px;border-radius:0;
+}
+.risk-corner::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--ui-orange)}
+.risk-fields{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
+.risk-alert-box .risk-confirm{
+  display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--text);
+  border:var(--line-thin);background:var(--ui-white);
+  padding:7px 10px;border-radius:0;cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast);
+}
+.risk-alert-box .risk-confirm:has(input:checked){background:var(--ui-yellow);border-color:var(--ui-black)}
+.risk-alert-box .risk-confirm input{width:auto;margin:0;accent-color:var(--ui-orange);cursor:pointer}
+
+/* 4) 税口径：配比堆叠条 + k 公式 Metric Badge */
+.comp-stack{margin-top:8px}
+.comp-stack-bar{display:flex;height:10px;border-radius:0;overflow:hidden;background:var(--ui-white);border:var(--line-thin)}
+.comp-stack-bar .cs-fill{height:100%;transition:width var(--dur-slow) var(--ease-out)}
+.comp-stack-bar .c-credit{background:var(--ui-orange)}              /* 橙：可抵扣 */
+.comp-stack-bar .c-ledger{background:var(--ui-black)}               /* 黑：不可抵扣 */
+.comp-stack-legend{display:flex;gap:16px;margin-top:7px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
+.comp-stack-legend .cl-it{display:inline-flex;align-items:center;gap:6px}
+.comp-stack-legend .cl-it b{color:var(--text);font-weight:600}
+.cs-dot{width:9px;height:9px;border-radius:0;flex-shrink:0}
+.cs-dot.c-credit{background:var(--ui-orange)}
+.cs-dot.c-ledger{background:var(--ui-black)}
+.comp-formula-badge{
+  display:flex;align-items:baseline;gap:8px;margin:10px 0;
+  padding:9px 12px;border-radius:0;
+  background:var(--ui-white);
+  border:var(--line-thin);
+  transition:background var(--dur-base),border-color var(--dur-base);
+}
+.comp-formula-badge .f-label{font-size:12px;color:var(--text-secondary);font-weight:600;letter-spacing:.02em}
+.comp-formula-badge .f-val{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.02em;line-height:1}
+.comp-formula-badge .f-unit{font-size:12px;color:var(--text-tertiary);margin-left:auto;text-align:right}
+
+/* 5) 双通道资产舱 Dual Intake Bay */
+.intake-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.intake-slot{
+  position:relative;background:var(--ui-white);border:var(--line-thin);
+  border-radius:0;padding:0;cursor:pointer;overflow:hidden;
+  display:flex;flex-direction:column;
+  transition:border-color var(--dur-base),background var(--dur-base);
+}
+.intake-slot input[type=file]{display:none}
+.intake-slot:hover{border-color:var(--ui-orange);background:var(--ui-yellow)}
+.intake-slot:focus-within,
+.intake-slot:focus-visible{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
+.intake-slot.dragging{border-color:var(--ui-orange);background:var(--ui-yellow)}
+.intake-head{display:flex;align-items:center;gap:9px;padding:12px 12px 9px}
+/* 图标块两个槽位同款：白底 + 黑色描边图标。
+   重构前这里是 --ic/--ic-soft 两个变量（cap 淡蓝 #e5edf6 / cost 淡绿 #e6f1ec），用来轻量区分两槽；
+   V2 禁第三强调色时这两个值被分别映射，cap 落成 --ui-yellow（中饱和强调色）、cost 落成白，
+   于是两个同构槽位变成一黄一白；且悬停时 .intake-slot:hover 会把槽底也变黄，
+   cap 的图标块随之与槽底同色、边界消失。现统一为白，去掉这层无用间接。 */
+.intake-ic{
+  width:34px;height:34px;border-radius:0;flex-shrink:0;display:grid;place-items:center;
+  background:var(--ui-white);color:var(--ui-black);border:var(--line-thin);
+}
+.intake-ic svg{width:18px;height:18px}
+.intake-title strong{display:block;font-size:12px;font-weight:700;color:var(--text)}
+.intake-title span{font-size:12px;color:var(--text-tertiary)}
+.intake-title span:last-child{display:block}
+.intake-body{padding:0 12px 12px;border-top:var(--line-thin);padding-top:9px;flex:1 1 auto;display:flex;flex-direction:column}
+.intake-state{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
+.intake-cta{color:var(--text);font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--ui-black);opacity:.38;flex-shrink:0}
+.intake-slot:not(.loaded) .pulse-dot{background:var(--ui-black);opacity:.38}
+.intake-slot.loaded .pulse-dot{background:var(--ui-black);opacity:1}
+.intake-reup{
+  display:none;margin:0 auto;border:var(--line-thin);background:var(--ui-white);color:var(--text);
+  font-size:12px;font-weight:600;padding:4px 12px;border-radius:0;cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
+}
+.intake-reup:hover{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
+.intake-slot:not(.loaded) .intake-reup{display:inline-block}
+.intake-slot.loaded{border-color:var(--ui-black);outline:1px solid var(--ui-black);outline-offset:-1px}
+.intake-slot.loaded .intake-cta{color:var(--text)}
+
+/* ---------- 响应式 ---------- */
+/* 注：prefers-reduced-motion 的动效关闭规则**只在 styles.css 里定义一份**
+   （*,*::before,*::after 的 animation/transition/iteration-count/scroll-behavior）。
+   本文件曾有一份更弱的副本（仅 `*`、且时长 .01ms 而非 .001ms）：两处 !important 同名属性
+   跨文件取值不同，属实测出的真实冲突，且它加载在后会把更严的那份盖松。已删。 */
+@media (max-width:1280px){
+  .workbench-layout{grid-template-columns:1fr}
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:768px){
+  /* 操作坞在窄屏居中、并抬到 FAB 上方（FAB 占 bottom:24~72），避免与其重叠遮挡 */
+  .floating-dock{left:50%;right:auto;transform:translateX(-50%);bottom:84px}
+  .kpi-row{grid-template-columns:1fr}
+  .intake-grid{grid-template-columns:1fr}
+  .table-section{padding:16px}
+}
+
+/* ============================================================================
+   本轮细化 · qd3
+   1) 下拉底色与输入框一致  3) 空态就绪度检查清单  3b) FAB 加载动效
+   4) 右侧对比结果卡  5) 安全防线双滑块叠加  6) 资产舱统计约束
+   ============================================================================ */
+
+/* 1) 下拉触发器与选项面板：实心白底，与输入框一致 */
+#quoteView .cs-trigger{
+  background:var(--ui-white);
+}
+#quoteView .cs-list{
+  background:var(--ui-white);
+}
+#quoteView .cs-opt:hover,
+#quoteView .cs-opt[aria-selected="true"]{background:var(--ui-yellow)}
+
+/* 3) 测算准备就绪度检查清单（测算前空态，替代单行提示） */
+.prepare-panel .card-head{margin-bottom:12px}
+.prep-item{
+  display:flex;align-items:flex-start;gap:9px;padding:10px 12px;margin-bottom:8px;
+  border:var(--line-thin);border-radius:0;background:var(--ui-white);
+  font-size:12px;color:var(--text-secondary);transition:border-color var(--dur-fast),background var(--dur-fast);
+}
+.prep-item:last-child{margin-bottom:0}
+.prep-item .prep-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0;background:var(--ui-black);opacity:.38}
+.prep-item[data-state="ok"]{border-color:var(--ui-black);background:var(--ui-white);color:var(--text)}
+.prep-item[data-state="ok"] .prep-dot{background:var(--ui-black);opacity:1}
+.prep-item[data-state="alert"]{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
+.prep-item[data-state="alert"] .prep-dot{background:var(--ui-black);opacity:1}
+.prep-text{flex:1;min-width:0}
+.prep-state{
+  flex-shrink:0;font-size:12px;font-weight:600;padding:2px 9px;border-radius:0;
+  border:var(--line-thin);
+  background:var(--ui-white);color:var(--text-secondary);margin-left:6px;
+}
+.prep-state.ok{background:var(--ui-black);color:var(--ui-white)}
+.prep-state.alert{background:var(--ui-yellow);color:var(--ui-black)}
+
+/* 4) 右侧主舞台：多方案横向对比结果卡 */
+.compare-stage .result-head{margin-bottom:12px}
+.compare-stage .result-head h3{font-size:16px;font-weight:700;margin:0;color:var(--text)}
+.compare-stage .result-head p{font-size:12px;color:var(--text-secondary);margin:4px 0 0}
+.compare-stage .table-wrap{margin-bottom:4px}
+
+/* 3b) FAB 操作坞：分割线 + ghost 次级 + 运算加载旋转动效 */
+.dock-sep{width:1px;height:22px;background:var(--ui-black);margin:0 2px}
+.dock-btn.ghost{color:var(--text-secondary);border:1px solid transparent;background:transparent}
+.dock-btn.ghost:hover{border-color:var(--line-thin);background:var(--ui-yellow);color:var(--text)}
+.floating-dock .dock-btn.dock-busy{pointer-events:none;opacity:.85}
+.dock-btn.dock-busy::before{
+  content:"";display:inline-block;width:12px;height:12px;border-radius:50%;
+  border:2px solid currentColor;border-top-color:transparent;
+  animation:dockSpin .7s linear infinite;margin-right:2px;
+}
+@keyframes dockSpin{to{transform:rotate(360deg)}}
+
+/* 5) 安全防线双滑块：两把 thumb 绝对叠加到同一可视化轨道 */
+#quoteView .guardrail-track input[type=range]{
+  position:absolute;left:0;right:0;top:0;bottom:0;width:100%;height:24px;margin:0;
+  background:transparent;pointer-events:none;z-index:calc(var(--z-sticky) + 1);
+}
+#quoteView .guardrail-track input[type=range]::-webkit-slider-thumb{pointer-events:auto}
+#quoteView .guardrail-track input[type=range]::-moz-range-thumb{pointer-events:auto}
+
+/* 6) 双通道资产舱：两列等宽、重新上传两卡一致居中 */
+.intake-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.intake-title span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.intake-reup{display:block;width:fit-content;margin:auto auto 0;flex-shrink:0}
+@media (prefers-reduced-motion:reduce){ .dock-btn.dock-busy::before{animation:none} }
+
+/* ============================================================================
+   本轮细化 · qd4
+   双滑块 thumb 区隔化 · k 内联 pill · 方案 Tab 溢出保护
+   ============================================================================ */
+
+/* 双滑块 thumb 区隔：下限=橙（废标风险），上限=黑（合规安全），呼应图例（白钮体 + 状态色描边） */
+#quoteView .guardrail-track input[type=range]#ratioLow::-webkit-slider-thumb{border:2px solid var(--ui-orange)}
+#quoteView .guardrail-track input[type=range]#ratioHigh::-webkit-slider-thumb{border:2px solid var(--ui-black)}
+#quoteView .guardrail-track input[type=range]#ratioLow::-moz-range-thumb{background:var(--ui-white);border:2px solid var(--ui-orange)}
+#quoteView .guardrail-track input[type=range]#ratioHigh::-moz-range-thumb{background:var(--ui-white);border:2px solid var(--ui-black)}
+
+/* k 换算系数：compose-foot 行内 pill（含税→不含税） */
+.compose-foot{gap:8px;flex-wrap:wrap}
+.k-inline{
+  display:inline-flex;align-items:center;gap:5px;flex-shrink:0;
+  background:var(--ui-white);border:var(--line-thin);
+  border-radius:0;padding:2px 10px 2px 8px;font-size:12px;color:var(--text-secondary);
+}
+.k-inline i{font-style:normal;font-weight:700;color:var(--text);font-size:12px}
+.k-inline b{font-weight:700;color:var(--text)}
+.k-inline em{font-style:normal;color:var(--text-tertiary);font-size:12px}
+/* k 公式下标 j：字体缺 U+2C7C，改用 <sub>j</sub>；显式取 12px（像素字体原生设计尺寸），
+   避免浏览器默认的 smaller（≈10px）落在非 12 网格上发糊。 */
+#quoteView .k-inline em sub{font-size:12px;line-height:0}
+
+/* 方案 Tab 文字：过长单行省略，悬浮显示完整名（由 label.title 提供） */
+#quoteView .scheme-tab .tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:126px}
+
+/* ============================================================================
+   本轮打磨 · qd5（P2）
+   结果入场动画 · 选中态统一墨黑 · 卡片内边距统一 · FAB 窄屏图标化
+   ============================================================================ */
+
+/* —— 末次测算结果入场：4 卡错峰淡入（只改透明度，不做位移） —— */
+#quoteView .dash-arrive .kpi-card{animation:kpiIn var(--dur-base) var(--ease-out) both}
+#quoteView .dash-arrive .kpi-card:nth-child(2){animation-delay:.05s}
+#quoteView .dash-arrive .kpi-card:nth-child(3){animation-delay:.1s}
+#quoteView .dash-arrive .kpi-card:nth-child(4){animation-delay:.15s}
+#quoteView .dash-arrive .table-section>*, #quoteView .dash-arrive .compare-stage>*{animation:kpiIn var(--dur-base) var(--ease-out) both}
+@keyframes kpiIn{from{opacity:0}to{opacity:1}}
+
+/* —— 方案切换（A/B/C）：卡片容器完全静止，仅数值平滑淡入，避免快速连点的上下抖动 —— */
+#quoteView .scheme-fade .table-scroll tbody{animation:valIn var(--dur-base) var(--ease-out) both}
+#quoteView .kpi-val.val-fade{animation:valIn var(--dur-base) var(--ease-out) both}
+@keyframes valIn{from{opacity:.3}to{opacity:1}}
+
+/* —— 选中 / 钻取态统一：橙色描边 + 橙色左条，不做位移 —— */
+#quoteView .kpi-card.active-drill{border-color:var(--ui-orange);box-shadow:inset 4px 0 0 var(--ui-orange)}
+#quoteView .kpi-card.active-drill::before{background:var(--ui-orange)!important}
+#quoteView .filter-chip.active{background:var(--ui-orange);color:var(--ui-black)}
+
+/* —— 排版网格统一 —— */
+#quoteView .compare-stage{padding:20px}
+#quoteView .kpi-row{gap:16px}
+
+/* —— FAB 窄屏图标化：≤1024px 隐文本、保留图标，杜绝 5 按钮横排溢出 —— */
+@media (max-width:1024px){
+  .floating-dock .dock-btn{font-size:0;line-height:0;padding:10px;gap:0;min-width:40px;justify-content:center}
+  .floating-dock .dock-sep{margin:0 4px}
+}
+@media (prefers-reduced-motion:reduce){
+  #quoteView .dash-arrive .kpi-card,
+  #quoteView .dash-arrive .table-section>*,
+  #quoteView .dash-arrive .compare-stage>*{animation:none}
+}
+
+/* ============================================================================
+   本轮微调 · qd6
+   成本进项税抵扣模型紧凑化 · k-inline 与占比合计锁定同行 · 双滑块锚定
+   ============================================================================ */
+
+/* 换算系数 pill 与「占比合计」强制同行同高，不换行 */
+.compose-foot{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:nowrap}
+.compose-foot .compose-sum{min-width:0;white-space:nowrap}
+.k-inline{max-width:100%;flex-shrink:1;flex-wrap:wrap;row-gap:0;line-height:1.35}
+.k-inline em{white-space:normal}
+
+/* 成本进项税抵扣模型：逐段收紧纵向留白 */
+#quoteView #composeWrap{margin-top:2px}
+#quoteView #composeWrap .comp-stack{margin:2px 0 6px}
+#quoteView #composeWrap .comp-stack-legend{margin-top:4px}
+#quoteView #composeWrap .compose-table{margin-top:2px}
+#quoteView #composeWrap .compose-row{padding:5px 8px}
+#quoteView #composeWrap .compose-foot{margin-top:6px}
+
+/* ============================================================================
+   本轮重构 · qd11（P0）
+   右栏唯一真相源：就绪清单操作按钮 / 预览核对卡 / 结果动作工具栏 / Toast 语义色
+   ============================================================================ */
+
+/* 1) 就绪清单（#preparePanel）底部操作组：预览=次级、识别并计算=主 CTA */
+.prep-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.prep-actions .btn-primary,
+.prep-actions .btn-secondary{flex:1;min-width:150px;justify-content:center;padding:10px 16px;font-size:14px}
+.prep-actions .btn-primary:focus-visible,
+.prep-actions .btn-secondary:focus-visible,
+.result-actions button:focus-visible,
+.result-actions a:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
+
+/* 2) 预览核对卡（#previewStage）：复用 card/table 体系，标题沿用对比卡规格 */
+.preview-stage .result-head{margin-bottom:12px}
+.preview-stage .result-head h3{font-size:16px;font-weight:700;margin:0;color:var(--text)}
+.preview-stage .result-head p{font-size:12px;color:var(--text-secondary);margin:4px 0 0}
+
+/* 3) 明细表工具栏右侧：结果动作小按钮组（下载 Excel / 下载 JSON / 定稿并回写） */
+.table-toolbar-side{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.result-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.result-actions .btn-primary,
+.result-actions .btn-secondary,
+.result-actions .download-button{padding:6px 12px;font-size:12px;border-radius:0;min-height:30px}
+
+/* 4) 方案 Tab：槽位 C 恒灰显（disabled 态），A/B 恢复正常指针 */
+#quoteView .scheme-tab:disabled{opacity:.38;cursor:not-allowed;color:var(--text-tertiary)}
+#quoteView .scheme-tab:disabled:hover{background:var(--ui-white)}
+
+/* 5) 成本清单卡 intake-title：span 与 strong 统一行高、左对齐，两槽位视觉对齐 */
+.intake-title strong,.intake-title span{line-height:1.5;text-align:left}
+
+/* ============================================================================
+   本轮重构 · qd19（方案组 + 右下角吸附弹层）
+   方案中心 #planHub：右下角吸附弹层（对齐操作坞右缘）= 方案组 → A/B/C槽位 + 对比条
+   ============================================================================ */
+
+/* 1) 弹层容器：右下角吸附，右缘对齐操作坞（right:32px），可向左拖缩宽度 */
+.plan-hub{
+  position:fixed;right:32px;bottom:96px;z-index:var(--z-fab);
+  width:340px;max-height:76vh;display:flex;flex-direction:column;
+  background:var(--ui-white);border:var(--line-strong);
+  border-radius:0;
+  opacity:0;pointer-events:none;transform-origin:bottom right;
+  transition:opacity var(--dur-base) var(--ease-out);
+}
+.plan-hub.open{opacity:1;pointer-events:auto}
+
+/* 2) 顶部条：标题 + 当前项目 + 关闭 */
+.ph-header{
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+  padding:12px 16px;border-bottom:var(--line-thin);border-radius:0;
+}
+.ph-header h3{margin:0;font-size:14px;font-weight:700;color:var(--text);flex-shrink:0}
+.ph-current{
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12px;color:var(--text-secondary);
+  padding:3px 9px;border:var(--line-thin);border-radius:0;background:var(--ui-white);
+}
+.ph-close{
+  margin-left:auto;flex-shrink:0;border:var(--line-thin);background:var(--ui-white);font-size:16px;line-height:1;
+  color:var(--text);width:30px;height:30px;border-radius:0;cursor:pointer;transition:background var(--dur-fast),color var(--dur-fast);
+  display:grid;place-items:center;
+}
+.ph-close:hover{background:var(--ui-yellow);color:var(--text)}
+.ph-close:focus-visible,.ph-run:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
+
+/* 3) 主体：方案组卡片竖列 */
+.ph-body{
+  flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 16px 16px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.ph-empty{
+  padding:40px 16px;text-align:center;color:var(--text-secondary);font-size:12px;
+  border:var(--line-thin);border-radius:0;background:var(--ui-white);
+}
+
+/* 4) 方案组卡片（夹心：组信息头 + 可展开 A/B/C 槽位） */
+.phg-card{
+  background:var(--ui-white);border:var(--line-thin);border-radius:0;
+  padding:11px 12px;transition:border-color var(--dur-fast);min-width:0;
+}
+.phg-card:hover{border-color:var(--ui-orange)}
+.phg-card.finalized{border-color:var(--ui-orange)}
+.phg-card.expanded{border:2px solid var(--ui-orange)}
+.phg-head{display:flex;align-items:center;gap:8px;min-width:0}
+.phg-expand{
+  flex-shrink:0;width:22px;height:22px;border:var(--line-thin);background:var(--ui-white);
+  border-radius:0;color:var(--text);cursor:pointer;font-size:12px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
+}
+.phg-expand:hover{border-color:var(--ui-orange);background:var(--ui-yellow);color:var(--text)}
+.phg-expand .arr{transition:transform var(--dur-fast) var(--ease-out)}
+.phg-card.expanded .phg-expand .arr{transform:rotate(90deg)}
+.phg-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:12px;color:var(--text)}
+.phg-lock{flex-shrink:0;font-size:12px;line-height:1;color:var(--text-tertiary)}
+.phg-lock.on{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 8px;border-radius:0;border:var(--line-thin);
+  background:var(--ui-yellow);color:var(--ui-black);font-weight:600;
+}
+.phg-lock.on svg{width:12px;height:12px;flex-shrink:0}
+.phg-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:12px;color:var(--text-secondary)}
+.phg-meta b{font-variant-numeric:tabular-nums;font-weight:600;color:var(--text)}
+.phg-ops{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;border-top:var(--line-thin);padding-top:8px}
+.phg-op{
+  flex:1;border:var(--line-thin);background:var(--ui-white);
+  padding:4px 6px;border-radius:0;font-size:12px;font-weight:600;
+  color:var(--text);cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);white-space:nowrap;
+}
+.phg-op:hover{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
+.phg-op.fin.is-on{background:var(--ui-yellow);color:var(--ui-black);border-color:var(--ui-black)}
+.phg-op.fin.is-on:hover{background:var(--ui-white);color:var(--text)}
+.phg-op.is-disabled{opacity:.38;pointer-events:none}
+
+/* 组内行内改名 */
+.phg-rename-input{
+  flex:1;min-width:0;padding:3px 6px;border:var(--line-thin);border-radius:0;
+  font-size:12px;font-weight:600;color:var(--text);background:var(--ui-white);font-family:var(--font);outline:none;
+}
+.phg-rename-input:focus{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
+
+/* 槽位区（展开后显示） */
+.phg-slots{display:flex;flex-direction:column;gap:6px;margin-top:10px;border-top:var(--line-thin);padding-top:10px}
+.phg-slot{
+  display:flex;align-items:center;gap:8px;padding:7px 9px;border:var(--line-thin);border-radius:0;
+  background:var(--ui-white);min-width:0;
+}
+.phg-slot .letter{
+  flex-shrink:0;width:20px;height:20px;border-radius:0;display:inline-flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:var(--ui-white);background:var(--ui-black);
+}
+.phg-slot.letter-a .letter{background:var(--ui-black);color:var(--ui-white)}
+.phg-slot.letter-b .letter{background:var(--ui-orange);color:var(--ui-black)}
+.phg-slot.letter-c .letter{background:var(--ui-yellow);color:var(--ui-black)}
+.phg-slot-info{flex:1;min-width:0}
+.phg-slot-title{font-size:12px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
+.phg-slot-title .sub{font-weight:500;color:var(--text-tertiary)}
+.phg-slot-stat{font-size:12px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.phg-slot-stat b{font-variant-numeric:tabular-nums;font-weight:600;color:var(--text)}
+.phg-slot.pending{opacity:.38}
+.phg-slot.pending .letter{background:var(--ui-white);color:var(--text);border:var(--line-thin)}
+.phg-slot .slot-act{
+  flex-shrink:0;border:var(--line-thin);background:var(--ui-white);
+  padding:3px 8px;border-radius:0;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);white-space:nowrap;
+}
+.phg-slot .slot-act:hover{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
+.phg-slot .slot-check{display:inline-flex;align-items:center;gap:4px;margin:0;cursor:pointer;font-size:12px;color:var(--text-secondary);flex-shrink:0}
+.phg-slot .slot-check input{width:14px;height:14px;margin:0;accent-color:var(--ui-orange);cursor:pointer}
+
+/* 5) 底部对比操作条 */
+.ph-bar{
+  flex-shrink:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  border-top:var(--line-thin);background:var(--ui-white);
+  padding:10px 16px;border-radius:0;
+}
+.ph-count{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap}
+.ph-base{flex:none;min-width:150px;width:auto;padding:6px 24px 6px 9px;font-size:12px;border-radius:0}
+.ph-run{margin-left:auto;padding:7px 16px;font-size:12px;border-radius:0}
+
+/* 6) 缩放手柄：左侧竖条，向左/右拖动调宽（右缘锚定 dock） */
+.ph-resize{
+  position:absolute;top:0;bottom:0;left:-4px;width:9px;cursor:ew-resize;z-index:calc(var(--z-sticky) + 1);
+}
+.ph-resize::after{content:"";position:absolute;top:50%;left:3px;transform:translateY(-50%);
+  width:2px;height:36px;border-radius:0;background:var(--ui-black);opacity:0;transition:opacity var(--dur-fast)}
+.ph-resize:hover::after{opacity:1}
+
+/* 7) 断点适配：窄屏（≤768px）弹层全宽贴边，不再吸附 dock */
+@media (max-width:768px){
+  .plan-hub{left:10px;right:10px;width:auto !important;bottom:84px}
+}
+@media (prefers-reduced-motion:reduce){
+  .plan-hub{transition:none}
+}
+
+/* ============================================================================
+   本轮细化 · qd26
+   KPI 穿透清除徽标 · 上传资产舱解析摘要
+   ============================================================================ */
+
+/* KPI 穿透清除徽标：毛利/风险钻取激活时出现，一键回到全部子目 */
+.drill-clear{
+  display:inline-flex;align-items:center;gap:5px;
+  border:2px solid var(--ui-orange);
+  background:var(--ui-white);color:var(--text);
+  padding:4px 11px;border-radius:0;font-size:12px;font-weight:600;cursor:pointer;
+  transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
+}
+.drill-clear:hover{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
+.drill-clear:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
+
+/* 上传资产舱即时摘要：预览解析后回填「已解析行数 / 匹配 / 未匹配」凭证 */
+.intake-stat{
+  margin-top:6px;font-size:12px;color:var(--text-secondary);
+  font-variant-numeric:tabular-nums;line-height:1.5;
+}
+.intake-stat b{font-weight:700;color:var(--text)}
+.intake-slot.loaded .intake-stat b{color:var(--text)}
+
+/* ============================================================================
+   本轮细化 · qd27
+   双滑块重叠防死锁（默认下限在上）· 就绪清单打勾反馈
+   ============================================================================ */
+
+/* 双滑块 z 序：默认下限 thumb 在上（可被点击），pointer 靠近上限时由 JS 提权（内联 z-index 覆盖） */
+/* 基础层 z 一致；指针靠近提权由 JS refreshRatioHover 单一函数统一管理（P2-11） */
+#quoteView .guardrail-track input[type=range]#ratioLow,
+#quoteView .guardrail-track input[type=range]#ratioHigh{z-index:calc(var(--z-sticky) + 1)}
+
+/* 就绪清单：待就绪 → 就绪 状态点淡变（不做缩放弹跳） */
+.prep-dot{transition:background var(--dur-fast),opacity var(--dur-fast)}
+
+/* 结果态状态胶囊条（Status Capsule）：推演完成后 #preparePanel 折叠为 38px 收拢条，释放垂直空间给明细表 */
+.status-capsule{
+  display:flex;align-items:center;gap:8px;height:38px;padding:0 16px;
+  background:var(--ui-white);border:var(--line-thin);
+  border-radius:0;
+  font-size:12px;color:var(--text-secondary);
+}
+.status-capsule .capsule-dot{width:8px;height:8px;border-radius:50%;background:var(--ui-black);flex-shrink:0}
+.status-capsule .capsule-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ============================================================================
+   关联项目门控：未选择关联项目 → 报价页全部控件不可交互
+   唯一例外：关联投标项目选择本身（#projectId 及其自定义下拉触发/列表）
+   ============================================================================ */
+body.project-locked .param-column,
+body.project-locked .canvas-column,
+body.project-locked .floating-dock,
+body.project-locked #planHub{pointer-events:none}
+body.project-locked .param-column,
+body.project-locked .floating-dock,
+body.project-locked .prep-actions{opacity:.38;transition:opacity var(--dur-base)}
+body.project-locked #projectId,
+body.project-locked .cs-trigger,
+body.project-locked .cs-list{pointer-events:auto}
+
+/* ============================================================================
+   方案对比结果弹层：居中式大弹层（宽屏表格可横向滚动），不占用右栏主舞台
+   ============================================================================ */
+.cmp-modal{
+  position:fixed;inset:0;z-index:var(--z-audit);display:flex;align-items:center;justify-content:center;
+  padding:24px;opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease-out);
+}
+.cmp-modal.open{opacity:1;pointer-events:auto}
+.cmp-mask{position:absolute;inset:0;background:var(--ui-overlay)}
+.cmp-panel{
+  position:relative;z-index:var(--z-sticky);display:flex;flex-direction:column;overflow:hidden;
+  width:min(1180px,94vw);max-height:min(88vh,860px);
+  background:var(--ui-white);border:var(--line-strong);
+  border-radius:0;
+  opacity:0;transition:opacity var(--dur-base) var(--ease-out);
+}
+.cmp-modal.open .cmp-panel{opacity:1}
+.cmp-head{
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+  padding:12px 16px;border-bottom:var(--line-thin);
+}
+.cmp-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
+.cmp-body{padding:16px 16px 20px;overflow:auto;flex:1 1 auto;min-height:0}
+.cmp-body .result-head{margin-top:0}
+/* —— 审计日志弹层表格（#auditModal，复用 #cmpModal 外观）—— */
+.audit-body{padding:16px 16px 20px;overflow:auto;flex:1 1 auto;min-height:0}
+.audit-body .table-wrap{padding:0;max-height:56vh;overflow:auto;border:var(--line-thin);border-radius:0}
+.audit-loading,.audit-empty{color:var(--text-secondary);font-size:14px;padding:20px 4px}
+.audit-meta{color:var(--text-tertiary);font-size:12px;margin:10px 2px 0}
+table.audit-table{width:100%;border-collapse:collapse;font-size:13px}
+table.audit-table th{position:sticky;top:0;background:var(--ui-white);z-index:var(--z-sticky);text-align:left;padding:8px 12px;color:var(--text);font-weight:700;white-space:nowrap;border-bottom:var(--line-strong)}
+table.audit-table td{padding:7px 12px;border-top:var(--line-thin);vertical-align:top;white-space:nowrap}
+table.audit-table td.sec{white-space:normal;color:var(--text-secondary);min-width:180px}
+table.audit-table tr:hover td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
+.audit-success{color:var(--text)}
+.audit-error{color:var(--text);font-weight:700}
+.audit-warn{color:var(--text)}
+/* ---- Skeleton loading：静态黑框占位，不做扫光动画 ---- */
+.skeleton{position:relative;overflow:hidden;background:var(--ui-white);border:var(--line-thin);border-radius:0}
+.skeleton-row{display:flex;gap:12px;align-items:center;padding:8px 12px;border-top:var(--line-thin)}
+.skeleton-cell{height:14px;border-radius:0;flex:1;min-width:0;background:var(--ui-white);border:var(--line-thin)}
+.skeleton-card{padding:12px 16px;border:var(--line-thin);border-radius:0;margin-bottom:8px}
+
+/* ============================================================
+   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   ------------------------------------------------------------
+   覆盖：模块短标题、Tab / Chip / Badge / 状态药丸、按钮、数据指标、
+   表格列头与数字单元格。
+   不覆盖：.card-subtitle / .kpi-foot / .phg-meta / .ph-empty / .prep-item
+   等说明文字，.input-affix 内输入内容，以及物料名/备注等中文数据串
+   （§5.1 第 203 行），一律保持 --font（MiSans）。
+   规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
+   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
+   ============================================================ */
+/* 模块短标题 */
+#quoteView .card-title,
+.cmp-head h3,
+.compare-stage .result-head h3,
+.preview-stage .result-head h3,
+.ph-header h3,
+/* Tab / Chip / Badge / 短状态码 */
+.scheme-tab,
+.filter-chip,
+.status-tag,
+.delta-badge,
+.risk-corner,
+.prep-state,
+.toast-pill,
+.status-capsule,
+/* 按钮 */
+.dock-btn,
+.intake-reup,
+.phg-op,
+.phg-slot .slot-act,
+.phg-expand,
+.ph-run,
+.drill-clear,
+.prep-actions .btn-primary,
+.prep-actions .btn-secondary,
+.result-actions .btn-primary,
+.result-actions .btn-secondary,
+.result-actions .download-button,
+/* 数据指标 */
+.range-val,
+.kpi-val,
+.intake-stat b,
+.phg-meta b,
+.phg-slot-stat b,
+.ph-count,
+.k-inline i,
+.k-inline b,
+.k-inline em,
+/* 表格列头与数字单元格：回归正文字体（MiSans）。
+ * 2026-10-06：像素字体仅用于装饰性标签（H1/药丸/按钮/Badge/时间日期，见 DESIGN.md §5.1），
+ * 数字表格用像素字体在非整数倍缩放下发虚、可读性下降，故此处不再接管。 */
+.audit-table th,
+.table-scroll th.num,
+.table-scroll td.num,
+#quoteView table td.num{
+  font-family:var(--font);
+  font-weight:400;
+  font-synthesis:none;
+  font-variant-numeric:tabular-nums;   /* 数字等宽，列对齐不跳动 */
+}
+
+/* ---- results.css ---- */
+/* ============ 结果面板与表格（DESIGN V2：白底 + 2px 黑框 + 直角） ============ */
+.result-panel{
+  margin-top:16px;background:var(--ui-white);
+  border:var(--line-strong);border-radius:0;
+  padding:16px;
+}
+.result-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
+.result-head h3{margin:0;font-size:16px;font-weight:700;letter-spacing:-.01em}
+.result-head p{margin:3px 0 0;color:var(--text-secondary);font-size:12px}
+.download-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* 容器结构与单元格规范已收敛至 styles.css 设计系统层（.table-wrap），此处仅保留视图高度上限 */
+.table-wrap{max-height:460px}
+
+/* 数字列：右对齐 + 等宽数字，便于逐行对位 */
+.table-wrap th.num,.table-wrap td.num{text-align:right;padding-right:16px}
+.price-cell{color:var(--text);font-weight:600}
+
+.plan-saved-pill{
+  display:inline-block;margin-left:8px;padding:2px 8px;border-radius:0;
+  background:var(--ui-white);border:var(--line-thin);color:var(--text);font-size:12px;font-weight:600;
+}
+
+/* 对比表单元格高亮：亏损=橙块黑字 / 提醒=黄块黑字 / 增益=黑字加粗（均满足 AA 对比） */
+.table-wrap td.loss-cell{background:var(--ui-orange);color:var(--ui-black)}
+.table-wrap td.warn-cell{background:var(--ui-yellow);color:var(--ui-black)}
+.table-wrap td.gain-cell{color:var(--text);font-weight:700}
+/* ============================================================
    全景大盘（P1 前端整合：由 frontend/portal.css 并入）
    适配：React 版在 .main 内、顶栏之下，高度不写死 100vh。
    已剔除母项目外壳专用段（.app-shell / shell-immersive）。
@@ -6459,1580 +8036,3 @@ details.spec .hint { margin: 6px 0; }
   font-family:var(--font);
 }
 
-/* ============================================================
-   投标报价沙盘样式（P3 前端整合：由 frontend/quote-dashboard.css + results.css 并入）
-   ============================================================ */
-/* ============================================================================
-   报价页 · 投标报价优化工作台（决策沙盘）
-   V2：黑白极简 + 橙/黄专色。布局令牌统一见 tokens.css
-   规则：橙色只作背景/边框/色块，不作白底文字；无渐变/模糊/阴影（主按钮除外）
-   ============================================================================ */
-
-/* ---------- 双栏布局 ---------- */
-/* 参数栏随视口收缩：1281px 视口下右栏仅约 680px，固定 390px 会把明细表第 6 列挤出可视区。
-   clamp 让参数栏在 300~390px 之间随容器比例变化，宽度优先让给结果区。 */
-.workbench-layout{
-  display:grid;grid-template-columns:clamp(300px,24%,390px) minmax(0,1fr);
-  gap:20px;align-items:stretch;
-}
-.param-column{min-width:0;display:flex;flex-direction:column;gap:16px}
-.param-column > .card{margin-bottom:0}
-.canvas-column{min-width:0;min-height:0;display:flex;flex-direction:column;gap:16px}
-
-/* ---------- 卡片基础 ---------- */
-#quoteView .card{position:relative}
-#quoteView .card-head{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:16px;padding-bottom:10px;border-bottom:var(--line-thin);
-}
-#quoteView .card-title{
-  font-size:16px;font-weight:700;color:var(--text);
-  display:flex;align-items:center;gap:7px;
-}
-/* 注：.title-dot / .card-subtitle 已移到 styles.css（设计系统层）——工具页也要用它们，
-   不该为这三个选择器加载整份本文件。本文件保留 #quoteView 作用域内的全部规则。 */
-.field-group{display:flex;flex-direction:column;gap:12px}
-
-/* ---------- 一体化前后缀输入框 ---------- */
-.input-affix{
-  display:flex;align-items:center;background:var(--ui-white);
-  border:var(--line-thin);border-radius:0;
-  padding:0 8px;transition:border-color var(--dur-fast);
-}
-.input-affix:focus-within{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
-.input-prefix{font-size:12px;color:var(--text-tertiary);font-weight:500;margin-right:3px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
-.input-suffix{font-size:12px;color:var(--text-secondary);background:var(--ui-white);border:var(--line-thin);padding:2px 5px;border-radius:0;margin-left:3px;flex-shrink:0;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
-.input-affix input{
-  flex:1;min-width:0;border:none;outline:none;height:30px;font-size:14px;
-  font-family:var(--font);color:var(--text);background:transparent;width:100%;
-}
-
-/* ---------- 安全防线比率滑块 ---------- */
-.range-box{
-  background:var(--ui-white);border:var(--line-thin);
-  border-radius:0;padding:12px 16px;margin-top:4px;
-}
-.range-meta{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
-.range-val{font-size:14px;font-weight:700;color:var(--text)}
-#quoteView input[type=range]{
-  width:100%;height:5px;background:var(--ui-black);border-radius:0;outline:none;
-  -webkit-appearance:none;appearance:none;cursor:pointer;
-}
-/* 滑块为键盘可操作控件（方向键），必须给出可见焦点环 */
-#quoteView input[type=range]:focus-visible{outline:2px solid var(--ui-orange);outline-offset:3px}
-#quoteView input[type=range]::-webkit-slider-thumb{
-  -webkit-appearance:none;width:16px;height:16px;border-radius:0;
-  background:var(--ui-white);border:2px solid var(--ui-black);
-  cursor:grab;
-}
-.ticks{display:flex;justify-content:space-between;font-size:12px;color:var(--text-tertiary);margin-top:5px}
-
-/* ---------- 低价风控留痕：紧凑警示条（不打断操作，点击展开留痕表单） ---------- */
-.risk-alert-box{
-  position:relative;overflow:visible;margin-top:8px;font-size:12px;
-  display:none;
-}
-.risk-alert-box.active{display:block;animation:qdFadeIn var(--dur-base) var(--ease-out)}
-.risk-summary{
-  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
-  background:var(--ui-white);border:2px solid var(--ui-orange);border-left-width:4px;
-  border-radius:0;padding:6px 10px 6px 12px;
-  color:var(--text);font-size:12px;font-weight:600;cursor:pointer;
-  transition:border-color var(--dur-fast),background var(--dur-fast);
-}
-.risk-summary:hover{background:var(--ui-yellow)}
-.risk-summary:focus-visible{outline:2px solid var(--ui-orange);outline-offset:2px}
-.risk-chev{width:14px;height:14px;margin-left:auto;flex-shrink:0;color:var(--ui-black);transition:transform var(--dur-base) var(--ease-out)}
-.risk-alert-box.open .risk-chev{transform:rotate(180deg)}
-.risk-fields-wrap{display:none;padding:9px 2px 0}
-.risk-alert-box.open .risk-fields-wrap{display:block;animation:qdFadeIn var(--dur-base) var(--ease-out)}
-.risk-hint{color:var(--text-secondary);margin-bottom:2px}
-.risk-alert-box strong{font-weight:600}
-.risk-alert-box input{
-  margin-top:8px;width:100%;padding:6px 9px;border:var(--line-thin);
-  border-radius:0;background:var(--ui-white);font-size:14px;color:var(--text);font-family:var(--font);
-}
-.risk-alert-box input:focus{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
-
-/* ---------- 双通道清单上传舱 ---------- */
-.upload-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-.upload-slot{
-  background:var(--ui-white);border:2px dashed var(--ui-black);
-  border-radius:0;padding:16px 12px;text-align:center;cursor:pointer;
-  transition:border-color var(--dur-base),background var(--dur-base);
-}
-.upload-slot:hover{background:var(--ui-yellow);border-style:solid;border-color:var(--ui-black)}
-.upload-slot:focus-within{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
-.upload-slot svg{width:22px;height:22px;color:var(--ui-black);margin-bottom:4px;display:block;margin-left:auto;margin-right:auto}
-.upload-slot strong{display:block;font-size:12px;color:var(--text)}
-.upload-slot > span{font-size:12px;color:var(--text-tertiary)}
-.upload-slot input[type=file]{display:none}
-.upload-slot .file-tag{
-  font-size:12px;color:var(--text);font-weight:600;background:var(--ui-white);
-  border:var(--line-thin);padding:2px 7px;border-radius:0;margin-top:8px;display:inline-block;max-width:100%;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
-
-/* ---------- 方案切换：同一条分段控制条 ---------- */
-.scheme-switcher-bar{
-  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;
-  background:var(--ui-white);border:var(--line-thin);
-  border-radius:0;padding:6px 10px;
-}
-.scheme-tabs{display:flex;gap:0;flex-wrap:wrap}
-.scheme-tab{
-  border:var(--line-thin);border-right:none;background:var(--ui-white);padding:7px 16px;border-radius:0;
-  font-size:12px;font-weight:600;color:var(--text);cursor:pointer;
-  transition:background var(--dur-fast),color var(--dur-fast);display:flex;align-items:center;gap:6px;
-}
-.scheme-tab:last-child{border-right:var(--line-thin)}
-.scheme-tab:hover{background:var(--ui-yellow)}
-.scheme-tab.active{background:var(--ui-orange);color:var(--ui-black)}
-.scheme-tab.active svg,.scheme-tab.active .tab-indicator{color:var(--ui-black)}
-.scheme-tab .tab-indicator{width:6px;height:6px;border-radius:50%;background:var(--ui-black)}
-.scheme-tab:focus-visible,.filter-chip:focus-visible,.kpi-card:focus-visible,
-.dock-btn:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
-
-/* ---------- 4 联 KPI 看板（单色收敛，类别仅靠序号） ---------- */
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.kpi-card{
-  background:var(--ui-white);border:var(--line-strong);
-  border-top-width:4px;
-  border-radius:0;padding:16px;
-  position:relative;cursor:pointer;transition:border-color var(--dur-base),background var(--dur-base);
-}
-.kpi-card.kpi-bamboo,.kpi-card.kpi-ochre,.kpi-card.kpi-blue{border-top-color:var(--ui-black)}
-.kpi-card:hover{border-color:var(--ui-orange)}
-.kpi-card.active-drill{border-color:var(--ui-orange);box-shadow:inset 4px 0 0 var(--ui-orange)}
-/* 钻取穿透指示：激活卡片底部向下微三角，建立「该指标正在过滤下方清单」的心智链接 */
-.kpi-card.active-drill::after{
-  content:"";position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);
-  width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;
-  border-top:5px solid var(--ui-orange);
-}
-.kpi-card[tabindex]:focus-visible{border-color:var(--ui-orange);outline:3px solid var(--ui-orange);outline-offset:2px}
-
-/* 标题行预留两行高度：四张卡的标题长度不一（「测算总报价 (含税)」带 hover 提示时折两行，
-   「测算进项抵扣总额」只有一行），不预留的话值/图形/底注三行的基线会各差 18px。
-   KPI 卡在网格里本来就等高，预留不增加页面高度，只把多出的留白放进最矮的卡。 */
-.kpi-label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;min-height:38px}
-.kpi-title{font-size:12px;font-weight:500;color:var(--text-secondary)}
-.kpi-drill-hint{font-size:12px;color:var(--text-tertiary);opacity:0;transition:opacity var(--dur-fast);white-space:nowrap}
-.kpi-card:hover .kpi-drill-hint{opacity:1}
-.kpi-val{
-  font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.02em;
-  display:flex;align-items:baseline;gap:5px;margin-bottom:4px;flex-wrap:wrap;
-}
-.delta-badge{
-  font-size:12px;font-weight:600;padding:1px 6px;border-radius:0;
-  border:var(--line-thin);
-  display:inline-flex;align-items:center;gap:2px;white-space:nowrap;
-}
-.delta-badge.gain{background:var(--ui-white);color:var(--text)}
-.delta-badge.warn{background:var(--ui-yellow);color:var(--text)}
-.delta-badge.neutral{background:var(--ui-white);color:var(--text-secondary)}
-.sparkline-svg{width:100%;height:28px;margin:4px 0;display:block}
-/* KPI 视觉槽：四张卡的图形统一放进等高容器，底注基线因此对齐；
-   6px 方角色带承担原卡 3 的行内三段条（原实现用了 3px 圆角，与全站直角规则冲突）。 */
-.kpi-vis{height:28px;display:flex;align-items:center;margin:6px 0 4px}
-.kpi-vis .sparkline-svg{width:100%;height:28px;margin:0}
-.kpi-scale{display:flex;width:100%;height:6px;border:1px solid var(--ui-black);background:var(--ui-white)}
-.kpi-scale > i{display:block;height:100%}
-.kpi-scale > .seg-safe{background:var(--success)}
-.kpi-scale > .seg-early{background:var(--warn)}
-.kpi-scale > .seg-risk{background:var(--danger)}
-.kpi-foot{
-  font-size:12px;color:var(--text-tertiary);display:flex;justify-content:space-between;
-  gap:6px;flex-wrap:wrap;border-top:var(--line-thin);padding-top:5px;margin-top:0;
-}
-.kpi-foot .kpi-foot-status{font-weight:600;color:var(--text)}
-
-/* ---------- 明细审查表 ---------- */
-/* 明细表撑满右栏剩余高度，底部与左栏（报价资料卡）对齐，行多时表内纵向滚动 */
-.table-section{
-  background:var(--ui-white);border:var(--line-strong);
-  border-radius:0;padding:var(--card-pad) 20px;
-  flex:1 1 auto;min-height:260px;display:flex;flex-direction:column;
-}
-.table-toolbar{
-  display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;
-  flex-wrap:wrap;gap:10px;flex-shrink:0;
-}
-.filter-chips{display:flex;gap:6px;flex-wrap:wrap}
-.filter-chip{
-  border:var(--line-thin);background:var(--ui-white);
-  padding:4px 11px;border-radius:0;font-size:12px;font-weight:500;
-  color:var(--text);cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
-}
-.filter-chip:hover{background:var(--ui-yellow);border-color:var(--ui-black);color:var(--text)}
-.filter-chip.active{background:var(--ui-orange);color:var(--ui-black);border-color:var(--ui-black);font-weight:600}
-
-.table-scroll{overflow:auto;border:var(--line-thin);border-radius:0;background:var(--ui-white);flex:1 1 auto;min-height:0}
-/* 横向滚动条常显：改前用 overlay 滚动条，最后一列被切在卡片边界上而无任何可滚动提示。
-   注意 10 列合计约 1316px，而 1440 视口下容器只有 737px，横向滚动是这张表的固有形态。
-   这里只用 ::-webkit-scrollbar 而不再写 scrollbar-width/scrollbar-color：
-   Chromium 只要看到 scrollbar-width 就改用自带的 Fluent 细滚动条，反而忽略下面这套规则，
-   实测滑块几乎看不见。去掉之后滑块由本文件完全接管：12px 轨道 + 实心黑滑块。 */
-.table-scroll::-webkit-scrollbar{width:12px;height:12px}
-.table-scroll::-webkit-scrollbar-track{background:var(--ui-white);border-top:var(--line-thin)}
-.table-scroll::-webkit-scrollbar-thumb{background:var(--ui-black)}
-.table-scroll::-webkit-scrollbar-corner{background:var(--ui-white)}
-.table-scroll table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.table-scroll th{
-  background:var(--ui-white);color:var(--text);font-weight:700;text-align:left;
-  padding:9px 10px;border-bottom:var(--line-strong);position:sticky;top:0;z-index:var(--z-sticky);
-}
-.table-scroll th.num,.table-scroll td.num{text-align:right;padding-right:14px}
-/* 数字列语义类：从 JS 内联色收拢到 CSS 单点可调（P0-1） */
-.table-scroll td.cell-code{color:var(--text-secondary)}
-.table-scroll td.cap{color:var(--text-secondary)}
-.table-scroll td.cost{color:var(--text-tertiary)}
-.table-scroll td.quote{color:var(--text);font-weight:700}
-.table-scroll td.cell-total{font-weight:600}
-.table-scroll td{padding:9px 10px;border-bottom:var(--line-thin);color:var(--text)}
-.table-scroll tbody tr:hover > td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
-.table-scroll tbody tr.selected > td:first-child{box-shadow:inset 4px 0 0 var(--ui-orange)}
-.table-scroll tbody tr:last-child td{border-bottom:none}
-/* 冻结首两列：横向滚动时「项目编码 / 项目名称」保持可见；第二列偏移由 JS 实测 --frozen-w 同步 */
-.table-scroll th:nth-child(1),
-.table-scroll td:nth-child(1):not([colspan]){
-  position:sticky;left:0;z-index:calc(var(--z-sticky) + 1);background:var(--ui-white);
-}
-.table-scroll th:nth-child(2),
-.table-scroll td:nth-child(2){
-  position:sticky;left:var(--frozen-w,110px);z-index:calc(var(--z-sticky) + 1);background:var(--ui-white);
-  border-right:var(--line-thin);
-}
-.table-scroll thead th:nth-child(1),
-.table-scroll thead th:nth-child(2){z-index:calc(var(--z-sticky) + 2);background:var(--ui-white)}
-
-.ratio-pill-cell{display:inline-flex;align-items:center;gap:6px}
-.mini-progress{
-  width:42px;height:4px;background:var(--ui-white);border:1px solid var(--ui-black);border-radius:0;overflow:hidden;display:inline-block;
-}
-.mini-progress-fill{height:100%;background:var(--ui-black);transition:width var(--dur-slow) var(--ease-out)}
-.status-tag{font-size:12px;font-weight:600;padding:2px 7px;border:var(--line-thin);border-radius:0;display:inline-block;white-space:nowrap;background:var(--ui-white);color:var(--text)}
-.status-tag.early{background:var(--ui-yellow);color:var(--text)}
-.status-tag.safe{background:var(--ui-white);color:var(--text)}
-.status-tag.risk{background:var(--ui-white);color:var(--text);border:2px solid var(--ui-orange)}
-.note-cell{font-size:12px;color:var(--text-secondary);margin-left:6px}
-
-/* ---------- 常驻悬浮操作坞 ---------- */
-/* right 由 32px 让到 92px：给右下角 AI 助手 FAB（48px 宽 + 12px 间距）腾位，两者不重叠。 */
-.floating-dock{
-  position:fixed;bottom:24px;right:92px;z-index:var(--z-floating);
-  background:var(--ui-white);
-  border:var(--line-strong);border-radius:0;padding:6px 10px;
-  display:flex;align-items:center;gap:8px;
-}
-.dock-btn{
-  border:var(--line-thin);padding:8px 16px;border-radius:0;font-size:12px;font-weight:600;cursor:pointer;
-  display:inline-flex;align-items:center;gap:6px;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);color:var(--text);background:var(--ui-white);
-}
-.dock-btn.primary{background:var(--ui-orange);color:var(--ui-black);border:var(--line-strong);box-shadow:var(--shadow-action)}
-.dock-btn.primary:hover{background:var(--ui-yellow);color:var(--ui-black)}
-.dock-btn.primary:active{transform:translateY(1px)}
-.dock-btn.secondary{border:var(--line-strong)}
-.dock-btn.secondary:hover{background:var(--ui-yellow);border-color:var(--ui-black)}
-.dock-btn:disabled{opacity:.38;cursor:not-allowed}
-
-/* ---------- 方案对比抽屉 ---------- */
-.diff-backdrop{
-  position:fixed;inset:0;background:var(--ui-overlay);
-  z-index:var(--z-drawer-backdrop);opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease-out);
-}
-.diff-backdrop.open{opacity:1;pointer-events:auto}
-.diff-drawer{
-  position:fixed;top:0;right:0;bottom:0;width:480px;max-width:92vw;z-index:var(--z-drawer);
-  background:var(--ui-white);border-left:var(--line-strong);
-  display:flex;flex-direction:column;
-  transform:translateX(105%);transition:transform var(--dur-base) var(--ease-out);
-}
-.diff-drawer.open{transform:translateX(0)}
-.diff-header{
-  padding:16px 24px;border-bottom:var(--line-thin);
-  display:flex;justify-content:space-between;align-items:center;
-}
-.diff-header h3{margin:0;font-size:16px;font-weight:700}
-.diff-body{padding:24px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px}
-.diff-compare-card{background:var(--ui-white);padding:16px;border-radius:0;border:var(--line-thin)}
-
-/* ---------- Toast（语义由左侧色条 + 文案承载，不靠橙黄文字） ---------- */
-/* Toast 堆叠容器：右上角垂直堆叠，最多 3 条，新条从上方滑入 */
-.toast-stack{
-  position:fixed;top:24px;right:24px;z-index:var(--z-toast);
-  display:flex;flex-direction:column;gap:8px;align-items:flex-end;
-  max-width:420px;width:max-content;
-  pointer-events:none;
-}
-.toast-pill{
-  background:var(--ui-white);color:var(--text);padding:8px 16px;
-  border:var(--line-strong);border-left-width:4px;border-radius:0;
-  font-size:12px;font-weight:500;
-  display:flex;align-items:center;gap:6px;
-  opacity:0;
-  pointer-events:auto;
-  transition:opacity var(--dur-base) var(--ease-out);
-  max-width:100%;
-}
-.toast-pill.show{opacity:1}
-.toast-pill.leaving{opacity:0}
-.toast-pill.toast-success{border-left-color:var(--ui-black)}
-.toast-pill.toast-error{border-left-color:var(--ui-orange)}
-.toast-pill.toast-warn{border-left-color:var(--ui-yellow)}
-
-@keyframes qdFadeIn{from{opacity:0}to{opacity:1}}
-
-/* ============================================================================
-   报价页升级：等宽数字 / 方案库动线 / 安全防线滑块 / 税口径堆叠条 / 双通道资产舱 / 字段徽标
-   ============================================================================ */
-
-/* 2) 等宽数字排版（Tabular Nums）：凡数字一律等宽，逐行对位
-   注：无前缀的 .tabular 已移到 styles.css（工具页数字列也用它）；此处只留 #quoteView 作用域。 */
-#quoteView .kpi-val, #quoteView .kpi-foot b,
-#quoteView .range-val, #quoteView .delta-badge,
-#quoteView table td.num,
-#quoteView .f-val, #quoteView .comp-formula-badge .f-val,
-#quoteView input.tabular, #quoteView .ratio-pill-cell span:last-child,
-#quoteView .mini-progress ~ span{
-  font-variant-numeric:tabular-nums !important;
-  font-feature-settings:"tnum" !important;
-}
-#quoteView input[type=number]{font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield}
-/* 金额/税率输入去掉原生上下箭头，数字位数多时不挤压输入区 */
-#quoteView input[type=number]::-webkit-outer-spin-button,
-#quoteView input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-
-/* 1) 方案库操作动线：次级工具组 + 主 CTA */
-.plan-util-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 8px}
-.plan-util{
-  border:var(--line-thin);background:var(--ui-white);color:var(--text);
-  padding:7px 0;border-radius:0;font-size:12px;font-weight:500;cursor:pointer;
-  transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
-}
-.plan-util:hover{background:var(--ui-yellow);border-color:var(--ui-black);color:var(--text)}
-.plan-util:focus-visible,.plan-main-act:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
-.plan-main-act{
-  width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
-  background:var(--ui-orange);color:var(--ui-black);border:var(--line-strong);
-  padding:10px 16px;border-radius:0;font-size:12px;font-weight:600;cursor:pointer;
-  box-shadow:var(--shadow-action);transition:background var(--dur-fast),color var(--dur-fast);
-}
-.plan-main-act:hover{background:var(--ui-yellow);color:var(--ui-black)}
-.plan-main-act:active{transform:translateY(1px)}
-.plan-main-act svg{width:16px;height:16px;color:inherit}
-.plan-main-act:disabled{opacity:.38;cursor:not-allowed}
-
-/* 3) 安全防线双向 Range：区间带以橙色半透明色块表达，废标/安全分界为黑色细线 */
-.guardrail{
-  background:var(--ui-white);border:var(--line-thin);border-radius:0;
-  padding:12px 16px;margin-top:4px;
-  transition:border-color var(--dur-fast);
-}
-.guardrail-track{position:relative;height:24px;margin-top:2px}
-.guardrail-zones{
-  position:absolute;left:0;right:0;top:5px;height:9px;border-radius:0;
-  background:var(--ui-white);border:var(--line-thin);
-  display:flex;align-items:center;font-size:12px;color:var(--text-secondary);
-}
-/* 安全防线为组件内局部层叠：以 z 阶梯基线 --z-sticky 起算，不使用全局浮层层级 */
-.guardrail-zones .gz-serious{padding-left:4px;font-weight:600;position:relative;z-index:calc(var(--z-sticky) + 1)}
-.guardrail-zones .gz-line{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--ui-black);z-index:calc(var(--z-sticky) + 1)}
-.guardrail-zones .gz-safe{margin-left:auto;padding-right:4px;font-weight:600;color:var(--text);position:relative;z-index:calc(var(--z-sticky) + 1)}
-.guardrail-fill{
-  position:absolute;top:5px;height:9px;border-radius:0;z-index:var(--z-sticky);
-  background:var(--ui-orange);opacity:.32;
-  pointer-events:none;
-  transition:left var(--dur-fast) var(--ease-out),width var(--dur-fast) var(--ease-out);
-}
-/* 风险态：轨道改为橙色 2px 描边（静态提示，不做呼吸闪烁） */
-.guardrail.is-risk{
-  border-color:var(--ui-orange);border-width:2px;
-}
-#quoteView .guardrail input[type=range]{position:relative;z-index:calc(var(--z-sticky) + 1);height:24px;background:transparent}
-#quoteView .guardrail input[type=range]::-webkit-slider-runnable-track{height:9px;border-radius:0;background:transparent}
-#quoteView .guardrail input[type=range]::-webkit-slider-thumb{margin-top:-4px}
-#quoteView .guardrail input[type=range]::-moz-range-track{background:transparent;height:9px}
-.guardrail-legend{display:flex;gap:16px;margin-top:6px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
-.guardrail-legend span{display:inline-flex;align-items:center;gap:5px}
-.guardrail-legend i{width:8px;height:8px;border-radius:50%}
-.gl-red i{background:var(--ui-orange)}
-.gl-safe i{background:var(--ui-black)}
-
-/* 3b) 低价风控留痕：行内角标 + 双输入 + 确认芯片 */
-.risk-corner{
-  flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;
-  background:var(--ui-white);border:2px solid var(--ui-orange);
-  color:var(--text);font-size:12px;font-weight:700;letter-spacing:.04em;
-  padding:2px 8px;border-radius:0;
-}
-.risk-corner::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--ui-orange)}
-.risk-fields{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
-.risk-alert-box .risk-confirm{
-  display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--text);
-  border:var(--line-thin);background:var(--ui-white);
-  padding:7px 10px;border-radius:0;cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast);
-}
-.risk-alert-box .risk-confirm:has(input:checked){background:var(--ui-yellow);border-color:var(--ui-black)}
-.risk-alert-box .risk-confirm input{width:auto;margin:0;accent-color:var(--ui-orange);cursor:pointer}
-
-/* 4) 税口径：配比堆叠条 + k 公式 Metric Badge */
-.comp-stack{margin-top:8px}
-.comp-stack-bar{display:flex;height:10px;border-radius:0;overflow:hidden;background:var(--ui-white);border:var(--line-thin)}
-.comp-stack-bar .cs-fill{height:100%;transition:width var(--dur-slow) var(--ease-out)}
-.comp-stack-bar .c-credit{background:var(--ui-orange)}              /* 橙：可抵扣 */
-.comp-stack-bar .c-ledger{background:var(--ui-black)}               /* 黑：不可抵扣 */
-.comp-stack-legend{display:flex;gap:16px;margin-top:7px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
-.comp-stack-legend .cl-it{display:inline-flex;align-items:center;gap:6px}
-.comp-stack-legend .cl-it b{color:var(--text);font-weight:600}
-.cs-dot{width:9px;height:9px;border-radius:0;flex-shrink:0}
-.cs-dot.c-credit{background:var(--ui-orange)}
-.cs-dot.c-ledger{background:var(--ui-black)}
-.comp-formula-badge{
-  display:flex;align-items:baseline;gap:8px;margin:10px 0;
-  padding:9px 12px;border-radius:0;
-  background:var(--ui-white);
-  border:var(--line-thin);
-  transition:background var(--dur-base),border-color var(--dur-base);
-}
-.comp-formula-badge .f-label{font-size:12px;color:var(--text-secondary);font-weight:600;letter-spacing:.02em}
-.comp-formula-badge .f-val{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.02em;line-height:1}
-.comp-formula-badge .f-unit{font-size:12px;color:var(--text-tertiary);margin-left:auto;text-align:right}
-
-/* 5) 双通道资产舱 Dual Intake Bay */
-.intake-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-.intake-slot{
-  position:relative;background:var(--ui-white);border:var(--line-thin);
-  border-radius:0;padding:0;cursor:pointer;overflow:hidden;
-  display:flex;flex-direction:column;
-  transition:border-color var(--dur-base),background var(--dur-base);
-}
-.intake-slot input[type=file]{display:none}
-.intake-slot:hover{border-color:var(--ui-orange);background:var(--ui-yellow)}
-.intake-slot:focus-within,
-.intake-slot:focus-visible{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
-.intake-slot.dragging{border-color:var(--ui-orange);background:var(--ui-yellow)}
-.intake-head{display:flex;align-items:center;gap:9px;padding:12px 12px 9px}
-/* 图标块两个槽位同款：白底 + 黑色描边图标。
-   重构前这里是 --ic/--ic-soft 两个变量（cap 淡蓝 #e5edf6 / cost 淡绿 #e6f1ec），用来轻量区分两槽；
-   V2 禁第三强调色时这两个值被分别映射，cap 落成 --ui-yellow（中饱和强调色）、cost 落成白，
-   于是两个同构槽位变成一黄一白；且悬停时 .intake-slot:hover 会把槽底也变黄，
-   cap 的图标块随之与槽底同色、边界消失。现统一为白，去掉这层无用间接。 */
-.intake-ic{
-  width:34px;height:34px;border-radius:0;flex-shrink:0;display:grid;place-items:center;
-  background:var(--ui-white);color:var(--ui-black);border:var(--line-thin);
-}
-.intake-ic svg{width:18px;height:18px}
-.intake-title strong{display:block;font-size:12px;font-weight:700;color:var(--text)}
-.intake-title span{font-size:12px;color:var(--text-tertiary)}
-.intake-title span:last-child{display:block}
-.intake-body{padding:0 12px 12px;border-top:var(--line-thin);padding-top:9px;flex:1 1 auto;display:flex;flex-direction:column}
-.intake-state{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap}
-.intake-cta{color:var(--text);font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pulse-dot{width:8px;height:8px;border-radius:50%;background:var(--ui-black);opacity:.38;flex-shrink:0}
-.intake-slot:not(.loaded) .pulse-dot{background:var(--ui-black);opacity:.38}
-.intake-slot.loaded .pulse-dot{background:var(--ui-black);opacity:1}
-.intake-reup{
-  display:none;margin:0 auto;border:var(--line-thin);background:var(--ui-white);color:var(--text);
-  font-size:12px;font-weight:600;padding:4px 12px;border-radius:0;cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
-}
-.intake-reup:hover{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
-.intake-slot:not(.loaded) .intake-reup{display:inline-block}
-.intake-slot.loaded{border-color:var(--ui-black);outline:1px solid var(--ui-black);outline-offset:-1px}
-.intake-slot.loaded .intake-cta{color:var(--text)}
-
-/* ---------- 响应式 ---------- */
-/* 注：prefers-reduced-motion 的动效关闭规则**只在 styles.css 里定义一份**
-   （*,*::before,*::after 的 animation/transition/iteration-count/scroll-behavior）。
-   本文件曾有一份更弱的副本（仅 `*`、且时长 .01ms 而非 .001ms）：两处 !important 同名属性
-   跨文件取值不同，属实测出的真实冲突，且它加载在后会把更严的那份盖松。已删。 */
-@media (max-width:1280px){
-  .workbench-layout{grid-template-columns:1fr}
-  .kpi-row{grid-template-columns:repeat(2,1fr)}
-}
-@media (max-width:768px){
-  /* 操作坞在窄屏居中、并抬到 FAB 上方（FAB 占 bottom:24~72），避免与其重叠遮挡 */
-  .floating-dock{left:50%;right:auto;transform:translateX(-50%);bottom:84px}
-  .kpi-row{grid-template-columns:1fr}
-  .intake-grid{grid-template-columns:1fr}
-  .table-section{padding:16px}
-}
-
-/* ============================================================================
-   本轮细化 · qd3
-   1) 下拉底色与输入框一致  3) 空态就绪度检查清单  3b) FAB 加载动效
-   4) 右侧对比结果卡  5) 安全防线双滑块叠加  6) 资产舱统计约束
-   ============================================================================ */
-
-/* 1) 下拉触发器与选项面板：实心白底，与输入框一致 */
-#quoteView .cs-trigger{
-  background:var(--ui-white);
-}
-#quoteView .cs-list{
-  background:var(--ui-white);
-}
-#quoteView .cs-opt:hover,
-#quoteView .cs-opt[aria-selected="true"]{background:var(--ui-yellow)}
-
-/* 3) 测算准备就绪度检查清单（测算前空态，替代单行提示） */
-.prepare-panel .card-head{margin-bottom:12px}
-.prep-item{
-  display:flex;align-items:flex-start;gap:9px;padding:10px 12px;margin-bottom:8px;
-  border:var(--line-thin);border-radius:0;background:var(--ui-white);
-  font-size:12px;color:var(--text-secondary);transition:border-color var(--dur-fast),background var(--dur-fast);
-}
-.prep-item:last-child{margin-bottom:0}
-.prep-item .prep-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0;background:var(--ui-black);opacity:.38}
-.prep-item[data-state="ok"]{border-color:var(--ui-black);background:var(--ui-white);color:var(--text)}
-.prep-item[data-state="ok"] .prep-dot{background:var(--ui-black);opacity:1}
-.prep-item[data-state="alert"]{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
-.prep-item[data-state="alert"] .prep-dot{background:var(--ui-black);opacity:1}
-.prep-text{flex:1;min-width:0}
-.prep-state{
-  flex-shrink:0;font-size:12px;font-weight:600;padding:2px 9px;border-radius:0;
-  border:var(--line-thin);
-  background:var(--ui-white);color:var(--text-secondary);margin-left:6px;
-}
-.prep-state.ok{background:var(--ui-black);color:var(--ui-white)}
-.prep-state.alert{background:var(--ui-yellow);color:var(--ui-black)}
-
-/* 4) 右侧主舞台：多方案横向对比结果卡 */
-.compare-stage .result-head{margin-bottom:12px}
-.compare-stage .result-head h3{font-size:16px;font-weight:700;margin:0;color:var(--text)}
-.compare-stage .result-head p{font-size:12px;color:var(--text-secondary);margin:4px 0 0}
-.compare-stage .table-wrap{margin-bottom:4px}
-
-/* 3b) FAB 操作坞：分割线 + ghost 次级 + 运算加载旋转动效 */
-.dock-sep{width:1px;height:22px;background:var(--ui-black);margin:0 2px}
-.dock-btn.ghost{color:var(--text-secondary);border:1px solid transparent;background:transparent}
-.dock-btn.ghost:hover{border-color:var(--line-thin);background:var(--ui-yellow);color:var(--text)}
-.floating-dock .dock-btn.dock-busy{pointer-events:none;opacity:.85}
-.dock-btn.dock-busy::before{
-  content:"";display:inline-block;width:12px;height:12px;border-radius:50%;
-  border:2px solid currentColor;border-top-color:transparent;
-  animation:dockSpin .7s linear infinite;margin-right:2px;
-}
-@keyframes dockSpin{to{transform:rotate(360deg)}}
-
-/* 5) 安全防线双滑块：两把 thumb 绝对叠加到同一可视化轨道 */
-#quoteView .guardrail-track input[type=range]{
-  position:absolute;left:0;right:0;top:0;bottom:0;width:100%;height:24px;margin:0;
-  background:transparent;pointer-events:none;z-index:calc(var(--z-sticky) + 1);
-}
-#quoteView .guardrail-track input[type=range]::-webkit-slider-thumb{pointer-events:auto}
-#quoteView .guardrail-track input[type=range]::-moz-range-thumb{pointer-events:auto}
-
-/* 6) 双通道资产舱：两列等宽、重新上传两卡一致居中 */
-.intake-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-.intake-title span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.intake-reup{display:block;width:fit-content;margin:auto auto 0;flex-shrink:0}
-@media (prefers-reduced-motion:reduce){ .dock-btn.dock-busy::before{animation:none} }
-
-/* ============================================================================
-   本轮细化 · qd4
-   双滑块 thumb 区隔化 · k 内联 pill · 方案 Tab 溢出保护
-   ============================================================================ */
-
-/* 双滑块 thumb 区隔：下限=橙（废标风险），上限=黑（合规安全），呼应图例（白钮体 + 状态色描边） */
-#quoteView .guardrail-track input[type=range]#ratioLow::-webkit-slider-thumb{border:2px solid var(--ui-orange)}
-#quoteView .guardrail-track input[type=range]#ratioHigh::-webkit-slider-thumb{border:2px solid var(--ui-black)}
-#quoteView .guardrail-track input[type=range]#ratioLow::-moz-range-thumb{background:var(--ui-white);border:2px solid var(--ui-orange)}
-#quoteView .guardrail-track input[type=range]#ratioHigh::-moz-range-thumb{background:var(--ui-white);border:2px solid var(--ui-black)}
-
-/* k 换算系数：compose-foot 行内 pill（含税→不含税） */
-.compose-foot{gap:8px;flex-wrap:wrap}
-.k-inline{
-  display:inline-flex;align-items:center;gap:5px;flex-shrink:0;
-  background:var(--ui-white);border:var(--line-thin);
-  border-radius:0;padding:2px 10px 2px 8px;font-size:12px;color:var(--text-secondary);
-}
-.k-inline i{font-style:normal;font-weight:700;color:var(--text);font-size:12px}
-.k-inline b{font-weight:700;color:var(--text)}
-.k-inline em{font-style:normal;color:var(--text-tertiary);font-size:12px}
-/* k 公式下标 j：字体缺 U+2C7C，改用 <sub>j</sub>；显式取 12px（像素字体原生设计尺寸），
-   避免浏览器默认的 smaller（≈10px）落在非 12 网格上发糊。 */
-#quoteView .k-inline em sub{font-size:12px;line-height:0}
-
-/* 方案 Tab 文字：过长单行省略，悬浮显示完整名（由 label.title 提供） */
-#quoteView .scheme-tab .tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:126px}
-
-/* ============================================================================
-   本轮打磨 · qd5（P2）
-   结果入场动画 · 选中态统一墨黑 · 卡片内边距统一 · FAB 窄屏图标化
-   ============================================================================ */
-
-/* —— 末次测算结果入场：4 卡错峰淡入（只改透明度，不做位移） —— */
-#quoteView .dash-arrive .kpi-card{animation:kpiIn var(--dur-base) var(--ease-out) both}
-#quoteView .dash-arrive .kpi-card:nth-child(2){animation-delay:.05s}
-#quoteView .dash-arrive .kpi-card:nth-child(3){animation-delay:.1s}
-#quoteView .dash-arrive .kpi-card:nth-child(4){animation-delay:.15s}
-#quoteView .dash-arrive .table-section>*, #quoteView .dash-arrive .compare-stage>*{animation:kpiIn var(--dur-base) var(--ease-out) both}
-@keyframes kpiIn{from{opacity:0}to{opacity:1}}
-
-/* —— 方案切换（A/B/C）：卡片容器完全静止，仅数值平滑淡入，避免快速连点的上下抖动 —— */
-#quoteView .scheme-fade .table-scroll tbody{animation:valIn var(--dur-base) var(--ease-out) both}
-#quoteView .kpi-val.val-fade{animation:valIn var(--dur-base) var(--ease-out) both}
-@keyframes valIn{from{opacity:.3}to{opacity:1}}
-
-/* —— 选中 / 钻取态统一：橙色描边 + 橙色左条，不做位移 —— */
-#quoteView .kpi-card.active-drill{border-color:var(--ui-orange);box-shadow:inset 4px 0 0 var(--ui-orange)}
-#quoteView .kpi-card.active-drill::before{background:var(--ui-orange)!important}
-#quoteView .filter-chip.active{background:var(--ui-orange);color:var(--ui-black)}
-
-/* —— 排版网格统一 —— */
-#quoteView .compare-stage{padding:20px}
-#quoteView .kpi-row{gap:16px}
-
-/* —— FAB 窄屏图标化：≤1024px 隐文本、保留图标，杜绝 5 按钮横排溢出 —— */
-@media (max-width:1024px){
-  .floating-dock .dock-btn{font-size:0;line-height:0;padding:10px;gap:0;min-width:40px;justify-content:center}
-  .floating-dock .dock-sep{margin:0 4px}
-}
-@media (prefers-reduced-motion:reduce){
-  #quoteView .dash-arrive .kpi-card,
-  #quoteView .dash-arrive .table-section>*,
-  #quoteView .dash-arrive .compare-stage>*{animation:none}
-}
-
-/* ============================================================================
-   本轮微调 · qd6
-   成本进项税抵扣模型紧凑化 · k-inline 与占比合计锁定同行 · 双滑块锚定
-   ============================================================================ */
-
-/* 换算系数 pill 与「占比合计」强制同行同高，不换行 */
-.compose-foot{flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:nowrap}
-.compose-foot .compose-sum{min-width:0;white-space:nowrap}
-.k-inline{max-width:100%;flex-shrink:1;flex-wrap:wrap;row-gap:0;line-height:1.35}
-.k-inline em{white-space:normal}
-
-/* 成本进项税抵扣模型：逐段收紧纵向留白 */
-#quoteView #composeWrap{margin-top:2px}
-#quoteView #composeWrap .comp-stack{margin:2px 0 6px}
-#quoteView #composeWrap .comp-stack-legend{margin-top:4px}
-#quoteView #composeWrap .compose-table{margin-top:2px}
-#quoteView #composeWrap .compose-row{padding:5px 8px}
-#quoteView #composeWrap .compose-foot{margin-top:6px}
-
-/* ============================================================================
-   本轮重构 · qd11（P0）
-   右栏唯一真相源：就绪清单操作按钮 / 预览核对卡 / 结果动作工具栏 / Toast 语义色
-   ============================================================================ */
-
-/* 1) 就绪清单（#preparePanel）底部操作组：预览=次级、识别并计算=主 CTA */
-.prep-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
-.prep-actions .btn-primary,
-.prep-actions .btn-secondary{flex:1;min-width:150px;justify-content:center;padding:10px 16px;font-size:14px}
-.prep-actions .btn-primary:focus-visible,
-.prep-actions .btn-secondary:focus-visible,
-.result-actions button:focus-visible,
-.result-actions a:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
-
-/* 2) 预览核对卡（#previewStage）：复用 card/table 体系，标题沿用对比卡规格 */
-.preview-stage .result-head{margin-bottom:12px}
-.preview-stage .result-head h3{font-size:16px;font-weight:700;margin:0;color:var(--text)}
-.preview-stage .result-head p{font-size:12px;color:var(--text-secondary);margin:4px 0 0}
-
-/* 3) 明细表工具栏右侧：结果动作小按钮组（下载 Excel / 下载 JSON / 定稿并回写） */
-.table-toolbar-side{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.result-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.result-actions .btn-primary,
-.result-actions .btn-secondary,
-.result-actions .download-button{padding:6px 12px;font-size:12px;border-radius:0;min-height:30px}
-
-/* 4) 方案 Tab：槽位 C 恒灰显（disabled 态），A/B 恢复正常指针 */
-#quoteView .scheme-tab:disabled{opacity:.38;cursor:not-allowed;color:var(--text-tertiary)}
-#quoteView .scheme-tab:disabled:hover{background:var(--ui-white)}
-
-/* 5) 成本清单卡 intake-title：span 与 strong 统一行高、左对齐，两槽位视觉对齐 */
-.intake-title strong,.intake-title span{line-height:1.5;text-align:left}
-
-/* ============================================================================
-   本轮重构 · qd19（方案组 + 右下角吸附弹层）
-   方案中心 #planHub：右下角吸附弹层（对齐操作坞右缘）= 方案组 → A/B/C槽位 + 对比条
-   ============================================================================ */
-
-/* 1) 弹层容器：右下角吸附，右缘对齐操作坞（right:32px），可向左拖缩宽度 */
-.plan-hub{
-  position:fixed;right:32px;bottom:96px;z-index:var(--z-fab);
-  width:340px;max-height:76vh;display:flex;flex-direction:column;
-  background:var(--ui-white);border:var(--line-strong);
-  border-radius:0;
-  opacity:0;pointer-events:none;transform-origin:bottom right;
-  transition:opacity var(--dur-base) var(--ease-out);
-}
-.plan-hub.open{opacity:1;pointer-events:auto}
-
-/* 2) 顶部条：标题 + 当前项目 + 关闭 */
-.ph-header{
-  display:flex;align-items:center;gap:10px;flex-shrink:0;
-  padding:12px 16px;border-bottom:var(--line-thin);border-radius:0;
-}
-.ph-header h3{margin:0;font-size:14px;font-weight:700;color:var(--text);flex-shrink:0}
-.ph-current{
-  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  font-size:12px;color:var(--text-secondary);
-  padding:3px 9px;border:var(--line-thin);border-radius:0;background:var(--ui-white);
-}
-.ph-close{
-  margin-left:auto;flex-shrink:0;border:var(--line-thin);background:var(--ui-white);font-size:16px;line-height:1;
-  color:var(--text);width:30px;height:30px;border-radius:0;cursor:pointer;transition:background var(--dur-fast),color var(--dur-fast);
-  display:grid;place-items:center;
-}
-.ph-close:hover{background:var(--ui-yellow);color:var(--text)}
-.ph-close:focus-visible,.ph-run:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
-
-/* 3) 主体：方案组卡片竖列 */
-.ph-body{
-  flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 16px 16px;
-  display:flex;flex-direction:column;gap:10px;
-}
-.ph-empty{
-  padding:40px 16px;text-align:center;color:var(--text-secondary);font-size:12px;
-  border:var(--line-thin);border-radius:0;background:var(--ui-white);
-}
-
-/* 4) 方案组卡片（夹心：组信息头 + 可展开 A/B/C 槽位） */
-.phg-card{
-  background:var(--ui-white);border:var(--line-thin);border-radius:0;
-  padding:11px 12px;transition:border-color var(--dur-fast);min-width:0;
-}
-.phg-card:hover{border-color:var(--ui-orange)}
-.phg-card.finalized{border-color:var(--ui-orange)}
-.phg-card.expanded{border:2px solid var(--ui-orange)}
-.phg-head{display:flex;align-items:center;gap:8px;min-width:0}
-.phg-expand{
-  flex-shrink:0;width:22px;height:22px;border:var(--line-thin);background:var(--ui-white);
-  border-radius:0;color:var(--text);cursor:pointer;font-size:12px;line-height:1;
-  display:inline-flex;align-items:center;justify-content:center;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
-}
-.phg-expand:hover{border-color:var(--ui-orange);background:var(--ui-yellow);color:var(--text)}
-.phg-expand .arr{transition:transform var(--dur-fast) var(--ease-out)}
-.phg-card.expanded .phg-expand .arr{transform:rotate(90deg)}
-.phg-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:12px;color:var(--text)}
-.phg-lock{flex-shrink:0;font-size:12px;line-height:1;color:var(--text-tertiary)}
-.phg-lock.on{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:3px 8px;border-radius:0;border:var(--line-thin);
-  background:var(--ui-yellow);color:var(--ui-black);font-weight:600;
-}
-.phg-lock.on svg{width:12px;height:12px;flex-shrink:0}
-.phg-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:12px;color:var(--text-secondary)}
-.phg-meta b{font-variant-numeric:tabular-nums;font-weight:600;color:var(--text)}
-.phg-ops{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;border-top:var(--line-thin);padding-top:8px}
-.phg-op{
-  flex:1;border:var(--line-thin);background:var(--ui-white);
-  padding:4px 6px;border-radius:0;font-size:12px;font-weight:600;
-  color:var(--text);cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);white-space:nowrap;
-}
-.phg-op:hover{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
-.phg-op.fin.is-on{background:var(--ui-yellow);color:var(--ui-black);border-color:var(--ui-black)}
-.phg-op.fin.is-on:hover{background:var(--ui-white);color:var(--text)}
-.phg-op.is-disabled{opacity:.38;pointer-events:none}
-
-/* 组内行内改名 */
-.phg-rename-input{
-  flex:1;min-width:0;padding:3px 6px;border:var(--line-thin);border-radius:0;
-  font-size:12px;font-weight:600;color:var(--text);background:var(--ui-white);font-family:var(--font);outline:none;
-}
-.phg-rename-input:focus{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
-
-/* 槽位区（展开后显示） */
-.phg-slots{display:flex;flex-direction:column;gap:6px;margin-top:10px;border-top:var(--line-thin);padding-top:10px}
-.phg-slot{
-  display:flex;align-items:center;gap:8px;padding:7px 9px;border:var(--line-thin);border-radius:0;
-  background:var(--ui-white);min-width:0;
-}
-.phg-slot .letter{
-  flex-shrink:0;width:20px;height:20px;border-radius:0;display:inline-flex;align-items:center;justify-content:center;
-  font-size:12px;font-weight:700;color:var(--ui-white);background:var(--ui-black);
-}
-.phg-slot.letter-a .letter{background:var(--ui-black);color:var(--ui-white)}
-.phg-slot.letter-b .letter{background:var(--ui-orange);color:var(--ui-black)}
-.phg-slot.letter-c .letter{background:var(--ui-yellow);color:var(--ui-black)}
-.phg-slot-info{flex:1;min-width:0}
-.phg-slot-title{font-size:12px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
-.phg-slot-title .sub{font-weight:500;color:var(--text-tertiary)}
-.phg-slot-stat{font-size:12px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.phg-slot-stat b{font-variant-numeric:tabular-nums;font-weight:600;color:var(--text)}
-.phg-slot.pending{opacity:.38}
-.phg-slot.pending .letter{background:var(--ui-white);color:var(--text);border:var(--line-thin)}
-.phg-slot .slot-act{
-  flex-shrink:0;border:var(--line-thin);background:var(--ui-white);
-  padding:3px 8px;border-radius:0;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);white-space:nowrap;
-}
-.phg-slot .slot-act:hover{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
-.phg-slot .slot-check{display:inline-flex;align-items:center;gap:4px;margin:0;cursor:pointer;font-size:12px;color:var(--text-secondary);flex-shrink:0}
-.phg-slot .slot-check input{width:14px;height:14px;margin:0;accent-color:var(--ui-orange);cursor:pointer}
-
-/* 5) 底部对比操作条 */
-.ph-bar{
-  flex-shrink:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  border-top:var(--line-thin);background:var(--ui-white);
-  padding:10px 16px;border-radius:0;
-}
-.ph-count{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap}
-.ph-base{flex:none;min-width:150px;width:auto;padding:6px 24px 6px 9px;font-size:12px;border-radius:0}
-.ph-run{margin-left:auto;padding:7px 16px;font-size:12px;border-radius:0}
-
-/* 6) 缩放手柄：左侧竖条，向左/右拖动调宽（右缘锚定 dock） */
-.ph-resize{
-  position:absolute;top:0;bottom:0;left:-4px;width:9px;cursor:ew-resize;z-index:calc(var(--z-sticky) + 1);
-}
-.ph-resize::after{content:"";position:absolute;top:50%;left:3px;transform:translateY(-50%);
-  width:2px;height:36px;border-radius:0;background:var(--ui-black);opacity:0;transition:opacity var(--dur-fast)}
-.ph-resize:hover::after{opacity:1}
-
-/* 7) 断点适配：窄屏（≤768px）弹层全宽贴边，不再吸附 dock */
-@media (max-width:768px){
-  .plan-hub{left:10px;right:10px;width:auto !important;bottom:84px}
-}
-@media (prefers-reduced-motion:reduce){
-  .plan-hub{transition:none}
-}
-
-/* ============================================================================
-   本轮细化 · qd26
-   KPI 穿透清除徽标 · 上传资产舱解析摘要
-   ============================================================================ */
-
-/* KPI 穿透清除徽标：毛利/风险钻取激活时出现，一键回到全部子目 */
-.drill-clear{
-  display:inline-flex;align-items:center;gap:5px;
-  border:2px solid var(--ui-orange);
-  background:var(--ui-white);color:var(--text);
-  padding:4px 11px;border-radius:0;font-size:12px;font-weight:600;cursor:pointer;
-  transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
-}
-.drill-clear:hover{border-color:var(--ui-black);background:var(--ui-yellow);color:var(--text)}
-.drill-clear:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
-
-/* 上传资产舱即时摘要：预览解析后回填「已解析行数 / 匹配 / 未匹配」凭证 */
-.intake-stat{
-  margin-top:6px;font-size:12px;color:var(--text-secondary);
-  font-variant-numeric:tabular-nums;line-height:1.5;
-}
-.intake-stat b{font-weight:700;color:var(--text)}
-.intake-slot.loaded .intake-stat b{color:var(--text)}
-
-/* ============================================================================
-   本轮细化 · qd27
-   双滑块重叠防死锁（默认下限在上）· 就绪清单打勾反馈
-   ============================================================================ */
-
-/* 双滑块 z 序：默认下限 thumb 在上（可被点击），pointer 靠近上限时由 JS 提权（内联 z-index 覆盖） */
-/* 基础层 z 一致；指针靠近提权由 JS refreshRatioHover 单一函数统一管理（P2-11） */
-#quoteView .guardrail-track input[type=range]#ratioLow,
-#quoteView .guardrail-track input[type=range]#ratioHigh{z-index:calc(var(--z-sticky) + 1)}
-
-/* 就绪清单：待就绪 → 就绪 状态点淡变（不做缩放弹跳） */
-.prep-dot{transition:background var(--dur-fast),opacity var(--dur-fast)}
-
-/* 结果态状态胶囊条（Status Capsule）：推演完成后 #preparePanel 折叠为 38px 收拢条，释放垂直空间给明细表 */
-.status-capsule{
-  display:flex;align-items:center;gap:8px;height:38px;padding:0 16px;
-  background:var(--ui-white);border:var(--line-thin);
-  border-radius:0;
-  font-size:12px;color:var(--text-secondary);
-}
-.status-capsule .capsule-dot{width:8px;height:8px;border-radius:50%;background:var(--ui-black);flex-shrink:0}
-.status-capsule .capsule-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-/* ============================================================================
-   关联项目门控：未选择关联项目 → 报价页全部控件不可交互
-   唯一例外：关联投标项目选择本身（#projectId 及其自定义下拉触发/列表）
-   ============================================================================ */
-body.project-locked .param-column,
-body.project-locked .canvas-column,
-body.project-locked .floating-dock,
-body.project-locked #planHub{pointer-events:none}
-body.project-locked .param-column,
-body.project-locked .floating-dock,
-body.project-locked .prep-actions{opacity:.38;transition:opacity var(--dur-base)}
-body.project-locked #projectId,
-body.project-locked .cs-trigger,
-body.project-locked .cs-list{pointer-events:auto}
-
-/* ============================================================================
-   方案对比结果弹层：居中式大弹层（宽屏表格可横向滚动），不占用右栏主舞台
-   ============================================================================ */
-.cmp-modal{
-  position:fixed;inset:0;z-index:var(--z-audit);display:flex;align-items:center;justify-content:center;
-  padding:24px;opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease-out);
-}
-.cmp-modal.open{opacity:1;pointer-events:auto}
-.cmp-mask{position:absolute;inset:0;background:var(--ui-overlay)}
-.cmp-panel{
-  position:relative;z-index:var(--z-sticky);display:flex;flex-direction:column;overflow:hidden;
-  width:min(1180px,94vw);max-height:min(88vh,860px);
-  background:var(--ui-white);border:var(--line-strong);
-  border-radius:0;
-  opacity:0;transition:opacity var(--dur-base) var(--ease-out);
-}
-.cmp-modal.open .cmp-panel{opacity:1}
-.cmp-head{
-  display:flex;align-items:center;gap:10px;flex-shrink:0;
-  padding:12px 16px;border-bottom:var(--line-thin);
-}
-.cmp-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
-.cmp-body{padding:16px 16px 20px;overflow:auto;flex:1 1 auto;min-height:0}
-.cmp-body .result-head{margin-top:0}
-/* —— 审计日志弹层表格（#auditModal，复用 #cmpModal 外观）—— */
-.audit-body{padding:16px 16px 20px;overflow:auto;flex:1 1 auto;min-height:0}
-.audit-body .table-wrap{padding:0;max-height:56vh;overflow:auto;border:var(--line-thin);border-radius:0}
-.audit-loading,.audit-empty{color:var(--text-secondary);font-size:14px;padding:20px 4px}
-.audit-meta{color:var(--text-tertiary);font-size:12px;margin:10px 2px 0}
-table.audit-table{width:100%;border-collapse:collapse;font-size:13px}
-table.audit-table th{position:sticky;top:0;background:var(--ui-white);z-index:var(--z-sticky);text-align:left;padding:8px 12px;color:var(--text);font-weight:700;white-space:nowrap;border-bottom:var(--line-strong)}
-table.audit-table td{padding:7px 12px;border-top:var(--line-thin);vertical-align:top;white-space:nowrap}
-table.audit-table td.sec{white-space:normal;color:var(--text-secondary);min-width:180px}
-table.audit-table tr:hover td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
-.audit-success{color:var(--text)}
-.audit-error{color:var(--text);font-weight:700}
-.audit-warn{color:var(--text)}
-/* ---- Skeleton loading：静态黑框占位，不做扫光动画 ---- */
-.skeleton{position:relative;overflow:hidden;background:var(--ui-white);border:var(--line-thin);border-radius:0}
-.skeleton-row{display:flex;gap:12px;align-items:center;padding:8px 12px;border-top:var(--line-thin)}
-.skeleton-cell{height:14px;border-radius:0;flex:1;min-width:0;background:var(--ui-white);border:var(--line-thin)}
-.skeleton-card{padding:12px 16px;border:var(--line-thin);border-radius:0;margin-bottom:8px}
-
-/* ============================================================
-   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
-   ------------------------------------------------------------
-   覆盖：模块短标题、Tab / Chip / Badge / 状态药丸、按钮、数据指标、
-   表格列头与数字单元格。
-   不覆盖：.card-subtitle / .kpi-foot / .phg-meta / .ph-empty / .prep-item
-   等说明文字，.input-affix 内输入内容，以及物料名/备注等中文数据串
-   （§5.1 第 203 行），一律保持 --font（MiSans）。
-   规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
-   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
-   ============================================================ */
-/* 模块短标题 */
-#quoteView .card-title,
-.cmp-head h3,
-.compare-stage .result-head h3,
-.preview-stage .result-head h3,
-.ph-header h3,
-/* Tab / Chip / Badge / 短状态码 */
-.scheme-tab,
-.filter-chip,
-.status-tag,
-.delta-badge,
-.risk-corner,
-.prep-state,
-.toast-pill,
-.status-capsule,
-/* 按钮 */
-.dock-btn,
-.intake-reup,
-.phg-op,
-.phg-slot .slot-act,
-.phg-expand,
-.ph-run,
-.drill-clear,
-.prep-actions .btn-primary,
-.prep-actions .btn-secondary,
-.result-actions .btn-primary,
-.result-actions .btn-secondary,
-.result-actions .download-button,
-/* 数据指标 */
-.range-val,
-.kpi-val,
-.intake-stat b,
-.phg-meta b,
-.phg-slot-stat b,
-.ph-count,
-.k-inline i,
-.k-inline b,
-.k-inline em,
-/* 表格列头与数字单元格：回归正文字体（MiSans）。
- * 2026-10-06：像素字体仅用于装饰性标签（H1/药丸/按钮/Badge/时间日期，见 DESIGN.md §5.1），
- * 数字表格用像素字体在非整数倍缩放下发虚、可读性下降，故此处不再接管。 */
-.audit-table th,
-.table-scroll th.num,
-.table-scroll td.num,
-#quoteView table td.num{
-  font-family:var(--font);
-  font-weight:400;
-  font-synthesis:none;
-  font-variant-numeric:tabular-nums;   /* 数字等宽，列对齐不跳动 */
-}
-
-/* ---- results.css ---- */
-/* ============ 结果面板与表格（DESIGN V2：白底 + 2px 黑框 + 直角） ============ */
-.result-panel{
-  margin-top:16px;background:var(--ui-white);
-  border:var(--line-strong);border-radius:0;
-  padding:16px;
-}
-.result-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
-.result-head h3{margin:0;font-size:16px;font-weight:700;letter-spacing:-.01em}
-.result-head p{margin:3px 0 0;color:var(--text-secondary);font-size:12px}
-.download-actions{display:flex;gap:8px;flex-wrap:wrap}
-
-/* 容器结构与单元格规范已收敛至 styles.css 设计系统层（.table-wrap），此处仅保留视图高度上限 */
-.table-wrap{max-height:460px}
-
-/* 数字列：右对齐 + 等宽数字，便于逐行对位 */
-.table-wrap th.num,.table-wrap td.num{text-align:right;padding-right:16px}
-.price-cell{color:var(--text);font-weight:600}
-
-.plan-saved-pill{
-  display:inline-block;margin-left:8px;padding:2px 8px;border-radius:0;
-  background:var(--ui-white);border:var(--line-thin);color:var(--text);font-size:12px;font-weight:600;
-}
-
-/* 对比表单元格高亮：亏损=橙块黑字 / 提醒=黄块黑字 / 增益=黑字加粗（均满足 AA 对比） */
-.table-wrap td.loss-cell{background:var(--ui-orange);color:var(--ui-black)}
-.table-wrap td.warn-cell{background:var(--ui-yellow);color:var(--ui-black)}
-.table-wrap td.gain-cell{color:var(--text);font-weight:700}
-/* ============================================================
-   基础件层（P3 前端整合：由 frontend/styles.css 并入全文）
-   母项目现行基础件标准（.card/.field/.btn/.compose-* 等），报价页依赖它。
-   ============================================================ */
-/* ============================================================
-   工程智算 · 投标报价 —— 全局基础层
-   V2 设计语言：黑白极简 · 橙/黄专色 · 像素秩序 · 打印终端感
-   颜色/间距/圆角/阴影/字体/层级等全部令牌见 tokens.css（单一事实源），
-   本文件不定义任何令牌，只消费。
-   ============================================================ */
-
-*{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{
-  background:var(--page-bg);color:var(--text);
-  font-family:var(--font);font-size:14px;line-height:1.55;
-  font-synthesis:none;text-rendering:optimizeLegibility;
-  -webkit-font-smoothing:antialiased;
-  -moz-osx-font-smoothing:grayscale;
-  /* 数字微排版：等宽数字 + 字体特性（tnum 位权对齐 / cv01 字形统一） */
-  font-variant-numeric:tabular-nums;
-  font-feature-settings:"tnum" 1,"cv01" 1;
-}
-.hidden{display:none!important}
-a{color:var(--accent-600);text-decoration:none}
-button{font-family:var(--font)}
-/* 全局键盘焦点环（WCAG 2.1 SC 2.4.7）：仅键盘导航时显示，不干扰鼠标点击 */
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:inherit}
-
-/* ---------- 布局骨架 ---------- */
-.app-shell{display:flex;min-height:100vh}
-
-/* ---------- 侧边栏（白底 + 右侧 2px 黑竖线，无渐变无阴影） ---------- */
-.sidebar{
-  width:var(--sidebar-w);flex-shrink:0;
-  background:var(--ui-white);
-  color:var(--text);
-  border-right:var(--line-strong); /* V2：右侧 2px 黑竖线 */
-  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;
-}
-.brand{display:flex;align-items:center;gap:var(--space-3);padding:20px;border-bottom:var(--line-thin)}
-.brand-mark{
-  width:40px;height:40px;
-  background:var(--ui-black);color:var(--ui-white);display:grid;place-items:center;flex-shrink:0;
-}
-.brand-mark svg{width:22px;height:22px}
-.brand-text strong{font-family:var(--font-pixel);font-size:16px;font-weight:400;display:block;line-height:1.3;letter-spacing:.02em;color:var(--text)}
-.brand-text small{color:var(--text-secondary);font-size:12px;display:block;margin-top:2px;letter-spacing:.02em;font-weight:500}
-
-/* 中间导航：可独立滚动 */
-.nav-scroll{flex:1;overflow-y:auto;padding:10px 12px 12px}
-.nav-scroll::-webkit-scrollbar{width:6px}
-.nav-scroll::-webkit-scrollbar-thumb{background:var(--drawer-text-mute);border-radius:0}
-.nav-group{margin-bottom:32px}
-.nav-group:last-child{margin-bottom:0}
-.nav-group-title{
-  font-family:var(--font-pixel);font-size:12px;font-weight:400;letter-spacing:.1em;
-  color:var(--text-tertiary);padding:8px 12px 6px;
-}
-.nav-item{
-  display:flex;align-items:center;gap:10px;width:100%;
-  border:var(--line-thin);background:var(--ui-white);color:var(--text);
-  padding:10px 12px;
-  font-size:14px;font-weight:500;cursor:pointer;text-align:left;
-  transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
-  margin-bottom:var(--space-2);
-}
-.nav-item svg{width:18px;height:18px;flex-shrink:0;color:currentColor}
-/* 未上线模块：灰显但仍可点进占位页，所以用 --text-secondary（≈5:1）而不是压 opacity 到不可读；
-   右侧索引位换成「建设中」标记，说明这一项为什么是灰的。
-   放在 .nav-item:hover / .nav-item.active 之前，让悬停与选中态照常赢回黑色。 */
-.nav-item.nav-soon{color:var(--text-secondary)}
-.nav-item.nav-soon svg{opacity:.6}
-.nav-num.nav-soon-tag{color:var(--text-secondary);letter-spacing:.02em}
-.nav-item.nav-soon:hover .nav-num.nav-soon-tag{color:var(--ui-black)}
-.nav-item:hover{background:var(--ui-yellow);color:var(--ui-black)}
-.nav-item.active{background:var(--ui-orange);color:var(--ui-black);font-weight:700;border:var(--line-strong)}
-.nav-item.active svg{color:var(--ui-black)}
-.nav-item:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
-/* 导航编号：本项目的模块索引（Q-01 报价 / C-02 实施成本 / A-03 AI 助手 / L-04 台账 / S-05 结算 / T-06 工具箱 / W-00 工作台） */
-.nav-num{margin-left:auto;font-family:var(--font-pixel);font-size:12px;letter-spacing:.04em;color:var(--text-tertiary)}
-.nav-item.active .nav-num{color:var(--ui-black)}
-
-/* ---------- 工作台二级折叠（P-W8：9 页并入外层，全站只有一条竖栏） ----------
-   父行 = 折叠开关（右侧 chevron），二级项缩进一档表示层级。
-   不使用 display:none 之外的隐藏技巧；字号与父行一致（14px），
-   因为像素字体只在 12px 网格整数倍上清晰，缩进已足够表达层级。 */
-.nav-parent .nav-chev{width:14px;height:14px;flex-shrink:0;margin-left:8px;transition:transform var(--dur-fast)}
-.nav-parent.is-collapsed .nav-chev{transform:rotate(-90deg)}
-/* 子项处于激活态时给父行一条橙色竖标（硬 inset，无模糊），收起状态下也能看出当前在哪 */
-.nav-parent.has-active{box-shadow:inset 4px 0 0 var(--ui-orange)}
-/* 树状线 + 缩进表达层级；二级项更紧凑，避免 16 项把侧栏撑到一屏之外 */
-.nav-sublist{margin-left:12px;padding-left:10px;border-left:var(--line-thin)}
-.nav-sublist.is-collapsed{display:none}
-.nav-sub{padding-top:7px;padding-bottom:7px;margin-bottom:4px}
-.nav-sub svg{width:16px;height:16px}
-
-/* 底部用户区 + 版本号 */
-.sidebar-foot{padding:12px 16px 16px;border-top:var(--line-thin)}
-.user-block{display:flex;align-items:center;gap:10px;margin-bottom:9px}
-.avatar{
-  width:32px;height:32px;
-  background:var(--ui-black);color:var(--ui-white);
-  display:grid;place-items:center;font-family:var(--font-pixel);font-size:12px;font-weight:400;flex-shrink:0;
-}
-.user-meta{display:flex;flex-direction:column;line-height:1.35}
-.user-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-scope{font-size:12px;color:var(--text-tertiary)}
-.version-line{font-family:var(--font-pixel);font-size:12px;color:var(--text-tertiary);text-align:left;padding-top:var(--space-1);letter-spacing:.02em}
-
-/* ---------- 主内容区 ---------- */
-/* 主内容水平 padding 对齐 DESIGN §7.1：≥1440 → 32px；≤1280 → 24px；≤1024 → 16px */
-.main-content{flex:1;min-width:0;padding:24px 32px 80px;max-width:1680px;margin:0 auto}
-@media (max-width:1280px){.main-content{padding-left:24px;padding-right:24px}}
-@media (max-width:1024px){.main-content{padding-left:16px;padding-right:16px}}
-.breadcrumb{font-size:12px;color:var(--text-secondary);margin-bottom:8px}
-.breadcrumb span{margin:0 6px;color:var(--text-tertiary)}
-.page-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:24px}
-/* H1 用像素字体：字号须落在 12px 网格的整数倍（原 28px = 2.33× 会发糊），故取 36px（3×）；
-   同时去掉负字距——像素字体靠字形栅格对齐，负字距会把字形推到半像素上。 */
-.page-header h1{font-size:36px;font-weight:400;margin:0;letter-spacing:0}
-.page-sub{color:var(--text-secondary);margin:6px 0 0;font-size:12px}
-.status-pill{
-  display:inline-flex;align-items:center;gap:6px;
-  background:var(--ui-white);color:var(--text);border:var(--line-thin);
-  font-size:12px;font-weight:600;padding:5px 12px;white-space:nowrap;
-}
-
-/* ---------- 卡片（一级模块 · DESIGN §8.1） ---------- */
-.card{
-  position:relative;
-  background:var(--ui-white);border:var(--line-strong);
-  border-radius:0;box-shadow:none;
-  padding:var(--card-pad) 20px;margin-bottom:16px;
-}
-/* 统一裁角（右上角 45° 切角）：外层伪元素实现，不用 clip-path，避免裁掉 .field[data-tip] 气泡与 focus ring */
-.card::before{
-  content:"";position:absolute;top:-2px;right:-2px;width:0;height:0;pointer-events:none;
-  border-top:calc(var(--notch-md) / 2) solid var(--ui-white);
-  border-right:calc(var(--notch-md) / 2) solid var(--ui-white);
-  border-bottom:calc(var(--notch-md) / 2) solid transparent;
-  border-left:calc(var(--notch-md) / 2) solid transparent;
-}
-.card::after{
-  content:"";position:absolute;top:-2px;right:-2px;pointer-events:none;
-  width:calc(var(--notch-md) * 1.414);height:2px;background:var(--ui-black);
-  transform-origin:0 50%;
-  transform:translate(calc(var(--notch-md) * 0.414), -1px) rotate(45deg);
-}
-/* 窄屏取消装饰性裁角（DESIGN §10） */
-@media (max-width:768px){.card::before,.card::after{display:none}}
-/* 标题行 40px 高 + 1px 黑底分隔线 */
-.card-head{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  min-height:40px;margin-bottom:16px;padding-bottom:10px;border-bottom:var(--line-thin);
-}
-
-/* ---------- 表格（设计系统层：唯一真相源 · DESIGN §8.7） ---------- */
-/* 容器结构与单元格规范统一收敛于此；视图级差异（如对比卡高度上限）留在各自样式文件 */
-.table-wrap{overflow:auto;border-radius:0;border:var(--line-strong);background:var(--ui-white)}
-.table-wrap table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.table-wrap th,.table-wrap td{text-align:left;border-bottom:var(--line-thin);padding:9px 12px}
-/* 表头：白底 + 黑粗字 + 2px 黑底线 */
-.table-wrap th{color:var(--text);font-weight:700;background:var(--ui-white);border-bottom:var(--line-strong);position:sticky;top:0;z-index:var(--z-sticky)}
-.table-wrap tbody tr:last-child td{border-bottom:0}
-/* 行 hover：黄色 4px 左条（不填满整行）；选中：橙色 4px 左条 */
-.table-wrap tbody tr:hover>td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
-.table-wrap tbody tr.selected>td:first-child{box-shadow:inset 4px 0 0 var(--ui-orange)}
-
-/* ---------- 跨页共用基础件（报价页 + 速算工具箱都直接用） ----------
-   为什么收在设计系统层：这几个类在**工具页**也被使用，而工具页此前是靠加载整份
-   quote-dashboard.css（995 行 / 54.9 KB）才拿到它们——为 3 个选择器付整份视图层的
-   解析成本，且报价页的非前缀规则会在工具页"裸生效"（隐性耦合）。
-   依赖面是**实测**出来的，不是估的：jsdom 逐元素 matches 全部 415 个选择器 + 工具页
-   HTML/JS 类名与样式定义的交叉核对，结果只有 .title-dot / .card-subtitle / .tabular
-   三个（含 toast、确认框、自定义下拉等动态路径）。据此刻意不搬任何其他规则。
-   判据：test/smoke.test.mjs「工具页不得加载报价页视图层」「三个基础件由 styles.css 提供」。 */
-.title-dot{width:6px;height:6px;border-radius:50%;background:var(--ui-black);flex-shrink:0}
-.card-subtitle{font-size:12px;color:var(--text-secondary)}
-/* 等宽数字排版：数字列逐行对位（与 quote-dashboard.css 里 #quoteView 作用域的那组同一口径） */
-.tabular{font-variant-numeric:tabular-nums!important;font-feature-settings:"tnum"!important}
-
-/* ---------- 个人工作台（宿主壳：内容由 React 版工作台 :3456 以 iframe 提供） ---------- */
-.workbench-view{min-height:60vh}
-.workbench-view .wb-frame{display:block;width:100%;height:calc(100vh - 104px);min-height:520px;border:0;background:var(--ui-white)}
-@media (max-width:560px){.workbench-view .wb-frame{height:calc(100vh - 152px)}}
-.card-head h2{font-size:16px;font-weight:700;margin:0;letter-spacing:-.01em}
-.card-head p{font-size:12px;color:var(--text-secondary);margin:3px 0 0;text-align:right}
-
-/* ---------- 参数区：三列分组（组标题带竖条） ---------- */
-.param-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-.param-group{display:flex;flex-direction:column;gap:10px}
-.param-group-title{
-  display:flex;align-items:center;gap:8px;
-  font-size:12px;font-weight:600;color:var(--text);letter-spacing:.02em;
-  padding-bottom:7px;border-bottom:1px solid var(--border);margin-bottom:0;
-}
-.param-group-title::before{content:"";width:3px;height:13px;border-radius:0;background:var(--accent)}
-.field{display:flex;flex-direction:column;gap:5px;position:relative}
-.field-label{font-size:12px;font-weight:500;color:var(--text-secondary)}
-.field-label em{font-style:normal;color:var(--text-tertiary);font-weight:500;margin-left:4px;font-size:12px}
-.field input:not([type=checkbox]){
-  width:100%;padding:6px 12px;border:var(--line-thin);border-radius:0;
-  font-size:14px;font-family:var(--font);font-weight:400;color:var(--text);
-  background:var(--ui-white);transition:border-color var(--dur-fast);
-}
-/* placeholder：黑色 + 降低透明度（DESIGN §8.5） */
-.field input:not([type=checkbox])::placeholder{color:var(--ui-black);opacity:.45;font-weight:400}
-.field input:not([type=checkbox]):hover{border-color:var(--ui-orange)}
-.field input:not([type=checkbox]):focus{border-color:var(--ui-orange)}
-.field input:not([type=checkbox]):focus-visible{outline:2px solid var(--ui-orange);outline-offset:2px}
-.field input[type=number]{text-align:right;font-variant-numeric:tabular-nums}
-.field input.invalid{border-color:var(--ui-orange);box-shadow:inset 0 0 0 1px var(--ui-orange)}
-.field input.invalid:focus{border-color:var(--ui-orange)}
-.field.check{flex-direction:row;align-items:center;gap:8px;margin-top:3px}
-/* 开启态用橙色实心，不用绿色（DESIGN §8.5） */
-.field.check input{accent-color:var(--ui-orange);width:16px;height:16px;cursor:pointer}
-.field.check span{font-size:12px;color:var(--text-secondary);cursor:pointer}
-/* 成本构成（分项多税率精算）面板 —— 沿用 .field 控件语言与卡片分隔线风格 */
-/* 成本税口径已改为第 4 列，与各组并列，不再独占整行 */
-.compose-table{
-  display:flex;flex-direction:column;margin-top:4px;
-  border:1px solid var(--border);border-radius:var(--radius-tile);
-  background:var(--surface-nested);overflow:hidden;
-}
-.compose-row{
-  display:grid;grid-template-columns:1fr 78px 78px;align-items:center;gap:8px;
-  padding:7px 10px;
-}
-.compose-row + .compose-row{border-top:1px solid var(--border)}
-.compose-row.compose-head{
-  padding-top:9px;padding-bottom:9px;
-  background:var(--surface-card);
-  font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--text-secondary);
-  border-bottom:1px solid var(--border);
-}
-.compose-row.compose-head span:nth-child(2),
-.compose-row.compose-head span:nth-child(3){text-align:right}
-.compose-row .comp-label{font-size:14px;font-weight:500;color:var(--text)}
-.compose-row input{
-  width:100%;padding:4px 5px;
-  border:var(--line-thin);border-radius:0;
-  font-size:14px;font-family:var(--font);
-  text-align:right;font-variant-numeric:tabular-nums;color:var(--text);
-  background:var(--ui-white);transition:border-color var(--dur-fast);
-}
-.compose-row input::placeholder{color:var(--text-tertiary)}
-.compose-row input:hover{border-color:var(--text-tertiary)}
-.compose-row input:focus{border-color:var(--ui-orange);outline:2px solid var(--ui-orange);outline-offset:2px}
-/* 成本构成行脚。**只声明与视图无关的部分**：排列方向与间距都由视图层决定
-   （quote-dashboard.css 的 qd6 强制 row / center / space-between，间距用它的 8px）。
-   此前这里写 column + align-items:flex-start + gap:4px，与 qd6 的 row/8px 直接矛盾——
-   而本文件先加载、特异性相同，所以那三条**永远不生效**：改这里的人会以为改了却没变化。
-   全量比对（逐文件解析选择器 + 逐属性比对）后确认：同上下文下的跨文件属性冲突仅此一处，
-   其余同名选择器要么是视图层的追加（.table-wrap 的高度上限），要么在 @media print 内
-   （tools.css 隐藏导航，有意覆盖）。 */
-.compose-foot{display:flex;margin-top:8px}
-.compose-sum{font-size:12px;font-weight:600;padding:5px 12px;border:var(--line-thin);border-radius:0;background:var(--ui-white);color:var(--text)}
-.compose-sum.bad{background:var(--ui-yellow);color:var(--ui-black);border-color:var(--ui-black)}
-.compose-k{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
-#composeWrap.hidden{display:none}
-/* 构成块内说明文案：压缩占位，避免整块被长说明撑高 */
-#composeWrap .corner-tip{margin:2px 0 8px;font-size:12px;line-height:1.62;max-width:none}
-/* 兜底：.field 内任何原生 select（未接入自定义组件时）也与输入框同一控件语言，
-   不出现浏览器原生框；接入 initCustomSelect 后原生 select 会被 cs-hidden 隐藏，互不冲突。 */
-.field select{
-  width:100%;padding:6px 32px 6px 12px;
-  border:var(--line-thin);border-radius:0;
-  font-size:14px;font-family:var(--font);font-weight:400;color:var(--text);
-  background-color:var(--ui-white);
-  appearance:none;-webkit-appearance:none;
-  background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 12px center;background-size:14px;
-  cursor:pointer;transition:border-color var(--dur-fast);
-}
-.field select:hover, .plan-select:hover{border-color:var(--ui-orange)}
-.field select:focus, .plan-select:focus{border-color:var(--ui-orange)}
-.field select:focus-visible, .plan-select:focus-visible{outline:2px solid var(--ui-orange);outline-offset:2px}
-/* 自定义下拉组件位于 .field 内时，撤销其默认 flex:1（避免列布局下被纵向拉伸） */
-.field .cs{flex:0 0 auto;min-width:0;width:100%}
-
-/* 底部条：说明 + 确认人 */
-.card-corner{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)}
-.corner-tip{font-size:12px;color:var(--text-secondary);line-height:1.7;margin:0;max-width:640px}
-.card-corner .field{width:200px;max-width:100%;flex-shrink:0}
-
-/* 输入框悬停说明 tooltip：白底 + 2px 黑框 + 0 圆角，无模糊阴影（DESIGN §8.9） */
-.field[data-tip]::after{
-  content:attr(data-tip);
-  position:absolute;left:0;bottom:calc(100% + 8px);
-  background:var(--ui-white);
-  color:var(--text);font-size:12px;line-height:1.5;font-weight:500;
-  padding:7px 11px;border:var(--line-strong);border-radius:0;white-space:normal;
-  /* max-width 取字段自身宽度：气泡自字段左缘向右展开，宽度不超过字段 → 右边界永不越出，无需 JS 翻转 */
-  width:max-content;max-width:min(280px,100%);
-  opacity:0;visibility:hidden;transform:translateY(4px);
-  transition:opacity var(--dur-fast),transform var(--dur-fast),visibility var(--dur-fast);
-  z-index:var(--z-tooltip);pointer-events:none;
-}
-.field[data-tip]::before{
-  content:"";position:absolute;left:14px;bottom:calc(100% + 2px);
-  border:6px solid transparent;border-top-color:var(--ui-black);
-  opacity:0;visibility:hidden;transition:opacity var(--dur-fast),visibility var(--dur-fast);z-index:var(--z-tooltip);
-}
-.field[data-tip]:hover::after,
-.field[data-tip]:hover::before,
-.field[data-tip]:focus-within::after,
-.field[data-tip]:focus-within::before,
-.field[data-tip]:focus-visible::after,
-.field[data-tip]:focus-visible::before{opacity:1;visibility:visible;transform:translateY(0)}
-
-.hint{font-size:12px;color:var(--text-secondary);margin:16px 0 0;line-height:1.6}
-
-/* ---------- 上传区 ---------- */
-.upload-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
-.upload-card{
-  background:var(--ui-white);border:2px dashed var(--ui-black);border-radius:0;
-  padding:24px;display:flex;flex-direction:column;gap:6px;min-height:140px;
-  cursor:pointer;transition:border-color var(--dur-fast),background-color var(--dur-fast);
-}
-.upload-card:hover{border-color:var(--ui-orange)}
-.upload-icon{width:36px;height:36px;color:var(--text);margin-bottom:4px}
-.upload-icon svg{width:100%;height:100%}
-.upload-card strong{font-size:16px;font-weight:600}
-.upload-card small{color:var(--text-secondary);font-size:12px}
-.upload-card input{display:none}
-.file-name{color:var(--text-tertiary);font-size:12px;margin-top:auto;padding-top:12px}
-.file-name.selected{color:var(--text);font-weight:600}
-
-/* ---------- 消息（成功=黑左条 / 错误=橙左条，DESIGN §8.10） ---------- */
-.message{
-  margin-top:16px;padding:10px 16px;border-radius:0;
-  background:var(--ui-white);border:var(--line-thin);border-left:4px solid var(--ui-black);
-  color:var(--text);font-size:12px;line-height:1.6;
-}
-.message.success{background:var(--ui-white);color:var(--text);border-left-color:var(--ui-black)}
-.message.error{background:var(--ui-white);color:var(--text);border-left-color:var(--ui-orange)}
-
-/* ---------- 按钮（DESIGN §8.3） ---------- */
-.action-row{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
-.btn-primary,.btn-secondary,.btn-ghost,.download-button{
-  display:inline-flex;align-items:center;gap:6px;justify-content:center;
-  border-radius:0;font-size:14px;font-weight:600;font-family:var(--font);
-  padding:10px 16px;cursor:pointer;
-  transition:background-color var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast),transform var(--dur-fast);
-  white-space:nowrap;
-}
-.btn-primary svg{width:16px;height:16px}
-.btn-primary{background:var(--ui-orange);color:var(--ui-black);border:var(--line-strong);box-shadow:var(--shadow-action)}
-.btn-primary:hover{background:var(--ui-yellow);color:var(--ui-black)}
-.btn-primary:active{transform:translateY(1px)}
-.btn-primary:disabled{opacity:.38;cursor:not-allowed;box-shadow:none}
-.btn-primary:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
-.btn-secondary{background:var(--ui-white);color:var(--text);border:var(--line-strong)}
-.btn-secondary:hover{background:var(--ui-yellow);color:var(--ui-black)}
-.btn-secondary:disabled{opacity:.38;cursor:not-allowed}
-.btn-ghost{background:var(--ui-white);color:var(--text);border:var(--line-thin)}
-.btn-ghost:hover{background:var(--ui-yellow);color:var(--ui-black)}
-.download-button{background:var(--ui-white);color:var(--text);border:var(--line-thin);padding:8px 16px;font-size:12px}
-.download-button:hover{background:var(--ui-yellow);color:var(--ui-black)}
-
-/* ---------- 方案选择下拉 ---------- */
-.plan-select{
-  flex:1;min-width:200px;padding:9px 12px;
-  border:var(--line-thin);
-  border-radius:0;
-  font-size:14px;font-family:var(--font);color:var(--text);cursor:pointer;
-  appearance:none;-webkit-appearance:none;
-  background-color:var(--ui-white);
-  background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 12px center;background-size:14px;
-  padding-right:32px;
-  transition:border-color var(--dur-fast);
-}
-/* hover/focus 与 .field select 收敛（见上） */
-
-/* ---- 自定义下拉（替代原生 select）：白底黑框直角，与输入框同一控件语言 ---- */
-.cs-hidden{display:none!important}
-.cs{position:relative;flex:1;min-width:200px}
-.cs-trigger{
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
-  width:100%;padding:6px 12px;
-  border:var(--line-thin);
-  border-radius:0;
-  font-size:14px;font-family:var(--font);color:var(--text);cursor:pointer;
-  background-color:var(--ui-white);
-  transition:border-color var(--dur-fast);
-}
-.cs-trigger:hover{border-color:var(--ui-orange)}
-.cs-trigger:focus{border-color:var(--ui-orange)}
-.cs-trigger:focus-visible{outline:2px solid var(--ui-orange);outline-offset:2px}
-.cs-trigger svg{width:16px;height:16px;color:var(--text);flex-shrink:0}
-.cs-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.cs-list{
-  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:var(--z-sidebar);
-  margin:0;padding:4px;list-style:none;max-height:320px;overflow:auto;
-  border:var(--line-strong);border-radius:0;
-  background:var(--ui-white);
-}
-.cs-opt{
-  padding:9px 12px;border-radius:0;
-  font-size:12px;color:var(--text);cursor:pointer;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  transition:background-color var(--dur-fast),color var(--dur-fast);
-}
-.cs-opt:hover{background:var(--ui-yellow)}
-.cs-opt.cs-selected{background:var(--ui-orange);color:var(--ui-black);font-weight:700}
-.cs-list::-webkit-scrollbar{width:6px}
-.cs-list::-webkit-scrollbar-thumb{background:var(--ui-black)}
-.compare-bar{margin-top:12px;padding-top:16px;border-top:var(--line-thin)}
-.compare-checks{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:10px}
-.compare-check{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--text-secondary)}
-.compare-check input{accent-color:var(--ui-orange)}
-
-/* ---------- 模块占位页（空状态：黑图标 + 说明 + 至多一个操作，DESIGN §8.10） ---------- */
-.module-view{min-height:60vh}
-.module-empty{
-  border:2px dashed var(--ui-black);border-radius:0;
-  background:var(--ui-white);padding:56px 32px;text-align:center;
-}
-.module-icon{
-  width:64px;height:64px;margin:0 auto 16px;
-  background:var(--ui-white);border:var(--line-strong);color:var(--text);
-  display:grid;place-items:center;font-size:28px;
-}
-.module-empty h2{font-size:20px;margin:0 0 8px;font-weight:700;letter-spacing:-.02em}
-.module-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:28px 0;text-align:left}
-.module-cards article{
-  background:var(--ui-white);border:var(--line-thin);border-radius:0;
-  padding:16px;display:flex;flex-direction:column;gap:4px;
-  transition:outline-color var(--dur-fast);
-}
-.module-cards article:hover{outline:2px solid var(--ui-orange);outline-offset:-2px}
-.module-cards strong{font-size:14px;font-weight:600}
-.module-cards span{color:var(--text-secondary);font-size:12px;line-height:1.6}
-
-/* ---------- 响应式（统一 4 档：1280/1024/768/560） ---------- */
-@media (max-width:1280px){
-  .param-grid{grid-template-columns:repeat(2,1fr)}
-}
-@media (max-width:1024px){
-  .upload-grid{grid-template-columns:1fr}
-  .module-cards{grid-template-columns:1fr}
-}
-@media (max-width:768px){
-  .param-grid{grid-template-columns:1fr}
-}
-/* ---------- 侧栏收起（宽屏隐藏控件，窄屏抽屉式） ---------- */
-.sb-toggle{display:none}
-.sb-backdrop{display:none}
-@media (max-width:768px){
-  /* 汉堡按钮：固定左上角，浮于内容之上 */
-.sb-toggle{display:grid;place-items:center;position:fixed;top:12px;left:12px;z-index:var(--z-toggle);width:44px;height:44px;border:var(--line-strong);background:var(--ui-white);color:var(--text);cursor:pointer;padding:0;transition:background var(--dur-fast)}
-  .sb-toggle:hover{background:var(--ui-yellow)}
-  .sb-toggle:focus-visible{outline:3px solid var(--ui-orange);outline-offset:2px}
-  .sb-toggle .ic-burger,.sb-toggle .ic-close{width:21px;height:21px}
-  .sb-toggle .ic-close{display:none}
-  .app-shell.sb-open .sb-toggle .ic-burger{display:none}
-  .app-shell.sb-open .sb-toggle .ic-close{display:block}
-  /* 遮罩：打开时渐显，点击关闭 */
-.sb-backdrop{display:block;position:fixed;inset:0;background:var(--ui-overlay);z-index:var(--z-backdrop);opacity:0;pointer-events:none;transition:opacity var(--dur-slow)}
-  .app-shell.sb-open .sb-backdrop{opacity:1;pointer-events:auto}
-  /* 侧栏：转为固定抽屉，默认滑出左侧 */
-  .app-shell{display:block}
-.sidebar{position:fixed;left:0;top:0;bottom:0;height:100vh;z-index:var(--z-overlay);transform:translateX(-105%);transition:transform var(--dur-slow) var(--ease-out)}
-  .app-shell.sb-open .sidebar{transform:translateX(0)}
-  /* 主内容占满全宽，顶部为汉堡按钮让位 */
-  .main-content{max-width:none;padding:72px 16px 80px}
-  .card-corner{flex-direction:column;align-items:stretch}
-  .card-corner .field{width:100%}
-  .card-head{flex-direction:column}
-  .card-head p{text-align:left}
-}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}}
-
-/* ---------- 确认弹窗（报价定稿回写） ---------- */
-.modal-mask{position:fixed;inset:0;background:var(--ui-overlay);display:flex;align-items:center;justify-content:center;z-index:var(--z-modal);animation:fadeIn var(--dur-base) ease}
-.modal{background:var(--ui-white);border:var(--line-strong);border-radius:0;padding:24px;width:440px;max-width:92vw;max-height:90vh;overflow-y:auto;animation:modalEnter var(--dur-slow) ease}
-.modal h3{margin:0 0 12px;font-size:16px;font-weight:700;letter-spacing:-.01em}
-.modal p{margin:0 0 20px;font-size:14px;line-height:1.7;color:var(--text);word-break:break-all}
-.modal-actions{display:flex;justify-content:flex-end;gap:10px}
-@keyframes fadeIn{from{opacity:0}}
-@keyframes modalEnter{from{opacity:0}}
-
-/* ---------- 方案库：项目下的方案数据行（DESIGN §8.2：行间 1px 黑线，不做卡片嵌套） ---------- */
-.plan-cards{display:flex;flex-direction:column;gap:0;margin-top:4px;border:var(--line-thin)}
-.plan-card{
-  display:flex;align-items:center;gap:12px;justify-content:space-between;
-  padding:12px 16px;border:0;border-bottom:var(--line-thin);border-radius:0;
-  background:var(--ui-white);cursor:pointer;transition:background-color var(--dur-fast);
-}
-.plan-card:last-child{border-bottom:0}
-.plan-card:hover{background:var(--ui-yellow)}
-.plan-card.sel{box-shadow:inset 4px 0 0 var(--ui-orange);background:var(--ui-white)}
-.plan-card:focus-visible{outline:2px solid var(--ui-orange);outline-offset:-2px}
-.plan-card-main{min-width:0}
-.plan-card-title{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:700;color:var(--text)}
-.plan-card-badge{
-  flex-shrink:0;font-size:12px;font-weight:600;line-height:1;padding:3px 6px;border-radius:0;vertical-align:1px;
-  color:var(--ui-black);background:var(--ui-orange);
-}
-.plan-card.finalized{box-shadow:inset 0 0 0 2px var(--ui-orange)}
-.plan-card-meta{font-size:12px;font-weight:400;color:var(--text-tertiary)}
-.plan-card-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.plan-card-fin{
-  flex-shrink:0;padding:6px 12px;font-size:12px;border:var(--line-thin);border-radius:0;cursor:pointer;
-  color:var(--text);background:var(--ui-white);transition:background-color var(--dur-fast),border-color var(--dur-fast);
-}
-.plan-card-fin:hover{background:var(--ui-yellow)}
-.plan-card-fin.is-on{background:var(--ui-orange);border-color:var(--ui-black);color:var(--ui-black)}
-.plan-card-fin.is-on:hover{background:var(--ui-yellow)}
-.plan-card-info{font-size:12px;color:var(--text-secondary);font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.plan-card-del{
-  flex-shrink:0;padding:6px 12px;font-size:12px;border:var(--line-thin);border-radius:0;cursor:pointer;
-  color:var(--text);background:var(--ui-white);transition:background-color var(--dur-fast),color var(--dur-fast);
-}
-.plan-card-del:hover{background:var(--ui-orange);color:var(--ui-black)}
-.plan-card-del.is-disabled{opacity:.38;cursor:not-allowed;pointer-events:none}
-
-/* ---------- 应用内确认框（替换原生 confirm，防止误删） ---------- */
-.ui-confirm-overlay{position:fixed;inset:0;background:var(--ui-overlay);display:flex;align-items:center;justify-content:center;z-index:var(--z-portal);animation:fadeIn var(--dur-fast)}
-.ui-confirm-box{background:var(--ui-white);border:var(--line-strong);border-radius:0;padding:20px;width:min(360px,90vw)}
-.ui-confirm-msg{font-size:14px;color:var(--text);margin-bottom:16px;line-height:1.6;word-break:break-all}
-.ui-confirm-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px}
-.ui-confirm-sub{font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.55}
-.ui-confirm-overlay.danger .ui-confirm-box{border-color:var(--ui-orange)}
-.ui-confirm-actions{display:flex;justify-content:flex-end;gap:10px}
-.btn-danger{border:var(--line-strong);border-radius:0;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;background:var(--ui-orange);color:var(--ui-black);transition:background-color var(--dur-fast),color var(--dur-fast)}
-.btn-danger:hover{background:var(--ui-black);color:var(--ui-white)}
-
-/* ============================================================
-   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
-   ------------------------------------------------------------
-   覆盖：导航标签与编号、页面 H1、模块短标题、按钮 / Tab / Chip /
-   Badge、时间日期、数据指标、短状态码。
-   不覆盖：长段说明、记录/笔记正文、表单输入内容（§5.1 第 203 行），
-   以及用户/项目数据串（方案名、物料名），一律保持 --font（MiSans）。
-   规范依据 §5.1 第 205 行：像素字体元素统一 font-weight:400 +
-   font-synthesis:none，不以浏览器合成粗体建立层级。
-   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
-   （.brand-text strong / .nav-group-title / .nav-num / .avatar /
-     .version-line 已在上方原规则中直接声明，此处不重复。）
-   ============================================================ */
-.nav-item,                              /* 导航标签文字 */
-.page-header h1,                        /* 页面 H1 */
-.btn-primary,.btn-secondary,.btn-ghost,.download-button, /* 按钮 */
-.btn-danger,
-.status-pill,                           /* Badge / 状态药丸 */
-.ui-confirm-title{                      /* 模块短标题（确认框标题） */
-  font-family:var(--font-pixel);
-  font-weight:400;
-  font-synthesis:none;
-}

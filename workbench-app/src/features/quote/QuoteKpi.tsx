@@ -8,12 +8,17 @@ import type { QuoteResult } from './quoteCalc';
 const fmtMoney = (v: number) => `¥${Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function QuoteKpi({
-  result, compliance, vat, marginRate,
+  result, compliance, vat, marginRate, drillFilter, drillSortMargin, onDrillTotal, onDrillMargin, onDrillRisk,
 }: {
   result: QuoteResult | null;
   compliance: Compliance;
   vat: InputVat;
   marginRate: number;
+  drillFilter?: 'all' | 'risk' | 'early';
+  drillSortMargin?: boolean;
+  onDrillTotal?: () => void;
+  onDrillMargin?: () => void;
+  onDrillRisk?: () => void;
 }) {
   const has = Boolean(result);
   const total = Number(result?.target_total ?? 0);
@@ -23,7 +28,8 @@ export function QuoteKpi({
   return (
     <div className="kpi-row">
       {/* 1. 测算总报价 */}
-      <div className="kpi-card" id="kpiCardTotal" role="button" tabIndex={0} aria-label="清除筛选，查看全部清单">
+      <div className="kpi-card" id="kpiCardTotal" role="button" tabIndex={0} aria-label="清除筛选，查看全部清单"
+        onClick={onDrillTotal} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDrillTotal?.(); } }}>
         <div className="kpi-label-row">
           <span className="kpi-title">测算总报价 (含税)</span>
           <span className="kpi-drill-hint">看全部清单 →</span>
@@ -43,7 +49,8 @@ export function QuoteKpi({
       </div>
 
       {/* 2. 预期毛利额 */}
-      <div className="kpi-card kpi-bamboo" id="kpiCardMargin" role="button" tabIndex={0} aria-label="按毛利穿透筛选" aria-pressed={false}>
+      <div className={`kpi-card kpi-bamboo${drillSortMargin ? ' active-drill' : ''}`} id="kpiCardMargin" role="button" tabIndex={0} aria-label="按毛利穿透筛选" aria-pressed={drillSortMargin}
+        onClick={onDrillMargin} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDrillMargin?.(); } }}>
         <div className="kpi-label-row">
           <span className="kpi-title">预期毛利额</span>
           <span className="kpi-drill-hint">按毛利穿透 →</span>
@@ -61,7 +68,8 @@ export function QuoteKpi({
       </div>
 
       {/* 3. 合规防畸形评分 */}
-      <div className="kpi-card kpi-ochre" id="kpiCardScore" role="button" tabIndex={0} aria-label="查看风险项" aria-pressed={false}>
+      <div className={`kpi-card kpi-ochre${drillFilter === 'risk' ? ' active-drill' : ''}`} id="kpiCardScore" role="button" tabIndex={0} aria-label="查看风险项" aria-pressed={drillFilter === 'risk'}
+        onClick={onDrillRisk} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDrillRisk?.(); } }}>
         <div className="kpi-label-row">
           <span className="kpi-title">合规防畸形评分</span>
           <span className="kpi-drill-hint">看风险项 →</span>

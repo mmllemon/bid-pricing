@@ -58,8 +58,9 @@ export function registerQuoteProxy(app: Express): void {
     const fullPath = req.originalUrl.split('?')[0];
     if (!isQuotePath(fullPath)) return next();
 
-    const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
-    const target = `${UPSTREAM}/api${req.url}${query}`;
+    // req.url（挂载后）已含路径与查询串（如 /group/list?project_id=X），
+    // 不得再拼一次 query，否则会变成 ?a=1?a=1 使上游解析出空参数。
+    const target = `${UPSTREAM}/api${req.url}`;
     const method = req.method.toUpperCase();
 
     // GET/HEAD 无 body；其余读原始流转发。

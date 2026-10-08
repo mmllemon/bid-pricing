@@ -1,26 +1,36 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { filterDashItems, sortDashItems, pageDashItems, ratioTagClass, type DashFilter, type QuoteItem } from './quoteCalc';
 
 /**
  * 报价页明细表（P3 块1：由 frontend/index.html 的 .table-section + app.js renderDashTable 迁入 React）
  * 筛选/排序/分页走 quoteCalc 纯函数（有判据）；列结构与原生一致（10 列，可横向滚动）。
+ * P3 块4c：改为受控组件（filter/sortMargin/page 由 Quote 持有），供 KPI 卡穿透驱动。
  */
 const fmt = (v: unknown, d = 2) => {
   const n = Number(v);
   return Number.isFinite(n) ? n.toLocaleString('zh-CN', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—';
 };
 
-export function QuoteTable({ items, totalCount, actions }: { items: QuoteItem[]; totalCount: number; actions?: ReactNode }) {
-  const [filter, setFilter] = useState<DashFilter>('all');
-  // 毛利排序：由 KPI 毛利卡穿透触发（块 3 接），当前保留状态位
-  const [sortMargin] = useState(false);
-  const [page, setPage] = useState(0);
-
+export function QuoteTable({
+  items, totalCount, actions, filter, sortMargin, page, onFilter, onSortMargin, onPage,
+}: {
+  items: QuoteItem[];
+  totalCount: number;
+  actions?: ReactNode;
+  filter: DashFilter;
+  sortMargin: boolean;
+  page: number;
+  onFilter: (f: DashFilter) => void;
+  onSortMargin: (next: boolean) => void;
+  onPage: (p: number) => void;
+}) {
   const { rows, pageCount, page: curPage } = useMemo(() => {
     const filtered = sortDashItems(filterDashItems(items, filter), sortMargin);
     return pageDashItems(filtered, page);
   }, [items, filter, sortMargin, page]);
+
+  const hasDrill = filter !== 'all' || sortMargin;
 
   return (
     <div className="table-section">
@@ -28,10 +38,11 @@ export function QuoteTable({ items, totalCount, actions }: { items: QuoteItem[];
         <div className="filter-chips" role="tablist" aria-label="筛选">
           {([['all', '全部子目'], ['risk', '临界/关注项'], ['early', '早结倾斜项']] as [DashFilter, string][]).map(([k, label]) => (
             <button key={k} type="button" className={`filter-chip${filter === k ? ' active' : ''}`} role="tab"
-              aria-selected={filter === k} onClick={() => { setFilter(k); setPage(0); }}>{label}</button>
+              aria-selected={filter === k} onClick={() => { onFilter(k); onPage(0); }}>{label}</button>
           ))}
-          {filter !== 'all' && (
-            <button className="drill-clear" id="clearDrillChip" type="button" aria-label="清除筛选" onClick={() => setFilter('all')}>✕ 清除筛选</button>
+          {hasDrill && (
+            <button className="drill-clear" id="clearDrillChip" type="button" aria-label="清除筛选"
+              onClick={() => { onFilter('all'); onSortMargin(false); onPage(0); }}>✕ 清除筛选</button>
           )}
         </div>
         <div className="table-toolbar-side">
@@ -41,10 +52,10 @@ export function QuoteTable({ items, totalCount, actions }: { items: QuoteItem[];
             <span style={{ color: 'var(--text-tertiary)' }}>共 10 列，可左右滚动查看</span>
             <span id="tablePager" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <button type="button" data-pg="prev" disabled={pageCount <= 1 || curPage <= 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}>‹ 上页</button>
+                onClick={() => onPage(Math.max(0, curPage - 1))}>‹ 上页</button>
               <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>第 <b>{curPage + 1}</b> / {pageCount} 页</span>
               <button type="button" data-pg="next" disabled={pageCount <= 1 || curPage >= pageCount - 1}
-                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}>下页 ›</button>
+                onClick={() => onPage(Math.min(pageCount - 1, curPage + 1))}>下页 ›</button>
             </span>
           </div>
         </div>

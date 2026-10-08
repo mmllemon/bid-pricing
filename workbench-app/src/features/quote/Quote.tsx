@@ -6,7 +6,12 @@ import { QuoteTable } from './QuoteTable';
 import { QuotePreview } from './QuotePreview';
 import { QuoteReady, StatusCapsule, computeReady } from './QuoteReady';
 import { QuoteActions } from './QuoteActions';
-import { previewQuote, optimizeQuote, listOverviewProjects, finalizeOverview, markPlanFinalized, type OverviewProject } from './quoteApi';
+import { previewQuote, optimizeQuote, listOverviewProjects, finalizeOverview, markPlanFinalized, listGroups, renameGroup, copyGroup, finalizeGroup, deleteGroup, getPlan, comparePlans, type OverviewProject, type PlanGroup, type CompareResult } from './quoteApi';
+import { QuotePlanHub } from './QuotePlanHub';
+import { QuoteCompareModal } from './QuoteCompareModal';
+import { QuoteSchemeBar } from './QuoteSchemeBar';
+import { QuoteAuditModal } from './QuoteAuditModal';
+import type { DashFilter } from './quoteCalc';
 import type { QuotePreviewResult } from './quoteApi';
 import { buildTaxOverride, type TaxComp } from './quoteCalc';
 
@@ -57,14 +62,39 @@ export default function QuotePage() {
   const [preview, setPreview] = useState<QuotePreviewResult | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [calculating, setCalculating] = useState(false);
-  const [message, setMessage] = useState<{ text: string; kind: 'info' | 'error' | 'success' } | null>(null);
+  const [message, setMessage] = useState<{ text: string; kind: 'info' | 'error' | 'success' | 'warn' } | null>(null);
   const [taxComp, setTaxComp] = useState<TaxComp[]>(VOLT_DEFAULT_COMP);
   const [projects, setProjects] = useState<OverviewProject[]>([]);
+  const [groups, setGroups] = useState<PlanGroup[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [selectedPlans, setSelectedPlans] = useState<Set<string>>(new Set());
+  const [hubOpen, setHubOpen] = useState(false);
+  const [compareRes, setCompareRes] = useState<CompareResult | null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [activeGroupId, setActiveGroupId] = useState('');
+  const [activeSlot, setActiveSlot] = useState('A');
+  // 明细表穿透状态（KPI 卡驱动）
+  const [dashFilter, setDashFilter] = useState<DashFilter>('all');
+  const [dashSortMargin, setDashSortMargin] = useState(false);
+  const [dashPage, setDashPage] = useState(0);
 
   // 拉「关联投标项目」下拉（仅投标阶段）
   useEffect(() => {
     void listOverviewProjects().then((list) => setProjects(list.filter((p) => !p.stage || p.stage === '投标')));
   }, []);
+
+  // 拉当前项目的方案组
+  const refreshGroups = useCallback(async () => {
+    if (!params.projectId) { setGroups([]); return; }
+    try {
+      setGroups(await listGroups(params.projectId));
+    } catch {
+      setGroups([]);
+    }
+  }, [params.projectId]);
+
+  useEffect(() => { void refreshGroups(); }, [refreshGroups]);
   const set = (patch: Partial<QuoteParamsState>) => setParams((s) => ({ ...s, ...patch }));
 
   const onFile = (kind: 'cap' | 'cost', f: File | null) => {
@@ -102,7 +132,7 @@ export default function QuotePage() {
   const ready = computeReady(params, Boolean(capFileRef.current && costFileRef.current), taxClosed);
 
   /** 组装 /api/quote/optimize 表单（字段对齐 app.js buildOptimizeForm）。 */
-  const buildForm = useCallback((strategy: string): FormData | null => {
+  const buildForm = useCallback((strategy: string, groupId = ''): FormData | null => {
     const cap = capFileRef.current, cost = costFileRef.current;
     if (!cap || !cost) return null;
     const data = new FormData();
@@ -129,33 +159,193 @@ export default function QuotePage() {
     data.append('unbalanced_m_max', params.ubMMax || '0.3');
     data.append('unbalanced_strategies', '');
     data.append('unbalanced_kw_rules', params.ubKwRules || '');
-    data.append('group_id', '');
+    data.append('group_id', groupId);
     return data;
   }, [params, taxComp]);
 
-  /** 计算（方案 A optimal）：提交 → 渲染结果。方案组/对比属块 4。 */
+  /** 一键三方案（P3 块4c）：顺序 A=optimal（主舞台）+ B=uniform（同组 B 槽位）；B 失败不阻断 A。 */
   const runCalculate = useCallback(async () => {
-    const form = buildForm('optimal');
-    if (!form) { setMessage({ text: '请先上传限价清单和成本清单。', kind: 'error' }); return; }
+    const formA = buildForm('optimal');
+    if (!formA) { setMessage({ text: '请先上传限价清单和成本清单。', kind: 'error' }); return; }
     setCalculating(true);
+    setDashFilter('all'); setDashSortMargin(false); setDashPage(0);
     setMessage({ text: '正在识别清单并运行 Phase 2 MILP（方案 A：逐项最优），请稍候。', kind: 'info' });
     try {
       // 后端返回体即完整 result（字段在顶层，无 result 嵌套，与 app.js 一致）。
-      // 非 PASS（含 BLOCKED）由 postForm 按 !r.ok 抛错，此处只处理 PASS。
-      const result = await optimizeQuote(form);
-      setResult(result as QuoteResult);
+      const resultA = await optimizeQuote(formA);
+      setResult(resultA as QuoteResult);
+      setActiveSlot('A');
+      const gid = String(resultA.group_id || '');
+      setActiveGroupId(gid);
       setMessage({
-        text: `方案 A 计算完成：竞争性预算 ${Number(result.competitive_budget).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元，结算调整后利润（不含增值税）${Number(result.objective).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元。`,
+        text: `方案 A 计算完成：竞争性预算 ${Number(resultA.competitive_budget).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元，结算调整后利润（不含增值税）${Number(resultA.objective).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元。`,
         kind: 'success',
       });
+      // 第二步：方案 B（uniform）——失败不阻断 A 的成功结果（同组 B 槽位）
+      try {
+        const formB = buildForm('uniform', gid);
+        if (formB) {
+          const resultB = await optimizeQuote(formB);
+          setMessage({ text: `方案 A/B 均已生成：A=逐项最优，B=等比下浮（利润 ${Number(resultB.objective).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元）。`, kind: 'success' });
+        }
+      } catch (eB) {
+        setMessage({ text: `方案 B（等比下浮）生成失败，原因：${(eB as Error).message}。方案 A 已可用。`, kind: 'warn' });
+      }
+      await refreshGroups();
+      setExpandedGroups((s) => new Set(s).add(gid));
+      setActiveGroupId(gid);
     } catch (e) {
       setMessage({ text: `计算失败：${(e as Error).message}`, kind: 'error' });
     } finally {
       setCalculating(false);
     }
-  }, [buildForm]);
+  }, [buildForm, refreshGroups]);
+
+  /** 方案切换条：切到组内某槽位方案并回填。 */
+  const switchSlot = useCallback(async (slot: string, planId: string | null, index: number) => {
+    if (!planId) { setMessage({ text: `方案 ${slot} 槽位暂无方案。`, kind: 'warn' }); return; }
+    setActiveSlot(slot);
+    setDashFilter('all'); setDashSortMargin(false); setDashPage(0);
+    void index;
+    try {
+      const plan = await getPlan(planId);
+      if (plan?.params) {
+        const p = plan.params as Record<string, unknown>;
+        setParams((s) => ({
+          ...s,
+          targetTotal: p.target_total != null ? String(p.target_total) : s.targetTotal,
+          fixedPretax: p.fixed_pretax != null ? String(p.fixed_pretax) : s.fixedPretax,
+          vatRate: p.vat_rate != null ? String(Math.round(Number(p.vat_rate) * 100)) : s.vatRate,
+          surtaxRate: p.surtax_rate != null ? String(Math.round(Number(p.surtax_rate) * 100)) : s.surtaxRate,
+          ratioLow: p.ratio_min != null ? Math.round(Number(p.ratio_min) * 100) : s.ratioLow,
+          ratioHigh: p.ratio_max != null ? Math.round(Number(p.ratio_max) * 100) : s.ratioHigh,
+        }));
+      }
+      if (plan?.result) setResult(plan.result);
+      setMessage({ text: `已切换至方案 ${slot}。`, kind: 'success' });
+    } catch (e) {
+      setMessage({ text: `切换方案失败：${(e as Error).message}`, kind: 'error' });
+    }
+  }, []);
+
+  /** KPI 穿透：毛利卡 = 切换排序；风险卡 = 切换 risk 筛选；总报价卡 = 清除。 */
+  const drillTotal = useCallback(() => { setDashFilter('all'); setDashSortMargin(false); setDashPage(0); }, []);
+  const drillMargin = useCallback(() => { setDashSortMargin((v) => !v); setDashPage(0); }, []);
+  const drillRisk = useCallback(() => { setDashFilter((f) => (f === 'risk' ? 'all' : 'risk')); setDashPage(0); }, []);
 
   const hasResult = Boolean(result);
+
+  // Esc 逐层关闭：对比弹层 → 方案中心
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (compareOpen) { setCompareOpen(false); return; }
+      if (auditOpen) { setAuditOpen(false); return; }
+      if (hubOpen) setHubOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [compareOpen, hubOpen, auditOpen]);
+
+  /* ==================== 方案中心动作（P3 块4b/4c） ==================== */
+
+  /** 点算指定组的某策略槽位（带 group_id 提交 optimize）。 */
+  const calcSlot = useCallback(async (groupId: string, strategy: string) => {
+    const form = buildForm(strategy, groupId);
+    if (!form) { setMessage({ text: '请先在左栏导入限价清单与成本清单后再点算该槽位。', kind: 'error' }); return; }
+    const slotName = strategy === 'optimal' ? 'A' : strategy === 'uniform' ? 'B' : 'C（不平衡报价）';
+    setMessage({ text: `正在测算方案 ${slotName} 槽位，请稍候。`, kind: 'info' });
+    try {
+      const result = await optimizeQuote(form);
+      setResult(result as QuoteResult);
+      const gid = String(result.group_id || groupId);
+      setActiveGroupId(gid);
+      await refreshGroups();
+      setExpandedGroups((s) => new Set(s).add(gid));
+      setMessage({ text: `方案 ${slotName} 槽位测算完成。`, kind: 'success' });
+    } catch (e) {
+      setMessage({ text: `测算失败：${(e as Error).message}`, kind: 'error' });
+    }
+  }, [buildForm, refreshGroups]);
+
+  /** 打开某槽位方案：拉方案 → 填参数 → 渲染其 result。 */
+  const openSlot = useCallback(async (planId: string, gid: string) => {
+    try {
+      const plan = await getPlan(planId);
+      if (!plan) throw new Error('方案不存在');
+      setActiveGroupId(plan.group_id || gid);
+      setHubOpen(false);
+      if (plan.params) {
+        const p = plan.params as Record<string, unknown>;
+        setParams((s) => ({
+          ...s,
+          projectId: String(p.overview_id || p.project_id || s.projectId),
+          targetTotal: p.target_total != null ? String(p.target_total) : s.targetTotal,
+          fixedPretax: p.fixed_pretax != null ? String(p.fixed_pretax) : s.fixedPretax,
+          vatRate: p.vat_rate != null ? String(Math.round(Number(p.vat_rate) * 100)) : s.vatRate,
+          surtaxRate: p.surtax_rate != null ? String(Math.round(Number(p.surtax_rate) * 100)) : s.surtaxRate,
+          ratioLow: p.ratio_min != null ? Math.round(Number(p.ratio_min) * 100) : s.ratioLow,
+          ratioHigh: p.ratio_max != null ? Math.round(Number(p.ratio_max) * 100) : s.ratioHigh,
+        }));
+      }
+      if (plan.result) {
+        setResult(plan.result);
+        setMessage({ text: `已打开方案「${plan.name || plan.id}」。`, kind: 'success' });
+      } else {
+        setMessage({ text: '已打开方案，但该槽位尚未生成结果，可点击「按当前参数重算」。', kind: 'success' });
+      }
+    } catch (e) {
+      setMessage({ text: `打开方案失败：${(e as Error).message}`, kind: 'error' });
+    }
+  }, []);
+
+  const doRename = useCallback(async (gid: string, name: string) => {
+    if (!name) return;
+    try { await renameGroup(gid, name); await refreshGroups(); setMessage({ text: '已重命名方案组。', kind: 'success' }); }
+    catch (e) { setMessage({ text: `重命名失败：${(e as Error).message}`, kind: 'error' }); }
+  }, [refreshGroups]);
+
+  const doCopy = useCallback(async (gid: string) => {
+    if (!window.confirm('复制整组为独立新组（深拷贝组内已算槽位方案，可独立改参）？')) return;
+    try {
+      const res = await copyGroup(gid);
+      setMessage({ text: `已复制整组为「${res.group?.group_name || ''}」。`, kind: 'success' });
+      await refreshGroups();
+    } catch (e) { setMessage({ text: `复制整组失败：${(e as Error).message}`, kind: 'error' }); }
+  }, [refreshGroups]);
+
+  const doFinalizeGroup = useCallback(async (gid: string, on: boolean) => {
+    try {
+      await finalizeGroup(gid, on);
+      setMessage({ text: on ? '已整组定稿锁定（组内槽位不可删改）。' : '已取消整组定稿。', kind: 'success' });
+      await refreshGroups();
+    } catch (e) { setMessage({ text: `定稿切换失败：${(e as Error).message}`, kind: 'error' }); }
+  }, [refreshGroups]);
+
+  const doDelete = useCallback(async (gid: string) => {
+    if (!window.confirm('删除该方案组？组内已算槽位方案将一并删除。')) return;
+    try {
+      await deleteGroup(gid);
+      setSelectedPlans(new Set());
+      setExpandedGroups((s) => { const n = new Set(s); n.delete(gid); return n; });
+      if (activeGroupId === gid) setActiveGroupId('');
+      setMessage({ text: '方案组已删除。', kind: 'success' });
+      await refreshGroups();
+    } catch (e) { setMessage({ text: `删除方案组失败：${(e as Error).message}`, kind: 'error' }); }
+  }, [refreshGroups, activeGroupId]);
+
+  /** 多方案对比（限同一项目）。 */
+  const runCompare = useCallback(async () => {
+    const ids = Array.from(selectedPlans);
+    if (ids.length < 2) { setMessage({ text: '多方案对比至少需要勾选 2 个槽位。', kind: 'error' }); return; }
+    setMessage({ text: '正在对比方案，请稍候。', kind: 'info' });
+    try {
+      const res = await comparePlans(ids);
+      setCompareRes(res);
+      setCompareOpen(true);
+      setMessage({ text: `对比完成：${(res.plan_ids || []).length} 个方案。低于 50% 报价比率的为风险项，是否构成废标以招标文件为准。`, kind: 'success' });
+    } catch (e) { setMessage({ text: `对比失败：${(e as Error).message}`, kind: 'error' }); }
+  }, [selectedPlans]);
 
   /** 定稿并回写项目经营概览（仅写投标报价金额）。 */
   const runFinalize = useCallback(async () => {
@@ -186,7 +376,7 @@ export default function QuotePage() {
       <div className="breadcrumb">投标报价 <span>/</span> 优化沙盘</div>
 
       {message && (
-        <div className={`ui-alert ui-alert--${message.kind === 'error' ? 'error' : message.kind === 'success' ? 'success' : 'info'}`} role="status">
+        <div className={`ui-alert ui-alert--${message.kind === 'error' ? 'error' : message.kind === 'success' ? 'success' : message.kind === 'warn' ? 'warn' : 'info'}`} role="status">
           {message.text}
         </div>
       )}
@@ -211,14 +401,63 @@ export default function QuotePage() {
           {!hasResult && <QuoteReady ready={ready} onCalculate={runCalculate} calculating={calculating} balanceText="" />}
           {!hasResult && preview && <QuotePreview res={preview} />}
           {hasResult && <StatusCapsule text="推演完成" />}
-          {hasResult && <QuoteKpi result={result} compliance={compliance} vat={vat} marginRate={margin} />}
+          {hasResult && <QuoteSchemeBar
+            visible={Boolean(activeGroupId)}
+            group={groups.find((g) => g.group_id === activeGroupId) || null}
+            activeSlot={activeSlot}
+            balanceText={`${groups.find((g) => g.group_id === activeGroupId) ? '当前组已算 ' + Object.values(groups.find((g) => g.group_id === activeGroupId)?.strategy_slots || {}).filter((s) => s && (s.plan_id || s.summary?.plan_id)).length + ' 槽' : '未加载方案组'} ｜ 槽位 A=逐项最优 / B=等比下浮`}
+            onSwitch={switchSlot}
+          />}
+          {hasResult && <QuoteKpi
+            result={result}
+            compliance={compliance}
+            vat={vat}
+            marginRate={margin}
+            drillFilter={dashFilter}
+            drillSortMargin={dashSortMargin}
+            onDrillTotal={drillTotal}
+            onDrillMargin={drillMargin}
+            onDrillRisk={drillRisk}
+          />}
           {hasResult && <QuoteTable
             items={(result?.items ?? []) as never}
             totalCount={(result?.items ?? []).length}
+            filter={dashFilter}
+            sortMargin={dashSortMargin}
+            page={dashPage}
+            onFilter={setDashFilter}
+            onSortMargin={setDashSortMargin}
+            onPage={setDashPage}
             actions={<QuoteActions result={result as QuoteResult} savedPlan={Boolean(result?.plan_id)} canFinalize={Boolean(params.projectId)} onFinalize={runFinalize} />}
           />}
+          {Boolean(params.projectId) && (
+            <div className="action-row" style={{ marginTop: 12 }}>
+              <button type="button" className="btn-secondary" onClick={() => setHubOpen(true)}>方案中心</button>
+              <button type="button" className="btn-ghost" id="auditDockBtn" style={{ marginLeft: 8 }} onClick={() => setAuditOpen(true)}>审计日志</button>
+            </div>
+          )}
         </section>
       </div>
+
+      <QuotePlanHub
+        open={hubOpen}
+        projectName={projects.find((p) => p.id === params.projectId)?.name || ''}
+        groups={groups}
+        selected={selectedPlans}
+        expanded={expandedGroups}
+        onToggleGroup={(gid) => setExpandedGroups((s) => { const n = new Set(s); n.has(gid) ? n.delete(gid) : n.add(gid); return n; })}
+        onRename={doRename}
+        onCopy={doCopy}
+        onFinalize={doFinalizeGroup}
+        onDelete={doDelete}
+        onCalcSlot={calcSlot}
+        onOpenSlot={openSlot}
+        onToggleSelect={(pid, on) => setSelectedPlans((s) => { const n = new Set(s); on ? n.add(pid) : n.delete(pid); return n; })}
+        onCompare={runCompare}
+        onClose={() => setHubOpen(false)}
+      />
+      <QuoteCompareModal open={compareOpen} res={compareRes} onClose={() => setCompareOpen(false)} />
+      <QuoteAuditModal open={auditOpen} onClose={() => setAuditOpen(false)} />
     </div>
   );
 }

@@ -794,6 +794,39 @@ select.nb-input {
   opacity: 0.7;
 }
 
+/* 窄屏收拢：顶栏两条导航（域 + 工作台二级）在 ≤1024 起允许横向滚动，
+   内容不撑破页面（此前无任何窄屏规则，≤768 时 scrollWidth 恒为 845）。 */
+@media (max-width: 1024px) {
+  .site-topbar-main {
+    gap: var(--space-3);
+    padding: 0 var(--space-3);
+  }
+  .site-nav {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-subnav {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .site-subnav::-webkit-scrollbar { display: none; }
+}
+
+@media (max-width: 768px) {
+  .site-brand-text small { display: none; }
+  .site-topbar-actions .site-runtime-badge { display: none; }
+  .site-nav-btn, .site-subnav-btn { flex-shrink: 0; }
+  .site-nav-code, .site-subnav-code { display: none; }
+}
+
+@media (max-width: 560px) {
+  .site-brand-text strong { font-size: 13px; }
+  .site-nav-label, .site-subnav-btn span:not(.site-subnav-code) { white-space: nowrap; }
+}
+
 .sidebar {
   width: 248px;
   flex-shrink: 0;

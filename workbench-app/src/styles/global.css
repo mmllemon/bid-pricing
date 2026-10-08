@@ -6301,10 +6301,6 @@ table.audit-table tr:hover td:first-child{box-shadow:inset 4px 0 0 var(--ui-yell
    规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
    本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
    ============================================================ */
-/* 模块短标题 */
-#quoteView .card-title,
-.cmp-head h3,
-
 /* ---- results.css ---- */
 /* ============ 结果面板与表格（DESIGN V2：白底 + 2px 黑框 + 直角） ============ */
 .result-panel{

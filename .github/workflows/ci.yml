@@ -61,11 +61,15 @@ jobs:
           # 故上界必须钉在 <4，否则候选后端会随版本静默失效。
           pip install "pulp>=3.3,<4" "highspy>=1.11,<2"
 
-      - name: 装配 Web 依赖（两档都要）
-        # api/app.py 的导入需要 fastapi；带 Form 的路由需要 python-multipart。
-        # tests/test_project_credential.py 在方法内 from api.app import …，
-        # 不装则 4 项全 error。求解器包仍按档区分，这里只装 Web 框架。
-        run: pip install "fastapi>=0.115,<1" "python-multipart>=0.0.9,<1"
+      - name: 装配测试依赖（两档都要）
+        # pytest：unittest discover 遇到 pytest 风格的测试模块（test_project_exec /
+        # test_project_docs / test_solve_unbalanced / test_unbalanced，2026-10-07 起）
+        # 会 import 失败（_FailedTest）；且 discover 对裸函数测试是静默跳过。
+        # pytest 一把跑全量，同时兼容 unittest 风格（已本地验证：除已知 gate0/
+        # parity 失败外无新增问题）。
+        # fastapi + python-multipart：api/app.py 导入需要（test_project_credential
+        # 在方法内 from api.app import …）。求解器包仍按档区分，这里只装测试框架。
+        run: pip install pytest "fastapi>=0.115,<1" "python-multipart>=0.0.9,<1"
 
       - name: 依赖档自述（防止把 SKIP 读成 PASS）
         run: |
@@ -126,7 +130,8 @@ jobs:
         run: python -m bidpricing.cli ruleset-selftest
 
       - name: 全量测试
-        run: python -m unittest discover -s tests -t .
+        # pytest 兼容 unittest 风格 + 真正执行 pytest 风格模块（见上）。
+        run: python -m pytest tests/ -q
 
   frontend-smoke:
     # React 工作台（workbench-app）的判据：vitest 单元/组件测试。

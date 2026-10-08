@@ -20,10 +20,21 @@ interface UnitInfo {
   role: string;
   amount?: number;
   paid?: number;
+  payable?: number;
+  scope?: string;
+  material?: string;
+  status?: string;
 }
 
+/** 后端实际返回格式（sqlite_store.get_graph_project） */
 interface GraphProjectData {
-  units: UnitInfo[];
+  project?: { id: string; name: string };
+  units?: {
+    clients?: UnitInfo[];
+    subcontractors?: UnitInfo[];
+    suppliers?: UnitInfo[];
+  };
+  unit_count?: number;
 }
 
 function formatValue(key: string, val: unknown): string {
@@ -83,7 +94,8 @@ export function ExpandableCard({
     // 只支持 api: 前缀
     if (!url.startsWith('api:')) return;
     setLoading(true);
-    api.request<GraphProjectData>(url.slice(4))
+    // api.request 会自动加 /api 前缀，去掉重复
+    api.request<GraphProjectData>(url.slice(4).replace(/^\/api/, ''))
       .then((d: GraphProjectData) => setGraphData(d))
       .catch(() => setGraphData(null))
       .finally(() => setLoading(false));
@@ -94,8 +106,11 @@ export function ExpandableCard({
   const unitFields = summaryFields?.units || [];
 
   // 按角色分组单位
-  const suppliers = (graphData?.units || []).filter((u) => u.role === 'supplier' || u.role === '供应商');
-  const laborUnits = (graphData?.units || []).filter((u) => u.role === 'labor' || u.role === '劳务' || u.role === 'subcontractor');
+  // 后端按 clients/subcontractors/suppliers 分组返回（2026-10-08 修：之前误当扁平数组调.filter直接炸）
+  const unitsObj = graphData?.units || {};
+  const suppliers = (unitsObj.suppliers || []).map((s) => ({ ...s, role: '供应商' }));
+  const laborUnits = (unitsObj.subcontractors || []).map((s) => ({ ...s, role: '劳务分包' }));
+  const clients = (unitsObj.clients || []).map((s) => ({ ...s, role: '建设单位' }));
 
   if (!expanded) {
     // ===== 摘要态 =====
@@ -151,12 +166,13 @@ export function ExpandableCard({
   }
 
   // ===== 详情态 =====
-  const allUnits = [...suppliers, ...laborUnits];
+  const allUnits = [...clients, ...suppliers, ...laborUnits];
   return (
     <div className="expandable-card detail">
       <div className="ec-detail-list">
         {allUnits.map((u) => {
-          const unpaid = (u.amount ?? 0) - (u.paid ?? 0);
+          // 后端直接给了 payable，优先用；没有才自己算
+          const unpaid = u.payable ?? (u.amount ?? 0) - (u.paid ?? 0);
           return (
             <div className="ec-unit-detail" key={u.name}>
               <div className="ec-unit-head">

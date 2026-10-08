@@ -76,8 +76,10 @@ export function useModuleItems(modId: string | null, branchId: string | null) {
         return;
       }
       setLoading(true);
+      // dataSource 格式 "api:/api/xxx"，api.request 会自动加 /api 前缀，所以要去掉
+      const apiPath = ds.slice(4).replace(/^\/api/, '');
       api
-        .request<{ projects: OverviewProject[] }>(ds.slice(4))
+        .request<{ projects: OverviewProject[] }>(apiPath)
         .then((d) => {
           const list = (d.projects || []).map(mapOverviewProject);
           setItems(list);

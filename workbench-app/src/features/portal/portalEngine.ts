@@ -78,7 +78,7 @@ export function slotOf(selId: string | null, id: string): number {
 
 /** 布局目标计算（逐字搬自原生版 targets）。 */
 export function targets(
-  L: { size: { w: number; h: number }; stage: Stage; mod: string | null; branch: string | null; time: number },
+  L: { size: { w: number; h: number }; stage: Stage; mod: string | null; branch: string | null; time: number; reduced?: boolean },
   t: number,
 ): Layout {
   const W = L.size.w;
@@ -96,16 +96,20 @@ export function targets(
     const rx = narrow ? W * 0.36 : Math.min(W * 0.37, 560);
     const ry = narrow ? H * 0.29 : Math.min(H * 0.27, 236);
 
+    // swim：呼吸系数（对齐参考项目 neural-creator-dashboard），控制摆动幅度；
+    // 尊重 reduced-motion，关闭时为 0（静态布局）
+    const swim = L.reduced ? 0 : 1;
+
     mods.forEach((m, i) => {
       const base = -90 + (i * 360) / Math.max(mods.length, 1);
-      const a = ((base + 5 * Math.sin(t * 0.16 + i * 1.6)) * Math.PI) / 180;
-      const r = 1 + 0.035 * Math.sin(t * 0.2 + i);
+      const a = ((base + swim * 7 * Math.sin(t * 0.17 + i * 1.7)) * Math.PI) / 180;
+      const r = 1 + swim * 0.04 * Math.sin(t * 0.23 + i);
       res.jelly[m.id] = {
         x: W / 2 + Math.cos(a) * rx * r,
-        y: cy + Math.sin(a) * ry * r + 6 * Math.sin(t * 0.7 + i * 2.1),
+        y: cy + Math.sin(a) * ry * r + swim * 9 * Math.sin(t * 0.9 + i * 2.1),
         s: narrow ? 78 : clamp(W * 0.099, 104, 124),
         o: 1,
-        tilt: 0,
+        tilt: swim * 6 * Math.sin(t * 0.6 + i),
       };
     });
   } else {
@@ -173,6 +177,9 @@ export class PortalEngine {
     branchState: [] as ({ x: Spring2; y: Spring2; o: Spring2; cur?: { x: number; y: number } } | null)[],
     leafState: [] as ({ x: Spring2; y: Spring2; o: Spring2 } | null)[],
     size: { w: 1200, h: 800 },
+    // 是否减少动效（prefers-reduced-motion），为 true 时 swim=0，模块静止
+    reduced: typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     springs: {
       orb: { x: sp(600), y: sp(400), s: sp(150), o: sp(1) },
       dust: sp(0.4),

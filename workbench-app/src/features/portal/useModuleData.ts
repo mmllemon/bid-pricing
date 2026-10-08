@@ -28,7 +28,8 @@ interface OverviewProject {
 function mapOverviewProject(p: OverviewProject, idx: number): PortalItem {
   const bidAmount = Number(p.bid_amount) || 0;
   const bidCost = Number(p.bid_cost) || 0;
-  const margin = bidAmount > 0 ? ((bidAmount - bidCost) / bidAmount) * 100 : 0;
+  // 数据缺失时 margin 为 null，显示 — 而不是 0.0%（2026-10-08 修）
+  const margin = bidAmount > 0 ? ((bidAmount - bidCost) / bidAmount) * 100 : null;
   return {
     id: p.id,
     code: `P-${String(idx + 1).padStart(2, '0')}`,
@@ -41,7 +42,7 @@ function mapOverviewProject(p: OverviewProject, idx: number): PortalItem {
     contract_amount: String(p.bid_amount ?? ''),
     start_date: p.bid_open_date || p.created_at || '',
     exec_cost: String(p.actual_cost ?? p.bid_cost ?? ''),
-    profit_margin: margin.toFixed(1),
+    profit_margin: margin == null ? '' : margin.toFixed(1),
   } as PortalItem & Record<string, string>;
 }
 

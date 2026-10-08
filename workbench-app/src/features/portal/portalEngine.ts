@@ -100,7 +100,7 @@ export function targets(
 
   // 停靠态（2026-10-08 Step B）：全部模块在左侧垂直排成侧边导航，选中高亮
   if (L.docked && L.stage === 'module' && L.mod) {
-    const res: Layout = { orb: { x: -200, y: -200, s: 0 }, jelly: {}, branches: null, leaves: null };
+    const res: Layout = { orb: { x: -1000, y: -1000, s: 0 }, jelly: {}, branches: null, leaves: null };
     const startY = 140;
     const gap = 84;
     MODULES.forEach((m, i) => {

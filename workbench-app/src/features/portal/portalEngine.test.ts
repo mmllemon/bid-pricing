@@ -108,18 +108,16 @@ describe('targets 可变深度', () => {
 });
 
 describe('targets 停靠态', () => {
-  it('docked 时全部模块在左侧垂直排成侧边栏，选中高亮', async () => {
+  it('docked 时隐藏全部节点，抽屉全宽只看项目', async () => {
     const { targets } = await import('./portalEngine');
     const layout = targets(
       { size: { w: 1366, h: 768 }, stage: 'module', mod: 'biz', branch: null, time: 0, docked: true },
       0
     );
-    expect(layout.jelly['biz'].x).toBe(60);
-    expect(layout.jelly['biz'].o).toBe(1);
-    // 其他模块也在左侧垂直排列（侧边导航可切换）
-    expect(layout.jelly['quote'].x).toBe(60);
-    expect(layout.jelly['quote'].o).toBe(0.7);
-    expect(layout.jelly['quote'].y).not.toBe(layout.jelly['biz'].y);
+    // 全部模块移出可视区
+    expect(layout.jelly['biz'].o).toBe(0);
+    expect(layout.jelly['biz'].x).toBe(-1000);
+    expect(layout.jelly['quote'].o).toBe(0);
     expect(layout.branches).toBeNull();
     expect(layout.leaves).toBeNull();
   });

@@ -5,12 +5,14 @@ import type { QuoteResult } from './quoteCalc';
  * 下载 Excel（超链到后端导出） / 下载 JSON（本地 Blob） / 定稿并回写项目（需已选关联项目）。
  */
 export function QuoteActions({
-  result, savedPlan, canFinalize, onFinalize,
+  result, savedPlan, canFinalize, onFinalize, onRecompute, recomputing,
 }: {
   result: QuoteResult;
   savedPlan: boolean;
   canFinalize: boolean;
   onFinalize: () => void;
+  onRecompute?: () => void;
+  recomputing?: boolean;
 }) {
   // 下载兜底：历史方案 result 可能未带 excel_download_url，按 plan_id 推导
   const dlUrl = (result.excel_download_url as string) || (result.plan_id ? `/api/quote/download/${result.plan_id}` : '');
@@ -31,6 +33,10 @@ export function QuoteActions({
         <a className="download-button" href={dlUrl} download={String(dlUrl).split('/').pop()}>下载 Excel</a>
       )}
       <button className="btn-secondary" id="downloadResult" onClick={downloadJson}>下载 JSON</button>
+      {onRecompute && (
+        <button className="btn-secondary" id="dockCalcBtn" onClick={onRecompute} disabled={recomputing}
+          title="按当前左栏参数重算当前方案">{recomputing ? '重算中…' : '一键重新推演'}</button>
+      )}
       {canFinalize && (
         <button className="btn-primary" id="finalizeBid" onClick={onFinalize}
           title="将目标总报价写回为该项目投标报价金额，竞争性预算写回为投标成本测算">

@@ -6,7 +6,7 @@ import { QuoteTable } from './QuoteTable';
 import { QuotePreview } from './QuotePreview';
 import { QuoteReady, StatusCapsule, computeReady } from './QuoteReady';
 import { QuoteActions } from './QuoteActions';
-import { previewQuote, optimizeQuote, listOverviewProjects, finalizeOverview, markPlanFinalized, listGroups, renameGroup, copyGroup, finalizeGroup, deleteGroup, getPlan, comparePlans, type OverviewProject, type PlanGroup, type CompareResult } from './quoteApi';
+import { previewQuote, optimizeQuote, listOverviewProjects, finalizeOverview, markPlanFinalized, listGroups, renameGroup, copyGroup, finalizeGroup, deleteGroup, getPlan, comparePlans, recomputePlan, type OverviewProject, type PlanGroup, type CompareResult } from './quoteApi';
 import { QuotePlanHub } from './QuotePlanHub';
 import { QuoteCompareModal } from './QuoteCompareModal';
 import { QuoteSchemeBar } from './QuoteSchemeBar';
@@ -74,6 +74,7 @@ export default function QuotePage() {
   const [auditOpen, setAuditOpen] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState('');
   const [activeSlot, setActiveSlot] = useState('A');
+  const [currentPlanId, setCurrentPlanId] = useState('');
   // 明细表穿透状态（KPI 卡驱动）
   const [dashFilter, setDashFilter] = useState<DashFilter>('all');
   const [dashSortMargin, setDashSortMargin] = useState(false);
@@ -175,6 +176,7 @@ export default function QuotePage() {
       const resultA = await optimizeQuote(formA);
       setResult(resultA as QuoteResult);
       setActiveSlot('A');
+      setCurrentPlanId(String(resultA.plan_id || ''));
       const gid = String(resultA.group_id || '');
       setActiveGroupId(gid);
       setMessage({
@@ -222,11 +224,51 @@ export default function QuotePage() {
         }));
       }
       if (plan?.result) setResult(plan.result);
+      setCurrentPlanId(String(plan?.id || planId));
       setMessage({ text: `已切换至方案 ${slot}。`, kind: 'success' });
     } catch (e) {
       setMessage({ text: `切换方案失败：${(e as Error).message}`, kind: 'error' });
     }
   }, []);
+
+  /** 按当前参数重算当前已打开方案（POST /api/project/recompute?id=）。与 app.js runRecompute 对齐。 */
+  const runRecompute = useCallback(async () => {
+    if (!currentPlanId) { setMessage({ text: '请先打开或选择一个方案再重算。', kind: 'error' }); return; }
+    const fd = new FormData();
+    fd.append('target_total', params.targetTotal);
+    fd.append('fixed_pretax', params.fixedPretax);
+    fd.append('vat_rate', String(Number(params.vatRate) / 100));
+    fd.append('surtax_rate', String(Number(params.surtaxRate) / 100));
+    fd.append('ratio_min', String(params.ratioLow / 100));
+    fd.append('ratio_max', String(params.ratioHigh / 100));
+    fd.append('low_ratio_confirmed', params.lowRatioConfirmed ? 'true' : 'false');
+    fd.append('low_price_confirmed_by', [params.lowPriceConfirmedBy, params.lowPriceBasisBy].filter(Boolean).join('；'));
+    fd.append('clause_enabled', params.clauseEnabled ? 'true' : 'false');
+    const tax = buildTaxOverride(params.taxMode, taxComp);
+    fd.append('input_vat_credit_mode', tax.mode);
+    fd.append('cost_input_vat_rate', '0.13');
+    fd.append('credit_ratio', String(tax.creditRatio));
+    fd.append('cost_composition', tax.compositionJson);
+    // 重算保留该方案策略（A=optimal / B=uniform）
+    const g = groups.find((x) => x.group_id === activeGroupId);
+    const slotSummary = g?.strategy_slots?.[activeSlot]?.summary;
+    fd.append('strategy', String(slotSummary?.strategy || (activeSlot === 'B' ? 'uniform' : 'optimal')));
+    setCalculating(true);
+    setMessage({ text: '正在按当前参数重算，请稍候。', kind: 'info' });
+    try {
+      const result = await recomputePlan(currentPlanId, fd);
+      setResult(result as QuoteResult);
+      setMessage({
+        text: `重算完成：竞争性预算 ${Number(result.competitive_budget).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元，结算调整后利润（不含增值税）${Number(result.objective).toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元。`,
+        kind: 'success',
+      });
+      await refreshGroups();
+    } catch (e) {
+      setMessage({ text: `重算失败：${(e as Error).message}`, kind: 'error' });
+    } finally {
+      setCalculating(false);
+    }
+  }, [currentPlanId, params, taxComp, groups, activeGroupId, activeSlot, refreshGroups]);
 
   /** KPI 穿透：毛利卡 = 切换排序；风险卡 = 切换 risk 筛选；总报价卡 = 清除。 */
   const drillTotal = useCallback(() => { setDashFilter('all'); setDashSortMargin(false); setDashPage(0); }, []);
@@ -428,7 +470,7 @@ export default function QuotePage() {
             onFilter={setDashFilter}
             onSortMargin={setDashSortMargin}
             onPage={setDashPage}
-            actions={<QuoteActions result={result as QuoteResult} savedPlan={Boolean(result?.plan_id)} canFinalize={Boolean(params.projectId)} onFinalize={runFinalize} />}
+            actions={<QuoteActions result={result as QuoteResult} savedPlan={Boolean(result?.plan_id)} canFinalize={Boolean(params.projectId)} onFinalize={runFinalize} onRecompute={runRecompute} recomputing={calculating} />}
           />}
           {Boolean(params.projectId) && (
             <div className="action-row" style={{ marginTop: 12 }}>

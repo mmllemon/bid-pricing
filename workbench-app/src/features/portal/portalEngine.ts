@@ -76,6 +76,16 @@ export function slotOf(selId: string | null, id: string): number {
   return k < 0 ? MODULES.findIndex((m) => m.id === id) : k;
 }
 
+import portalConfigJson from './portal.config.json';
+
+/** 从 portal.config.json 读模块的 levels（可变深度，2026-10-08）。找不到则默认 3。 */
+export function getModuleLevels(modId: string | null): number {
+  if (!modId) return 3;
+  const m = (portalConfigJson.modules || []).find((x: { id: string }) => x.id === modId);
+  const lv = (m as { levels?: number } | undefined)?.levels;
+  return typeof lv === 'number' && lv >= 1 && lv <= 4 ? lv : 3;
+}
+
 /** 布局目标计算（逐字搬自原生版 targets）。 */
 export function targets(
   L: { size: { w: number; h: number }; stage: Stage; mod: string | null; branch: string | null; time: number; reduced?: boolean },
@@ -146,15 +156,26 @@ export function targets(
       };
     });
 
-    const brs = getBranches(L.mod as string);
-    const bn = brs.length;
-    const bSpan = Math.max(0, bn - 1) * 76;
-    res.branches = { x: col2_x, y0: cy2 - bSpan / 2, gap: bn > 1 ? bSpan / (bn - 1) : 0 };
+    // 可变深度（2026-10-08）：levels<=2 的模块跳过分支列，items 直接进 leaves
+    const modLevels = getModuleLevels(L.mod as string);
+    if (modLevels <= 2) {
+      res.branches = null;
+      // 扁平化所有分支的 items
+      const allItems = getBranches(L.mod as string).flatMap((b) => getItems(L.mod as string, b.id));
+      const ln = allItems.length;
+      const lSpan = Math.min(H - 150, Math.max(0, ln - 1) * 60);
+      res.leaves = { x: col2_x, y0: cy2 - lSpan / 2, gap: ln > 1 ? lSpan / (ln - 1) : 0 };
+    } else {
+      const brs = getBranches(L.mod as string);
+      const bn = brs.length;
+      const bSpan = Math.max(0, bn - 1) * 76;
+      res.branches = { x: col2_x, y0: cy2 - bSpan / 2, gap: bn > 1 ? bSpan / (bn - 1) : 0 };
 
-    const leafItems = getItems(L.mod as string, L.branch as string);
-    const ln = leafItems.length;
-    const lSpan = Math.min(H - 150, Math.max(0, ln - 1) * 60);
-    res.leaves = { x: col3_x, y0: cy2 - lSpan / 2, gap: ln > 1 ? lSpan / (ln - 1) : 0 };
+      const leafItems = getItems(L.mod as string, L.branch as string);
+      const ln = leafItems.length;
+      const lSpan = Math.min(H - 150, Math.max(0, ln - 1) * 60);
+      res.leaves = { x: col3_x, y0: cy2 - lSpan / 2, gap: ln > 1 ? lSpan / (ln - 1) : 0 };
+    }
   }
   return res;
 }
@@ -289,10 +310,14 @@ export class PortalEngine {
     const mod = MODULES.find((m) => m.id === modId);
     if (!mod) return;
     const brs: PortalBranch[] = mod.branches || [];
+    // 可变深度（2026-10-08）：levels<=2 不自动选分支，走 flat 模式
+    const lv = getModuleLevels(modId);
     let brId = targetBranchId;
-    if (!brId && brs.length > 0) brId = (brs.find((b) => b.isDefault) ?? brs[0]).id;
+    if (lv > 2 && !brId && brs.length > 0) brId = (brs.find((b) => b.isDefault) ?? brs[0]).id;
 
     const now = performance.now();
+    // flat 模式：leafState 按扁平化 items 初始化
+    const flatItems = lv <= 2 ? brs.flatMap((b) => getItems(modId, b.id)) : getItems(modId, brId);
     Object.assign(this.state, {
       stage: 'module' as Stage,
       mod: modId,
@@ -301,7 +326,7 @@ export class PortalEngine {
       branchStart: now,
       leafStart: now + 40,
       branchState: brs.map(() => null),
-      leafState: getItems(modId, brId).map(() => null),
+      leafState: flatItems.map(() => null),
     });
     this.rebuildBranchSvg(mod);
     this.rebuildLeafSvg(mod);
@@ -551,15 +576,30 @@ export class PortalEngine {
     }
 
     // 5B. 分支 → 卡片（伞状开花）
-    if (T.leaves && L.mod && L.branch) {
+    // 可变深度（2026-10-08）：levels<=2 时无分支，leaves 直接挂模块下
+    const isFlat = T.leaves && L.mod && !L.branch && getModuleLevels(L.mod) <= 2;
+    if ((T.leaves && L.mod && L.branch) || isFlat) {
       const currentMod2 = MODULES.find((m) => m.id === L.mod);
-      const leafItems = getItems(L.mod, L.branch);
-      const branches2 = getBranches(L.mod);
+      // 可变深度：flat 模式用扁平化 items，origin 从模块位置算
+      const leafItems = isFlat
+        ? getBranches(L.mod as string).flatMap((b) => getItems(L.mod as string, b.id))
+        : getItems(L.mod as string, L.branch as string);
+      const branches2 = getBranches(L.mod as string);
       const activeBrIdx = branches2.findIndex((b) => b.id === L.branch);
       const activeBrState = L.branchState[activeBrIdx];
-      if (activeBrState?.cur && currentMod2) {
-        const brOx = activeBrState.cur.x + 130 + 4;
-        const brOy = activeBrState.cur.y;
+      // flat 模式：从模块 jelly 位置发散
+      const modJelly = isFlat ? this.state.springs.jelly[L.mod as string] : null;
+      let originX = 0, originY = 0;
+      if (isFlat) {
+        originX = (modJelly?.cur.x ?? 0) + 60;
+        originY = modJelly?.cur.y ?? 0;
+      } else if (activeBrState?.cur) {
+        originX = activeBrState.cur.x + 130 + 4;
+        originY = activeBrState.cur.y;
+      }
+      if ((activeBrState?.cur || isFlat) && currentMod2) {
+        const brOx = originX;
+        const brOy = originY;
 
         leafItems.forEach((it, li) => {
           if (!L.leafState[li]) L.leafState[li] = { x: sp(brOx), y: sp(brOy), o: sp(0) };

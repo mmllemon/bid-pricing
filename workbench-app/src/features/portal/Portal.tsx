@@ -3,7 +3,7 @@ import {
   MODULES, getBranches, getItems, getModule,
   type PortalBranch, type PortalItem,
 } from './portalData';
-import { PortalEngine, type EngineRefs, type Stage } from './portalEngine';
+import { PortalEngine, getModuleLevels, type EngineRefs, type Stage } from './portalEngine';
 import { PortalSnapshot } from './PortalSnapshot';
 import { PortalDrawer } from './PortalDrawer';
 
@@ -36,7 +36,19 @@ export default function PortalPage() {
 
   const activeModule = mod ? getModule(mod) : undefined;
   const branches = mod ? getBranches(mod) : [];
-  const leafItems = mod && branch ? getItems(mod, branch) : [];
+  // 可变深度（2026-10-08）：levels<=2 且无分支时，用扁平化 items
+  const leafItems = (() => {
+    if (!mod) return [];
+    if (branch) return getItems(mod, branch);
+    // flat 模式：从配置读 levels
+    try {
+      const cfg = getModuleLevels(mod);
+      if (cfg <= 2) {
+        return getBranches(mod).flatMap((b) => getItems(mod, b.id));
+      }
+    } catch { /* fallback */ }
+    return [];
+  })();
 
   /** 把引擎状态同步到 React 低频状态（交互后调用，非每帧）。 */
   const syncFromEngine = useCallback(() => {

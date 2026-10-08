@@ -66,3 +66,43 @@ describe('targets', () => {
     }
   });
 });
+
+describe('getModuleLevels', () => {
+  it('返回配置的 levels', async () => {
+    const { getModuleLevels } = await import('./portalEngine');
+    // portal.config.json 里 graph=2, biz=3
+    expect(getModuleLevels('graph')).toBe(2);
+    expect(getModuleLevels('biz')).toBe(3);
+    expect(getModuleLevels('todos')).toBe(2);
+  });
+
+  it('未知模块默认 3', async () => {
+    const { getModuleLevels } = await import('./portalEngine');
+    expect(getModuleLevels('nonexistent')).toBe(3);
+    expect(getModuleLevels(null)).toBe(3);
+  });
+});
+
+describe('targets 可变深度', () => {
+  const base = {
+    size: { w: 1366, h: 768 },
+    stage: 'module' as const,
+    time: 0,
+  };
+
+  it('levels=2 模块：branches 为 null，leaves 有数据', async () => {
+    const { targets } = await import('./portalEngine');
+    // todos 模块 levels=2
+    const layout = targets({ ...base, mod: 'todos', branch: null }, 0);
+    expect(layout.branches).toBeNull();
+    expect(layout.leaves).not.toBeNull();
+  });
+
+  it('levels=3 模块：branches 和 leaves 都有', async () => {
+    const { targets } = await import('./portalEngine');
+    // biz 模块 levels=3
+    const layout = targets({ ...base, mod: 'biz', branch: 'projects' }, 0);
+    expect(layout.branches).not.toBeNull();
+    expect(layout.leaves).not.toBeNull();
+  });
+});

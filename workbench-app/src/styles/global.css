@@ -842,15 +842,20 @@ select.nb-input {
 /* 顶栏导航态（P0-3 前端整合）：无侧栏，主导航在顶栏 */
 .shell--topnav {
   flex-direction: column;
+  /* 顶栏 fixed 后脱离文档流，内容区顶部留出顶栏高度 */
+  padding-top: 58px;
 }
 
 .site-topbar {
   width: 100%;
   background: var(--ui-white);
   border-bottom: var(--line-strong);
-  position: sticky;
+  /* fixed 置顶：portal 的绝对定位卡片再怎么算也不会盖住导航栏 */
+  position: fixed;
   top: 0;
-  z-index: var(--z-nav);
+  left: 0;
+  right: 0;
+  z-index: 1000;
 }
 
 .site-topbar-main {

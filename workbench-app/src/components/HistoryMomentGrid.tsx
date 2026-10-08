@@ -99,7 +99,7 @@ function HistoryMomentCard({ item, index }: { item: KnowledgeMomentDraft; index:
       <div className="kb-moment-layout">
         <img className="kb-moment-avatar" src={lshuAvatar} alt="" aria-hidden="true" />
         <div className="kb-moment-content">
-          <div className="kb-moment-name">L叔 · LOCAL COMMAND</div>
+          <div className="kb-moment-name">Liam · LOCAL COMMAND</div>
           <div id={bodyId} className={`kb-moment-copy${expanded ? ' is-expanded' : ''}`}>
             {item.draft}
           </div>

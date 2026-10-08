@@ -2119,7 +2119,7 @@ select.nb-input {
 .kb-hotspot-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .kb-hotspot-summary { font-size: 13px; opacity: 0.62; margin-top: 8px; line-height: 1.7; }
 
-/* ===== L叔精选 · 批量朋友圈侧栏 ===== */
+/* ===== Liam精选 · 批量朋友圈侧栏 ===== */
 .drawer.drawer--batch {
   width: min(1120px, calc(100vw - 16px));
   overflow: hidden;
@@ -5368,7 +5368,7 @@ button{font-family:var(--font)}
 .btn-danger:hover{background:var(--ui-black);color:var(--ui-white)}
 
 /* ============================================================
-   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   像素字体适用范围（Liam工作台 DESIGN.md §5.1）
    ------------------------------------------------------------
    覆盖：导航标签与编号、页面 H1、模块短标题、按钮 / Tab / Chip /
    Badge、时间日期、数据指标、短状态码。
@@ -6327,7 +6327,7 @@ table.audit-table tr:hover td:first-child{box-shadow:inset 4px 0 0 var(--ui-yell
 .skeleton-card{padding:12px 16px;border:var(--line-thin);border-radius:0;margin-bottom:8px}
 
 /* ============================================================
-   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   像素字体适用范围（Liam工作台 DESIGN.md §5.1）
    ------------------------------------------------------------
    覆盖：模块短标题、Tab / Chip / Badge / 状态药丸、按钮、数据指标、
    表格列头与数字单元格。
@@ -8068,7 +8068,7 @@ details.spec .hint { margin: 6px 0; }
 }
 
 /* ============================================================
-   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   像素字体适用范围（Liam工作台 DESIGN.md §5.1）
    ------------------------------------------------------------
    覆盖：模块短标题、Chip / Badge、按钮、数据指标、表格列头与数字单元格。
    不覆盖：.tool-table .fx（计算式长文本）、表格首列中文物料名、
@@ -8422,7 +8422,7 @@ details.spec .hint { margin: 6px 0; }
 }
 
 /* ============================================================
-   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   像素字体适用范围（Liam工作台 DESIGN.md §5.1）
    ------------------------------------------------------------
    覆盖：页面 H1、状态药丸、模块短标题、按钮、Badge、时间日期。
    不覆盖：.agent-chat / .agent-msg 正文与 .agent-msg.err 错误提示、

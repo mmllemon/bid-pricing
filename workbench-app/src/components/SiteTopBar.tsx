@@ -27,7 +27,7 @@ export default function SiteTopBar() {
         <div className="site-brand">
           <span className="site-brand-mark" aria-hidden="true">◈</span>
           <span className="site-brand-text">
-            <strong>工程智算</strong>
+            <strong>Liam的工作台</strong>
             <small>工程项目智能决策平台</small>
           </span>
         </div>

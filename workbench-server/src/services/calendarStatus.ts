@@ -60,7 +60,7 @@ export function calendarStatusCopy(input: {
     return { statusLabel: '仅有写入权限', hint: '仅有写入权限，需要完整访问。请在系统设置 → 隐私与安全性 → 日历中开启完全访问。' };
   }
   if (permission === 'denied' || permission === 'restricted') {
-    return { statusLabel: '已拒绝', hint: '已拒绝，请打开系统设置 → 隐私与安全性 → 日历，为 L叔工作台日历读取器打开完全访问。' };
+    return { statusLabel: '已拒绝', hint: '已拒绝，请打开系统设置 → 隐私与安全性 → 日历，为 Liam工作台日历读取器打开完全访问。' };
   }
   if (code === PRODUCTIVITY_ERROR_CODES.CALENDAR_HELPER_STALE) {
     return { statusLabel: 'helper 过期', hint: '日历 helper 过期，请重新构建正式 calendar-reader 后再同步。' };

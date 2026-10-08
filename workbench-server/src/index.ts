@@ -1069,7 +1069,7 @@ app.get('/api/knowledge/hotspots/status', async (_req, res) => {
   }
 });
 
-// GET /api/knowledge/hotspots/articles → L叔精选（20 篇历史校准素材）
+// GET /api/knowledge/hotspots/articles → Liam精选（20 篇历史校准素材）
 app.get('/api/knowledge/hotspots/articles', async (_req, res) => {
   try {
     res.json(await getKnowledgeHotspotArticles());
@@ -1210,7 +1210,7 @@ app.listen(PORT, BIND_HOST, () => {
   if (interrupted > 0) {
     console.log(`[sync] interrupted ${interrupted} orphan running run(s)`);
   }
-  console.log(`✅ L叔工作台后端已启动: http://127.0.0.1:${PORT}`);
+  console.log(`✅ Liam工作台后端已启动: http://127.0.0.1:${PORT}`);
   if (process.env.DISABLE_SCHEDULERS === '1') return;
   startScheduler();
   startProductivityScheduler();

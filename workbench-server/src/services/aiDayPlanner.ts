@@ -77,7 +77,7 @@ export function buildWorkPatternProfile(): WorkPatternProfile {
 }
 
 function systemPrompt(): string {
-  return `你是 L叔个人工作台的每日规划器。只输出合法 JSON 对象，不要 Markdown，不要解释。
+  return `你是 Liam个人工作台的每日规划器。只输出合法 JSON 对象，不要 Markdown，不要解释。
 目标：从今天全部候选事项中选择最值得完成的 1 到 ${MAX_DAILY_FOCUS_TASKS} 件主任务。固定日历事件不计入这 ${MAX_DAILY_FOCUS_TASKS} 件，但会占用时间。
 必须结合截止时间、事项来源、已经固化的工作画像和剩余工作时间。不要为了凑数选择低价值事项。
 不得发明 stableKey，不得输出输入中不存在的任务。selections 必须唯一，rank 必须从 1 连续递增。

@@ -68,7 +68,7 @@ function createGenerationRequestId(mode: KnowledgeMomentGenerationMode): string 
   return `moment-${mode}-${randomId}`;
 }
 
-// ===== L叔精选单篇详情元素 =====
+// ===== Liam精选单篇详情元素 =====
 interface CuratedArticle {
   article_id: string;
   title: string;
@@ -120,13 +120,13 @@ export default function HotspotsPage() {
   const [drawer, setDrawer] = useState<HotspotArticleDetail | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
 
-  // ===== L叔精选（知识库 hotspots）=====
+  // ===== Liam精选（知识库 hotspots）=====
   const [curated, setCurated] = useState<KnowledgeHotspotArticle[]>([]);
   const [curatedFetchedAt, setCuratedFetchedAt] = useState<string | null>(null);
   const [curatedLoading, setCuratedLoading] = useState(false);
   const [curatedRefreshing, setCuratedRefreshing] = useState(false);
   const [curatedMsg, setCuratedMsg] = useState('');
-  // L叔精选详情抽屉
+  // Liam精选详情抽屉
   const [curatedDrawer, setCuratedDrawer] = useState<CuratedArticle | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<KnowledgeGenerateResult | null>(null);
@@ -234,7 +234,7 @@ export default function HotspotsPage() {
     }
   }, []);
 
-  // ===== L叔精选加载 =====
+  // ===== Liam精选加载 =====
   const loadCurated = useCallback(async (refresh = false) => {
     setCuratedLoading(true);
     setCuratedMsg('');
@@ -455,7 +455,7 @@ export default function HotspotsPage() {
     ];
   }, [status]);
 
-  // L叔精选是否"今日"抓取（历史校准素材通常不是今天）
+  // Liam精选是否"今日"抓取（历史校准素材通常不是今天）
   const curatedIsToday = isToday(curatedFetchedAt);
 
   return (
@@ -548,7 +548,7 @@ export default function HotspotsPage() {
           onClick={() => setTab('curated')}
           onKeyDown={handleTabKeyDown}
         >
-          L叔精选
+          Liam精选
         </button>
         <button
           id="hotspot-tab-history"
@@ -717,9 +717,9 @@ export default function HotspotsPage() {
           role="tabpanel"
           aria-labelledby="hotspot-tab-curated"
         >
-          {/* 说明条：L叔精选（知识库校准素材，非今日热点） */}
+          {/* 说明条：Liam精选（知识库校准素材，非今日热点） */}
           <div className="ui-receipt">
-            <span className="nb-badge">L叔精选</span>
+            <span className="nb-badge">Liam精选</span>
             <span className="nb-muted" style={{ fontSize: 13, marginLeft: 12 }}>
               来自知识库热点评分系统 · 抓取时间 {curatedFetchedAt ? formatTime(curatedFetchedAt) : '—'}
             </span>
@@ -753,7 +753,7 @@ export default function HotspotsPage() {
           )}
 
           {curatedLoading ? (
-            <div className="nb-card empty-state"><p>加载 L叔精选…</p></div>
+            <div className="nb-card empty-state"><p>加载 Liam精选…</p></div>
           ) : curated.length === 0 ? (
             <div className="nb-card empty-state">
               <p>暂无精选素材。点击右上角「刷新 36Kr 精选」抓取并评分。</p>
@@ -926,9 +926,9 @@ export default function HotspotsPage() {
               ) : (
                 <>
                   <h2>还没有朋友圈草稿</h2>
-                  <p>从「L叔精选」生成单篇或批量朋友圈，成功正文会自动保存在这里。</p>
+                  <p>从「Liam精选」生成单篇或批量朋友圈，成功正文会自动保存在这里。</p>
                   <button className="nb-btn nb-btn--primary" type="button" onClick={() => setTab('curated')}>
-                    前往 L叔精选
+                    前往 Liam精选
                   </button>
                 </>
               )}
@@ -997,13 +997,13 @@ export default function HotspotsPage() {
         </div>
       )}
 
-      {/* L叔精选详情抽屉 */}
+      {/* Liam精选详情抽屉 */}
       {curatedDrawer && (
         <div className="drawer-overlay" onClick={() => setCuratedDrawer(null)}>
           <div className="drawer" role="dialog" aria-modal="true" aria-label="精选详情" onClick={(e) => e.stopPropagation()}>
             <div className="drawer-header">
               <div style={{ maxWidth: 480 }}>
-                <div className="drawer-kicker">L叔精选 · {curatedDrawer.format}</div>
+                <div className="drawer-kicker">Liam精选 · {curatedDrawer.format}</div>
                 <h2 className="drawer-title">{curatedDrawer.title}</h2>
               </div>
               <button className="nb-btn nb-btn--ghost drawer-close" aria-label="关闭精选抽屉" onClick={() => setCuratedDrawer(null)}>关闭</button>

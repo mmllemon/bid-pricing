@@ -547,7 +547,7 @@ export default function TodosPage() {
                   <div className="todo-receipt-brand">
                     <img src={lshuAvatar} alt="" aria-hidden="true" />
                     <div>
-                      <span className="todo-receipt-eyebrow">L叔 · LOCAL COMMAND</span>
+                      <span className="todo-receipt-eyebrow">Liam · LOCAL COMMAND</span>
                       <h3>今日，做出点名堂</h3>
                       <p>DAILY ROUTE RECEIPT / 今日作战小票</p>
                     </div>
@@ -747,7 +747,7 @@ export default function TodosPage() {
                       ))}
                     </details>
                   )}
-                  <button className="nb-btn nb-btn--ghost" onClick={confirmWrite}>确认写入「L叔工作台」日历</button>
+                  <button className="nb-btn nb-btn--ghost" onClick={confirmWrite}>确认写入「Liam工作台」日历</button>
                   {writeNote && <p className="nb-muted">{writeNote}</p>}
                 </section>
               )}

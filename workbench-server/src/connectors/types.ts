@@ -85,5 +85,5 @@ export interface ConnectorStatus {
   windowStatus?: string | null;
 }
 
-export const WORKBENCH_CALENDAR_NAME = 'L叔工作台';
+export const WORKBENCH_CALENDAR_NAME = 'Liam工作台';
 export const PROTECTED_CALENDAR_NAMES = new Set(['个人', '工作', '家庭', '飞行计划', '计划的提醒事项', '生日', '中国大陆节假日', 'Siri建议']);

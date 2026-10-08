@@ -127,7 +127,7 @@ export function redactCalendarLog(text: string): string {
   return redactText(text, 160);
 }
 
-export const TEST_EVENT_TITLE = '[测试] L叔工作台排程连通性检查 — 可回滚';
+export const TEST_EVENT_TITLE = '[测试] Liam工作台排程连通性检查 — 可回滚';
 
 function shanghaiWall(iso: string): { y: number; m: number; d: number; hh: number; mm: number } {
   const parts = new Intl.DateTimeFormat('en-US', {

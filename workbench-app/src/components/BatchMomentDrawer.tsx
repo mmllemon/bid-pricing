@@ -191,7 +191,7 @@ export default function BatchMomentDrawer({
       >
         <div className="drawer-header kb-batch-header">
           <div>
-            <div className="drawer-kicker">L叔精选 · MOMENTS DRAFTS</div>
+            <div className="drawer-kicker">Liam精选 · MOMENTS DRAFTS</div>
             <h2 id="kb-batch-drawer-title" className="drawer-title">批量朋友圈草稿</h2>
           </div>
           <div className="kb-batch-actions">
@@ -269,7 +269,7 @@ export default function BatchMomentDrawer({
                     <div className="kb-moment-layout">
                       <img className="kb-moment-avatar" src={lshuAvatar} alt="" aria-hidden="true" />
                       <div className="kb-moment-content">
-                        <div className="kb-moment-name">L叔 · LOCAL COMMAND</div>
+                        <div className="kb-moment-name">Liam · LOCAL COMMAND</div>
 
                         {item.status === 'queued' && (
                           <div className="kb-moment-pending">正在等待生成这条朋友圈正文…</div>

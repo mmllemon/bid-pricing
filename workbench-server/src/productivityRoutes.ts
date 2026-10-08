@@ -412,7 +412,7 @@ export function registerProductivityRoutes(app: Express): void {
     if (settings.autoScheduleEnabled !== true && req.body?.confirmed !== true) {
       return sendError(res, new ProductivityError(PRODUCTIVITY_ERROR_CODES.EXTERNAL_WRITE_DISABLED, '未开启自动排程，且用户未确认写入日历'));
     }
-    return sendError(res, new ProductivityError(PRODUCTIVITY_ERROR_CODES.EXTERNAL_WRITE_DISABLED, '批量日历写入需用户确认后仅允许写入「L叔工作台」'));
+    return sendError(res, new ProductivityError(PRODUCTIVITY_ERROR_CODES.EXTERNAL_WRITE_DISABLED, '批量日历写入需用户确认后仅允许写入「Liam工作台」'));
   });
 
   app.post('/api/todos/reconcile-completion', (req, res) => {

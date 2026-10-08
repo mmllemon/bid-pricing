@@ -305,7 +305,7 @@ export async function createTodayDayPlan(options: {
 export function refuseExternalCommit(): never {
   throw new ProductivityError(
     PRODUCTIVITY_ERROR_CODES.EXTERNAL_WRITE_DISABLED,
-    '本轮只保存本地草稿。确认写入「L叔工作台」日历不会修改 Things、飞书消息或 Apple 原有事件，且本轮不执行真实外部写入。'
+    '本轮只保存本地草稿。确认写入「Liam工作台」日历不会修改 Things、飞书消息或 Apple 原有事件，且本轮不执行真实外部写入。'
   );
 }
 

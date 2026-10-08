@@ -8,7 +8,7 @@ import {
   roundCoord,
   sanitizeWeatherRequest,
 } from '../src/services/weatherService';
-import { formatHomeClock, systemTimeZone } from '../../frontend/src/lib/homeClock';
+import { formatHomeClock, systemTimeZone } from '../../workbench-app/src/lib/homeClock';
 
 const NOW = new Date('2026-08-24T08:00:00.000Z');
 const TZ = 'Asia/Shanghai';

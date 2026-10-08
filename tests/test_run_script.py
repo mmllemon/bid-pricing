@@ -199,14 +199,16 @@ class RunScriptPortHardeningTest(unittest.TestCase):
         self.assertGreaterEqual(
             len(backend_guards), 2,
             "后端至少两处 HasExited：探活失败分支（报退出码）+ 探活成功后的假成功拦截。")
-        # P0 架构收敛（2026-10-07）：前端静态已并入后端同进程（:8000 的 / 挂 frontend/），
-        # 不再有独立 $frontend 进程；假成功拦截由后端的 HasExited 覆盖。
-        # 此处只要求：无残留 $frontend 引用，且静态挂载本身被探活（目录缺失时 mount 跳过会 404）。
-        self.assertNotIn("$frontend", self.text, "不应再有独立前端进程变量残留")
+        # P4 前端整合（2026-10-08）：:8000 退为纯 API，不再挂载静态前端；整站入口是 :3456。
+        # 此处要求：无残留 $frontend 变量，且后端 /api/health 被探活（后端挂则报价域全挂）。
+        self.assertNotIn("$frontend", self.text, "不应再有任何前端进程变量")
         self.assertIn(
-            'Wait-HttpOk "http://127.0.0.1:$BackendPort/"',
-            self.text,
-            "前端静态（:8000 的 /）必须被探活，确认 mount 生效。")
+            'Wait-HttpOk "http://127.0.0.1:$BackendPort/api/health"', self.text,
+            "后端 /api/health 必须被探活。")
+        # P4：Web 前端（:3456）探活失败必须报错退出（它是唯一前端，挂了整站不可用）。
+        self.assertIn(
+            'Wait-HttpOk "http://127.0.0.1:$WbPort/api/health"', self.text,
+            "Web 前端（:3456）必须被探活。")
         banner = self.text.find('Write-Host "  frontend: ')
         self.assertGreater(
             banner, backend_guards[-1].start(),

@@ -21,7 +21,6 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -49,9 +48,6 @@ from bidpricing.sqlite_store import (
 from bidpricing.quote_resolve import run_resolve
 from bidpricing.quote_strategies import STRATEGIES
 from bidpricing.validation.low_price_policy import DISPOSITION_NOTE
-
-from api.wb_local import router as wb_local_router
-from api.wb_proxy import router as wb_router
 
 # H-012 多用户隔离（不鉴权，仅目录级）：以运行账号作为命名空间，各用户方案互不相见。
 # 方案与方案组统一落到 SQLite，库文件沿用按用户重定向的 PROJECTS_DIR 模型。
@@ -373,19 +369,6 @@ async def _csp_guard(request, call_next):
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "bidpricing"}
-
-
-# ===== 工作台域本地实现（D-2 收编侧）=====
-# 必须先于 wb_proxy 注册：FastAPI 按注册顺序匹配，已收编的 /api/wb/<path> 由这里
-# 命中，未被收编的路径才落到下面的兜底反代。前端契约不变。
-# 注：wb_todos（/api/wb/todos）已于 2026-10-06 删除——全仓库无前端调用，
-# React 待办页实际走 /api/todos → :3456；如需恢复见 git 历史。
-app.include_router(wb_local_router)
-
-# ===== lshu-workbench 过渡期反代（D-2 strangler fig）=====
-# /api/wb/<path> → Express(:3456)/api/<path>。逐模块 Python 收编后，在 wb_local 里
-# 注册同路径的本地实现即可短路，前端契约不变。
-app.include_router(wb_router)
 
 
 # ===== 长江现货金属价格代理（工具箱「拉取长江现货」按钮用）=====
@@ -1115,10 +1098,6 @@ async def well_library_save(request: Request):
     return JSONResponse(status_code=200, content={"status": "PASS", "count": count})
 
 
-# ---- P0 架构收敛（2026-10-07）：:8080 并入 :8000 ----
-# 前端静态（frontend/，vanilla 页）改由本 FastAPI 同进程 serving，run.ps1 不再起
-# python http.server :8080。挂载放在所有 /api 路由之后，API 优先匹配；html=True
-# 让 / 直接落到 frontend/index.html。目录缺失时不挂载（不影响 API）。
-_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-if _FRONTEND_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=str(_FRONTEND_DIR), html=True), name="frontend")
+# ---- P4 前端整合（2026-10-08）：:8000 退为纯 API ----
+# 前端静态（frontend/）已整体迁入 React 应用（workbench-app），由 :3456 同进程 serving。
+# 本进程不再挂载任何静态前端；浏览器只访问 :3456。

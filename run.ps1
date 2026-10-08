@@ -1,6 +1,6 @@
 ﻿# bid-pricing one-click launcher (Windows PowerShell 5.1+)
-# 启动后端 8000（Python FastAPI，含前端静态）+ 个人工作台 3456（Node，可选，BIDPRICING_WORKBENCH_PORT 可覆盖；
-# agent 已并入工作台进程（/agent 前缀），不再独立占 :8010；:8080 已并入 :8000；
+# 启动后端 8000（Python FastAPI，纯 API）+ Web 前端 3456（Node，唯一前端，BIDPRICING_WORKBENCH_PORT 可覆盖；
+# agent 已并入该进程（/agent 前缀），不再独立占 :8010；
 #   代码取仓库内 workbench-app/（React 前端）+ workbench-server/（Express 后端），不再指向 skill 安装目录）；
 # 首次运行在仓库 .venv 内建隔离环境并装依赖；Ctrl+C 停止全部。
 #
@@ -25,8 +25,8 @@
 #   7) 端口三重防护：预检占用 / 探活后校验进程存活 / 端口可覆盖。
 #      起服务前先查端口占用并明说占用者；探活通过后还须确认是自己拉起的进程
 #      还活着；端口可用 BIDPRICING_BACKEND_PORT / BIDPRICING_WORKBENCH_PORT 覆盖。
-#   8) WORKBENCH_UPSTREAM 必须在**起后端进程之前**设好：api/wb_proxy.py 在 import 时
-#      读它（默认 127.0.0.1:3456），后端拉起后再改只能影响新进程，反代仍指向旧地址。
+#   8) 工作台进程（:3456）自 P4 起是**唯一 Web 前端**（React SPA），不再是可选边车。
+#      但启动策略仍按「主应用在后端」处理：Node/构建失败时后端照常起来（API 可用）。
 #   9) lshu 工作台要跑 src/index.ts（node --import tsx），不能跑 dist/index.js：
 #      那份 dist 由 moduleResolution=bundler 的 tsc 产出，相对导入不带扩展名，
 #      普通 node 按 ESM 解析会 ERR_MODULE_NOT_FOUND —— 它的 npm start 本身就是坏的。
@@ -38,12 +38,12 @@
 #
 # 启动拓扑（一览表，出问题先看这张）：
 #
-#   浏览器 ──► :8000  后端 API + 前端静态（FastAPI，api/app.py；/ 挂 frontend/）
-#                ├─ /api/*              报价 / 项目 / 井库 / 方案
-#                ├─ /*                  前端静态（html=True，/ → index.html）
-#                └─ /api/wb/* ──► :3456 反代（strangler；已收编的走本地 wb_local）
-#              :3456  个人工作台（Express，SPA 与 API 同进程；可选边车）
-#                └─ /agent/*           Agent（Pi Durable，原独立 :8010，已并入本进程）
+#   浏览器 ──► :3456  Web 前端（Express，SPA 与 API 同进程，唯一入口）
+#                ├─ /                     React SPA（workbench-app/dist）
+#                ├─ /api/*               工作台域 API + 报价域同源反代 → :8000
+#                └─ /agent/*             AI 助手（Pi Durable，原独立 :8010，已并入本进程）
+#              :8000  后端 API（FastAPI，api/app.py，纯 API，不挂静态）
+#                └─ /api/*               报价 / 项目 / 井库 / 方案（由 :3456 反代或直连）
 #
 #   端口覆盖（重跑生效，无需改脚本）：
 #     $env:BIDPRICING_BACKEND_PORT（8000）/ $env:BIDPRICING_WORKBENCH_PORT（3456）
@@ -56,8 +56,8 @@
 #
 #   故障速查：
 #     启动报端口被占用   → 按提示用 $env:<名> 换端口重跑
-#     页面空白 / 转圈    → 先看 outputs\logs\backend.err.log（:8000 挂则全挂）
-#     工作台 iframe 空白 → outputs\logs\workbench.err.log（边车，可选，不影响主应用）
+#     页面空白 / 转圈    → 先看 outputs\logs\workbench.err.log（:3456 挂则整站挂）
+#     报价数据为空       → :8000 是否在跑；看 backend.err.log
 #     审批 / 模型设置 401 → 服务端 AGENT_API_TOKEN 与面板 token 是否一致
 #     井库 / 项目列表为空 → :8000 是否在跑；看 backend.err.log
 
@@ -314,9 +314,7 @@ $BackendPort  = Get-PortOrDefault "BIDPRICING_BACKEND_PORT" 8000
 Assert-PortFree $BackendPort  "后端" "BIDPRICING_BACKEND_PORT"
 
 # ============================================================================
-# lshu-workbench 边车：解析目录与端口，并**提前**把反代上游告诉后端。
-# WORKBENCH_UPSTREAM 必须在起后端进程之前设置：api/wb_proxy.py 在模块 import 时
-# 读取它（默认 http://127.0.0.1:3456），后端一旦拉起再改就晚了。
+# Web 前端（:3456）：解析目录与端口。
 # 目录是**仓库内 vendored 代码**（收编后不再指向 skill 安装目录）：
 #   workbench-app/     React 前端，构建产物 dist/ 由 Express 在请求期读盘
 #   workbench-server/  Express 后端（SPA 与 API 同进程），入口是 TS 源码
@@ -343,8 +341,6 @@ elseif (Test-Path -LiteralPath $WbEnvFile) {
     $wm = [regex]::Match((Get-Content -LiteralPath $WbEnvFile -Raw), '(?m)^\s*PORT\s*=\s*"?(\d+)"?')
     if ($wm.Success) { $WbPort = [int]$wm.Groups[1].Value }
 }
-
-$env:WORKBENCH_UPSTREAM = "http://127.0.0.1:$WbPort"
 
 # --- start backend ---
 $env:PYTHONPATH = "src"
@@ -512,14 +508,8 @@ if ($backend.HasExited) {
     Stop-All
     exit 1
 }
-# 前端静态与后端同进程（:8000 的 / 挂 frontend/）：/api/health 已证明进程存活，
-# 这里只确认静态挂载生效（目录缺失时挂载跳过，/ 会 404）。
-if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/" 20)) {
-    Write-Host "[ERR] 前端静态 20s 内未就绪（http://127.0.0.1:$BackendPort/ 应 200）。" -ForegroundColor Red
-    Write-Host "      日志：outputs\logs\backend.err.log" -ForegroundColor Yellow
-    Stop-All
-    exit 1
-}
+# P4 前端整合（2026-10-08）：:8000 不再挂载静态前端，/ 将 404——不再探它。
+# 整站入口是 :3456（下方工作台段探活）。
 
 # agent 已并入工作台进程（/agent）：只做告警级探活，不阻断。
 if ($workbench) {
@@ -528,26 +518,35 @@ if ($workbench) {
     }
 }
 
-# workbench（边车）：语义同 agent。注意 3456 上若跑的是「已在用的工作台」，
-# 探活会通过——此时不复用也不报错，只是 Ctrl+C 不会停它。
+# Web 前端（:3456，P4 起为唯一前端）：探活失败即整站不可用，必须报错退出。
+# 注意 3456 上若跑的是「已在用的实例」，探活会通过——此时不复用也不报错，
+# 但 Ctrl+C 不会停它（$workbench 置空）。
 if ($workbench) {
     if (Wait-HttpOk "http://127.0.0.1:$WbPort/api/health" 30) {
         if ($workbench.HasExited) {
-            Write-Host "[WARN] :$WbPort/api/health 已有人应答，但本拉起的工作台进程已退出——复用在跑的实例（Ctrl+C 时不会停它）。" -ForegroundColor Yellow
+            Write-Host "[WARN] :$WbPort/api/health 已有人应答，但本拉起的进程已退出——复用在跑的实例（Ctrl+C 时不会停它）。" -ForegroundColor Yellow
             $workbench = $null
         }
-    } else {
-        Write-Host "[WARN] 个人工作台 30s 内未就绪，已跳过（不影响主应用）。日志：outputs\logs\workbench.err.log" -ForegroundColor Yellow
-        Stop-Process -Id @($workbench.Id) -Force -ErrorAction SilentlyContinue
-        $workbench = $null
     }
+    else {
+        Write-Host "[ERR] Web 前端 30s 内未就绪（http://127.0.0.1:$WbPort/api/health）。日志：outputs\logs\workbench.err.log" -ForegroundColor Red
+        if ($workbench.HasExited) { Write-Host ("      前端进程已退出，exit code = " + $workbench.ExitCode) -ForegroundColor Red }
+        Stop-All
+        exit 1
+    }
+}
+else {
+    Write-Host "[ERR] Web 前端未能启动（Node 缺失 / 依赖或构建失败）。P4 后它是唯一前端，整站不可用。" -ForegroundColor Red
+    Write-Host "      修法：确认 node/npm 可用，在 workbench-server/ 与 workbench-app/ 各跑 npm install，再 npm run build。" -ForegroundColor Yellow
+    Stop-All
+    exit 1
 }
 
 Write-Host ""
-Write-Host "  frontend: http://127.0.0.1:$BackendPort  （与后端同进程）" -ForegroundColor Green
+Write-Host "  frontend: http://127.0.0.1:$WbPort  （React SPA，唯一入口）" -ForegroundColor Green
 Write-Host "  backend:  http://127.0.0.1:$BackendPort/api/health" -ForegroundColor Green
-Write-Host "  agent:    http://127.0.0.1:$WbPort/agent/health  （已并入工作台进程）" -ForegroundColor Green
-if ($workbench) { Write-Host "  workbench: http://127.0.0.1:$WbPort/  (个人工作台；母项目 #workbench 以 iframe 嵌入本地址)" -ForegroundColor Green }
+Write-Host "  agent:    http://127.0.0.1:$WbPort/agent/health  （已并入前端进程）" -ForegroundColor Green
+if ($workbench) { Write-Host "  workbench: http://127.0.0.1:$WbPort/  （工作台 + 报价 + 工具箱 + 大盘）" -ForegroundColor Green }
 Write-Host "  logs:     outputs\logs\*.log" -ForegroundColor DarkGray
 Write-Host "Press Ctrl+C to stop all services ..." -ForegroundColor DarkGray
 

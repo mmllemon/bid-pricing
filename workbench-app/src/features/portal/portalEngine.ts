@@ -355,14 +355,10 @@ export class PortalEngine {
       if (!sz) return;
       const w = sz.clientWidth || window.innerWidth;
       const h = sz.clientHeight || window.innerHeight;
-      // 每帧同步尺寸（不只依赖 canvas 变化）：窗口缩放/旋转/侧栏显隐时
-      // clientWidth 会变，必须实时跟进，否则模块卡片定位错乱
-      if (this.state.size.w !== w || this.state.size.h !== h) {
-        this.state.size = { w, h };
-      }
       if (this.refs.dustCanvas && (this.refs.dustCanvas.width !== w || this.refs.dustCanvas.height !== h)) {
         this.refs.dustCanvas.width = w;
         this.refs.dustCanvas.height = h;
+        this.state.size = { w, h };
       }
       try {
         this.step(now);
@@ -403,24 +399,10 @@ export class PortalEngine {
     const os = spring(S.orb.s, T.orb.s, dt, 40);
     const oo = spring(S.orb.o, 1, dt, 30);
 
-    // 渲染层安全钳：只拦真正的数值发散（NaN/巨大值），正常弹簧过冲不受影响
-    const W = L.size.w, H = L.size.h;
-    const osSafe = Number.isFinite(os) ? clamp(os, 50, 1000) : 300;
-    const oxSafe = Number.isFinite(ox) ? clamp(ox, -W, W * 2) : W / 2;
-    const oySafe = Number.isFinite(oy) ? clamp(oy, -H, H * 2) : H * 0.47;
-
     const coreEl = this.refs.core;
     if (coreEl) {
-      coreEl.style.transform = `translate3d(${oxSafe - osSafe / 2}px, ${oySafe - osSafe / 2}px, 0) scale(${osSafe / 340})`;
+      coreEl.style.transform = `translate3d(${ox - os / 2}px, ${oy - os / 2}px, 0) scale(${os / 340})`;
       coreEl.style.opacity = String(clamp(oo, 0, 1));
-    } else if (this.refs.stage) {
-      // 防御：core ref 若因重挂丢失，从 stage 里重查一次，避免圆球卡在左上角 (0,0)
-      const el = this.refs.stage.querySelector('.portal-core-hub') as HTMLElement | null;
-      if (el) {
-        this.refs.core = el;
-        el.style.transform = `translate3d(${oxSafe - osSafe / 2}px, ${oySafe - osSafe / 2}px, 0) scale(${osSafe / 340})`;
-        el.style.opacity = String(clamp(oo, 0, 1));
-      }
     }
 
     // 2. 星尘 canvas
@@ -465,14 +447,9 @@ export class PortalEngine {
       const o = spring(j.o, tg.o, dt, 40);
       j.cur = { x, y, s };
 
-      // 渲染层安全钳（同核心）：只拦真正的发散，正常过冲不受影响
-      const xSafe = Number.isFinite(x) ? clamp(x, -W, W * 2) : W / 2;
-      const ySafe = Number.isFinite(y) ? clamp(y, -H, H * 2) : H / 2;
-      const sSafe = Number.isFinite(s) ? clamp(s, 20, 500) : 120;
-
       const el = this.refs.modNodes[m.id];
       if (el) {
-        el.style.transform = `translate3d(${xSafe - sSafe / 2}px, ${ySafe - sSafe / 2}px, 0) scale(${sSafe / 120}) rotate(${tg.tilt}deg)`;
+        el.style.transform = `translate3d(${x - s / 2}px, ${y - s / 2}px, 0) scale(${s / 120}) rotate(${tg.tilt}deg)`;
         el.style.opacity = String(clamp(o, 0, 1));
         el.classList.toggle('node-active', m.id === L.mod);
         el.classList.toggle('node-dimmed', L.stage !== 'hub' && m.id !== L.mod);

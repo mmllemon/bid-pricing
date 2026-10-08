@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -31,7 +32,7 @@ from bidpricing import project_docs, project_overview, project_store
 from bidpricing import sqlite_store
 from bidpricing import well_library
 from bidpricing.atomic_io import atomic_write_text
-from bidpricing.deployment import log_event, safe_user, user_scope
+from bidpricing.deployment import log_event, safe_user, user_scope, user_scope_path
 from bidpricing.import_preview import build_listing_preview
 from bidpricing.io.boq import assert_price_columns_present, parse_listing
 from bidpricing.io.clean import clean_listing_rows
@@ -51,34 +52,70 @@ from bidpricing.validation.low_price_policy import DISPOSITION_NOTE
 
 # H-012 多用户隔离（不鉴权，仅目录级）：以运行账号作为命名空间，各用户方案互不相见。
 # 方案与方案组统一落到 SQLite，库文件沿用按用户重定向的 PROJECTS_DIR 模型。
+#
+# P1-3（2026-10-08）：import 期只保留**纯计算**（读环境变量 + 拼路径）；
+# 一切副作用（建目录、改写 sqlite_store / project_store 的全局 PROJECTS_DIR、
+# 跑迁移、打印告警）全部移进 lifespan。动因是实测到的假绿：
+#   `python -m unittest tests.test_project_credential.…test_real_project_passes`
+#   单跑 FAIL，整套 discover 却 OK。
+# 因为 import 时那句 `sqlite_store.PROJECTS_DIR = USER_PROJECTS` 会把测试自己
+# patch 的临时目录覆盖回真实用户目录；整套跑时 api.app 已被更早的用例 import 并缓存，
+# 模块体不再执行，于是「看起来是绿的」。判据：**import api.app 不得产生文件写入
+# 或跨模块状态改写**，由 tests/test_app_import_purity.py 机械守住。
 CURRENT_USER = safe_user(os.environ.get("USERNAME") or os.environ.get("USER") or "default")
-USER_PROJECTS = user_scope(ROOT / "outputs" / "projects", CURRENT_USER)
-project_store.PROJECTS_DIR = USER_PROJECTS
-sqlite_store.PROJECTS_DIR = USER_PROJECTS
+# 用 user_scope_path（纯路径）而非 user_scope（会 mkdir）：import 期不得碰文件系统。
+USER_PROJECTS = user_scope_path(ROOT / "outputs" / "projects", CURRENT_USER)
 LOG_DIR = ROOT / "outputs" / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-# 一次性种子迁移：仅当本用户库尚未建立时把既有 JSON 树幂等归库；
-# 此后库为唯一真相，避免把已在库中删除的方案从遗留 JSON 复活。
-if not sqlite_store.resolve_db_path().exists():
-    try:
-        sqlite_store.import_json_tree(source_dir=USER_PROJECTS)
-    except Exception as exc:  # noqa: BLE001 迁移失败不阻止服务启动
-        print(f"[bidpricing] SQLite 种子迁移失败（将跳过）：{exc}")
+WEB_OUTPUT_DIR = user_scope_path(ROOT / "outputs" / "web-results", CURRENT_USER)
 
-# B-P1-2 双真相收敛：projects.json → SQLite project 表一次性迁移（幂等）。
-# 迁移成功后把 projects.json 改名 .bak（保留 30 天，用户手动删）。
-# 此后 project_overview.* 全走 SQLite，projects.json 不再写入。
-try:
-    _pj = USER_PROJECTS / "projects.json"
-    if _pj.exists():
-        _n = sqlite_store.import_projects_json(source_dir=USER_PROJECTS)
-        if _n >= 0:
-            _bak = USER_PROJECTS / "projects.json.bak"
-            if not _bak.exists():
-                _pj.rename(_bak)
-                print(f"[bidpricing] projects.json 已迁入 SQLite（{_n} 个项目），原文件改名 .bak（30 天后可手动删）")
-except Exception as exc:  # noqa: BLE001 迁移失败不阻止服务启动
-    print(f"[bidpricing] projects.json 迁移失败（将跳过）：{exc}")
+
+def _apply_user_scope() -> None:
+    """把用户目录钉到两个存储模块（运行方后赋值口径，见 project_store 注释）。
+    只在启动钩子里调用，不在 import 时执行。"""
+    project_store.PROJECTS_DIR = USER_PROJECTS
+    sqlite_store.PROJECTS_DIR = USER_PROJECTS
+
+
+def _migrate_legacy_json_once() -> None:
+    """把既有 JSON 方案树与 projects.json 幂等归库到 SQLite。
+
+    种子迁移仅当本用户库尚未建立时跑；此后库为唯一真相，避免把已在库中
+    删除的方案从遗留 JSON 复活。projects.json 迁移成功后改名 .bak（保留 30 天，
+    用户手动删），此后 project_overview.* 全走 SQLite，projects.json 不再写入。
+    """
+    if not sqlite_store.resolve_db_path().exists():
+        try:
+            sqlite_store.import_json_tree(source_dir=USER_PROJECTS)
+        except Exception as exc:  # noqa: BLE001 迁移失败不阻止服务启动
+            print(f"[bidpricing] SQLite 种子迁移失败（将跳过）：{exc}")
+
+    try:
+        _pj = USER_PROJECTS / "projects.json"
+        if _pj.exists():
+            _n = sqlite_store.import_projects_json(source_dir=USER_PROJECTS)
+            if _n >= 0:
+                _bak = USER_PROJECTS / "projects.json.bak"
+                if not _bak.exists():
+                    _pj.rename(_bak)
+                    print(f"[bidpricing] projects.json 已迁入 SQLite（{_n} 个项目），原文件改名 .bak（30 天后可手动删）")
+    except Exception as exc:  # noqa: BLE001 迁移失败不阻止服务启动
+        print(f"[bidpricing] projects.json 迁移失败（将跳过）：{exc}")
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """启动钩子：原来全在 import 期执行的副作用，现只在服务真正起起来时跑一次。
+
+    顺序有意：token 强制模式先于任何文件写入——拒绝启动就不应留下半成品目录。
+    先 _apply_user_scope() 再迁移：迁移的目标库路径由 PROJECTS_DIR 决定。
+    """
+    _enforce_token_policy()
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    USER_PROJECTS.mkdir(parents=True, exist_ok=True)   # 路径在 import 期算，目录在此建
+    _apply_user_scope()
+    _migrate_legacy_json_once()
+    yield
 
 
 #: 单个上传文件上限（MB）。超过则直接拒绝，避免内存占用异常放大。
@@ -288,7 +325,7 @@ def _low_price_guard(params: dict, low_policy: dict) -> JSONResponse | None:
         return JSONResponse(status_code=400, content={"status": "NEEDS_CONFIRMATION", "reason": f"报价比率下限低于 {low_threshold:.0%}。这可能触发招标文件中的严重低价/废标审查，请确认招标文件允许后再计算。", "confirmation_required": True, "ratio_min": ratio_min, "ratio_max": ratio_max, "low_price_threshold": low_threshold, "clause_basis": clause_basis, "disposition_note": DISPOSITION_NOTE})
     return None
 
-app = FastAPI(title="工程智算报价 API", version="0.1.0")
+app = FastAPI(title="工程智算报价 API", version="0.1.0", lifespan=_lifespan)
 # 本机单机版：放行 localhost/127.0.0.1 的任意端口来源（前端端口可覆盖，见 run.ps1）。
 # 之前白名单写死端口：前端换端口（如 8080→8081 避让占用）就整站 CORS 拒绝、
 # 前端误报「后端服务不可达」。安全边界是 API Token / 目录级隔离，不是 CORS。
@@ -296,8 +333,8 @@ app.add_middleware(CORSMiddleware,
                    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
                    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                    allow_headers=["Authorization", "X-API-Token", "Content-Type", "Accept"])
-WEB_OUTPUT_DIR = user_scope(ROOT / "outputs" / "web-results", CURRENT_USER)
-WEB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+#: WEB_OUTPUT_DIR 已在文件顶部随其它路径一起算好（纯计算）；建目录移到 _lifespan。
 
 #: 槽位写入互斥锁：并发请求命中同组同策略槽位时，「读槽位 → 落 SQLite →
 #: 回写槽位」序列须原子化。
@@ -339,7 +376,17 @@ async def _access_log(request, call_next):
 # 须改为按请求头 X-User 动态切 user_scope（配合 token 保护），当前版本不支持。
 API_TOKEN = os.environ.get("BIDPRICING_API_TOKEN", "").strip()
 _REQUIRE_TOKEN = os.environ.get("BIDPRICING_REQUIRE_TOKEN", "").strip().lower() in ("1", "true", "yes", "on")
-if not API_TOKEN:
+
+
+def _enforce_token_policy() -> None:
+    """token 策略的执行部分（拒绝启动 / 打印告警）。
+
+    读环境变量（API_TOKEN / _REQUIRE_TOKEN）仍是模块级纯计算，只有这里的
+    raise 与 print 是副作用，故从 import 期移到 _lifespan 最前——
+    拒绝启动就不应在之前留下任何目录写入。
+    """
+    if API_TOKEN:
+        return
     if _REQUIRE_TOKEN:
         raise RuntimeError(
             "BIDPRICING_REQUIRE_TOKEN 已设置但 BIDPRICING_API_TOKEN 未设置。"

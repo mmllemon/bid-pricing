@@ -33,9 +33,19 @@ def safe_user(raw: str | None) -> str:
     return s[:_USER_MAX]
 
 
+def user_scope_path(base_dir: Path | str, user: str | None) -> Path:
+    """返回 ``base_dir/<safe_user>``，**不碰文件系统**。
+
+    只想要路径（如在模块导入期算常量）时用本函数；`user_scope` 会建目录，
+    因而不能出现在不得有副作用的 import 路径上（P1-3：`api/app.py` 曾因
+    import 期建目录而伪装出「单跑 FAIL / 整套 OK」的假绿）。
+    """
+    return Path(base_dir) / safe_user(user)
+
+
 def user_scope(base_dir: Path | str, user: str | None) -> Path:
     """返回 ``base_dir/<safe_user>``，并确保目录存在。"""
-    p = Path(base_dir) / safe_user(user)
+    p = user_scope_path(base_dir, user)
     p.mkdir(parents=True, exist_ok=True)
     return p
 

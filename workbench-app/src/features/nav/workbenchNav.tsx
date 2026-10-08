@@ -21,6 +21,7 @@ export interface WorkbenchNavItem {
 export const WORKBENCH_NAV: WorkbenchNavItem[] = [
   { to: '/', label: '今日', code: 'H-01', icon: <IconHome /> },
   { to: '/biz', label: '项目经营', code: 'M-01', icon: <IconBriefcase /> },
+  { to: '/graph', label: '关联图谱', code: 'G-09', icon: <IconBrain /> },
   { to: '/todos', label: '待办', code: 'T-02', icon: <IconTodo /> },
   { to: '/finance', label: '财务分析', code: 'F-08', icon: <Wallet width={24} height={24} /> },
   { to: '/hotspots', label: '热点雷达', code: 'R-04', icon: <IconHotspot /> },

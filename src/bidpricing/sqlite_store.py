@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS exec_material (
   qty REAL,
   price REAL,
   amount REAL,
+  paid REAL DEFAULT 0,  -- B-P1-2 图谱：已付金额（与 exec_subcontract.paid 对齐）
   supplier TEXT,
   date TEXT,
   status TEXT NOT NULL DEFAULT '待采购',
@@ -283,7 +284,18 @@ def _connect(db: Path | str | None) -> sqlite3.Connection:
     # 拉长持锁时间）；对象齐备即跳过，不齐备则全量补齐（幂等）。
     if not _schema_complete(conn):
         conn.executescript(_SCHEMA)
+    # 列级迁移（幂等）：已存在的库补列
+    _migrate_columns(conn)
     return conn
+
+
+def _migrate_columns(conn: sqlite3.Connection) -> None:
+    """幂等列迁移：给已存在的表补新列。"""
+    # exec_material.paid（2026-10-08 图谱：供应商已付金额）
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(exec_material)").fetchall()}
+    if "paid" not in cols:
+        conn.execute("ALTER TABLE exec_material ADD COLUMN paid REAL DEFAULT 0")
+        conn.commit()
 
 
 def _as_bool(v: Any) -> bool:
@@ -1210,7 +1222,7 @@ _EXEC_FIELDS = {
                    "approved_date", "status", "note"),
     "subcontract": ("subcontractor", "scope", "amount", "signed_at", "paid",
                     "settled_amount", "status", "note"),
-    "material": ("name", "spec", "unit", "qty", "price", "amount",
+    "material": ("name", "spec", "unit", "qty", "price", "amount", "paid",
                  "supplier", "date", "status", "note"),
 }
 
@@ -1378,3 +1390,178 @@ def exec_summary(project_id: str | None = None,
         "subcontract_payable": round(subcontract_total - subcontract_paid, 2),
         "material_total": round(material_total, 2),
     }
+
+
+# ---------------------------------------------------------------------------
+# 关联图谱（2026-10-08 liam 提出）：单位 ↔ 项目关系网
+# ---------------------------------------------------------------------------
+
+def list_graph_units(db: Path | str | None = None) -> list[dict[str, Any]]:
+    """列出所有往来单位（去重），按角色分组。
+
+    role: 'client'（建设单位，来自 exec_contract.client）
+          'subcontractor'（劳务/分包，来自 exec_subcontract.subcontractor）
+          'supplier'（供应商，来自 exec_material.supplier）
+    """
+    conn = _connect(db)
+    try:
+        units: dict[tuple[str, str], dict[str, Any]] = {}
+        # 建设单位
+        for r in conn.execute(
+            "SELECT DISTINCT client FROM exec_contract WHERE client IS NOT NULL AND client != ''"
+        ).fetchall():
+            name = r["client"].strip()
+            if name:
+                units[("client", name)] = {"name": name, "role": "client", "project_count": 0, "total_amount": 0}
+        # 劳务/分包
+        for r in conn.execute(
+            "SELECT DISTINCT subcontractor FROM exec_subcontract WHERE subcontractor IS NOT NULL AND subcontractor != ''"
+        ).fetchall():
+            name = r["subcontractor"].strip()
+            if name:
+                units[("subcontractor", name)] = {"name": name, "role": "subcontractor", "project_count": 0, "total_amount": 0}
+        # 供应商
+        for r in conn.execute(
+            "SELECT DISTINCT supplier FROM exec_material WHERE supplier IS NOT NULL AND supplier != ''"
+        ).fetchall():
+            name = r["supplier"].strip()
+            if name:
+                units[("supplier", name)] = {"name": name, "role": "supplier", "project_count": 0, "total_amount": 0}
+        # 统计每个单位的项目数和总金额
+        for (role, name), u in units.items():
+            if role == "client":
+                rows = conn.execute(
+                    "SELECT project_id, SUM(amount) as t FROM exec_contract WHERE client = ? GROUP BY project_id",
+                    (name,)).fetchall()
+            elif role == "subcontractor":
+                rows = conn.execute(
+                    "SELECT project_id, SUM(amount) as t FROM exec_subcontract WHERE subcontractor = ? GROUP BY project_id",
+                    (name,)).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT project_id, SUM(amount) as t FROM exec_material WHERE supplier = ? GROUP BY project_id",
+                    (name,)).fetchall()
+            u["project_count"] = len(rows)
+            u["total_amount"] = round(sum((r["t"] or 0) for r in rows), 2)
+        result = sorted(units.values(), key=lambda x: (-x["total_amount"], x["name"]))
+        return result
+    finally:
+        conn.close()
+
+
+def get_graph_unit(name: str, role: str, db: Path | str | None = None) -> dict[str, Any] | None:
+    """点一个单位，返回它参与的所有项目 + 每个项目的合同/已付/应付。"""
+    name = (name or "").strip()
+    if not name or role not in ("client", "subcontractor", "supplier"):
+        return None
+    conn = _connect(db)
+    try:
+        # 先确认单位存在
+        exists = False
+        if role == "client":
+            exists = conn.execute("SELECT 1 FROM exec_contract WHERE client = ? LIMIT 1", (name,)).fetchone()
+        elif role == "subcontractor":
+            exists = conn.execute("SELECT 1 FROM exec_subcontract WHERE subcontractor = ? LIMIT 1", (name,)).fetchone()
+        else:
+            exists = conn.execute("SELECT 1 FROM exec_material WHERE supplier = ? LIMIT 1", (name,)).fetchone()
+        if not exists:
+            return None
+
+        projects: dict[str, dict[str, Any]] = {}
+        if role == "client":
+            rows = conn.execute(
+                "SELECT project_id, contract_no, amount FROM exec_contract WHERE client = ?", (name,)).fetchall()
+            for r in rows:
+                pid = r["project_id"]
+                p = projects.setdefault(pid, {"project_id": pid, "contracts": [], "total_amount": 0})
+                p["contracts"].append({"type": "收入合同", "no": r["contract_no"], "amount": r["amount"] or 0})
+                p["total_amount"] = round(p["total_amount"] + (r["amount"] or 0), 2)
+            # 查每个项目的已收（从 exec_payment 汇总）
+            for pid, p in projects.items():
+                received = conn.execute(
+                    "SELECT SUM(received) as t FROM exec_payment WHERE project_id = ?", (pid,)).fetchone()["t"] or 0
+                p["total_paid"] = round(received, 2)
+                p["total_payable"] = round(p["total_amount"] - received, 2)
+        elif role == "subcontractor":
+            rows = conn.execute(
+                "SELECT project_id, scope, amount, paid, status FROM exec_subcontract WHERE subcontractor = ?",
+                (name,)).fetchall()
+            for r in rows:
+                pid = r["project_id"]
+                p = projects.setdefault(pid, {"project_id": pid, "contracts": [], "total_amount": 0, "total_paid": 0})
+                amt, paid = r["amount"] or 0, r["paid"] or 0
+                p["contracts"].append({"type": "分包", "scope": r["scope"], "amount": amt,
+                                       "paid": paid, "payable": round(amt - paid, 2), "status": r["status"]})
+                p["total_amount"] = round(p["total_amount"] + amt, 2)
+                p["total_paid"] = round(p["total_paid"] + paid, 2)
+            for p in projects.values():
+                p["total_payable"] = round(p["total_amount"] - p["total_paid"], 2)
+        else:  # supplier
+            rows = conn.execute(
+                "SELECT project_id, name, spec, amount, paid, status FROM exec_material WHERE supplier = ?",
+                (name,)).fetchall()
+            for r in rows:
+                pid = r["project_id"]
+                p = projects.setdefault(pid, {"project_id": pid, "contracts": [], "total_amount": 0, "total_paid": 0})
+                amt, paid = r["amount"] or 0, r["paid"] or 0
+                p["contracts"].append({"type": "材料", "name": r["name"], "spec": r["spec"],
+                                       "amount": amt, "paid": paid,
+                                       "payable": round(amt - paid, 2), "status": r["status"]})
+                p["total_amount"] = round(p["total_amount"] + amt, 2)
+                p["total_paid"] = round(p["total_paid"] + paid, 2)
+            for p in projects.values():
+                p["total_payable"] = round(p["total_amount"] - p["total_paid"], 2)
+
+        # 补项目名称
+        for pid, p in projects.items():
+            prow = conn.execute("SELECT name FROM project WHERE id = ?", (pid,)).fetchone()
+            p["project_name"] = prow["name"] if prow else pid[:8]
+
+        plist = sorted(projects.values(), key=lambda x: -x["total_amount"])
+        return {
+            "unit": {"name": name, "role": role},
+            "projects": plist,
+            "project_count": len(plist),
+            "grand_total": round(sum(p["total_amount"] for p in plist), 2),
+            "grand_payable": round(sum(p.get("total_payable", 0) for p in plist), 2),
+        }
+    finally:
+        conn.close()
+
+
+def get_graph_project(project_id: str, db: Path | str | None = None) -> dict[str, Any] | None:
+    """点一个项目，返回它关联的所有单位（按角色分组）。"""
+    pid = (project_id or "").strip()
+    if not pid:
+        return None
+    conn = _connect(db)
+    try:
+        prow = conn.execute("SELECT id, name FROM project WHERE id = ?", (pid,)).fetchone()
+        if not prow:
+            return None
+        clients = [{"name": r["client"], "amount": r["amount"] or 0}
+                   for r in conn.execute(
+                       "SELECT client, amount FROM exec_contract WHERE project_id = ?", (pid,)).fetchall()
+                   if r["client"]]
+        subcontractors = [{"name": r["subcontractor"], "scope": r["scope"], "amount": r["amount"] or 0,
+                           "paid": r["paid"] or 0,
+                           "payable": round((r["amount"] or 0) - (r["paid"] or 0), 2),
+                           "status": r["status"]}
+                          for r in conn.execute(
+                              "SELECT subcontractor, scope, amount, paid, status FROM exec_subcontract WHERE project_id = ?",
+                              (pid,)).fetchall()
+                          if r["subcontractor"]]
+        suppliers = [{"name": r["supplier"], "material": r["name"], "amount": r["amount"] or 0,
+                      "paid": r["paid"] or 0,
+                      "payable": round((r["amount"] or 0) - (r["paid"] or 0), 2)}
+                     for r in conn.execute(
+                         "SELECT supplier, name, amount, paid FROM exec_material WHERE project_id = ?",
+                         (pid,)).fetchall()
+                     if r["supplier"]]
+        return {
+            "project": {"id": prow["id"], "name": prow["name"]},
+            "units": {"clients": clients, "subcontractors": subcontractors, "suppliers": suppliers},
+            "unit_count": len(clients) + len(subcontractors) + len(suppliers),
+        }
+    finally:
+        conn.close()

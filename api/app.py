@@ -927,6 +927,32 @@ def overview_export():
     )
 
 
+# ===== 关联图谱（2026-10-08 liam 提出）：单位 ↔ 项目关系网 =====
+
+@app.get("/api/graph/units")
+def graph_units() -> JSONResponse:
+    """列出所有往来单位（去重，按角色）。"""
+    return JSONResponse(content={"status": "PASS", "units": sqlite_store.list_graph_units()})
+
+
+@app.get("/api/graph/unit")
+def graph_unit(name: str = "", role: str = "") -> JSONResponse:
+    """点一个单位，返回它参与的所有项目 + 合同/已付/应付。"""
+    data = sqlite_store.get_graph_unit(name.strip(), role.strip())
+    if data is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "单位不存在"})
+    return JSONResponse(content={"status": "PASS", **data})
+
+
+@app.get("/api/graph/project")
+def graph_project(id: str = "") -> JSONResponse:
+    """点一个项目，返回它关联的所有单位（按角色分组）。"""
+    data = sqlite_store.get_graph_project(id.strip())
+    if data is None:
+        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "项目不存在"})
+    return JSONResponse(content={"status": "PASS", **data})
+
+
 @app.post("/api/project/overview/finalize")
 def overview_finalize(id: str = Form(...), bid_amount: str = Form(""), bid_cost: str = Form("")):
     """报价定稿回写：把最终投标报价金额与投标成本测算写回对应项目，自动派生毛利/毛利率。"""

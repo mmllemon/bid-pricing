@@ -8355,3 +8355,52 @@ details.spec .hint { margin: 6px 0; }
 .agent-suggest,
 .agent-settings .as-active,
 .agent-settings-foot button{font-size:13px}
+
+/* ===== 关联图谱 /graph（2026-10-08） ===== */
+.graph-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+  margin-top: 16px;
+}
+@media (max-width: 900px) {
+  .graph-layout { grid-template-columns: 1fr; }
+}
+.graph-canvas {
+  min-height: 420px;
+  overflow: auto;
+}
+.graph-detail {
+  max-height: 80vh;
+  overflow: auto;
+}
+.graph-detail-head h3 {
+  margin: 8px 0 4px;
+  font-size: 18px;
+}
+.graph-project-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.graph-project-card {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.graph-project-name a {
+  font-weight: 700;
+  color: #111;
+  text-decoration: none;
+}
+.graph-project-name a:hover { text-decoration: underline; }
+.graph-project-amounts {
+  display: flex;
+  gap: 12px;
+  margin: 6px 0;
+  font-size: 13px;
+}
+.graph-project-amounts b { font-family: var(--font-data); }
+.graph-payable b { color: #dc2626; }
+.graph-contracts { margin-top: 4px; }

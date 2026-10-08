@@ -9,6 +9,7 @@ import KnowledgePage from './pages/Knowledge';
 import FinancePage from './pages/Finance';
 import BizPage from './pages/Biz';
 import BizDetailPage from './pages/BizDetail';
+import GraphPage from './pages/Graph';
 import PortalPage from './features/portal/Portal';
 import ToolsHome from './features/tools/ToolsHome';
 import ToolDuct from './features/tools/ToolDuct';
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/finance" element={<FinancePage />} />
             <Route path="/biz" element={<BizPage />} />
             <Route path="/biz/:id" element={<BizDetailPage />} />
+            <Route path="/graph" element={<GraphPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Routes>

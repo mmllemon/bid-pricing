@@ -151,6 +151,23 @@ def _validate_quote_params(*, vat_rate, surtax_rate, target_total, fixed_pretax,
     return None
 
 
+def _resolve_project_credential(project_id: str) -> tuple[str, JSONResponse | None]:
+    """项目凭证存在性校验（B-P1-5）。
+
+    返回 (proj_uuid, 拦阻响应）。拦阻时第二项是 403 JSONResponse，调用方直接 return。
+    刀口只钉「非空且非哨兵且非真实」一种：
+      - 空字符串 = 前端未选项目（允许，落孤儿聚合也保持旧行为）；
+      - "当前项目" = AI 助手 run_calculation 不传 project_id 的哨兵（允许）；
+      - 其余任意字符串流入会使方案 group 的 project_id 成为无归属孤儿（下 A2
+        的组归属校验拦不住——因为组会被建在该孤儿名下）。存在性（非格式）才是真实防线。
+    """
+    uid = (project_id or "").strip()
+    if uid and uid != "当前项目" and project_overview.get_project(uid) is None:
+        return uid, JSONResponse(status_code=403, content={"status": "FORBIDDEN",
+            "reason": f"关联项目不存在：{uid!r} 不在经营概览中。请先在「项目经营概览」新建项目，再选择该项目测算"})
+    return uid, None
+
+
 async def _read_upload_limited(file: UploadFile, max_mb: int = _MAX_UPLOAD_MB,
                               check_xlsx: bool = True) -> tuple[bytes | None, str | None]:
     """分块读取 UploadFile 并检查体积；超限立即中止返回 (None, reason)，正常返回 (data, None)。
@@ -510,8 +527,10 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         credit_ratio=credit_ratio, ratio_min=ratio_min, ratio_max=ratio_max)
     if _param_err is not None:
         return _param_err
-    # 项目凭证：project_id 必须为经营概览的真实项目 id（UUID）；project_name 仅用于展示/目录/文件名。
-    proj_uuid = project_id.strip()
+    # 项目凭证（B-P1-5）：见 _resolve_project_credential 的刀口说明。
+    proj_uuid, blocked = _resolve_project_credential(project_id)
+    if blocked is not None:
+        return blocked
     proj_name = project_name.strip() or proj_uuid or "当前项目"
     low_policy, _, _ = _load_low_policy()
     tax_override = _build_tax_override(input_vat_credit_mode, cost_input_vat_rate, credit_ratio, cost_composition)
@@ -658,7 +677,12 @@ def group_list(project_id: str = "") -> JSONResponse:
 @app.post("/api/group/create")
 def group_create(project_id: str = Form(""), project_name: str = Form(""),
                  name: str = Form(""), target_total: float = Form(None)) -> JSONResponse:
-    g = create_group(project_id.strip() or None, project_name.strip() or None,
+    # B-P1-5：与 optimize_quote 同口径——project_id 非哨兵时必须是真实概览 id，
+    # 否则建出无归属孤儿组。复用同一单点（刀口说明见 _resolve_project_credential）。
+    proj_uuid, blocked = _resolve_project_credential(project_id)
+    if blocked is not None:
+        return blocked
+    g = create_group(proj_uuid or None, project_name.strip() or None,
                      group_name=name.strip() or None, target_total=target_total)
     # B-P1-9：建组是状态变更起点，无审计则后续 GROUP 操作全无可追溯性。
     append_audit(CURRENT_USER, "group.create", "PASS",

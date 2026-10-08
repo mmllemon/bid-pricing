@@ -403,12 +403,11 @@ export class PortalEngine {
     const os = spring(S.orb.s, T.orb.s, dt, 40);
     const oo = spring(S.orb.o, 1, dt, 30);
 
-    // 渲染层安全钳：弹簧若因异常 dt/NaN 发散，强制钳回合理范围，
-    // 圆球永远不会巨大化或飞出视口（用户 2026-10-08 反馈圆球顶出视口）
+    // 渲染层安全钳：只拦真正的数值发散（NaN/巨大值），正常弹簧过冲不受影响
     const W = L.size.w, H = L.size.h;
-    const osSafe = Number.isFinite(os) ? clamp(os, 120, 420) : 300;
-    const oxSafe = Number.isFinite(ox) ? clamp(ox, 0, W) : W / 2;
-    const oySafe = Number.isFinite(oy) ? clamp(oy, 0, H) : H * 0.47;
+    const osSafe = Number.isFinite(os) ? clamp(os, 50, 1000) : 300;
+    const oxSafe = Number.isFinite(ox) ? clamp(ox, -W, W * 2) : W / 2;
+    const oySafe = Number.isFinite(oy) ? clamp(oy, -H, H * 2) : H * 0.47;
 
     const coreEl = this.refs.core;
     if (coreEl) {
@@ -466,10 +465,10 @@ export class PortalEngine {
       const o = spring(j.o, tg.o, dt, 40);
       j.cur = { x, y, s };
 
-      // 渲染层安全钳（同核心）：防弹簧发散导致卡片巨大化/飞出视口
-      const xSafe = Number.isFinite(x) ? clamp(x, -40, W + 40) : W / 2;
-      const ySafe = Number.isFinite(y) ? clamp(y, -40, H + 40) : H / 2;
-      const sSafe = Number.isFinite(s) ? clamp(s, 40, 200) : 120;
+      // 渲染层安全钳（同核心）：只拦真正的发散，正常过冲不受影响
+      const xSafe = Number.isFinite(x) ? clamp(x, -W, W * 2) : W / 2;
+      const ySafe = Number.isFinite(y) ? clamp(y, -H, H * 2) : H / 2;
+      const sSafe = Number.isFinite(s) ? clamp(s, 20, 500) : 120;
 
       const el = this.refs.modNodes[m.id];
       if (el) {

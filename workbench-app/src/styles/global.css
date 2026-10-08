@@ -335,7 +335,7 @@ select.nb-input {
 
 .nb-big-number,
 .ui-data {
-  font-family: var(--font-mono);
+  font-family: var(--font-data);
   font-size: 32px;
   font-weight: 400;
   line-height: 1;
@@ -521,7 +521,7 @@ select.nb-input {
   color: var(--text-muted);
 }
 .qv-metrics .v {
-  font-family: var(--font-mono);
+  font-family: var(--font-data);
   font-size: 16px;
   font-weight: 700;
 }
@@ -558,7 +558,7 @@ select.nb-input {
   margin-left: 6px;
 }
 .qv-link-count {
-  font-family: var(--font-mono);
+  font-family: var(--font-data);
   font-size: 18px;
   font-weight: 700;
 }
@@ -606,7 +606,7 @@ select.nb-input {
   margin-left: 6px;
 }
 .kpi-band .kpi-value {
-  font-family: var(--font-mono);
+  font-family: var(--font-data);
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -6459,7 +6459,7 @@ body:has(.portal-view:not(.hidden)) {
 .snap-kpi-band > div:first-child { border-left: 0; }
 .snap-kpi-band span { font-size: 11px; color: #666; }
 .snap-kpi-band span em { color: #aaa; font-style: normal; }
-.snap-kpi-band strong { font-family: var(--font-mono); font-size: 28px; font-weight: 800; }
+.snap-kpi-band strong { font-family: var(--font-data); font-size: 28px; font-weight: 800; }
 
 .snap-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 22px; }
 
@@ -6480,7 +6480,7 @@ body:has(.portal-view:not(.hidden)) {
 .snap-perf .t-title { display: block; font-weight: 700; margin-bottom: 6px; }
 .snap-perf .t-bar { display: block; height: 5px; background: rgba(17, 17, 17, 0.1); }
 .snap-perf .t-bar i { display: block; height: 100%; background: #ff6b00; }
-.snap-perf .t-num { font-family: var(--font-mono); text-align: right; white-space: nowrap; }
+.snap-perf .t-num { font-family: var(--font-data); text-align: right; white-space: nowrap; }
 .snap-foot { margin: 12px 0 0; font-size: 11.5px; color: #888; }
 .snap-foot em { color: #bbb; font-style: normal; }
 
@@ -6592,7 +6592,7 @@ body:has(.portal-view:not(.hidden)) {
 .dock-kpis > div:first-child { border-left: 0; padding-left: 0; }
 .dock-kpis span { font-size: 10.5px; color: #666; white-space: nowrap; }
 .dock-kpis span em { color: #aaa; font-style: normal; }
-.dock-kpis strong { font-family: var(--font-mono); font-size: 20px; font-weight: 800; }
+.dock-kpis strong { font-family: var(--font-data); font-size: 20px; font-weight: 800; }
 .dock-hint {
   display: flex;
   align-items: center;

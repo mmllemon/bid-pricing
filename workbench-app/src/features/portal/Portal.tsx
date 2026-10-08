@@ -23,6 +23,7 @@ export default function PortalPage() {
   const [branch, setBranch] = useState<string | null>(null);
   const [item, setItem] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
+  const [docked, setDocked] = useState(false);
 
   // DOM refs
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -165,9 +166,10 @@ export default function PortalPage() {
   );
 
   const stageClass = stage === 'hub' ? 'stage-hub' : stage === 'module' ? 'stage-module' : 'stage-item';
+  const dockedClass = docked ? ' is-docked' : '';
 
   return (
-    <div className={`portal-view ${stageClass}`} ref={scrollerRef}>
+    <div className={`portal-view ${stageClass}${dockedClass}`} ref={scrollerRef}>
       {/* 顶部导航已由 AppShell 的 SiteTopBar 提供（全站统一），本组件不再自带顶栏。 */}
       {/* 舞台：一屏高，动画层都在里面 */}
       <div className="portal-stage" ref={stageRef}>
@@ -332,15 +334,7 @@ export default function PortalPage() {
           onClose={doReturnToModule}
           onExpandChange={(expanded) => {
             engineRef.current?.setDocked(expanded);
-          }}
-          projects={leafItems}
-          onSelectProject={(id) => {
-            // 展开态切换项目：保持展开，换数据
-            const eng = engineRef.current;
-            if (eng) {
-              eng.selectItem(id);
-              syncFromEngine();
-            }
+            setDocked(expanded);
           }}
           onEnter={() => {
             if (!activeModule) return;

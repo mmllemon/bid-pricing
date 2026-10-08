@@ -98,14 +98,23 @@ export function targets(
   const leafItemsOf = (mod: string, branch: string | null): PortalItem[] =>
     itemOverride ?? getItems(mod, branch as string);
 
-  // 停靠态（2026-10-08 Step B 修：不显示模块列表，抽屉全宽只看项目）
-  // 之前把 7 个模块钉在左边是错的——用户点的是项目，项目节点反而消失了。
-  // 注意：点项目卡后 stage 是 'item' 不是 'module'（2026-10-08 修：之前写错导致 docked 永不生效）
+  // 停靠态（2026-10-08）：项目节点本身钉在左侧成导航（用户原意）
+  // 点"展开"的项目卡不动地方？不——它滑到最左垂直排成导航，抽屉在右展开。
+  // 注意：点项目卡后 stage 是 'item'（2026-10-08 修：之前写 stage==='module' 导致永不生效）
   if (L.docked && (L.stage === 'module' || L.stage === 'item') && L.mod) {
     const res: Layout = { orb: { x: -1000, y: -1000, s: 0 }, jelly: {}, branches: null, leaves: null };
+    // 模块/分支全部藏掉
     MODULES.forEach((m) => {
       res.jelly[m.id] = { x: -1000, y: -1000, s: 0, o: 0, tilt: 0 };
     });
+    // 项目卡在左侧垂直排成导航
+    const items = itemOverride ?? getItems(L.mod as string, L.branch as string);
+    const n = items.length;
+    res.leaves = {
+      x: 10,
+      y0: 140,
+      gap: n > 1 ? Math.min(84, (H - 280) / (n - 1)) : 0,
+    };
     return res;
   }
   const st = L.stage;

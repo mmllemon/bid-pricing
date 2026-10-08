@@ -478,11 +478,26 @@ export default function BizDetailPage() {
     return () => document.removeEventListener('keydown', onKey);
   }, [showEdit]);
 
+  // Esc 返回项目库（编辑弹窗打开时优先关弹窗）
+  useEffect(() => {
+    if (showEdit) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') navigate('/biz'); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showEdit, navigate]);
+
   const myTodos = todos.filter((t) => t.projectId === pid);
   const quoteUrl = API_BASE + '/';
 
   return (
     <div className="ui-page">
+      <nav className="breadcrumb" aria-label="面包屑">
+        <a href="#/biz" className="crumb-link">项目库</a>
+        <span> / </span>
+        <span>{project ? (project.short_name || project.name || '项目主页') : '项目主页'}</span>
+        <span> / </span>
+        <span>{TABS.find(([k]) => k === tab)?.[1] || ''}</span>
+      </nav>
       <PageHead
         zh="项目主页"
         en="Project"

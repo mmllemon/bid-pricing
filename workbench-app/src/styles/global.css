@@ -455,6 +455,124 @@ select.nb-input {
   padding-bottom: 2px;
 }
 
+/* ===== BizQuickView：项目快览面板（右侧滑出） ===== */
+.qv-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 17, 17, 0.35);
+  z-index: var(--z-modal, 1000);
+  display: flex;
+  justify-content: flex-end;
+}
+.qv-panel {
+  width: min(380px, 92vw);
+  height: 100%;
+  background: var(--ui-white);
+  border-left: var(--line-strong);
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: qv-slide-in 0.25s ease-out both;
+}
+@keyframes qv-slide-in {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qv-panel { animation: none; }
+}
+.qv-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.qv-title {
+  font-size: 20px;
+  margin: 0;
+  line-height: 1.3;
+}
+.qv-x {
+  flex-shrink: 0;
+}
+.qv-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.qv-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line, #e5e5e5);
+  border: var(--line);
+}
+.qv-metrics > div {
+  background: var(--ui-white);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.qv-metrics .l {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.qv-metrics .v {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+}
+.qv-metrics .v.neg { color: var(--ui-red, #d33); }
+.qv-metrics .v.pos { color: var(--ui-green, #1a7a1a); }
+.qv-links {
+  display: flex;
+  flex-direction: column;
+  border: var(--line-strong);
+}
+.qv-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: none;
+  border: 0;
+  border-bottom: var(--line);
+  cursor: pointer;
+  font-family: var(--font);
+  text-align: left;
+  width: 100%;
+}
+.qv-link:last-child { border-bottom: 0; }
+.qv-link:hover { background: var(--ui-yellow); }
+.qv-link-label { font-size: 14px; }
+.qv-link-label em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+.qv-link-count {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+}
+.qv-enter {
+  margin-top: 4px;
+  justify-content: center;
+}
+.qv-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0;
+}
+
 /* ===== kpi-band：通栏 KPI 横条（借鉴参考项目作品库） ===== */
 .kpi-band {
   display: grid;

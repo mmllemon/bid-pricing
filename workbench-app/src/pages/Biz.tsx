@@ -4,6 +4,7 @@ import { API_BASE, pct, toNum, yf } from './bizShared';
 import type { ProjectOverview } from './bizShared';
 import { useNavigate } from 'react-router-dom';
 import PageHead from '../components/PageHead';
+import BizQuickView from './BizQuickView';
 
 /**
  * 项目经营（M-01）：母项目「除个人工作台外唯一保留」的功能区，整体迁自
@@ -446,6 +447,14 @@ export default function BizPage() {
 
   const openNew = () => { setEditing(null); setShowModal(true); };
 
+  // 快览面板：卡片点击先滑出快览，再点「进入项目主页」才跳转整页
+  const [quickView, setQuickView] = useState<ProjectOverview | null>(null);
+  const openQuickView = (p: ProjectOverview) => setQuickView(p);
+  const enterDetail = (p: ProjectOverview) => {
+    setQuickView(null);
+    navigate(`/biz/${p.id}`);
+  };
+
   return (
     <div className="ui-page">
       <PageHead zh="项目库" en="Projects" sub="每个项目，都是一盘生意。" subEn="Every project is a business — stages, money and risks at a glance.">
@@ -522,7 +531,7 @@ export default function BizPage() {
                     <div className="biz-col-body" style={bodyStyle}>
                       {arr.length === 0
                         ? <div className="biz-col-empty">—</div>
-                        : arr.map((p, i) => <BizCard key={p.id} p={p} index={i} todoCount={todoCountByProject.get(p.id) || 0} onOpen={(pp) => navigate(`/biz/${pp.id}`)} />)}
+                        : arr.map((p, i) => <BizCard key={p.id} p={p} index={i} todoCount={todoCountByProject.get(p.id) || 0} onOpen={openQuickView} />)}
                     </div>
                   </div>
                 );
@@ -533,7 +542,7 @@ export default function BizPage() {
               <summary>未中标归档（{archived.length}）</summary>
               {archived.length > 0 && (
                 <div className="biz-arch-grid">
-                  {archived.map((p) => <BizCard key={p.id} p={p} todoCount={todoCountByProject.get(p.id) || 0} onOpen={(pp) => navigate(`/biz/${pp.id}`)} />)}
+                  {archived.map((p) => <BizCard key={p.id} p={p} todoCount={todoCountByProject.get(p.id) || 0} onOpen={openQuickView} />)}
                 </div>
               )}
             </details>
@@ -551,6 +560,15 @@ export default function BizPage() {
           todos={todos}
           onClose={() => setShowModal(false)}
           onSaved={load}
+        />
+      )}
+
+      {quickView && (
+        <BizQuickView
+          project={quickView}
+          todoCount={todoCountByProject.get(quickView.id) || 0}
+          onClose={() => setQuickView(null)}
+          onEnter={enterDetail}
         />
       )}
     </div>

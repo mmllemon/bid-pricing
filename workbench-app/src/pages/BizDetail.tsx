@@ -4,6 +4,8 @@ import { API_BASE, pct, yf } from './bizShared';
 import type { ExecSummary, ProjectOverview } from './bizShared';
 import { BizEditModal } from './Biz';
 import type { TodoLite } from './Biz';
+import { useConfirm } from '../components/confirm';
+import { useToast } from '../components/toast';
 
 /**
  * 项目主页（M-01 详情）：/biz/:id
@@ -170,6 +172,8 @@ function fmtSize(n: unknown): string {
 function DocsSection({ projectId }: { projectId: string }) {
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const confirm = useConfirm();
+  const toast = useToast();
   const [uploading, setUploading] = useState(false);
   const [category, setCategory] = useState('其他');
 
@@ -199,14 +203,14 @@ function DocsSection({ projectId }: { projectId: string }) {
       if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '上传失败');
       load();
     } catch (err) {
-      window.alert(`上传失败：${err instanceof Error ? err.message : String(err)}`);
+      toast(`上传失败：${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
       setUploading(false);
     }
   }
 
   async function del(name: string) {
-    if (!window.confirm(`确定删除文档「${name}」？此操作不可恢复。`)) return;
+    if (!(await confirm(`确定删除文档「${name}」？`, { danger: true, title: '删除文档', sub: '此操作不可恢复。', okLabel: '仍要删除', ariaLabel: '删除文档' }))) return;
     const data = new FormData();
     data.append('project_id', projectId);
     data.append('name', name);
@@ -216,7 +220,7 @@ function DocsSection({ projectId }: { projectId: string }) {
       if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '删除失败');
       load();
     } catch (err) {
-      window.alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+      toast(`删除失败：${err instanceof Error ? err.message : String(err)}`, 'error');
     }
   }
 
@@ -269,6 +273,8 @@ function DocsSection({ projectId }: { projectId: string }) {
 function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: string }) {
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
+  const confirm = useConfirm();
+  const toast = useToast();
   const [editing, setEditing] = useState<Record<string, string> | null>(null);
 
   const load = useCallback(() => {
@@ -310,12 +316,12 @@ function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: str
       setEditing(null);
       load();
     } catch (err) {
-      window.alert(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+      toast(`保存失败：${err instanceof Error ? err.message : String(err)}`, 'error');
     }
   }
 
   async function del(row: Record<string, unknown>) {
-    if (!window.confirm('确定删除这条记录？此操作不可恢复。')) return;
+    if (!(await confirm('确定删除这条记录？', { danger: true, title: '删除记录', sub: '此操作不可恢复。', okLabel: '仍要删除', ariaLabel: '删除记录' }))) return;
     try {
       const r = await fetch(`${API_BASE}/api/project/exec/${table.key}/delete`, {
         method: 'POST',
@@ -326,7 +332,7 @@ function ExecSection({ table, projectId }: { table: ExecTableDef; projectId: str
       if (!r.ok || j.status !== 'PASS') throw new Error(j.reason || '删除失败');
       load();
     } catch (err) {
-      window.alert(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+      toast(`删除失败：${err instanceof Error ? err.message : String(err)}`, 'error');
     }
   }
 

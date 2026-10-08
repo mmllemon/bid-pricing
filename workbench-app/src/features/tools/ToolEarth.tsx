@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { calcEarth, EARTH_RULE_PRESETS, type EarthRow, type EarthRule } from './toolsCalc';
 import { ToolShell, NumField, ResultStrip, fmt } from './ToolShell';
+import { useConfirm } from '../../components/confirm';
 
 /**
  * 挖方与回填速算（P2 前端整合：由 frontend/tool-earth.html + tool-earth.js 迁入 React）
@@ -19,6 +20,7 @@ const emptyRow = (init: Partial<EarthRow> = {}): EarthRow => ({
 
 export default function ToolEarth() {
   const [prices, setPrices] = useState({ dig: 48, back: 38, haul: 42 });
+  const confirm = useConfirm();
   const [loose, setLoose] = useState(1.30);
   const [ruleSet, setRuleSet] = useState('arch');
   const [rules, setRules] = useState<EarthRule[]>(EARTH_RULE_PRESETS.arch);
@@ -53,10 +55,10 @@ export default function ToolEarth() {
       <div className="chip-row" role="group" aria-label="放坡口径">
         <label className="field" style={{ minWidth: 210 }}>
           <span className="field-label">放坡口径（规则集）</span>
-          <select id="eRuleSet" value={ruleSet} onChange={(e) => {
+          <select id="eRuleSet" value={ruleSet} onChange={async (e) => {
             const key = e.target.value;
             if (key !== 'arch' && key !== ruleSet) {
-              const ok = window.confirm('电力/市政定额各省市差异大，当前载入的是建筑定额占位值——必须按你实际所套定额逐格核对修改。\n\n确定要切换吗？');
+              const ok = await confirm('电力/市政定额各省市差异大，当前载入的是建筑定额占位值——必须按你实际所套定额逐格核对修改。', { title: '切换定额口径', sub: '建筑定额占位值需按实际所套定额逐格核对。', okLabel: '继续切换', ariaLabel: '切换定额口径确认' });
               if (!ok) return;
             }
             setRuleSet(key);

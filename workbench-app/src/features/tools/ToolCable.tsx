@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { calcCableRows, VOLT_MAT, type CableRow } from './toolsCalc';
 import { ToolShell, NumField, ResultStrip, fmt } from './ToolShell';
+import { useConfirm } from '../../components/confirm';
 
 /**
  * 电缆价格速算（P2 前端整合：由 frontend/tool-cable.html + tool-cable.js 迁入 React）
@@ -16,6 +17,7 @@ const emptyCableRow = (matRatio: number | '' = ''): CableRow => ({
 
 export default function ToolCable() {
   const [cu, setCu] = useState(78000);
+  const confirm = useConfirm();
   const [al, setAl] = useState(21000);
   const [k, setK] = useState(1.05);
   const [mgr, setMgr] = useState(8);
@@ -39,12 +41,12 @@ export default function ToolCable() {
         <NumField id="cVat" label="增值税率" value={vat} onChange={setVat} step={1} suffix="%" />
         <label className="field" data-tip="其他材料系数建议值：0.6/1kV 取 0.30，8.7/15kV 取 0.40，26/35kV 取 0.50；切换后整表该系数同步更新，仍可逐行改">
           <span className="field-label">电压等级</span>
-          <select id="cVolt" value={volt} onChange={(e) => {
+          <select id="cVolt" value={volt} onChange={async (e) => {
             const next = e.target.value;
             const nv = Number((VOLT_MAT[next] ?? 0.30).toFixed(2));
             const ov = Number((VOLT_MAT[volt] ?? 0.30).toFixed(2));
             const dirty = rows.filter((r) => r.matRatio !== '' && Number(r.matRatio) !== ov && Number(r.matRatio) !== nv);
-            if (dirty.length > 0 && !window.confirm(`切换电压等级会把 ${dirty.length} 行手工填写的材料系数覆盖为建议值 ${nv}，确定继续吗？`)) return;
+            if (dirty.length > 0 && !(await confirm(`切换电压等级会把 ${dirty.length} 行手工填写的材料系数覆盖为建议值 ${nv}，确定继续吗？`, { title: '切换电压等级', sub: `会覆盖 ${dirty.length} 行手工填写的材料系数`, okLabel: '继续切换', ariaLabel: '切换电压等级确认' }))) return;
             setVolt(next);
             setRows((rs) => rs.map((r) => ({ ...r, matRatio: nv })));
           }}>

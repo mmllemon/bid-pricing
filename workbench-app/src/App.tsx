@@ -17,29 +17,35 @@ import ToolEarth from './features/tools/ToolEarth';
 import ToolCable from './features/tools/ToolCable';
 import ToolWell from './features/tools/ToolWell';
 import QuotePage from './features/quote/Quote';
+import { ConfirmProvider } from './components/confirm';
+import { ToastProvider } from './components/toast';
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<AppShell />}>
-        <Route path="/portal" element={<PortalPage />} />
-        <Route path="/quote" element={<QuotePage />} />
-        <Route path="/tools" element={<ToolsHome />} />
-        <Route path="/tools/duct" element={<ToolDuct />} />
-        <Route path="/tools/earth" element={<ToolEarth />} />
-        <Route path="/tools/cable" element={<ToolCable />} />
-        <Route path="/tools/well" element={<ToolWell />} />
-        <Route path="/" element={<HomePage />} />
-        <Route path="/todos" element={<TodosPage />} />
-        <Route path="/performance" element={<PerformancePage />} />
-        <Route path="/hotspots" element={<HotspotsPage />} />
-        <Route path="/knowledge" element={<KnowledgePage />} />
-        <Route path="/scan" element={<ScanPage />} />
-        <Route path="/finance" element={<FinancePage />} />
-        <Route path="/biz" element={<BizPage />} />
-        <Route path="/biz/:id" element={<BizDetailPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Route>
-    </Routes>
+    <ConfirmProvider>
+      <ToastProvider>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/portal" element={<PortalPage />} />
+            <Route path="/quote" element={<QuotePage />} />
+            <Route path="/tools" element={<ToolsHome />} />
+            <Route path="/tools/duct" element={<ToolDuct />} />
+            <Route path="/tools/earth" element={<ToolEarth />} />
+            <Route path="/tools/cable" element={<ToolCable />} />
+            <Route path="/tools/well" element={<ToolWell />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/todos" element={<TodosPage />} />
+            <Route path="/performance" element={<PerformancePage />} />
+            <Route path="/hotspots" element={<HotspotsPage />} />
+            <Route path="/knowledge" element={<KnowledgePage />} />
+            <Route path="/scan" element={<ScanPage />} />
+            <Route path="/finance" element={<FinancePage />} />
+            <Route path="/biz" element={<BizPage />} />
+            <Route path="/biz/:id" element={<BizDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
+      </ToastProvider>
+    </ConfirmProvider>
   );
 }

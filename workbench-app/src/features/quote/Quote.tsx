@@ -11,6 +11,7 @@ import { QuotePlanHub } from './QuotePlanHub';
 import { QuoteCompareModal } from './QuoteCompareModal';
 import { QuoteSchemeBar } from './QuoteSchemeBar';
 import { QuoteAuditModal } from './QuoteAuditModal';
+import { useConfirm } from '../../components/confirm';
 import type { DashFilter } from './quoteCalc';
 import type { QuotePreviewResult } from './quoteApi';
 import { buildTaxOverride, type TaxComp } from './quoteCalc';
@@ -72,6 +73,7 @@ export default function QuotePage() {
   const [compareRes, setCompareRes] = useState<CompareResult | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const confirm = useConfirm();
   const [activeGroupId, setActiveGroupId] = useState('');
   const [activeSlot, setActiveSlot] = useState('A');
   const [currentPlanId, setCurrentPlanId] = useState('');
@@ -348,13 +350,13 @@ export default function QuotePage() {
   }, [refreshGroups]);
 
   const doCopy = useCallback(async (gid: string) => {
-    if (!window.confirm('复制整组为独立新组（深拷贝组内已算槽位方案，可独立改参）？')) return;
+    if (!(await confirm('复制整组为独立新组（深拷贝组内已算槽位方案，可独立改参）？', { okLabel: '复制整组', ariaLabel: '复制方案组' }))) return;
     try {
       const res = await copyGroup(gid);
       setMessage({ text: `已复制整组为「${res.group?.group_name || ''}」。`, kind: 'success' });
       await refreshGroups();
     } catch (e) { setMessage({ text: `复制整组失败：${(e as Error).message}`, kind: 'error' }); }
-  }, [refreshGroups]);
+  }, [refreshGroups, confirm]);
 
   const doFinalizeGroup = useCallback(async (gid: string, on: boolean) => {
     try {
@@ -365,7 +367,9 @@ export default function QuotePage() {
   }, [refreshGroups]);
 
   const doDelete = useCallback(async (gid: string) => {
-    if (!window.confirm('删除该方案组？组内已算槽位方案将一并删除。')) return;
+    if (!(await confirm('删除该方案组？组内已算槽位方案将一并删除。', {
+      danger: true, title: '删除方案组', sub: '组内已算槽位方案将一并删除，此操作不可恢复。', okLabel: '仍要删除', ariaLabel: '删除方案组',
+    }))) return;
     try {
       await deleteGroup(gid);
       setSelectedPlans(new Set());
@@ -374,7 +378,7 @@ export default function QuotePage() {
       setMessage({ text: '方案组已删除。', kind: 'success' });
       await refreshGroups();
     } catch (e) { setMessage({ text: `删除方案组失败：${(e as Error).message}`, kind: 'error' }); }
-  }, [refreshGroups, activeGroupId]);
+  }, [refreshGroups, activeGroupId, confirm]);
 
   /** 多方案对比（限同一项目）。 */
   const runCompare = useCallback(async () => {
@@ -401,7 +405,9 @@ export default function QuotePage() {
       return;
     }
     const proj = projects.find((p) => p.id === params.projectId);
-    const ok = window.confirm(`将本次目标总报价 ${amt.toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元写回为「${proj?.name ?? ''}」的投标报价金额？投标成本测算不随本次回写，请在「项目经营概览」中手动填写。`);
+    const ok = await confirm(
+      `将本次目标总报价 ${amt.toLocaleString('zh-CN', { minimumFractionDigits: 2 })} 元写回为「${proj?.name ?? ''}」的投标报价金额？`,
+      { title: '定稿并回写项目', sub: '投标成本测算不随本次回写，请在「项目经营概览」中手动填写。', okLabel: '定稿回写', ariaLabel: '定稿并回写项目' });
     if (!ok) return;
     try {
       await finalizeOverview(params.projectId, String(amt));
@@ -411,7 +417,7 @@ export default function QuotePage() {
     } catch (e) {
       setMessage({ text: `定稿回写失败：${(e as Error).message}`, kind: 'error' });
     }
-  }, [params.targetTotal, params.projectId, projects, result]);
+  }, [params.targetTotal, params.projectId, projects, result, confirm]);
 
   return (
     <div className="page page-quote" id="quoteView">

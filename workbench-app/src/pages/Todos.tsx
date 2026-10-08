@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Barcode, Calendar, Check, File, Message, Receipt, Sparkles, StickyNote } from 'pixelarticons/react';
 import { api } from '../api/client';
+import { useConfirm } from '../components/confirm';
 import lshuAvatar from '../assets/avatar/lshu-avatar.source.svg';
 import obsidianPrinter from '../assets/printer/printer-02-obsidian-wide.svg';
 import type {
@@ -98,6 +99,7 @@ interface ProjectLite {
 
 export default function TodosPage() {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
+  const confirm = useConfirm();
   const date = localDateKey(new Date(), timezone);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [overview, setOverview] = useState<TodayOverviewItem[]>([]);
@@ -281,8 +283,9 @@ export default function TodosPage() {
       await planProgress.run(async () => {
         const currentSettings = settings || await api.getSettings();
         if (currentSettings.aiAnalysisEnabled !== true || currentSettings.aiPlanningConsent !== true) {
-          const confirmed = window.confirm(
-            '首次使用 AI 今日规划：只会发送已经固化的工作画像、今天的脱敏事项标题和固定忙碌时间。不会重新扫描电脑，也不会发送文件路径、正文或聊天记录。是否继续？'
+          const confirmed = await confirm(
+            '首次使用 AI 今日规划：只会发送已经固化的工作画像、今天的脱敏事项标题和固定忙碌时间。不会重新扫描电脑，也不会发送文件路径、正文或聊天记录。是否继续？',
+            { title: '首次使用 AI 今日规划', sub: '仅发送固化工作画像与脱敏标题，不扫描电脑、不发文件内容。', okLabel: '继续', ariaLabel: 'AI 今日规划隐私确认' }
           );
           if (!confirmed) throw new Error('已取消 AI 今日规划');
           const nextSettings = await api.updateSettings({

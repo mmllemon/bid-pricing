@@ -463,12 +463,21 @@ def _last_commit_times(root: Path) -> dict[str, datetime]:
         if not line.strip():
             date = None
             continue
-        m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})", line)
+        # %cI 带时区偏移（如 2026-10-08T18:14:03+08:00）。旧正则只取到秒，
+        # 把 "+08:00" 丢掉后按 naive 解析——在跑者时区 ≠ 提交者时区时
+        # （如 CI 的 UTC vs 他的 +08:00），提交时间会被整体平移 8 小时，
+        # 新鲜度判据误报/ flaky。必须保留偏移，再统一折成跑者本地墙钟
+        # （与 datetime.now() / STATE.md 横幅时间的 naive 口径一致）。
+        m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:[+-]\d{2}:?\d{2}|Z)?)", line)
         if m:
             try:
-                date = datetime.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S")
+                parsed = datetime.fromisoformat(m.group(1).replace("Z", "+00:00"))
             except ValueError:
                 date = None
+                continue
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone().replace(tzinfo=None)
+            date = parsed
             continue
         if date is not None:
             table.setdefault(line, date)

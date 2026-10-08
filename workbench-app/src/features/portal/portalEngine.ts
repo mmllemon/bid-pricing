@@ -369,9 +369,9 @@ export class PortalEngine {
 
   /** 切到条目（打开分析抽屉）。 */
   selectItem(itemId: string) {
-    if (!this.state.mod || !this.state.branch) return;
-    const it = getItems(this.state.mod, this.state.branch).find((x) => x.id === itemId);
-    if (!it) return;
+    if (!this.state.mod) return;
+    // 2026-10-08：不再用静态 getItems 校验（真数据源下 item 来自接口）；
+    // React 层只渲染合法卡片，点击即合法。
     this.state.stage = 'item';
     this.state.item = itemId;
   }

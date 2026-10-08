@@ -4,6 +4,7 @@ import {
   type PortalBranch, type PortalItem,
 } from './portalData';
 import { PortalEngine, getModuleLevels, type EngineRefs, type Stage } from './portalEngine';
+import { useModuleItems } from './useModuleData';
 import { PortalSnapshot } from './PortalSnapshot';
 import { PortalDrawer } from './PortalDrawer';
 
@@ -36,9 +37,14 @@ export default function PortalPage() {
 
   const activeModule = mod ? getModule(mod) : undefined;
   const branches = mod ? getBranches(mod) : [];
+  // 真数据源（2026-10-08）：配了 dataSource 的模块走接口
+  const { items: apiItems, fromApi } = useModuleItems(mod, branch);
   // 可变深度（2026-10-08）：levels<=2 且无分支时，用扁平化 items
-  const leafItems = (() => {
+  const leafItems: PortalItem[] = (() => {
     if (!mod) return [];
+    // 接口有数据时优先用接口（fromApi 区分"接口空列表"和"未走接口"）
+    if (fromApi) return apiItems;
+    if (apiItems.length > 0) return apiItems;
     if (branch) return getItems(mod, branch);
     // flat 模式：从配置读 levels
     try {

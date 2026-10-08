@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { PortalItem, PortalModule } from './portalData';
 import { ExpandableCard } from './ExpandableCard';
 import { getPortalConfig } from './portalConfig';
@@ -27,44 +27,54 @@ export function PortalDrawer({
   const [tab, setTab] = useState('tab-overview');
   const [cardExpanded, setCardExpanded] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
+  const firstRectRef = useRef<DOMRect | null>(null);
+  // 跟踪 item 切换以重置展开态（必须在 early return 之前，Hooks 规则）
+  const [lastItemId, setLastItemId] = useState<string | null>(null);
 
-  /** FLIP 展开动画（2026-10-08 Step B） */
+  /** FLIP 展开动画（2026-10-08 Step B，重构：useLayoutEffect 保时机） */
   const doExpand = () => {
     const el = drawerRef.current;
-    onExpandChange?.(true);
-    if (!el) {
-      setCardExpanded(true);
-      return;
+    // First: 在 React 提交前记录
+    if (el) {
+      firstRectRef.current = el.getBoundingClientRect();
     }
-    // First: 记录当前 rect
-    const first = el.getBoundingClientRect();
-    // 加 expanded 类（Last 状态）
-    el.classList.add('expanding');
+    onExpandChange?.(true);
     setCardExpanded(true);
-    // 下一帧测量 Last 并播放
-    requestAnimationFrame(() => {
-      const last = el.getBoundingClientRect();
-      const dx = first.left - last.left;
-      const dy = first.top - last.top;
-      const sx = first.width / last.width;
-      const sy = first.height / last.height;
-      // Invert
-      el.style.transformOrigin = 'top left';
-      el.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
-      // Play
-      requestAnimationFrame(() => {
-        el.classList.remove('expanding');
-        el.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1)';
-        el.style.transform = 'translate(0, 0) scale(1, 1)';
-        // 清理
-        setTimeout(() => {
-          el.style.transition = '';
-          el.style.transform = '';
-          el.style.transformOrigin = '';
-        }, 650);
-      });
-    });
   };
+
+  // React 提交后（DOM 已是 Last 态）再量尺寸、播动画
+  useLayoutEffect(() => {
+    if (!cardExpanded) return;
+    const el = drawerRef.current;
+    const first = firstRectRef.current;
+    if (!el || !first) return;
+    firstRectRef.current = null;
+
+    const last = el.getBoundingClientRect();
+    const dx = first.left - last.left;
+    const dy = first.top - last.top;
+    const sx = first.width / last.width;
+    const sy = first.height / last.height;
+    // 无变化就不播
+    if (dx === 0 && dy === 0 && sx === 1 && sy === 1) return;
+
+    // Invert: 先摆回 First 的样子
+    el.style.transformOrigin = 'top left';
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+    // 强制回流，让 Invert 生效
+    void el.offsetWidth;
+    // Play: 过渡到 Last
+    el.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1)';
+    el.style.transform = 'translate(0, 0) scale(1, 1)';
+
+    const timer = setTimeout(() => {
+      el.style.transition = '';
+      el.style.transform = '';
+      el.style.transformOrigin = '';
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [cardExpanded]);
 
   if (!module || !item) {
     return <aside className={`portal-analysis-drawer${open ? ' open' : ''}`} />;
@@ -77,8 +87,6 @@ export function PortalDrawer({
   const isBiz = module.id === 'biz' && Boolean(item.profile);
 
   // 重置展开态（切换卡片时）
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const [lastItemId, setLastItemId] = useState(item.id);
   if (lastItemId !== item.id) {
     setLastItemId(item.id);
     setCardExpanded(false);

@@ -39,6 +39,24 @@ function formatValue(key: string, val: unknown): string {
   return String(val);
 }
 
+/** 从 item 取字段值，带静态数据 fallback 映射（2026-10-08） */
+function getItemField(item: PortalItem, key: string): unknown {
+  const rec = item as unknown as Record<string, unknown>;
+  if (rec[key] != null && rec[key] !== '') return rec[key];
+  // 静态 portalData.ts 的字段名 → 配置字段名
+  switch (key) {
+    case 'contract_amount': return rec['bidAmount'] ?? rec['limitAmount'];
+    case 'start_date': return (rec['profile'] as Record<string, string> | undefined)?.['openDate'];
+    case 'exec_cost': return rec['costBudget'];
+    case 'profit_margin': {
+      const bid = Number(rec['bidAmount']) || 0;
+      const cost = Number(rec['costBudget']) || 0;
+      return bid > 0 ? (((bid - cost) / bid) * 100).toFixed(1) : null;
+    }
+    default: return null;
+  }
+}
+
 export function ExpandableCard({
   module,
   item,
@@ -88,7 +106,7 @@ export function ExpandableCard({
             <div className="ec-metric" key={key}>
               <span className="ec-label">{FIELD_DICT[key]?.label || key}</span>
               <strong className="ec-val" data-font="data">
-                {formatValue(key, (item as Record<string, unknown>)[key])}
+                {formatValue(key, getItemField(item, key))}
               </strong>
             </div>
           ))}

@@ -26,10 +26,6 @@ export interface SiteDomain {
   children?: WorkbenchNavItem[];
 }
 
-/** 尚未迁入 React 的旧页面所在的母项目入口（临时，迁移完成后删除）。 */
-export const LEGACY_ORIGIN =
-  (typeof window !== 'undefined' && (window as { __BID?: { legacyOrigin?: string } }).__BID?.legacyOrigin) ||
-  'http://127.0.0.1:8000';
 
 export const SITE_DOMAINS: SiteDomain[] = [
   {

@@ -513,8 +513,6 @@ export interface AiStatusResponse extends AiRunStatus {
   lastRunMatchesRuntime: boolean | null;
 }
 
-export type SyncState = 'idle' | 'loading' | 'success' | 'error';
-
 // ===== 单篇笔记详情 =====
 export interface NoteDetailBasic {
   impressions?: number;

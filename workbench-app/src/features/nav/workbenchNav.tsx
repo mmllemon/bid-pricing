@@ -31,5 +31,3 @@ export const WORKBENCH_NAV: WorkbenchNavItem[] = [
   { to: '/settings', label: '设置', code: 'S-07', icon: <IconSettings /> },
 ];
 
-/** 首页径向地图的环绕节点：除中心「今日」外的全部模块。 */
-export const HOME_RADIAL_NAV = WORKBENCH_NAV.filter((item) => item.to !== '/');

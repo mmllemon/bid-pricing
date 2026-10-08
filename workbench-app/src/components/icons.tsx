@@ -111,19 +111,7 @@ export const IconRefresh = ({ size = 24 }: IconProps) => (
   </Svg>
 );
 
-export const IconArrowUp = ({ size = 16 }: IconProps) => (
-  <Svg size={size}>
-    <path d="M12 19 V5" />
-    <path d="M6 11 L12 5 L18 11" />
-  </Svg>
-);
 
-export const IconArrowDown = ({ size = 16 }: IconProps) => (
-  <Svg size={size}>
-    <path d="M12 5 V19" />
-    <path d="M6 13 L12 19 L18 13" />
-  </Svg>
-);
 
 export const IconEye = ({ size = 16 }: IconProps) => (
   <Svg size={size}>
@@ -171,19 +159,7 @@ export const IconUserPlus = ({ size = 16 }: IconProps) => (
   </Svg>
 );
 
-export const IconCheck = ({ size = 16 }: IconProps) => (
-  <Svg size={size}>
-    <path d="M5 12 L10 17 L19 7" />
-  </Svg>
-);
 
-export const IconAlert = ({ size = 16 }: IconProps) => (
-  <Svg size={size}>
-    <path d="M12 4 L21 20 H3 Z" />
-    <path d="M12 10 V14" />
-    <path d="M12 17 V18" />
-  </Svg>
-);
 
 export const IconClose = ({ size = 16 }: IconProps) => (
   <Svg size={size}>

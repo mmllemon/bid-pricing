@@ -634,36 +634,7 @@ async def optimize_quote(limit_file: UploadFile = File(...), cost_file: UploadFi
         return JSONResponse(status_code=200, content=payload)
 
 
-@app.get("/api/project/list")
-def project_list() -> JSONResponse:
-    """按项目分组返回方案组摘要：前端右栏用关联项目定位，方案中心按项目列组。"""
-    groups = list_groups()
-    per_project: dict[str, dict] = {}
-    for g in groups:
-        pid = g.get("project_id") or g.get("project_name") or "未命名项目"
-        entry = per_project.setdefault(pid, {"name": pid, "group_count": 0, "plans": [], "groups": []})
-        entry["group_count"] += 1
-        entry["groups"].append(g)
-        for slot_key, s in (g.get("strategy_slots") or {}).items():
-            sm = (s or {}).get("summary") or {}
-            if s and s.get("plan_id"):
-                entry["plans"].append({
-                    "id": s["plan_id"], "slot": slot_key, "group_id": g.get("group_id"),
-                    "name": f"{g.get('group_name')} · {slot_key}", "project_id": pid,
-                    "project_name": g.get("project_name") or pid,
-                    "saved_at": sm.get("saved_at"),
-                    "strategy": sm.get("strategy") or slot_key.lower(),
-                    "target_total": sm.get("target_total"),
-                    "competitive_budget": sm.get("competitive_budget"),
-                    "finalized": bool(g.get("finalized")),
-                    "finalized_at": g.get("finalized_at"),
-                })
-    projects = list(per_project.values())
-    projects.sort(key=lambda g: g["name"])
-    return JSONResponse(status_code=200, content={"status": "PASS", "projects": projects})
 
-
-# ============ 方案组（H-008）端点 ============
 @app.get("/api/group/list")
 def group_list(project_id: str = "") -> JSONResponse:
     """按项目（归一键）返回方案组列表；未传 project_id 返回全部组。"""
@@ -673,21 +644,6 @@ def group_list(project_id: str = "") -> JSONResponse:
         data = list_groups()
     return JSONResponse(status_code=200, content={"status": "PASS", "groups": data})
 
-
-@app.post("/api/group/create")
-def group_create(project_id: str = Form(""), project_name: str = Form(""),
-                 name: str = Form(""), target_total: float = Form(None)) -> JSONResponse:
-    # B-P1-5：与 optimize_quote 同口径——project_id 非哨兵时必须是真实概览 id，
-    # 否则建出无归属孤儿组。复用同一单点（刀口说明见 _resolve_project_credential）。
-    proj_uuid, blocked = _resolve_project_credential(project_id)
-    if blocked is not None:
-        return blocked
-    g = create_group(proj_uuid or None, project_name.strip() or None,
-                     group_name=name.strip() or None, target_total=target_total)
-    # B-P1-9：建组是状态变更起点，无审计则后续 GROUP 操作全无可追溯性。
-    append_audit(CURRENT_USER, "group.create", "PASS",
-                 project_id=project_id.strip() or None, group_id=g.get("group_id"))
-    return JSONResponse(status_code=200, content={"status": "PASS", "group": g})
 
 
 @app.post("/api/group/rename")
@@ -742,26 +698,6 @@ def project_get(id: str) -> JSONResponse:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
     return JSONResponse(status_code=200, content={"status": "PASS", "plan": {"id": rec["id"], "name": rec.get("name"), "project_id": rec.get("project_id") or rec.get("name"), "project_name": rec.get("project_name"), "params": rec.get("params"), "all_items": rec.get("all_items"), "preview": rec.get("preview"), "result": rec.get("result"), "saved_at": rec.get("saved_at")}})
 
-
-@app.post("/api/project/copy")
-def project_copy(id: str, name: str = "") -> JSONResponse:
-    rec = load_plan(id)
-    if rec is None:
-        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
-    new_name = name.strip() or f"{rec.get('name') or id}（副本）"
-    new_id = uuid.uuid4().hex
-    copy = dict(rec)
-    copy["name"] = new_name
-    copy["params"] = dict(rec.get("params") or {})
-    copy["all_items"] = list(rec.get("all_items") or [])
-    copy["preview"] = rec.get("preview")
-    copy["result"] = None  # 副本先清空结果，用户可重算后生成新结果
-    copy["finalized"] = False  # 副本不继承定稿状态，避免同项目出现多份『已定稿』
-    copy.pop("finalized_at", None)
-    save_plan(copy, plan_id=new_id)
-    append_audit(CURRENT_USER, "plan.copy", "PASS",
-                 plan_id=new_id, detail={"from": id, "name": new_name})
-    return JSONResponse(status_code=200, content={"status": "PASS", "plan_id": new_id, "name": new_name})
 
 
 @app.post("/api/project/recompute")
@@ -826,18 +762,6 @@ def project_recompute(id: str, target_total: float = Form(...), fixed_pretax: fl
                  project_id=payload.get("project_id"), plan_id=id, detail={"strategy": strategy})
     return JSONResponse(status_code=200, content=payload)
 
-
-@app.post("/api/project/delete")
-def project_delete(id: str) -> JSONResponse:
-    try:
-        ok = delete_plan(id)
-    except StoreWriteLockedError as exc:
-        # 已定稿方案拒绝删除（A4 定稿锁）——归一为 409 业务错误而非裸 500
-        return JSONResponse(status_code=409, content={"status": "LOCKED", "reason": str(exc)})
-    if not ok:
-        return JSONResponse(status_code=404, content={"status": "NOT_FOUND", "reason": "方案不存在或已删除"})
-    append_audit(CURRENT_USER, "plan.delete", "PASS", plan_id=id)
-    return JSONResponse(status_code=200, content={"status": "PASS", "deleted": id})
 
 
 @app.post("/api/project/mark-finalized")

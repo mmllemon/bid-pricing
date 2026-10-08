@@ -4329,37 +4329,9 @@ select.nb-input {
 }
 
 /* ===== 项目经营（M-01；数据源＝母项目 FastAPI :8000） ===== */
-.biz-row {
-  justify-content: space-between;
-  gap: 16px;
-}
 
-.biz-row-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
 
-.biz-row-name {
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
-.biz-row-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-small);
-}
-
-.biz-row-profit {
-  flex: 0 0 auto;
-  font-family: var(--font-pixel);
-  font-variant-numeric: tabular-nums;
-}
 
 .biz-row-profit.neg {
   color: var(--ui-orange);
@@ -4373,9 +4345,6 @@ select.nb-input {
   margin-bottom: 12px;
 }
 
-.biz-toolbar-spacer {
-  flex: 1 1 auto;
-}
 
 .biz-toolbar .nb-btn svg {
   vertical-align: -2px;
@@ -5246,10 +5215,7 @@ button{font-family:var(--font)}
 .cs-opt.cs-selected{background:var(--ui-orange);color:var(--ui-black);font-weight:700}
 .cs-list::-webkit-scrollbar{width:6px}
 .cs-list::-webkit-scrollbar-thumb{background:var(--ui-black)}
-.compare-bar{margin-top:12px;padding-top:16px;border-top:var(--line-thin)}
-.compare-checks{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:10px}
-.compare-check{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--text-secondary)}
-.compare-check input{accent-color:var(--ui-orange)}
+
 
 /* ---------- 模块占位页（空状态：黑图标 + 说明 + 至多一个操作，DESIGN §8.10） ---------- */
 .module-view{min-height:60vh}
@@ -5928,10 +5894,9 @@ button{font-family:var(--font)}
 .prep-state.alert{background:var(--ui-yellow);color:var(--ui-black)}
 
 /* 4) 右侧主舞台：多方案横向对比结果卡 */
-.compare-stage .result-head{margin-bottom:12px}
-.compare-stage .result-head h3{font-size:16px;font-weight:700;margin:0;color:var(--text)}
-.compare-stage .result-head p{font-size:12px;color:var(--text-secondary);margin:4px 0 0}
-.compare-stage .table-wrap{margin-bottom:4px}
+
+
+
 
 /* 3b) FAB 操作坞：分割线 + ghost 次级 + 运算加载旋转动效 */
 .dock-sep{width:1px;height:22px;background:var(--ui-black);margin:0 2px}
@@ -6308,18 +6273,17 @@ body.project-locked .cs-list{pointer-events:auto}
 .cmp-body{padding:16px 16px 20px;overflow:auto;flex:1 1 auto;min-height:0}
 .cmp-body .result-head{margin-top:0}
 /* —— 审计日志弹层表格（#auditModal，复用 #cmpModal 外观）—— */
-.audit-body{padding:16px 16px 20px;overflow:auto;flex:1 1 auto;min-height:0}
-.audit-body .table-wrap{padding:0;max-height:56vh;overflow:auto;border:var(--line-thin);border-radius:0}
-.audit-loading,.audit-empty{color:var(--text-secondary);font-size:14px;padding:20px 4px}
+
+
+
 .audit-meta{color:var(--text-tertiary);font-size:12px;margin:10px 2px 0}
 table.audit-table{width:100%;border-collapse:collapse;font-size:13px}
 table.audit-table th{position:sticky;top:0;background:var(--ui-white);z-index:var(--z-sticky);text-align:left;padding:8px 12px;color:var(--text);font-weight:700;white-space:nowrap;border-bottom:var(--line-strong)}
 table.audit-table td{padding:7px 12px;border-top:var(--line-thin);vertical-align:top;white-space:nowrap}
 table.audit-table td.sec{white-space:normal;color:var(--text-secondary);min-width:180px}
 table.audit-table tr:hover td:first-child{box-shadow:inset 4px 0 0 var(--ui-yellow)}
-.audit-success{color:var(--text)}
-.audit-error{color:var(--text);font-weight:700}
-.audit-warn{color:var(--text)}
+
+
 /* ---- Skeleton loading：静态黑框占位，不做扫光动画 ---- */
 .skeleton{position:relative;overflow:hidden;background:var(--ui-white);border:var(--line-thin);border-radius:0}
 .skeleton-row{display:flex;gap:12px;align-items:center;padding:8px 12px;border-top:var(--line-thin)}
@@ -6340,53 +6304,6 @@ table.audit-table tr:hover td:first-child{box-shadow:inset 4px 0 0 var(--ui-yell
 /* 模块短标题 */
 #quoteView .card-title,
 .cmp-head h3,
-.compare-stage .result-head h3,
-.preview-stage .result-head h3,
-.ph-header h3,
-/* Tab / Chip / Badge / 短状态码 */
-.scheme-tab,
-.filter-chip,
-.status-tag,
-.delta-badge,
-.risk-corner,
-.prep-state,
-.toast-pill,
-.status-capsule,
-/* 按钮 */
-.dock-btn,
-.intake-reup,
-.phg-op,
-.phg-slot .slot-act,
-.phg-expand,
-.ph-run,
-.drill-clear,
-.prep-actions .btn-primary,
-.prep-actions .btn-secondary,
-.result-actions .btn-primary,
-.result-actions .btn-secondary,
-.result-actions .download-button,
-/* 数据指标 */
-.range-val,
-.kpi-val,
-.intake-stat b,
-.phg-meta b,
-.phg-slot-stat b,
-.ph-count,
-.k-inline i,
-.k-inline b,
-.k-inline em,
-/* 表格列头与数字单元格：回归正文字体（MiSans）。
- * 2026-10-06：像素字体仅用于装饰性标签（H1/药丸/按钮/Badge/时间日期，见 DESIGN.md §5.1），
- * 数字表格用像素字体在非整数倍缩放下发虚、可读性下降，故此处不再接管。 */
-.audit-table th,
-.table-scroll th.num,
-.table-scroll td.num,
-#quoteView table td.num{
-  font-family:var(--font);
-  font-weight:400;
-  font-synthesis:none;
-  font-variant-numeric:tabular-nums;   /* 数字等宽，列对齐不跳动 */
-}
 
 /* ---- results.css ---- */
 /* ============ 结果面板与表格（DESIGN V2：白底 + 2px 黑框 + 直角） ============ */
@@ -6719,27 +6636,8 @@ body:has(.portal-view:not(.hidden)) {
   border: 2px solid #111111;
   background: var(--ui-white);
 }
-.portal-nav-btn {
-  display: grid;
-  justify-items: center;
-  gap: 1px;
-  padding: 5px 14px;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font-family: var(--font-pixel);
-  font-size: 12px;
-  font-weight: 700;
-  color: #555;
-  line-height: 1.2;
-}
-.portal-nav-btn em {
-  font-style: normal;
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #aaa;
-}
+
+
 .portal-nav-btn:hover { color: #111111; background: var(--ui-yellow); }
 .portal-nav-btn.active { color: #111111; background: #ff6b00; }
 .portal-nav-btn.active em { color: rgba(255, 255, 255, 0.85); }

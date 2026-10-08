@@ -6,8 +6,9 @@
 
 报告类输出（解析日志、对比报告等可再生文件）不强制走这里，但走了也无害。
 
-注意 ``project_overview._write_all`` 早有同款 tmp+replace 内联实现，属于
-本模块语义的先例；新代码一律复用本模块，不再手写。
+``project_overview._write_all`` 历史上是一份自造的 tmp+replace 内联实现（临时名
+固定、无 fsync），已于 2026-10-08 并入本模块（B-P1-3）。全仓状态型持久文件
+统一走本入口，不再手写。
 """
 from __future__ import annotations
 

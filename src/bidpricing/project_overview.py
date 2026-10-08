@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from bidpricing import project_store
+from bidpricing.atomic_io import atomic_write_text
 
 #: 阶段候选值（下拉唯一选项，也是页面分栏依据）。
 STAGES = ("投标", "中标在建", "已竣工", "已结算", "售后", "未中标")
@@ -91,11 +92,10 @@ def load_all() -> list[dict[str, Any]]:
 
 
 def _write_all(projects: list[dict[str, Any]]) -> None:
-    p = _path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(projects, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(p)
+    # B-P1-3：此前是自造的 .tmp+replace —— 临时名固定（并发写同一文件会互相踩踏）
+    # 且无 fsync（断电后可能留下零长度/截断文件）。改用全仓统一入口：
+    # mkstemp 保证临时名唯一 + fsync + os.replace，读者只会看到完整旧文件或完整新文件。
+    atomic_write_text(_path(), json.dumps(projects, ensure_ascii=False, indent=2))
 
 
 def list_projects() -> list[dict[str, Any]]:

@@ -906,6 +906,12 @@ def delete_group(group_id: str, db: Path | str | None = None,
         conn.execute("DELETE FROM plan_group WHERE group_id = ?", (group_id,))
         conn.commit()
         return True
+    except Exception:
+        # B-P1-4：三条 DELETE 是一条逻辑事务，中途失败必须整体回滚——否则
+        # 会留下「方案行已删、槽位/组行还在」的半删组，组卡片仍在但打开即空。
+        # 与 save_plan / _write_plan 等写入路径同口径（全仓 rollback 一致性）。
+        conn.rollback()
+        raise
     finally:
         conn.close()
 

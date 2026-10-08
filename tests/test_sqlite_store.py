@@ -190,6 +190,39 @@ class SqliteStoreGroupTest(unittest.TestCase):
         self.assertIsNone(sqlite_store.find_group_by_id(gid, db=self.db))
         self.assertFalse(sqlite_store.delete_group(gid, db=self.db))
 
+    def test_delete_group_is_atomic_on_failure(self) -> None:
+        """回归（B-P1-4）：删除中途失败必须整体回滚，不留「方案行已删、槽位/组行还在」的半删组。
+
+        注入方式：在 plan_group 上挂 BEFORE DELETE trigger 抛 ABORT，使三条 DELETE 中的
+        最后一条必然失败。若前两条（删方案行 / 删槽位行）的效果没被回滚，组仍存在但槽位
+        和方案批量消失——组卡片还在、打开即空。任何事务模式（显式 rollback 或 close 丢弃）
+        下这个不变量都必须成立，故本用例只断言结果，不依赖实现细节。
+        """
+        import sqlite3 as _sqlite3
+        gid = self._seed()
+        before = self._counts()
+        conn = _sqlite3.connect(self.db)
+        conn.executescript(
+            "CREATE TRIGGER block_group_delete BEFORE DELETE ON plan_group "
+            "BEGIN SELECT RAISE(ABORT, 'injected group delete failure'); END;")
+        conn.commit()
+        conn.close()
+        with self.assertRaises(_sqlite3.IntegrityError):
+            sqlite_store.delete_group(gid, keep_plans=False, db=self.db)
+        self.assertEqual(self._counts(), before, "删除失败后应整体回滚，行数不变")
+        self.assertIsNotNone(sqlite_store.load_plan("opt", db=self.db))
+        self.assertIsNotNone(sqlite_store.find_group_by_id(gid, db=self.db))
+
+    def _counts(self) -> tuple[int, int, int]:
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(self.db)
+        try:
+            return (conn.execute("SELECT COUNT(*) FROM plan").fetchone()[0],
+                    conn.execute("SELECT COUNT(*) FROM plan_slot").fetchone()[0],
+                    conn.execute("SELECT COUNT(*) FROM plan_group").fetchone()[0])
+        finally:
+            conn.close()
+
     def test_finalized_group_locks_edits(self) -> None:
         """回归（A4）：已定稿组拒绝删除/改名/挂槽；取消定稿是唯解锁路径。"""
         gid = self._seed()

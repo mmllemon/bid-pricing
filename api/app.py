@@ -339,31 +339,10 @@ async def _auth_guard(request, call_next):
     return await call_next(request)
 
 
-#: F-16（UI/UX 审查 P2）：CSP header，限制内联脚本/事件处理器。
-#: 静态文件由 uvicorn 直接服务，不经 API 路由，故仅对非 /api 响应注入。
-#: F-P0-3（2026-10-07）：补 frame-ancestors 'self'——此前只有 frame-src（管"我能嵌谁"），
-#: 没有 frame-ancestors（管"谁能嵌我"），file:// 直开或任意外站 iframe 嵌本页无约束。
-_CSP_HEADER = (
-    "default-src 'self'; "
-    "script-src 'self'; "
-    "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data:; "
-    # 前端 API_BASE 默认写 http://localhost:8000——CSP 源匹配按主机名字面量，
-    # localhost 与 127.0.0.1 是两个不同的源，缺哪一个就拦哪一个。
-    "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000; "
-    # 个人工作台 iframe（app.js 用 http://127.0.0.1:3456）：无 frame-src 会回退
-    # default-src 'self' 被拦，localhost/127.0.0.1 两个写法都要放行。
-    "frame-src http://127.0.0.1:3456 http://localhost:3456; "
-    "frame-ancestors 'self'"
-)
-
-
-@app.middleware("http")
-async def _csp_guard(request, call_next):
-    response = await call_next(request)
-    if not request.url.path.startswith("/api/"):
-        response.headers["Content-Security-Policy"] = _CSP_HEADER
-    return response
+#: P4（2026-10-08）：:8000 已退为纯 API，不再 serving 任何静态前端，
+#: 页面级 CSP（frame-ancestors / script-src 那类只对 HTML 响应有意义）已随之移除。
+#: 现由唯一 Web 入口 :3456（workbench-server/src/index.ts 的 CSP_PARTS）统一下发。
+#: 此处不再保留空的 header 常量或中间件——避免后人误读为「还没配」。
 
 
 @app.get("/api/health")

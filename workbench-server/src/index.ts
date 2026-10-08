@@ -97,6 +97,7 @@ import {
   searchLocalKnowledge,
 } from './knowledgeLocal';
 import { corsOriginDelegate, BIND_HOST } from './http/localCors';
+import { buildCsp } from './http/csp';
 import { assertSettingsPatch, SettingsPolicyError } from './config/settingsPolicy';
 import { registerQuoteProxy } from './quoteProxy';
 
@@ -107,8 +108,14 @@ app.use(cors({ origin: corsOriginDelegate }));
 // 2026-10-07 修正：:8080 已并入 :8000，原白名单写的是旧端口导致 :8000 首页 iframe 被拦。
 const FRAME_ANCESTORS =
   process.env.WORKBENCH_FRAME_ANCESTORS || "'self' http://127.0.0.1:8000 http://localhost:8000";
+// F-P0-3：CSP 从只有 frame-ancestors 扩到完整策略（详见 src/http/csp.ts 的策略依据）。
+// 唯一 Web 入口统一下发；可用 WORKBENCH_CSP_EXTRA 追加源（服务暴露到局域网时放行实际 origin）。
+const CSP_HEADER = buildCsp({
+  frameAncestors: FRAME_ANCESTORS,
+  extra: process.env.WORKBENCH_CSP_EXTRA,
+});
 app.use((_req, res, next) => {
-  res.setHeader('Content-Security-Policy', `frame-ancestors ${FRAME_ANCESTORS}`);
+  res.setHeader('Content-Security-Policy', CSP_HEADER);
   next();
 });
 // P0 架构收敛（2026-10-07）：agent-service（原独立 :8010）并入本进程，挂 /agent 前缀。

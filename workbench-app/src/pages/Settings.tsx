@@ -5,6 +5,7 @@ import type { AppSettings, XhsAccountInfo, XhsVerificationStatus, HotspotStatus,
 import ActionProgress from '../components/ActionProgress';
 import { useActionProgress } from '../lib/actionProgress';
 import { calendarConnectSuccessCopy, shouldHintCalendarPermissionDialog } from '../lib/calendarStatus';
+import { PortalModuleSettings } from '../features/portal/PortalModuleSettings';
 
 function statusLabel(status: XhsVerificationStatus): string {
   switch (status) {
@@ -608,6 +609,11 @@ export default function SettingsPage() {
       <div className="ui-module mt-4 setting-section ui-alert--warn">
         <h2 className="ui-module-title"><span className="ui-code">PRIV</span>隐私说明</h2>
         <p style={{ fontSize: 14, lineHeight: 1.7 }}>{settings.privacyNotice}</p>
+      </div>
+
+      <div className="ui-module mt-4 setting-section">
+        <h2 className="ui-module-title"><span className="ui-code">PORTAL</span>大盘模块配置</h2>
+        <PortalModuleSettings />
       </div>
 
       <div className="ui-module mt-4 setting-section">

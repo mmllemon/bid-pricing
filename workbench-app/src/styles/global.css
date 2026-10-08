@@ -8404,3 +8404,14 @@ details.spec .hint { margin: 6px 0; }
 .graph-project-amounts b { font-family: var(--font-data); }
 .graph-payable b { color: #dc2626; }
 .graph-contracts { margin-top: 4px; }
+
+/* ===== Portal 模块设置（2026-10-08） ===== */
+.portal-settings { display: flex; flex-direction: column; gap: 8px; }
+.portal-settings-desc { font-size: 13px; }
+.portal-settings-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border: 1px solid #e5e5e5; border-radius: 6px;
+  cursor: pointer;
+}
+.portal-settings-name { font-weight: 600; }
+.portal-settings-meta { font-size: 12px; }

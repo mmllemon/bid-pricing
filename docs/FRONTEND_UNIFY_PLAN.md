@@ -1,9 +1,28 @@
 # 前端整合方案：两前端并为一个 React 应用
 
-> 状态：**待批准**
-> 撰写日期：2026-10-08
+> 状态：**已完成（P0–P4 全部落地）**
+> 撰写日期：2026-10-08　｜　完成日期：2026-10-08
 > 目标：把 `frontend/`（原生 JS）与 `workbench-app/`（React）合并为**唯一前端**，挂在 `workbench-server`（:3456）同进程下，`api/`（:8000）退为纯 API。
 > 决策依据：用户 2026-10-08 明确选择「全部并进 React（唯一前端）」+「先写迁移方案，再动手」。
+
+## 完成纪要
+
+| 阶段 | 内容 | 提交 |
+|---|---|---|
+| P0 | 令牌合并 + `:3456` 报价域同源反代 + 全站顶栏 | `1b60b36` |
+| P1 | 全景大盘 → `features/portal/` | `5de99f4` |
+| P2 | 速算工具箱 → `features/tools/`（9/9 数值字段对照） | `aacd54c` |
+| P3 | 报价页 → `features/quote/`（参数/KPI/明细/预览/导出/方案中心/对比/切换条/KPI 穿透/三方案/审计/重算） | `5de99f4`…`c08a0c2` |
+| P4-0 | AI 测算助手面板 → `features/agent/` | `5f726f1` |
+| P4-1 | 全站回归 + 顶栏窄屏溢出修复 | `a32f850` |
+| P4-2/3/4 | 删 `frontend/`、摘 `:8000` 静态挂载与 wb 反代、`run.ps1` 收敛单一 Web 进程 + 守卫测试重写 | `4396e96` |
+
+**P4 关键旁修（迁移中挖出的存量缺陷）**：
+- `workbench-server/src/quoteProxy.ts` 重复拼接查询串（`req.url` 挂载后已含 query）——经 `:3456` 的**所有带参报价域请求**被静默置空，如 `/api/group/list?project_id=…` 返回空数组。
+- `SiteTopBar` 无任何窄屏规则，≤768px 时文档 scrollWidth 恒 845px（横向溢出）。
+- `workbench-server/test/v210-weather.test.ts` 的 `../../frontend/src/lib/homeClock` 是收编时留下的死路径（该目录从未存在）。
+
+**验证**：1621 项 Python 测试 OK ｜ React vitest 62/62 ｜ workbench-server 223 OK ｜ 6 视口 × 4 页回归 0 横向溢出 / 0 控制台错误 ｜ 报价全链路（三方案/重算/方案中心/对比/审计）字段级对照通过。
 
 ---
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { WORKBENCH_NAV as navItems } from '../features/nav/workbenchNav';
 import SiteTopBar from './SiteTopBar';
+import AgentPanel from '../features/agent/AgentPanel';
 
 /* 导航形态（P0-3 前端整合）：全站主导航改到顶栏（SiteTopBar），不再渲染自带侧栏。
  * 迁移期：内嵌/独立访问都渲染同一套顶栏；未迁入 React 的域以 <a href> 外链回母项目。
@@ -96,6 +97,7 @@ export default function AppShell() {
         <main className="main">
           <Outlet />
         </main>
+        <AgentPanel />
       </div>
     );
   }
@@ -106,6 +108,7 @@ export default function AppShell() {
       <main className="main">
         <Outlet />
       </main>
+      <AgentPanel />
     </div>
   );
 }

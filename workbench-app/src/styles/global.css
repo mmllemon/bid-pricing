@@ -8036,3 +8036,325 @@ details.spec .hint { margin: 6px 0; }
   font-family:var(--font);
 }
 
+
+/* ============================================================
+   AI 测算助手样式（P4 前端整合：由 frontend/agent.css 并入）
+   全站悬浮 FAB + 面板 + 模型设置抽屉；与原生加载顺序一致置于末尾（只含 .agent-*）。
+   ============================================================ */
+/* ===== AI 测算助手（Pi Durable 边车 8010） =====
+ * 全站悬浮：FAB + 面板 + 模型设置抽屉，DOM 由 agent-panel.js 运行时注入。
+ * 遵循全站设计系统：白底 surface-card / 0 圆角 / 无模糊阴影 / 12px 字号红线 / 语义 z 与状态色。
+ */
+
+/* ---------- 悬浮入口 FAB（48×48，橙底黑框，全站右下角） ---------- */
+/* z 层级：FAB(90) > 侧栏抽屉(60)，面板(100) > FAB；模型设置抽屉(110) > 面板。
+ * 背景：移动端侧栏抽屉 z=60 曾盖住面板(z=51)——2026-10-06 起提到 drawer 档。 */
+.agent-fab{
+  position:fixed;bottom:24px;right:32px;z-index:var(--z-fab);
+  width:48px;height:48px;display:grid;place-items:center;cursor:pointer;
+  background:var(--ui-orange);color:var(--ui-black);
+  border:var(--line-strong);border-radius:0;padding:0;
+  transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out);
+}
+.agent-fab svg{width:22px;height:22px}
+.agent-fab:hover{background:var(--ui-yellow)}
+.agent-fab[aria-expanded="true"]{background:var(--ui-black);color:var(--ui-white)}
+/* P2: 面板关闭时来审批请求，FAB 右上角挂待批准数 */
+.agent-fab-badge{
+  position:absolute;top:-7px;right:-7px;min-width:20px;height:20px;padding:0 5px;
+  background:#c00;color:#fff;font-size:12px;font-weight:700;line-height:16px;text-align:center;
+  border-radius:10px;border:2px solid #fff;box-sizing:border-box;pointer-events:none;
+}
+
+/* ---------- 悬浮面板（FAB 正上方，fixed 定位，不参与任何页面的视图切换） ---------- */
+.agent-panel{
+  position:fixed;right:32px;bottom:84px;z-index:var(--z-drawer);
+  width:400px;max-width:calc(100vw - 64px);
+  height:min(620px, calc(100vh - 132px));
+  display:flex;flex-direction:column;overflow:hidden;
+  background:var(--surface-card);border:var(--line-strong);border-radius:0;
+  animation:agentIn var(--dur-base) var(--ease-out);
+}
+.agent-panel-head{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-bottom:var(--line-thin);background:var(--surface-card);
+}
+.agent-panel-title{
+  font-size:14px;font-weight:700;letter-spacing:0;margin-right:auto;white-space:nowrap;
+}
+.agent-panel-close{
+  width:30px;height:30px;display:grid;place-items:center;cursor:pointer;flex-shrink:0;
+  background:var(--surface-card);border:var(--line-thin);border-radius:0;color:var(--text);
+}
+.agent-panel-close svg{width:14px;height:14px}
+.agent-panel-close:hover{background:var(--surface-soft)}
+/* 面板内是限高容器：聊天区自己滚动，不再沿用整页版的 100vh 计算与 520px 最小高 */
+.agent-panel .agent-shell{min-height:0;flex:1}
+.agent-panel .agent-chat{max-height:none;min-height:0;flex:1;padding:16px 16px 12px}
+
+/* 状态药丸：● 在线 + 模型名 */
+.agent-status-pill{
+  display:inline-flex;align-items:center;gap:7px;flex-shrink:1;min-width:0;overflow:hidden;
+  background:var(--ui-white);color:var(--text);border:var(--line-thin);
+  font-size:12px;font-weight:600;padding:5px 12px;border-radius:0;white-space:nowrap;
+}
+.agent-status-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0}
+.agent-status-pill.warn .dot{background:var(--warn)}
+.agent-status-pill.off .dot{background:var(--danger)}
+
+.agent-settings-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:32px;padding:0 12px;font-size:12px;font-weight:500;cursor:pointer;
+  white-space:nowrap;flex-shrink:0;
+  background:var(--surface-card);border:var(--line-thin);border-radius:0;
+  color:var(--text-secondary);transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out);
+}
+.agent-settings-btn:hover{background:var(--surface-soft);border-color:var(--ui-orange);color:var(--text)}
+
+/* ---------- 聊天卡片 ---------- */
+.agent-shell{
+  flex:1;min-height:520px;display:flex;flex-direction:column;
+  background:var(--surface-card);border:var(--line-thin);
+  border-radius:0;overflow:hidden;
+}
+.agent-chat{
+  flex:1;overflow-y:auto;padding:24px 28px 16px;
+  display:flex;flex-direction:column;gap:16px;max-height:calc(100vh - 420px);min-height:360px;
+}
+
+/* 欢迎/空态：居中 + 建议卡片 */
+.agent-welcome{margin:auto;text-align:center;padding:40px 20px;max-width:430px}
+.agent-welcome .wv-icon{
+  width:52px;height:52px;margin:0 auto 16px;display:grid;place-items:center;
+  background:var(--ui-white);color:var(--text);border:var(--line-strong);border-radius:0;
+}
+.agent-welcome h2{font-size:17px;font-weight:700;margin:0 0 6px;letter-spacing:-.01em}
+.agent-welcome p{font-size:12.5px;line-height:1.7;color:var(--text-secondary);margin:0 0 16px}
+.agent-suggests{display:flex;flex-direction:column;gap:8px;text-align:left}
+.agent-suggest{
+  display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;
+  background:var(--surface-nested);border:var(--line-thin);border-radius:0;
+  font-size:12.5px;color:var(--text-secondary);transition:border-color var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out);
+}
+.agent-suggest:hover{border-color:var(--ui-orange);background:var(--surface-soft);color:var(--text)}
+.agent-suggest .s-ic{display:inline-flex;align-items:center;justify-content:center;opacity:.7}
+
+/* ---------- 消息 ---------- */
+.agent-msg{max-width:80%;font-size:13.5px;line-height:1.75}
+.agent-msg .msg-time{font-size:12px;color:var(--text-tertiary);margin-left:8px;opacity:0;transition:opacity var(--dur-base) var(--ease-out);vertical-align:1px}
+.agent-msg:hover .msg-time{opacity:.85}
+
+.agent-msg.user{
+  align-self:flex-end;
+  background:var(--ui-white);color:var(--text);border:var(--line-thin);
+  padding:10px 16px;border-radius:0;
+  white-space:pre-wrap;word-break:break-word;
+}
+.agent-msg.user .msg-time{color:var(--text-tertiary)}
+
+.agent-msg.bot{
+  align-self:flex-start;
+  background:transparent;padding:2px 0;
+  white-space:pre-wrap;word-break:break-word;
+}
+.agent-msg.bot .msg-line{display:flex;gap:9px}
+.agent-msg.bot .bot-avatar{
+  flex-shrink:0;width:18px;height:18px;margin-top:3px;border-radius:0;
+  background:var(--ui-orange);color:var(--ui-black);
+  display:grid;place-items:center;font-size:12px;line-height:1;font-weight:700;letter-spacing:.02em;
+}
+.agent-msg.bot .bot-text{flex:1;padding-top:1px}
+
+.agent-msg.err{
+  align-self:flex-start;max-width:88%;
+  background:var(--ui-white);border:var(--line-accent);border-left:4px solid var(--ui-orange);
+  color:var(--text);padding:10px 16px;border-radius:0;font-size:12.5px;
+}
+
+/* 工作指示 */
+.agent-work{
+  align-self:flex-start;display:flex;align-items:center;gap:8px;
+  font-size:12px;color:var(--text-tertiary);padding:2px 0;
+}
+.agent-work .dot{
+  width:8px;height:8px;border-radius:50%;background:var(--warn);
+}
+
+/* ---------- 审批卡片 ---------- */
+.agent-approval{
+  align-self:flex-start;max-width:86%;
+  background:var(--ui-white);
+  border:var(--line-thin);
+  border-radius:0;padding:12px 16px;
+  animation:agentIn var(--dur-base) ease;
+}
+.agent-approval .ap-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.agent-approval .ap-title .ap-badge{
+  font-size:12px;font-weight:600;background:var(--warn);color:var(--ui-black);
+  border:var(--line-thin);padding:1.5px 8px;border-radius:0;
+}
+.agent-approval .ap-args{
+  font-size:12px;line-height:1.6;color:var(--text-secondary);
+  white-space:pre-wrap;word-break:break-all;
+  background:var(--surface-card);border:var(--line-thin);
+  border-radius:0;padding:8px 10px;margin:8px 0 10px;
+  max-height:130px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+.agent-approval .ap-btns{display:flex;gap:8px}
+.agent-approval .ap-btn{
+  font-size:12px;font-weight:600;padding:6px 16px;border-radius:0;
+  cursor:pointer;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out);
+}
+.agent-approval .ap-allow{background:var(--ui-orange);border:var(--line-strong);color:var(--text)}
+.agent-approval .ap-allow:hover{filter:brightness(1.06)}
+.agent-approval .ap-deny{background:var(--surface-card);border:var(--line-thin);color:var(--text-secondary)}
+.agent-approval .ap-deny:hover{border-color:var(--ui-orange);color:var(--text)}
+.agent-approval .ap-result{font-size:12px;margin-top:8px;color:var(--text-secondary)}
+.agent-approval .ap-result.ok{color:var(--success);font-weight:600}
+.agent-approval .ap-result.bad{color:var(--text);font-weight:600}
+.agent-approval.decided{opacity:.85}
+.agent-approval.decided .ap-btns{display:none}
+
+/* ---------- 输入行（并入卡片内） ---------- */
+.agent-input-row{
+  display:flex;gap:10px;align-items:flex-end;
+  padding:12px 16px;border-top:1px solid var(--border);background:var(--surface-nested);
+}
+.agent-input-row textarea{
+  flex:1;resize:none;min-height:44px;max-height:140px;
+  border:var(--line-thin);border-radius:0;
+  padding:10px 12px;font-size:13px;line-height:1.6;background:var(--surface-card);
+  font-family:inherit;transition:border-color var(--dur-base) var(--ease-out);
+}
+.agent-input-row textarea:focus-visible{outline:2px solid var(--ui-orange);outline-offset:1px;border-color:var(--ui-black)}
+.agent-input-row textarea::placeholder{color:var(--text-tertiary)}
+.agent-send{
+  display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 16px;
+  font-size:13px;font-weight:600;white-space:nowrap;
+}
+.agent-send svg{width:15px;height:15px}
+.agent-send:disabled{opacity:.5;cursor:not-allowed}
+
+/* ---------- 模型设置抽屉（与侧栏同一墨色语言） ---------- */
+/* 严格高于悬浮面板(100)：遮罩 105、抽屉 110，不依赖 DOM 顺序决胜 */
+.agent-drawer-mask{
+  position:fixed;inset:0;z-index:calc(var(--z-drawer) + 5);
+  background:var(--ui-overlay);animation:agentFade var(--dur-base) ease;
+}
+.agent-settings{
+  position:fixed;top:0;right:0;bottom:0;width:384px;max-width:94vw;z-index:calc(var(--z-drawer) + 10);
+  background:var(--ui-white);
+  color:var(--drawer-text);border-left:var(--line-strong);
+  display:flex;flex-direction:column;animation:agentDrawerIn var(--dur-slow) var(--ease-out);
+}
+@keyframes agentDrawerIn{from{transform:translateX(48px);opacity:0}to{transform:none;opacity:1}}
+@keyframes agentFade{from{opacity:0}to{opacity:1}}
+@keyframes agentIn{from{opacity:0;transform:translateX(6px)}to{opacity:1;transform:none}}
+
+.agent-settings-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px 16px;border-bottom:var(--line-thin);
+}
+.agent-settings-head h2{margin:0;font-size:15px;font-weight:700;letter-spacing:-.01em}
+.agent-settings-close{
+  width:30px;height:30px;display:grid;place-items:center;cursor:pointer;
+  background:var(--drawer-hover);border:var(--line-thin);border-radius:0;
+  color:var(--drawer-text);font-size:14px;transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out);
+}
+.agent-settings-close:hover{background:var(--drawer-active);color:var(--drawer-text)}
+
+.agent-settings-body{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px}
+.agent-settings-body::-webkit-scrollbar-thumb{background:var(--drawer-text-mute);border-radius:0}
+.agent-settings .sec-title{
+  font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--drawer-text-mute);margin:0 0 8px;
+}
+.agent-settings label{font-size:12px;color:var(--drawer-text-mute);display:block;margin:0 0 5px}
+.agent-settings select,.agent-settings input[type="text"],.agent-settings input[type="password"]{
+  width:100%;box-sizing:border-box;
+  background:var(--ui-white);border:var(--line-thin);
+  color:var(--text);border-radius:0;
+  padding:8px 10px;font-size:12.5px;font-family:inherit;transition:border-color var(--dur-base) var(--ease-out);
+}
+.agent-settings select:hover,.agent-settings input:hover{border-color:var(--ui-orange)}
+.agent-settings select:focus-visible,.agent-settings input:focus-visible{outline:2px solid var(--ui-orange);outline-offset:1px;border-color:var(--ui-black)}
+.agent-settings select{appearance:none;background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 10px center;padding-right:32px}
+.agent-settings .row{display:flex;gap:10px}
+.agent-settings .row>*{flex:1;min-width:0}
+.agent-settings .as-active{
+  display:flex;align-items:center;gap:9px;padding:10px 12px;
+  background:var(--ui-white);border:var(--line-thin);
+  border-radius:0;font-size:12.5px;
+}
+.agent-settings .as-active .dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0}
+.agent-settings .as-active .as-active-name{font-weight:600}
+.agent-settings .chk{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--drawer-text-mute);cursor:pointer;user-select:none}
+.agent-settings .chk input{width:auto}
+.agent-settings .as-test{font-size:12px;color:var(--drawer-text-mute);line-height:1.6;min-height:0}
+.agent-settings .as-test:empty{display:none}
+.agent-settings .as-test.ok{color:var(--text);font-weight:600}
+.agent-settings .as-test.bad{color:var(--text);background:var(--surface-soft)}
+
+.agent-settings-foot{
+  padding:16px 20px;border-top:var(--line-thin);
+  display:flex;gap:9px;background:var(--drawer-bg);
+}
+.agent-settings-foot button{
+  flex:1;font-size:12.5px;font-weight:600;padding:10px 0;
+  border-radius:0;cursor:pointer;transition:filter var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out);
+}
+.agent-settings-foot .as-apply{
+  background:var(--drawer-text);color:var(--drawer-bg);border:none;
+}
+.agent-settings-foot .as-apply:hover{filter:brightness(1.1)}
+.agent-settings-foot .as-close{
+  background:transparent;color:var(--drawer-text-mute);border:var(--line-thin);
+}
+.agent-settings-foot .as-close:hover{color:var(--drawer-text);border-color:var(--ui-orange)}
+
+/* 窄屏 */
+@media (max-width:768px){
+  .agent-chat{padding:16px 16px}
+  .agent-msg{max-width:92%}
+  .agent-approval{max-width:100%}
+  /* 面板改为近满宽；底部抬到 80px，与报价页居中的操作坞错开 */
+  .agent-panel{left:16px;right:16px;width:auto;bottom:80px;height:min(560px, calc(100vh - 120px))}
+  .agent-settings-btn{padding:0 8px}
+}
+
+/* ============================================================
+   像素字体适用范围（L叔工作台 DESIGN.md §5.1）
+   ------------------------------------------------------------
+   覆盖：页面 H1、状态药丸、模块短标题、按钮、Badge、时间日期。
+   不覆盖：.agent-chat / .agent-msg 正文与 .agent-msg.err 错误提示、
+   .agent-welcome p、.ap-args（工具参数 JSON）、.agent-settings label /
+   .chk / .as-test，以及 textarea / select / input 输入内容
+   （§5.1 第 203 行，AI 对话正文必须保持可读）。
+   规范依据 §5.1 第 205 行：font-weight:400 + font-synthesis:none。
+   本区块位于文件末尾，靠层叠次序覆盖同特异性的既有 font-family。
+   ============================================================ */
+.agent-panel-title,      /* 面板标题 */
+.agent-status-pill,      /* 状态药丸 */
+.agent-settings-btn,     /* 按钮 */
+.agent-send,
+.agent-settings-foot button,
+.agent-welcome h2,       /* 模块短标题 */
+.agent-settings-head h2,
+.agent-settings .sec-title,
+.agent-settings .as-active,          /* 当前模型短状态码 */
+.agent-approval .ap-title,
+.agent-approval .ap-title .ap-badge, /* Badge */
+.agent-approval .ap-btn,
+.agent-approval .ap-result,
+.agent-suggest,          /* 建议项（按钮语言） */
+.agent-msg .msg-time,    /* 时间日期 */
+.agent-work{
+  font-family:var(--font-pixel);
+  font-weight:400;
+  font-synthesis:none;
+}
+
+/* §5.1 第 205 行：像素字体元素字号须为整数像素。以下 3 处原为 12.5px 尾数，就近取整。 */
+.agent-suggest,
+.agent-settings .as-active,
+.agent-settings-foot button{font-size:13px}

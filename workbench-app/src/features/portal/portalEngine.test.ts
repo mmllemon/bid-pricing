@@ -106,3 +106,19 @@ describe('targets 可变深度', () => {
     expect(layout.leaves).not.toBeNull();
   });
 });
+
+describe('targets 停靠态', () => {
+  it('docked 时选中模块钉在左侧，其余隐藏', async () => {
+    const { targets } = await import('./portalEngine');
+    const layout = targets(
+      { size: { w: 1366, h: 768 }, stage: 'module', mod: 'biz', branch: null, time: 0, docked: true },
+      0
+    );
+    expect(layout.jelly['biz'].x).toBe(80);
+    expect(layout.jelly['biz'].o).toBe(1);
+    // 其他模块透明
+    expect(layout.jelly['quote'].o).toBe(0);
+    expect(layout.branches).toBeNull();
+    expect(layout.leaves).toBeNull();
+  });
+});

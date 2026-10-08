@@ -15,6 +15,17 @@ export const FIELD_DICT: Record<string, FieldDef> = {
   bid_amount:    { label: '中标金额', type: 'money' },
   limit_total:   { label: '限价',   type: 'money' },
   progress:      { label: '进度',   type: 'percent' },
+  // 项目摘要（2026-10-08 展开卡片）
+  contract_amount: { label: '合同金额', type: 'money' },
+  start_date:      { label: '开工时间', type: 'date' },
+  exec_cost:       { label: '实施成本', type: 'money' },
+  profit_margin:   { label: '利润率',   type: 'percent' },
+  // 单位明细（2026-10-08 展开卡片详情）
+  paid:         { label: '已付款',   type: 'money' },
+  unpaid:       { label: '未付款',   type: 'money' },
+  pay_nodes:    { label: '付款节点', type: 'text' },
+  suppliers:    { label: '供应商',   type: 'text' },
+  labor_units:  { label: '劳务单位', type: 'text' },
   // 单位
   role:          { label: '角色',   type: 'badge' },
   project_count: { label: '项目数', type: 'text' },

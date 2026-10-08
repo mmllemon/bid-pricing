@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { PortalItem, PortalModule } from './portalData';
+import { ExpandableCard } from './ExpandableCard';
+import { getPortalConfig } from './portalConfig';
 
 /**
  * 深度分析抽屉（P1 迁移：由 portal-view.js openDrawer 迁入 React）。
  * 按模块业务动态渲染：项目经营（biz）走「概况/报价/执行/文档/待办」五 Tab；
  * 其余模块走通用结构（desc + metrics + planDetail/costDetail/finDetail）。
+ * 2026-10-08 Step A：配了 summaryFields 的模块走可展开卡片（摘要→详情）。
  */
 export function PortalDrawer({
   open,
@@ -12,23 +15,83 @@ export function PortalDrawer({
   item,
   onClose,
   onEnter,
+  onExpandChange,
 }: {
   open: boolean;
   module?: PortalModule;
   item?: PortalItem;
   onClose: () => void;
   onEnter: () => void;
+  onExpandChange?: (expanded: boolean) => void;
 }) {
   const [tab, setTab] = useState('tab-overview');
+  const [cardExpanded, setCardExpanded] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+
+  /** FLIP 展开动画（2026-10-08 Step B） */
+  const doExpand = () => {
+    const el = drawerRef.current;
+    onExpandChange?.(true);
+    if (!el) {
+      setCardExpanded(true);
+      return;
+    }
+    // First: 记录当前 rect
+    const first = el.getBoundingClientRect();
+    // 加 expanded 类（Last 状态）
+    el.classList.add('expanding');
+    setCardExpanded(true);
+    // 下一帧测量 Last 并播放
+    requestAnimationFrame(() => {
+      const last = el.getBoundingClientRect();
+      const dx = first.left - last.left;
+      const dy = first.top - last.top;
+      const sx = first.width / last.width;
+      const sy = first.height / last.height;
+      // Invert
+      el.style.transformOrigin = 'top left';
+      el.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+      // Play
+      requestAnimationFrame(() => {
+        el.classList.remove('expanding');
+        el.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1)';
+        el.style.transform = 'translate(0, 0) scale(1, 1)';
+        // 清理
+        setTimeout(() => {
+          el.style.transition = '';
+          el.style.transform = '';
+          el.style.transformOrigin = '';
+        }, 650);
+      });
+    });
+  };
 
   if (!module || !item) {
     return <aside className={`portal-analysis-drawer${open ? ' open' : ''}`} />;
   }
 
+  // 可展开卡片优先（2026-10-08）：配了 summaryFields 就走新交互
+  const modCfg = getPortalConfig().modules.find((m) => m.id === module.id);
+  const useExpandable = Boolean(modCfg?.summaryFields);
+
   const isBiz = module.id === 'biz' && Boolean(item.profile);
 
+  // 重置展开态（切换卡片时）
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const [lastItemId, setLastItemId] = useState(item.id);
+  if (lastItemId !== item.id) {
+    setLastItemId(item.id);
+    setCardExpanded(false);
+    onExpandChange?.(false);
+  }
+
   return (
-    <aside className={`portal-analysis-drawer${open ? ' open' : ''}`} role="complementary" aria-label="深度分析">
+    <aside
+      ref={drawerRef}
+      className={`portal-analysis-drawer${open ? ' open' : ''}${cardExpanded ? ' expanded' : ''}`}
+      role="complementary"
+      aria-label="深度分析"
+    >
       <div className="ad-head">
         <div className="ad-badge-group">
           <span className="pixel-tag" style={{ background: module.color, color: '#fff' }}>{module.code}</span>
@@ -41,7 +104,14 @@ export function PortalDrawer({
       <h2 className="ad-title">{item.title}</h2>
       <div className="ad-sub">{item.code} · 业务要素深度分析与控制舱</div>
 
-      {isBiz ? (
+      {useExpandable ? (
+        <ExpandableCard
+          module={module}
+          item={item}
+          expanded={cardExpanded}
+          onExpand={doExpand}
+        />
+      ) : isBiz ? (
         <>
           <div className="ad-tabs-header">
             {[

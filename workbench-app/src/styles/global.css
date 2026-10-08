@@ -8415,3 +8415,56 @@ details.spec .hint { margin: 6px 0; }
 }
 .portal-settings-name { font-weight: 600; }
 .portal-settings-meta { font-size: 12px; }
+
+/* ===== 可展开卡片（2026-10-08 Step A） ===== */
+.expandable-card { display: flex; flex-direction: column; gap: 16px; }
+.ec-summary-top {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.ec-metric {
+  padding: 12px; border: 1px solid #e5e5e5; border-radius: 8px;
+  background: #fafafa;
+}
+.ec-label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+.ec-val { font-size: 18px; font-family: var(--font-data); }
+.ec-summary-units { display: flex; flex-direction: column; gap: 12px; }
+.ec-group-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.ec-unit-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ec-chip {
+  padding: 4px 10px; border-radius: 999px; font-size: 12px;
+  background: #eef2ff; border: 1px solid #c7d2fe;
+}
+.ec-empty { font-size: 12px; color: #999; }
+.ec-loading { font-size: 12px; color: #666; }
+.ec-expand-btn {
+  padding: 10px; border: none; border-radius: 8px; cursor: pointer;
+  background: #111; color: #fff; font-size: 14px; font-weight: 600;
+}
+.ec-expand-btn:hover { background: #333; }
+.ec-unit-detail {
+  padding: 12px; border: 1px solid #e5e5e5; border-radius: 8px;
+  margin-bottom: 10px; background: #fff;
+}
+.ec-unit-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.ec-unit-head strong { font-size: 14px; }
+.ec-role-badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: #f0f0f0; color: #666;
+}
+.ec-kv-list { display: flex; flex-direction: column; gap: 6px; }
+
+/* ===== 抽屉展开动画（2026-10-08 Step B，FLIP） ===== */
+.portal-analysis-drawer.expanding {
+  transition: none; /* FLIP 接管，用 JS 驱动 transform */
+}
+.portal-analysis-drawer.expanded {
+  width: 100%;
+  border-left: none;
+  padding: 32px 48px;
+}
+.portal-analysis-drawer.expanded .ec-summary-top {
+  grid-template-columns: repeat(4, 1fr);
+}

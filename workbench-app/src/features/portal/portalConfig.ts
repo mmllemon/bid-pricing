@@ -16,6 +16,10 @@ export interface PortalModuleConfig {
   dataSource: string;      // "api:/path" 或 "static:"
   cardFields: string[];    // 字段字典的子集
   cardLink?: string;       // 穿透链接，{id}/{name} 占位符
+  // 可展开卡片（2026-10-08 Step A）
+  summaryFields?: { top: string[]; units: string[] };
+  detailFields?: string[];
+  unitDataSource?: string; // "api:/api/graph/project?id={id}"
 }
 
 export interface PortalConfig {

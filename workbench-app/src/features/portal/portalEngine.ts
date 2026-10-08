@@ -88,11 +88,28 @@ export function getModuleLevels(modId: string | null): number {
 
 /** 布局目标计算（逐字搬自原生版 targets）。 */
 export function targets(
-  L: { size: { w: number; h: number }; stage: Stage; mod: string | null; branch: string | null; time: number; reduced?: boolean },
+  L: { size: { w: number; h: number }; stage: Stage; mod: string | null; branch: string | null; time: number; reduced?: boolean; docked?: boolean },
   t: number,
 ): Layout {
   const W = L.size.w;
   const H = L.size.h;
+
+  // 停靠态（2026-10-08 Step B）：选中模块钉在左侧成侧边导航，其余淡出
+  if (L.docked && L.stage === 'module' && L.mod) {
+    const res: Layout = { orb: { x: 0, y: 0, s: 0 }, jelly: {}, branches: null, leaves: null };
+    const cy = H / 2;
+    MODULES.forEach((m) => {
+      const sel = m.id === L.mod;
+      res.jelly[m.id] = {
+        x: 80,
+        y: cy,
+        s: sel ? 48 : 0,
+        o: sel ? 1 : 0,
+        tilt: 0,
+      };
+    });
+    return res;
+  }
   const st = L.stage;
   const narrow = W < 1310;
   const res: Layout = { orb: { x: 0, y: 0, s: 0 }, jelly: {}, branches: null, leaves: null };
@@ -192,6 +209,7 @@ export class PortalEngine {
     branch: null as string | null,
     item: null as string | null,
     paused: false,
+    docked: false,
     time: 0,
     branchStart: 0,
     leafStart: 0,
@@ -330,6 +348,11 @@ export class PortalEngine {
     });
     this.rebuildBranchSvg(mod);
     this.rebuildLeafSvg(mod);
+  }
+
+  /** 停靠/取消停靠（2026-10-08 Step B）：抽屉展开时选中模块钉在左侧 */
+  setDocked(docked: boolean) {
+    this.state.docked = docked;
   }
 
   /** 切到分支（同一模块内换分支）。 */

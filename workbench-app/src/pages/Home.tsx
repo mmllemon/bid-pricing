@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { XhsPeriod, XhsPeriodView } from '../types';
-import { formatNumber } from '../components/widgets';
+import { formatNumber, formatMetricValue } from '../components/widgets';
 import { IconScanBtn, IconRefresh } from '../components/icons';
 import ActionProgress from '../components/ActionProgress';
 import { useActionProgress } from '../lib/actionProgress';
@@ -13,7 +13,6 @@ import {
   type HomeCoreMetricKey,
 } from '../features/home/homeMetrics';
 import { HomeContextRow, HomeInsightRow, HomeWorkRow } from '../features/home/HomeDashboard';
-import HomeRadialNav from '../features/home/HomeRadialNav';
 
 const SOURCE_LABEL: Record<string, string> = {
   live: '实时',
@@ -126,7 +125,20 @@ export default function HomePage() {
         </div>
       )}
 
-      <HomeRadialNav slots={slots} todoTotal={today.total} todoStale={today.stale} />
+      <section className="kpi-band" aria-label="今日核心指标">
+        {slots.map((slot) => (
+          <div key={slot.key}>
+            <span className="kpi-label">{slot.label}<em>{slot.key}</em></span>
+            <span className="kpi-value">
+              {slot.missing || !slot.metric ? '—' : formatMetricValue(slot.metric)}
+            </span>
+          </div>
+        ))}
+        <div>
+          <span className="kpi-label">待办<em>Todo</em></span>
+          <span className="kpi-value">{today.total}</span>
+        </div>
+      </section>
 
       <div className="home-dashboard">
         <HomeContextRow />

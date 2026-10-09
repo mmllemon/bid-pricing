@@ -228,9 +228,16 @@ CREATE INDEX IF NOT EXISTS idx_exec_material_project ON exec_material(project_id
 
 def resolve_db_path(db: Path | str | None = None) -> Path:
     """默认库路径在调用时解析，沿用 ``PROJECTS_DIR`` 的按用户重定向口径，
-    运行方（如 api/app.py）后赋值 PROJECTS_DIR 即可让库落在对应用户目录下。"""
+    运行方（如 api/app.py）后赋值 PROJECTS_DIR 即可让库落在对应用户目录下。
+
+    用 ``Path(PROJECTS_DIR)`` 包一层而非直接对它做 `/`：与 `project_store._resolve_dir`
+    保持**同一个消费契约**（两者都允许被赋成 str 或 Path）。两个模块用同名全局
+    但接受类型不同，测试里照抄邻居的 `str(d)` 写法就会静默炸
+    （2026-10-08 实测：CI 首次用 pytest 跑全量时 6 项 error）。
+    现由 tests/test_projects_dir_contract.py 钉住两个模块的行为一致。
+    """
     if db is None:
-        return PROJECTS_DIR / ".sqlite" / "quote.db"
+        return Path(PROJECTS_DIR) / ".sqlite" / "quote.db"
     return Path(db)
 
 
@@ -1096,7 +1103,7 @@ def import_json_tree(source_dir: Path | str | None = None,
     两种布局。plan 按 plan_id upsert、plan_group 按 group_id upsert，因此可安全重跑。
     返回 (导入方案数, 导入方案组数)。
     """
-    source = PROJECTS_DIR if source_dir is None else Path(source_dir)
+    source = Path(PROJECTS_DIR) if source_dir is None else Path(source_dir)
     if not source.exists():
         return 0, 0
     plans = 0
@@ -1127,7 +1134,7 @@ def import_projects_json(source_dir: Path | str | None = None,
     调用方负责在迁移成功后把 projects.json 改名 .bak（30 天后手动删）。
     """
     import json
-    source = PROJECTS_DIR if source_dir is None else Path(source_dir)
+    source = Path(PROJECTS_DIR) if source_dir is None else Path(source_dir)
     pj = source / "projects.json"
     if not pj.exists():
         return 0

@@ -5,7 +5,7 @@
 
 # 项目状态快照
 
-> 生成于 **2026-10-08 11:12:31** ｜ 合同基准日 `2026-03-01`
+> 生成于 **2026-10-09 08:26:28** ｜ 合同基准日 `2026-03-01`
 > 本文件是**生成物**，用于跨会话交接。改内容请改来源，不要改本文件。
 
 ---
@@ -19,10 +19,10 @@
 
 ## 一、版本锚点
 
-- 提交：`70bbe3e` ｜ 累计 218 次提交 ｜ 未推送 0 次提交
-- 最新提交信息：feat(B-P1-5): enforce project_id existence on optimize + group/create + guard test
+- 提交：`f225fc9` ｜ 累计 281 次提交 ｜ 未推送 0 次提交
+- 最新提交信息：test(parity-suite): Phase 2 能力门两向都防，修 minimal 档唯一残留红点
 - 最近里程碑标签：`pre-wb-merge-20261006`
-- 工作区：干净
+- 工作区：有 1 处未提交改动
 
 > 版本锚点是**结论可复算**的前提：任何一份交付物都能追到某个提交。
 >
@@ -73,10 +73,10 @@
 
 ## 四、质量门
 
-- 单元测试：**1634** 项，结果 **通过**（OK）
+- 单元测试：**1699** 项，结果 **通过**（1699 passed, 6 skipped, 276 warnings, 125 subtests passed in 49.90s）—— 跑法：`pytest`，解释器：`3.14.6`
 
 ```bash
-cd bid-pricing && PYTHONPATH=src python -m unittest discover -s tests
+cd bid-pricing && PYTHONPATH=src python -m pytest tests/ -q
 ```
 
 - 跨制品一致性：**PASS**（17/17 项判据通过） —— 判「已冻结制品彼此是否自洽」，与闸门正交；两者的关系是「hash 对不对」与「说法一致不一致」，缺一不可
@@ -220,8 +220,8 @@ cd bid-pricing
 PYTHONPATH=src python -m bidpricing.cli status --write
 # 2. 闸门机械判定
 PYTHONPATH=src python -m bidpricing.cli gate-check --contract-date 2026-03-01
-# 3. 全量测试
-PYTHONPATH=src python -m unittest discover -s tests
+# 3. 全量测试（口径与 CI 一致；未装 pytest 时先装：pip install -r requirements-dev.txt）
+PYTHONPATH=src python -m pytest tests/ -q
 # 4. 规则集指纹自检（含退化条件登记）
 PYTHONPATH=src python -m bidpricing.cli ruleset-selftest
 ```

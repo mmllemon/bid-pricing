@@ -48,6 +48,9 @@
 #   端口覆盖（重跑生效，无需改脚本）：
 #     $env:BIDPRICING_BACKEND_PORT（8000）/ $env:BIDPRICING_WORKBENCH_PORT（3456）
 #
+#   前端产物新鲜度（2026-10-08）：源码比 dist 新会自动重建；要无条件重建用
+#     .\run.ps1 -Rebuild
+#
 #   数据目录（备份就拷这几个）：
 #     outputs/projects/<user>/   quote.db（方案）＋ projects.json（项目）＋ well-library.json（井库）
 #     outputs/workbench-data/     workbench.db（工作台待办/热点/小红书）
@@ -60,6 +63,13 @@
 #     报价数据为空       → :8000 是否在跑；看 backend.err.log
 #     审批 / 模型设置 401 → 服务端 AGENT_API_TOKEN 与面板 token 是否一致
 #     井库 / 项目列表为空 → :8000 是否在跑；看 backend.err.log
+
+param(
+    # 强制重建前端产物（默认只在「缺产物」或「源码比产物新」时构建）。
+    # 背景（2026-10-08 实测踩过）：原脚本仅在 dist **缺失**时构建，源码改过不重建，
+    # 于是「仓库是最新的」与「跑的是最新页面」可以同时成立又互相矛盾。
+    [switch]$Rebuild
+)
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -433,8 +443,28 @@ else {
         $wbOk = $false
     }
     # 前端产物：Express 只在请求期读 workbench-app/dist，缺了页面就 404。
-    # 仅在缺失时构建（构建慢）；源码改过后需自行 npm run build，与「重建无需重启」配套。
-    if ($wbOk -and -not (Test-Path -LiteralPath $WbDist)) {
+    # 构建时机（2026-10-08 修正）：不只是「缺失才建」——**源码比产物新也要重建**。
+    # 原口径仅在缺失时构建，实测踩过：dist 停在 10:08、最新提交 18:57，
+    # 服务跑的是旧页面而 git 显示「已是最新」——两个结论都对，却不是一回事。
+    # 构建成本约 0.5s（实测 467ms），比「跑到旧产物上」的排查成本低得多。
+    # 仍可用 -Rebuild 无条件重建。
+    $wbStale = $false
+    if ($wbOk -and (Test-Path -LiteralPath $WbDist)) {
+        $distTime = (Get-Item -LiteralPath (Join-Path $WbDist "index.html") -ErrorAction SilentlyContinue).LastWriteTime
+        if (-not $distTime) { $distTime = [datetime]::MinValue }
+        $newestSrc = (Get-ChildItem $WbAppDir -Recurse -File -Include *.tsx,*.ts,*.css,*.html -ErrorAction SilentlyContinue |
+                      Where-Object { $_.FullName -notmatch 'node_modules|\bdist\b' } |
+                      Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+        if ($newestSrc -and $newestSrc.LastWriteTime -gt $distTime) {
+            $wbStale = $true
+            # 拼接换行只能发生在 `+` **之后**：PowerShell 不认二元操作符起行
+            # （管道 | 可以，-f 不行）。写成 `"..."` 换行 `-f …` 会当场语法崩坏。
+            Write-Host ("    前端产物落后于源码（" + $newestSrc.Name + " 改于 " +
+                        $newestSrc.LastWriteTime.ToString("HH:mm:ss") + "，产物 " +
+                        $distTime.ToString("HH:mm:ss") + "），需重建") -ForegroundColor DarkYellow
+        }
+    }
+    if ($wbOk -and ($Rebuild -or -not (Test-Path -LiteralPath $WbDist) -or $wbStale)) {
         Write-Host "==> workbench: 构建前端产物（npm run build）..." -ForegroundColor Cyan
         if ((-not (Invoke-WbNpm -WorkDir $WbAppDir -ArgList @("run", "build") -What "工作台前端构建")) -or
             -not (Test-Path -LiteralPath $WbDist)) {
